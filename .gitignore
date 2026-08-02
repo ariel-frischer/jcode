@@ -4,6 +4,7 @@ __pycache__/
 ios_simulator_screenshot.png
 /.wrangler/
 /tmp/
+/.beads/
 # Local onboarding sandbox + auth fixtures. May contain REAL OAuth tokens copied
 # from $HOME (see scripts/onboarding_sandbox.sh seed-real-logins). Never commit.
 /.tmp/
