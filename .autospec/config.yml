@@ -1,0 +1,97 @@
+# Autospec Configuration
+# See 'autospec config -h' for commands, 'autospec config keys' for all options
+
+# Agent settings
+agent_preset: codex                   # Built-in agent: claude | codex | opencode
+model: gpt-5.6-sol                    # Default model for workflow agent execution
+models:                               # Optional per-stage workflow agent model overrides
+  constitution: gpt-5.6-sol
+  specify: gpt-5.6-sol
+  clarify: gpt-5.6-sol
+  plan: gpt-5.6-sol
+  tasks: gpt-5.6-sol
+  checklist: gpt-5.6-sol
+  analyze: gpt-5.6-sol
+  implement: gpt-5.6-luna
+reasoning_effort: medium              # Codex reasoning effort: low | medium | high | xhigh | max | ultra
+reasoning_efforts:                    # Optional per-stage Codex reasoning effort overrides
+  constitution: high
+  specify: medium
+  clarify: high
+  plan: medium
+  tasks: medium
+  checklist: medium
+  analyze: high
+  implement: xhigh
+opencode_agent: ""                    # OpenCode sub-agent: build | plan | explore | etc.
+use_subscription: true                # Force subscription mode (no API charges); set false to use API key
+
+# Workflow settings
+max_retries: 0                        # Max retry attempts per stage (0-10)
+specs_dir: ./specs                    # Directory for feature specs
+state_dir: ./.autospec/state          # Directory for state files
+skip_preflight: false                 # Skip preflight checks
+timeout: 2400                         # Timeout in seconds (40 min default, 0 = no timeout)
+skip_confirmations: false             # Skip confirmation prompts
+implement_method: tasks               # Default: phases | tasks | single-session
+auto_commit: false                    # Auto-create git commit after workflow (disabled by default)
+
+# History settings
+max_history_entries: 500              # Max command history entries to retain
+
+# View dashboard settings
+view_limit: 5                         # Number of recent specs to display
+
+# Agent initialization settings
+default_agents:
+  - codex                              # Agents to pre-select in 'autospec init' prompt
+
+# Worktree management settings
+worktree:
+  base_dir: ""                        # Parent dir for worktrees (default: parent of repo)
+  prefix: ""                          # Directory name prefix
+  setup_script: scripts/worktree-setup.sh # Path to setup script relative to repo
+  auto_setup: true                    # Run setup automatically on create
+  track_status: true                  # Persist worktree state
+  copy_dirs:                          # Non-tracked dirs to copy
+    - .autospec
+    - .agents
+    - .claude
+  setup_timeout: 5m                   # Max setup script duration (e.g., '5m', '30s')
+
+# Notifications (all platforms)
+notifications:
+  enabled: false                      # Enable notifications (opt-in)
+  type: both                          # sound | visual | both
+  sound_file: ""                      # Custom sound file path (empty = system default)
+  on_command_complete: true           # Notify when command finishes
+  on_stage_complete: false            # Notify on each stage completion
+  on_error: true                      # Notify on failures
+  on_long_running: false              # Enable duration-based notifications
+  long_running_threshold: 2m          # Threshold for long-running notification
+
+# Cclean (claude-clean) output formatting
+cclean:
+  verbose: false                      # Verbose output with usage stats and tool IDs (-V)
+  line_numbers: false                 # Show line numbers in formatted output (-n)
+  style: default                      # Output style: default | compact | minimal | plain (-s)
+
+# Codex automated output formatting
+codex_output:
+  mode: compact                       # compact | full
+  max_lines_per_message: 40           # Max displayed lines per compact output block
+  color: true                         # Colorize compact Codex output
+
+# Autonomous execution
+skip_permissions: true                # Enable autonomous mode for supported agents
+
+# Verification settings
+verification:
+  level: basic                        # Verification depth: basic | enhanced | full
+  # adversarial_review: false         # Override: enable adversarial review
+  # contracts: false                  # Override: enable contracts verification
+  # property_tests: false             # Override: enable property-based tests
+  # metamorphic_tests: false          # Override: enable metamorphic tests
+  mutation_threshold: 0.8             # Minimum mutation score (0.0-1.0)
+  coverage_threshold: 0.85            # Minimum code coverage (0.0-1.0)
+  complexity_max: 10                  # Maximum cyclomatic complexity
