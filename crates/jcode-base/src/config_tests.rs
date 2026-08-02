@@ -485,70 +485,6 @@ fn tool_config_disabled_only_keeps_full_profile_with_deny_list() {
 }
 
 #[test]
-fn test_generated_default_config_uses_low_openai_reasoning_effort() {
-    let _guard = crate::storage::lock_test_env();
-    let prev_home = std::env::var_os("JCODE_HOME");
-    let dir = tempfile::TempDir::new().expect("tempdir");
-    crate::env::set_var("JCODE_HOME", dir.path());
-
-    let path = Config::create_default_config_file().expect("create default config file");
-    let content = std::fs::read_to_string(path).expect("read default config file");
-
-    assert!(
-        content.contains("openai_reasoning_effort = \"low\""),
-        "generated default config should use low OpenAI reasoning effort"
-    );
-    assert!(
-        content.contains("openai_service_tier = \"priority\""),
-        "generated default config should enable OpenAI fast mode"
-    );
-    assert!(
-        content.contains("[tools]") && content.contains("profile = \"full\""),
-        "generated default config should document tool profiles"
-    );
-    assert!(
-        content.contains("[acp]") && content.contains("tool_profile = \"acp\""),
-        "generated default config should document ACP profile settings"
-    );
-    assert!(
-        content.contains("[agents]") && content.contains("swarm_spawn_mode = \"inline\""),
-        "generated default config should document agent spawn defaults"
-    );
-    assert!(
-        content.contains("memory_model = \"gpt-5.6-luna\"")
-            && content.contains("reasoning effort \"none\""),
-        "generated default config should document the Luna memory sidecar default"
-    );
-
-    // Effort keys come from the per-platform keybinding registry; the template
-    // placeholders must always be substituted.
-    assert!(
-        !content.contains("@EFFORT_INCREASE@") && !content.contains("@EFFORT_DECREASE@"),
-        "generated default config should substitute effort key placeholders"
-    );
-    let expected_increase = if cfg!(target_os = "macos") {
-        "effort_increase = \"cmd+right\""
-    } else {
-        "effort_increase = \"alt+right\""
-    };
-    assert!(
-        content.contains(expected_increase),
-        "generated default config should use the platform effort_increase default"
-    );
-
-    // The generated file must always be valid TOML for the current Config schema.
-    let parsed: Config =
-        toml::from_str(&content).expect("generated default config should parse as Config");
-    assert_eq!(parsed.agents.swarm_spawn_mode, SwarmSpawnMode::Inline);
-
-    if let Some(prev) = prev_home {
-        crate::env::set_var("JCODE_HOME", prev);
-    } else {
-        crate::env::remove_var("JCODE_HOME");
-    }
-}
-
-#[test]
 fn global_config_cache_reloads_after_manual_file_edit() {
     let _guard = crate::storage::lock_test_env();
     let prev_home = std::env::var_os("JCODE_HOME");
@@ -1282,3 +1218,6 @@ fn config_reload_generation_increments_on_cache_invalidation() {
         "invalidate_config_cache must bump the reload generation ({before} -> {after})"
     );
 }
+
+#[path = "config_tests/memory_reasoning.rs"]
+mod memory_reasoning;

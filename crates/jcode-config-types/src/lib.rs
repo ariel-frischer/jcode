@@ -537,21 +537,18 @@ pub struct AgentsConfig {
     pub swarm_strip_layout: SwarmStripLayout,
     /// Optional default model override for the memory sidecar.
     pub memory_model: Option<String>,
+    /// OpenAI memory-sidecar effort, independent from the main session.
+    /// Environment override: `JCODE_MEMORY_REASONING_EFFORT`.
+    pub memory_reasoning_effort: Option<String>,
     /// Whether memory should use the sidecar for relevance/extraction.
     ///
-    /// Defaults to `true`: the LLM precision-judge path is the only memory mode
-    /// that is reliably productive (injection precision ~1.0), so memory uses it
-    /// by default. Set to `false` only to deliberately opt into the lower-
-    /// precision no-LLM hybrid path. When sidecar mode is on but no LLM backend
-    /// is reachable, the memory runtime goes dormant instead of degrading to the
-    /// no-LLM path.
+    /// Defaults to `true` for the high-precision LLM judge path. Set to `false`
+    /// only to opt into lower-precision no-LLM retrieval. With sidecar mode on,
+    /// an unreachable LLM makes memory dormant rather than silently degrading.
     #[serde(default = "default_memory_sidecar_enabled")]
     pub memory_sidecar_enabled: bool,
-    /// Minimum turns between Mode-2 memory reranks (cadence floor). The
-    /// expensive listwise LLM rerank runs at most once per this many turns;
-    /// skipped turns fall back to hybrid-ordered surfacing. A topic change or
-    /// the first turn always forces a rerank regardless of cadence. 0 or 1 =
-    /// rerank every turn (no gating). Default 3.
+    /// Minimum turns between Mode-2 LLM reranks. Skipped turns use hybrid order;
+    /// first turns and topic changes force a rerank. 0 or 1 disables gating.
     #[serde(default = "default_memory_rerank_cadence")]
     pub memory_rerank_cadence: usize,
     /// Number of independent LLM rerank "judges" to run per fired rerank. Their
@@ -627,6 +624,7 @@ impl Default for AgentsConfig {
             swarm_gallery_max_pct: None,
             swarm_strip_layout: SwarmStripLayout::default(),
             memory_model: None,
+            memory_reasoning_effort: None,
             memory_sidecar_enabled: default_memory_sidecar_enabled(),
             memory_rerank_cadence: default_memory_rerank_cadence(),
             memory_rerank_votes: default_memory_rerank_votes(),

@@ -1,0 +1,266 @@
+plan:
+  branch: "agent/jcode-sk5"
+  created: "2026-08-02"
+  spec_path: "specs/001-configure-memory-effort/spec.yaml"
+
+summary: |
+  Add the dedicated memory reasoning choice to the existing optional agent
+  configuration contract, then resolve it through one sidecar-owned path that
+  supplies request construction, model-aware validation, diagnostics, and
+  configuration-summary output. JCODE_MEMORY_REASONING_EFFORT will be applied
+  after TOML loading and will ignore blank values, matching the existing
+  provider reasoning-effort override convention.
+
+  Runtime integration will preserve Sidecar's existing public constructors and
+  reasoning_override precedence. A focused reasoning-resolution module will
+  distinguish the configured value from the effective request behavior, reuse
+  canonical and catalog-advertised effort metadata, and ensure the same explicit
+  override wins for the primary Luna request and the GPT-5.4 OAuth fallback.
+  Unset Luna, fallback, and other-OpenAI payloads remain byte-for-byte compatible
+  in their reasoning fields, and no main-session setting participates in this
+  resolution.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "None"
+  primary_dependencies:
+    - name: "jcode-config-types"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns the serialized AgentsConfig contract and backward-compatible optional field default."
+    - name: "jcode-provider-core"
+      version: "workspace path dependency"
+      purpose: "Provides canonical OpenAI reasoning-effort vocabulary and model identity helpers."
+    - name: "serde"
+      version: "1"
+      purpose: "Deserializes and serializes the optional TOML configuration field without a migration."
+    - name: "toml"
+      version: "0.8"
+      purpose: "Loads persisted configuration and supports strict parse-path tests."
+    - name: "serde_json"
+      version: "1"
+      purpose: "Builds and asserts OpenAI Responses API request payloads in focused sidecar tests."
+    - name: "reqwest"
+      version: "0.12"
+      purpose: "Existing sidecar HTTP transport; request count and transport behavior remain unchanged."
+  storage: "Existing ~/.jcode/config.toml TOML file plus process environment; no new storage"
+  testing:
+    framework: "Rust built-in test harness with existing jcode-base test utilities"
+    approach: "Focused unit and configuration tests for serde defaults, TOML/env precedence, pure resolution and diagnostics, request payloads, fallback, summary output, and main-session isolation; then package build and repository guardrails."
+  target_platform: "Jcode-supported Linux, macOS, and Windows CLI/server builds"
+  project_type: "cli"
+  performance_goals: "No additional requests, network probes, or persistent reads per memory operation; unset request payloads and cost characteristics remain unchanged."
+  constraints:
+    - "The optional field must deserialize to None for all existing configuration files and preserve current serialized names and defaults."
+    - "Resolution order is explicit sidecar override, then JCODE_MEMORY_REASONING_EFFORT, then agents.memory_reasoning_effort, then the existing model-specific default or omission."
+    - "Blank or whitespace-only environment values do not replace a valid persisted effort."
+    - "Memory reasoning never reads, inherits, writes, or otherwise mutates provider.openai_reasoning_effort or live main-session effort state."
+    - "Explicit effort must win on both the primary OpenAI request and an authentication-driven GPT-5.4 retry."
+    - "Unsupported vocabulary and resolved-model incompatibility must stop the request with actionable value, model, and alternatives context rather than silently clearing the choice."
+    - "No new third-party dependency, provider-wide default, protocol field, interactive picker, or crate-boundary inversion is introduced."
+    - "Touched oversized files must stay within repository ratchets; reasoning-only extraction may be used to keep sidecar.rs and config-type changes LOC-flat or smaller."
+  scale_scope: "One optional configuration value resolved for each in-process memory sidecar; constant-time string and cached-capability lookup."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits edits to the agent config field, env mapping, default guidance, sidecar resolver/request path, summary, and focused tests; UI and provider-wide behavior are explicit non-goals."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Uses an optional serde-defaulted field and preserves Luna=none, OAuth fallback=low, and omitted reasoning for other OpenAI models when unset."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Uses the established file-then-environment load flow and Sidecar reasoning_override rather than adding a parallel request setting."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Keeps the stable field in jcode-config-types and runtime resolution in jcode-base while reusing the already-allowed jcode-provider-core dependency."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps every default, explicit, precedence, fallback, invalid, incompatible, summary, and isolation scenario to focused jcode-base tests before broader validation."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Canonicalizes at the configuration-to-sidecar boundary and returns actionable diagnostics naming the supplied value, resolved model, and supported alternatives without secret data."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Requires exact tests first, cargo check/build for affected packages, current-stable guardrails, and isolation of the already-recorded unrelated baseline failures."
+
+research_findings:
+  decisions:
+    - topic: "Configuration representation and migration"
+      decision: "Add memory_reasoning_effort as Option<String> beside memory_model in AgentsConfig and default it to None."
+      rationale: "This matches existing provider effort storage, preserves old TOML without migration, and defers model-aware validation to the runtime trust boundary where the resolved backend and model are known."
+      alternatives_considered:
+        - "Add a new serialized enum, which would reject unknown TOML during deserialization but duplicate the existing provider vocabulary and make forward compatibility stricter."
+        - "Store the value only in jcode-base, which would violate the established configuration ownership boundary."
+    - topic: "Environment precedence and empty values"
+      decision: "Trim and lowercase JCODE_MEMORY_REASONING_EFFORT, apply a non-empty value after TOML loading, and ignore empty or whitespace-only values."
+      rationale: "Config::load already applies environment overrides after file parsing, and the existing OpenAI/Anthropic effort variables ignore blanks so a valid persisted effort remains intact."
+      alternatives_considered:
+        - "Treat blank as an explicit clear, which would silently erase the persisted choice and conflict with the feature edge-case requirement."
+        - "Read the environment variable inside Sidecar, which would create a second precedence path outside Config."
+    - topic: "Resolution ownership and summary consistency"
+      decision: "Create a focused sidecar reasoning-resolution module and have both request construction and Config::display_string consume its configured/effective result."
+      rationale: "One pure resolution contract prevents summary drift, supports deterministic tests, and keeps auth/model fallback behavior in the existing sidecar runtime layer."
+      alternatives_considered:
+        - "Duplicate formatting logic in display_summary.rs, which could disagree with the request path."
+        - "Move sidecar runtime rules into jcode-config-types, which would reverse dependency direction and mix stable data with auth/provider behavior."
+    - topic: "Supported and model-compatible effort validation"
+      decision: "Reuse canonical_reasoning_effort for the base vocabulary, reject Jcode-only swarm sentinels, consult cached OpenAI catalog efforts when present, and reject explicit effort for a resolved backend/model that cannot carry an OpenAI reasoning field."
+      rationale: "This reuses current capability sources, produces model-specific alternatives when known, and still permits canonical OpenAI values before catalog metadata is available."
+      alternatives_considered:
+        - "Maintain a new hardcoded per-model table in the sidecar, which would drift from catalog metadata."
+        - "Silently clear incompatible values, which fails the diagnostic and trust-boundary requirements."
+    - topic: "Luna OAuth fallback override"
+      decision: "Apply the existing reasoning_override to both the pre-resolved fallback path and the retry-after-unavailable path, with the hardcoded low used only when no explicit override exists."
+      rationale: "The current primary request already gives reasoning_override precedence, but the retry branch hardcodes low; sharing resolution closes that gap while preserving unset behavior."
+      alternatives_considered:
+        - "Change the GPT-5.4 fallback default globally, which would increase cost for existing users."
+        - "Update only the primary request path, which would fail explicit fallback behavior."
+    - topic: "File-size guardrail strategy"
+      decision: "Place new pure resolution code and its tests under the sidecar module and locally extract existing reasoning helpers if needed so oversized touched files do not grow."
+      rationale: "The branch has recorded pre-existing ratchet failures, and the constitution forbids worsening them; a reasoning-only extraction is directly tied to the feature and keeps the runtime owner intact."
+      alternatives_considered:
+        - "Append all logic and tests to sidecar.rs, risking a new code-size regression."
+        - "Rebaseline the ratchet, which would hide unrelated growth and requires separate review."
+
+data_model:
+  entities:
+    - name: "MemoryReasoningConfiguration"
+      description: "The optional explicit user choice after persisted configuration and environment precedence are resolved."
+      fields:
+        - name: "persisted_value"
+          type: "Option<String>"
+          description: "Value deserialized from agents.memory_reasoning_effort."
+          constraints: "Unset by default; accepted base values are none, minimal, low, medium, high, xhigh, and max."
+        - name: "environment_value"
+          type: "Option<String>"
+          description: "Trimmed JCODE_MEMORY_REASONING_EFFORT override."
+          constraints: "A non-empty value overrides persisted_value; blank input is ignored."
+        - name: "configured_value"
+          type: "Option<String>"
+          description: "The explicit value visible to Sidecar after Config::load precedence."
+          constraints: "Must remain independent from all main-session reasoning fields."
+      relationships:
+        - target: "MemoryRequestResolution"
+          type: "one-to-one"
+          description: "One configured choice contributes to each sidecar's effective request decision."
+    - name: "MemoryRequestResolution"
+      description: "The model-aware decision used by payload construction, validation diagnostics, and configuration summary output."
+      fields:
+        - name: "requested_model"
+          type: "String"
+          description: "Configured or auto-selected memory model before account fallback."
+          constraints: "Must resolve through the existing Sidecar backend selection."
+        - name: "request_model"
+          type: "String"
+          description: "Actual model used for the primary call or OAuth fallback."
+          constraints: "GPT-5.6 Luna may resolve to GPT-5.4 only through the existing availability fallback."
+        - name: "explicit_override"
+          type: "Option<String>"
+          description: "Validated configured effort that takes precedence over defaults."
+          constraints: "Canonical base vocabulary only and compatible with the resolved model."
+        - name: "effective_effort"
+          type: "Option<String>"
+          description: "Effort sent to OpenAI, or None when the reasoning field is omitted."
+          constraints: "Unset Luna resolves to none; unset GPT-5.4 OAuth fallback resolves to low; other unset OpenAI models remain None."
+        - name: "effective_description"
+          type: "String"
+          description: "Non-secret summary text explaining explicit, default, fallback, omitted, or invalid behavior."
+          constraints: "Must distinguish configured from effective state and identify the resolved model."
+      relationships:
+        - target: "MemoryReasoningConfiguration"
+          type: "one-to-one"
+          description: "Consumes the resolved explicit configuration without reading main-session state."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/001-configure-memory-effort/spec.yaml"
+      description: "Approved behavioral requirements and acceptance criteria."
+    - path: "specs/001-configure-memory-effort/plan.yaml"
+      description: "Implementation architecture, sequencing, risks, and validation contract."
+    - path: "docs/feature-requests/memory-sidecar-reasoning-effort.md"
+      description: "Existing source proposal and verified pre-feature behavior; update only if implementation changes its documented contract."
+  source_code:
+    - path: "crates/jcode-config-types/src/lib.rs"
+      description: "Optional AgentsConfig field and backward-compatible default."
+    - path: "crates/jcode-base/src/config.rs"
+      description: "Configuration environment fingerprint entry so runtime reload detects the new override."
+    - path: "crates/jcode-base/src/config/env_overrides.rs"
+      description: "Trimmed environment-over-TOML override application."
+    - path: "crates/jcode-base/src/config/default_file.rs"
+      description: "Generated default configuration guidance for vocabulary, precedence, unset behavior, and main-session isolation."
+    - path: "crates/jcode-base/src/config/display_summary.rs"
+      description: "Configured and effective memory reasoning summary rendered from the shared resolver."
+    - path: "crates/jcode-base/src/sidecar.rs"
+      description: "Sidecar construction and primary/retry payload integration using reasoning_override precedence."
+    - path: "crates/jcode-base/src/sidecar/reasoning.rs"
+      description: "Focused pure normalization, capability validation, effective resolution, and summary semantics; created if needed to keep oversized-file ratchets flat."
+  tests:
+    - path: "crates/jcode-base/src/config_tests.rs"
+      description: "Configuration default, TOML/env precedence, blank env, cache fingerprint, default guidance, summary, and main-session isolation tests."
+    - path: "crates/jcode-base/src/sidecar.rs"
+      description: "Existing sidecar tests retained for unchanged Luna and fallback defaults."
+    - path: "crates/jcode-base/src/sidecar/reasoning.rs"
+      description: "Focused tests for xhigh override, other-model omission, fallback override, invalid vocabulary, model incompatibility, and configured/effective descriptions."
+
+implementation_phases:
+  - phase: 1
+    name: "Configuration contract and resolver"
+    goal: "Represent the optional setting and define one deterministic configured/effective resolution contract."
+    deliverables:
+      - "Add the serde-defaulted AgentsConfig field, environment fingerprint, non-empty environment override, and default configuration guidance."
+      - "Add sidecar-owned canonicalization and model-capability validation that returns actionable errors without changing public constructors."
+      - "Keep oversized touched files LOC-flat or smaller through reasoning-only local extraction where necessary."
+  - phase: 2
+    name: "Runtime and diagnostics integration"
+    goal: "Use the resolver for all memory request paths and expose the same decision in configuration diagnostics."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Initialize Sidecar reasoning_override from Config and apply it to primary, pre-resolved fallback, and retry fallback OpenAI requests."
+      - "Preserve the exact unset none, low, and omitted payload behaviors."
+      - "Render configured and effective memory effort, resolved model, omission/default/fallback state, or actionable incompatibility in Config::display_string."
+  - phase: 3
+    name: "Focused regression evidence and delivery gates"
+    goal: "Prove every acceptance path and verify no boundary or baseline regression was introduced."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Add deterministic tests for defaults, xhigh, env precedence including blank input, fallback, invalid/incompatible values, summary output, and main-session isolation."
+      - "Run exact-name tests first, then cargo check/test/build for affected packages and scripts/check_guardrails.sh on current stable Rust."
+      - "Record any already-known unrelated Cargo.lock, size, test-size, or swallowed-error baseline failures without rebaselining or expanding scope."
+
+risks:
+  - id: "RISK-001"
+    risk: "The retry-after-unavailable branch could bypass the explicit effort and retain its hardcoded low fallback."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Route both fallback entry paths through the same override-or-default resolver and assert the final request payload for each."
+  - id: "RISK-002"
+    risk: "Configuration summary text could diverge from actual account/model fallback behavior."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Render the summary from the same pure resolution type used by request construction and test each state table."
+  - id: "RISK-003"
+    risk: "OpenAI catalog metadata may be absent or stale when validating a configured effort."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Use advertised per-model values when available, otherwise accept only the canonical OpenAI base vocabulary and still validate the final resolved backend before sending."
+  - id: "RISK-004"
+    risk: "Adding directly to oversized source files could worsen repository code-size ratchet failures."
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Extract only reasoning-specific helpers/tests into the sidecar submodule, keep touched oversized files net-flat or smaller, and never rebaseline unrelated growth."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-02T20:51:14Z"
+  artifact_type: "plan"

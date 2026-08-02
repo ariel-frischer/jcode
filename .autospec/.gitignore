@@ -1,0 +1,10 @@
+# Local autospec runtime files
+init.yml
+state/
+context/
+cache/
+tmp/
+
+# Legacy completion markers
+SPEC_DONE
+IMPLEMENTATION_DONE
