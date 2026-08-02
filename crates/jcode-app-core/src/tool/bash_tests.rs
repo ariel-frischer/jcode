@@ -29,6 +29,13 @@ fn make_agent_ctx(signal: jcode_agent_runtime::InterruptSignal) -> ToolContext {
     }
 }
 
+#[test]
+fn managed_timeout_allows_thirty_minutes() {
+    assert_eq!(bounded_timeout_ms(None), DEFAULT_TIMEOUT_MS);
+    assert_eq!(bounded_timeout_ms(Some(1_800_000)), 1_800_000);
+    assert_eq!(bounded_timeout_ms(Some(3_600_000)), 1_800_000);
+}
+
 #[tokio::test]
 async fn test_basic_command_no_stdin() {
     let tool = BashTool::new();
