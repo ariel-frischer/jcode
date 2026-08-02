@@ -377,6 +377,12 @@ impl Config {
                 Some(trimmed.to_string())
             };
         }
+        if let Ok(v) = std::env::var("JCODE_MEMORY_REASONING_EFFORT") {
+            let trimmed = v.trim();
+            if !trimmed.is_empty() {
+                self.agents.memory_reasoning_effort = Some(trimmed.to_ascii_lowercase());
+            }
+        }
         if let Ok(v) = std::env::var("JCODE_MEMORY_SIDECAR_ENABLED") {
             if let Some(parsed) = parse_env_bool(&v) {
                 self.agents.memory_sidecar_enabled = parsed;

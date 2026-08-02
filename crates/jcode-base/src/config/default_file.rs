@@ -422,6 +422,14 @@ swarm_max_concurrent_agents = 32
 # (OpenAI defaults to gpt-5.6-luna with reasoning effort "none").
 # Env override: JCODE_MEMORY_MODEL
 # memory_model = "gpt-5.6-luna"
+# Optional reasoning effort for OpenAI memory-sidecar requests. Accepted values:
+# none, minimal, low, medium, high, xhigh, or max. A non-empty
+# JCODE_MEMORY_REASONING_EFFORT value overrides this TOML value (it is trimmed
+# and lowercased); blank environment input is ignored. When unset, gpt-5.6-luna
+# sends none, its GPT-5.4 ChatGPT OAuth fallback sends low, and other OpenAI
+# memory models omit an explicit reasoning field. This setting is dedicated to
+# memory and never inherits from or changes the main-session reasoning effort.
+# memory_reasoning_effort = "xhigh"
 #
 # Whether the memory sidecar (LLM precision judge) handles relevance/extraction.
 # Default true: the LLM precision-judge path is the only reliably productive

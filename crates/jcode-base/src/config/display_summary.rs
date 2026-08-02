@@ -5,6 +5,7 @@ impl Config {
         let path = Self::path()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "unknown".to_string());
+        let memory_reasoning_summary = memory_reasoning_summary(self);
         let mut effective_disabled_tools: Vec<String> =
             self.tools.selection().disabled_tools.into_iter().collect();
         effective_disabled_tools.sort();
@@ -98,6 +99,7 @@ impl Config {
 - Review: {}
 - Judge: {}
 - Memory: {}
+- Memory reasoning: {}
 - Memory sidecar: {}
 - Ambient: {}
 
@@ -284,6 +286,7 @@ impl Config {
                 .memory_model
                 .as_deref()
                 .unwrap_or("(sidecar auto-select)"),
+            memory_reasoning_summary,
             if self.agents.memory_sidecar_enabled {
                 "enabled"
             } else {
@@ -361,5 +364,39 @@ impl Config {
                 "disabled"
             },
         )
+    }
+}
+
+fn memory_reasoning_summary(config: &Config) -> String {
+    let requested_model = config
+        .agents
+        .memory_model
+        .as_deref()
+        .unwrap_or(crate::sidecar::SIDECAR_OPENAI_MODEL);
+    let oauth_fallback = requested_model == crate::sidecar::SIDECAR_OPENAI_MODEL
+        && crate::provider::is_model_available_for_account(requested_model) == Some(false);
+    let request_model = if oauth_fallback {
+        crate::sidecar::SIDECAR_OPENAI_OAUTH_FALLBACK_MODEL
+    } else {
+        requested_model
+    };
+    let catalog_efforts = crate::provider::cached_openai_reasoning_efforts();
+
+    match crate::sidecar::reasoning::resolve_memory_reasoning(
+        requested_model,
+        request_model,
+        config.agents.memory_reasoning_effort.as_deref(),
+        oauth_fallback,
+        catalog_efforts.as_ref(),
+    ) {
+        Ok(resolution) => {
+            let configured = resolution.configured_effort.as_deref().unwrap_or("(unset)");
+            let effective = resolution.effective_effort.as_deref().unwrap_or("omitted");
+            format!(
+                "configured: {configured}; effective: {effective}; model: {}; {}",
+                resolution.request_model, resolution.effective_description
+            )
+        }
+        Err(error) => format!("invalid: {error}"),
     }
 }

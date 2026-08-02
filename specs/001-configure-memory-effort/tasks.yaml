@@ -1,0 +1,328 @@
+tasks:
+    branch: "agent/jcode-sk5"
+    created: "2026-08-02"
+    spec_path: "specs/001-configure-memory-effort/spec.yaml"
+    plan_path: "specs/001-configure-memory-effort/plan.yaml"
+summary:
+    total_tasks: 20
+    total_phases: 6
+    parallel_opportunities: 6
+    estimated_complexity: "medium"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Lock down the existing memory-request defaults before changing the shared sidecar path"
+      tasks:
+        - id: "T001"
+          title: "Add baseline tests for unset memory reasoning payloads in crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Focused tests prove that unset GPT-5.6 Luna sends reasoning.effort=none, its ChatGPT OAuth GPT-5.4 fallback sends low, and another OpenAI memory model omits reasoning effort."
+            - "The tests exercise final request JSON without performing live network calls and pass before feature behavior is added."
+    - number: 2
+      title: "Foundational"
+      purpose: "Add the backward-compatible configuration contract and one sidecar-owned reasoning resolver required by every story"
+      tasks:
+        - id: "T002"
+          title: "Add legacy and optional memory-effort config tests in crates/jcode-base/src/config_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests prove existing TOML without agents.memory_reasoning_effort deserializes with None and valid persisted xhigh round-trips under the exact memory_reasoning_effort key."
+            - "Tests do not change or rely on provider.openai_reasoning_effort."
+        - id: "T003"
+          title: "Add the optional AgentsConfig memory effort field in crates/jcode-config-types/src/lib.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-config-types/src/lib.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "AgentsConfig exposes memory_reasoning_effort as Option<String> beside memory_model and its default is None."
+            - "Serde preserves existing field names and accepts existing configuration without migration or behavior changes."
+        - id: "T004"
+          title: "Write pure memory reasoning resolution tests in crates/jcode-base/src/sidecar/reasoning.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/sidecar/reasoning.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Table-driven tests define canonical normalization and the configured-versus-effective states for explicit, Luna-default, GPT-5.4-fallback, and omitted-effort cases."
+            - "Tests use the canonical provider-core effort vocabulary and establish that Jcode-only swarm sentinels are not valid memory efforts."
+        - id: "T005"
+          title: "Implement the sidecar-owned reasoning resolver in crates/jcode-base/src/sidecar/reasoning.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/sidecar/reasoning.rs"
+          dependencies: ["T003", "T004"]
+          acceptance_criteria:
+            - "A pure resolution type records requested model, actual request model, explicit override, effective effort or omission, and a non-secret effective description."
+            - "Resolution reuses jcode-provider-core canonical effort/model metadata, performs no I/O, and adds no dependency."
+            - "The implementation preserves none for unset Luna, low for its unset GPT-5.4 OAuth fallback, and omission for other unset OpenAI models."
+        - id: "T006"
+          title: "Register the focused reasoning module from crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "refactor"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "sidecar.rs delegates reasoning-only decisions to sidecar/reasoning.rs without changing public Sidecar constructors or request behavior."
+            - "Any helper extraction is limited to reasoning resolution and does not worsen the repository code-size ratchet for touched oversized files."
+    - number: 3
+      title: "User Story 1 - Choose memory reasoning effort"
+      purpose: "Apply a dedicated explicit effort to memory requests without coupling it to the main session"
+      story_reference: "US-001"
+      independent_test: "Configure GPT-5.6 Luna memory effort as xhigh, build a memory request, and verify xhigh is sent while a different main-session effort remains unchanged."
+      tasks:
+        - id: "T007"
+          title: "Add explicit-effort and main-session isolation request tests in crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "A focused request test proves configured xhigh overrides GPT-5.6 Luna's built-in none."
+            - "Isolation tests set different main-session and memory efforts and prove neither value is inherited or mutated before or after request construction."
+        - id: "T008"
+          title: "Wire configured memory effort into Sidecar request construction in crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "Sidecar initialization reads only Config.agents.memory_reasoning_effort and supplies it through the existing reasoning_override precedence path."
+            - "An explicit supported effort wins on the primary OpenAI memory request without changing public constructors, main-session state, authentication selection, or request count."
+            - "All T001 unset-default tests remain unchanged and passing."
+    - number: 4
+      title: "User Story 2 - Override memory effort per environment"
+      purpose: "Resolve a non-empty environment value over persisted memory configuration and reload when it changes"
+      story_reference: "US-002"
+      independent_test: "Load persisted low with JCODE_MEMORY_REASONING_EFFORT=xhigh and verify xhigh becomes the configured and effective memory-only value; verify a blank environment value preserves low."
+      tasks:
+        - id: "T009"
+          title: "Add environment precedence and blank-value tests in crates/jcode-base/src/config_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Tests prove a trimmed, lowercased JCODE_MEMORY_REASONING_EFFORT overrides persisted memory effort."
+            - "Tests prove an empty or whitespace-only environment value leaves a valid persisted effort intact."
+            - "Tests prove the dedicated environment value does not read or modify provider.openai_reasoning_effort."
+        - id: "T010"
+          title: "Apply the memory effort environment override in crates/jcode-base/src/config/env_overrides.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config/env_overrides.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Config::load applies trimmed, lowercased JCODE_MEMORY_REASONING_EFFORT after TOML loading and ignores blank values."
+            - "The implementation follows the existing OpenAI/Anthropic effort override convention and creates no second Sidecar environment-read path."
+        - id: "T011"
+          title: "Add JCODE_MEMORY_REASONING_EFFORT to the reload fingerprint in crates/jcode-base/src/config.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "The configuration environment fingerprint includes the new variable so a changed value invalidates cached configuration consistently with existing overrides."
+            - "Fingerprinting records only the existing non-secret environment representation and does not log the value."
+        - id: "T012"
+          title: "Document memory effort precedence in crates/jcode-base/src/config/default_file.rs"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T010", "T011"]
+          acceptance_criteria:
+            - "Generated default guidance lists none, minimal, low, medium, high, xhigh, and max; names JCODE_MEMORY_REASONING_EFFORT; and states environment-over-TOML precedence."
+            - "Guidance explains blank environment handling, all three unset model/fallback behaviors, and independence from main-session reasoning."
+    - number: 5
+      title: "User Story 3 - Understand effective memory behavior"
+      purpose: "Reject unusable choices with actionable context and report the same effective decision used by requests"
+      story_reference: "US-003"
+      independent_test: "Inspect summaries for explicit, default, omitted, and fallback states, then supply unknown and model-incompatible efforts and verify each diagnostic names the value, resolved model, and valid alternatives."
+      tasks:
+        - id: "T013"
+          title: "Add invalid and model-incompatible effort tests in crates/jcode-base/src/sidecar/reasoning.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/sidecar/reasoning.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Tests reject an unknown effort, a Jcode-only swarm sentinel, a catalog-known incompatible effort, and an explicit effort on a resolved backend/model that cannot carry OpenAI reasoning."
+            - "Every error assertion includes the supplied value, resolved model, and supported alternatives or corrective action without credentials."
+        - id: "T014"
+          title: "Implement model-aware effort validation in crates/jcode-base/src/sidecar/reasoning.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/sidecar/reasoning.rs"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Validation canonicalizes the base OpenAI vocabulary, rejects swarm sentinels, uses cached catalog efforts when available, and otherwise permits only canonical values."
+            - "Invalid or incompatible explicit choices stop request construction with actionable, non-secret context rather than being silently cleared or downgraded."
+        - id: "T015"
+          title: "Add explicit primary and retry fallback payload tests in crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: ["T008", "T014"]
+          acceptance_criteria:
+            - "Tests prove xhigh remains authoritative when Luna is pre-resolved to GPT-5.4 and when an unavailable Luna request retries as GPT-5.4."
+            - "The existing no-override GPT-5.4 fallback test still proves low, and transport/request-count behavior is unchanged."
+        - id: "T016"
+          title: "Apply the resolver to every Luna fallback request in crates/jcode-base/src/sidecar.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/sidecar.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Both the pre-resolved OAuth fallback and retry-after-unavailable path use explicit reasoning_override when present and low only when it is absent."
+            - "Authentication selection, fallback model identity, and all unset payload shapes remain unchanged."
+        - id: "T017"
+          title: "Add configured and effective memory summary tests in crates/jcode-base/src/config_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T012", "T014", "T016"]
+          acceptance_criteria:
+            - "Summary tests cover explicit xhigh, unset Luna none, unset GPT-5.4 fallback low, and omitted effort for another OpenAI model."
+            - "Tests distinguish configured from effective state, include the resolved model and fallback/default/omission reason, and assert actionable invalid/incompatible output."
+        - id: "T018"
+          title: "Render memory reasoning resolution in crates/jcode-base/src/config/display_summary.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/config/display_summary.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Config::display_string consumes the shared sidecar resolution contract and reports configured effort separately from effective request behavior and resolved model."
+            - "Summary wording covers explicit, model default, OAuth fallback, omission, and invalid/incompatible states without guessing an effort when none is sent."
+            - "The summary never reads main-session effort as a memory default and never exposes secrets."
+    - number: 6
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Verify acceptance-criteria coverage, affected builds, repository guardrails, and scope containment"
+      tasks:
+        - id: "T019"
+          title: "Run focused memory config and sidecar validation from Cargo.toml"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "Cargo.toml"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "Run the exact-name jcode-base configuration and sidecar tests added by T001, T002, T004, T007, T009, T013, T015, and T017 before broader checks, recording each command and result."
+            - "Run cargo fmt --check, cargo check for jcode-config-types and jcode-base, the relevant jcode-base test target, and a source build on the current stable toolchain; all changed-surface checks pass."
+            - "If local resources are insufficient, use scripts/remote_build.sh for the build without treating a resource termination as a product failure."
+        - id: "T020"
+          title: "Run delivery guardrails and review the scoped diff with scripts/check_guardrails.sh"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T019"]
+          acceptance_criteria:
+            - "rustup update stable and scripts/check_guardrails.sh complete successfully, or every failure is isolated as pre-existing and outside the changed surface."
+            - "No code-size, test-size, panic, swallowed-error, dependency-boundary, wildcard-reexport, warning, formatting, clippy, lockfile, or unused-dependency ratchet is worsened or rebaselined."
+            - "Final git diff contains only the approved config contract, environment mapping, resolver/request integration, summary/guidance, and focused tests; unrelated dirty files remain untouched."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-003"]
+        - story_id: "US-002"
+          depends_on: []
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-001", "US-002"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3, 4, 5]
+        - phase: 3
+          blocks: [5]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T004"]
+          rationale: "The config compatibility tests and pure resolver tests touch different files and share only the completed request baseline."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T007", "T009", "T013"]
+          rationale: "After the foundation, explicit-request, environment-precedence, and validation tests can be authored in separate files for their respective story increments."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T010", "T011"]
+          rationale: "Environment application and reload fingerprinting modify separate config modules after the same precedence tests are defined."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3]
+        description: "Baseline protection plus the shared resolver and explicit per-memory-request effort control"
+        validation: "Run the focused unset-default, persisted-config, resolver, xhigh request, and main-session isolation tests; then cargo check jcode-config-types and jcode-base."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Backward-compatible optional configuration data and a pure, model-aware memory reasoning decision contract with unchanged request defaults."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3]
+          deliverable: "Users can set a dedicated persisted memory effort that controls primary memory requests without affecting main-session reasoning."
+        - milestone: "Environment Control Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "Deployments can override persisted memory effort through JCODE_MEMORY_REASONING_EFFORT with deterministic blank handling and reload detection."
+        - milestone: "Feature Complete"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "All primary/fallback paths, validation diagnostics, summaries, documentation, focused builds, and repository guardrails satisfy the specification."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-02T20:59:06Z"
+    artifact_type: "tasks"
