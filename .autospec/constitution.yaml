@@ -1,0 +1,263 @@
+constitution:
+  project_name: "Jcode"
+  version: "1.0.0"
+  ratified: "2026-08-02"
+  last_amended: "2026-08-02"
+
+preamble: |
+  Jcode is a Rust coding-agent product whose shared server, clients, providers,
+  tools, configuration, and persisted contracts must evolve without surprising
+  existing users. These principles keep changes narrow, compatible, testable,
+  and aligned with the workspace's established architecture and CI guardrails.
+
+principles:
+  - name: "Surgical, Scope-Bound Changes"
+    id: "PRIN-001"
+    category: "process"
+    priority: "NON-NEGOTIABLE"
+    description: |
+      Every change MUST be the smallest coherent edit that satisfies its approved
+      outcome and acceptance criteria. Implementations MUST preserve unrelated
+      working-tree changes and MUST NOT include adjacent cleanup, broad refactors,
+      speculative abstractions, unnecessary dependency additions, or repository-wide
+      reformatting. Newly discovered work outside the accepted scope MUST be
+      reported or tracked separately rather than folded into the current change.
+    rationale: "Narrow diffs reduce regression risk, review cost, and conflicts in a high-churn workspace."
+    enforcement:
+      - mechanism: "Scope-to-diff review"
+        description: "Reviewers compare the final diff with the Bead or specification outcome, non-goals, and acceptance criteria."
+      - mechanism: "Working-tree inspection"
+        description: "Contributors inspect git status and explicit file diffs before staging only the files owned by the change."
+    exceptions:
+      - "A directly required refactor may be included only when the requested behavior cannot be implemented safely without it and the expanded scope is documented before implementation."
+
+  - name: "Backward-Compatible User and Data Contracts"
+    id: "PRIN-002"
+    category: "architecture"
+    priority: "NON-NEGOTIABLE"
+    description: |
+      Additive work MUST preserve current behavior when the new capability is
+      unset or unused. Existing CLI behavior, environment variables, config
+      fields and defaults, provider behavior, wire messages, serialized forms,
+      persisted state, and public import or re-export paths MUST remain compatible
+      unless a breaking change is explicitly approved. Migrations MUST preserve
+      serde field names, defaults, skips, enum representations, and user-authored
+      choices; staged crate moves MUST retain compatibility re-exports until all
+      consumers intentionally migrate.
+    rationale: "Jcode has persistent configuration, cross-process protocols, and multiple clients whose contracts outlive an individual code change."
+    enforcement:
+      - mechanism: "Compatibility tests"
+        description: "Focused tests cover legacy or unset behavior, serialized shapes, fallback paths, and migrations affected by the change."
+      - mechanism: "Contract review"
+        description: "Plans and reviews identify every affected CLI, config, protocol, persistence, and public-path contract."
+    exceptions:
+      - "An intentionally breaking product change requires explicit maintainer approval, a migration or clear failure path, release notes, and an appropriate product version bump."
+
+  - name: "Explicit Configuration Precedence"
+    id: "PRIN-003"
+    category: "architecture"
+    priority: "MUST"
+    description: |
+      Every configurable behavior MUST define one canonical resolution path. For
+      settings exposed at all layers, precedence is explicit per-invocation or
+      per-session override, then environment override, then persisted config,
+      then built-in default, unless an existing documented contract explicitly
+      requires a different order. A new setting MUST reuse the owning resolver
+      instead of creating a parallel request path, and MUST document the meaning
+      of unset, empty, invalid, and unsupported values. Diagnostics SHOULD report
+      configured and effective non-secret values when those differ.
+    rationale: "Deterministic precedence makes behavior explainable while preserving Jcode's existing file-then-environment loading model."
+    enforcement:
+      - mechanism: "Precedence test matrix"
+        description: "Tests cover built-in defaults, persisted values, environment overrides, explicit runtime overrides, invalid input, and relevant fallback combinations."
+      - mechanism: "Configuration documentation review"
+        description: "The config type, default config template, environment override, and diagnostic summary are updated together when applicable."
+    exceptions:
+      - "Credential source selection or another established subsystem may retain a different documented precedence order when compatibility or security requires it; the order must remain explicit and tested."
+
+  - name: "Layered Rust Ownership and Dependency Direction"
+    id: "PRIN-004"
+    category: "architecture"
+    priority: "MUST"
+    description: |
+      Changes MUST respect Jcode's layered workspace and existing ownership
+      boundaries. Stable data contracts belong in focused, dependency-light type
+      crates; those crates MUST NOT depend on root orchestration, storage,
+      providers, networking, processes, protocol runtime, desktop, or TUI layers.
+      Runtime behavior remains with its owning domain or composition crate until
+      a complete boundary can move without cycles or increased dependency fan-out.
+      High-churn orchestration may depend on stable lower layers, but stable lower
+      layers MUST NOT depend back on product-specific runtime or interface code.
+      The single-server, multi-client runtime model MUST remain intact unless an
+      approved architecture change explicitly replaces it.
+    rationale: "The existing crate seams reduce compile invalidation and make ownership testable without forcing a big-bang rewrite."
+    enforcement:
+      - mechanism: "Dependency boundary guard"
+        description: "scripts/check_dependency_boundaries.py and Cargo metadata verify allowed crate direction and lockfile consistency."
+      - mechanism: "Architecture review"
+        description: "Plans identify the owning crate, reused contracts, dependency impact, compatibility seams, and explicit non-goals."
+    exceptions:
+      - "A temporary compatibility adapter is allowed during a staged migration when the old path remains usable and the adapter's removal condition is documented."
+
+  - name: "Focused Behavioral Tests"
+    id: "PRIN-005"
+    category: "quality"
+    priority: "MUST"
+    description: |
+      Every behavior change MUST add or adjust tests that directly exercise its
+      acceptance criteria and regression risk. Contributors MUST run the narrowest
+      reliable crate, module, or exact-name tests first; broad filters known to
+      select unrelated stateful, timing-sensitive, UI, or benchmark tests MUST NOT
+      substitute for focused evidence. Configuration changes MUST test unchanged
+      defaults, configured behavior, precedence, invalid input, and relevant
+      fallback behavior. Documentation-only changes require their artifact or link
+      validators rather than unrelated Rust tests.
+    rationale: "Precise tests provide attributable evidence and faster iteration in a large workspace with heterogeneous test costs."
+    enforcement:
+      - mechanism: "Acceptance-criteria traceability"
+        description: "Each behavioral acceptance criterion maps to a focused automated check or a documented reason why automation is impossible."
+      - mechanism: "Targeted test commands"
+        description: "Validation records exact Cargo package, module, test name, artifact validator, or deterministic smoke command and its result."
+    exceptions:
+      - "Manual validation is permitted only for behavior that cannot be observed automatically; the gap, environment, and expected observation must be documented."
+
+  - name: "Visible Failures and Trust-Boundary Validation"
+    id: "PRIN-006"
+    category: "security"
+    priority: "MUST"
+    description: |
+      External input, configuration, credentials, filesystem data, protocol data,
+      and provider responses MUST be validated at their trust boundaries. Invalid
+      or unsupported values MUST produce an actionable error or an explicitly
+      documented fallback; implementations MUST NOT silently swallow errors,
+      introduce panic-prone production paths, or log secret values. Diagnostic
+      output may expose names, presence, lengths, or redacted fingerprints only.
+    rationale: "Jcode coordinates local state and external providers, so hidden failures and leaked credentials have a wide operational blast radius."
+    enforcement:
+      - mechanism: "Repository ratchets"
+        description: "Panic, swallowed-error, and warning-budget checks prevent growth in known unsafe failure patterns."
+      - mechanism: "Negative-path tests"
+        description: "Focused tests verify invalid input, unsupported values, and provider or persistence failures where the change touches those boundaries."
+    exceptions: []
+
+  - name: "Repository Guardrails Are Delivery Gates"
+    id: "PRIN-007"
+    category: "quality"
+    priority: "NON-NEGOTIABLE"
+    description: |
+      Changes MUST satisfy the repository-local command contracts before push or
+      merge. Implementation changes MUST run focused checks first, then the
+      relevant build, and scripts/check_guardrails.sh, which mirrors CI formatting,
+      all-target and all-feature checking, clippy with warnings denied, lockfile,
+      warning, code-size, test-size, panic, swallowed-error, dependency-boundary,
+      wildcard re-export, frame-budget, and unused-dependency gates. Intentional
+      ratchet growth MUST be reviewed before rebaselining. Validation MUST use the
+      current stable Rust toolchain or disclose toolchain drift, and resource-heavy
+      builds SHOULD use the repository's remote-build path when local resources are
+      insufficient.
+    rationale: "One canonical guardrail suite keeps local evidence aligned with CI and prevents the next contributor from inheriting a broken branch."
+    enforcement:
+      - mechanism: "Local guardrail script"
+        description: "scripts/check_guardrails.sh must run before delivery; changed-surface gates must pass, and unrelated baseline failures must be isolated and recorded."
+      - mechanism: "Continuous integration"
+        description: "CI repeats formatting, quality, build, test, and platform-specific checks on supported targets."
+    exceptions:
+      - "A documentation-only or schema-only change may use scripts/check_guardrails.sh --skip-slow when it cannot affect compiled Rust; its dedicated artifact validator must still pass."
+      - "A proven pre-existing failure outside the changed surface may be reported without expanding scope; the change must not worsen it, and ratchet baselines must not be updated to hide it."
+      - "Live, costly, production-adjacent, or unavailable-platform validation may be deferred only with explicit approval and a recorded validation owner."
+
+sections:
+  - name: "Change Scope and Design"
+    content: |
+      Substantial work is owned by one Bead through local validation. The Bead,
+      specification, or plan must state the outcome, scope, design owner, contracts
+      to reuse, compatibility constraints, non-goals, acceptance criteria, and
+      related-work boundaries before implementation. Ambiguity that changes
+      behavior, scope, safety, or validation requires clarification; otherwise use
+      the simplest implementation consistent with existing architecture. Do not
+      combine unrelated cleanup or refactoring with the requested change.
+
+  - name: "Compatibility and Configuration"
+    content: |
+      New configuration is optional by default and must not change behavior or
+      cost when unset. Its config type, default template, environment mapping,
+      resolver, diagnostics, and tests evolve as one contract. Persisted, serde,
+      CLI, protocol, provider, and compatibility re-export surfaces are presumed
+      stable. Migration logic must distinguish absent, machine-written legacy, and
+      user-authored values where that distinction affects intent. Secrets never
+      appear in summaries, logs, fixtures, commits, or validation output.
+
+  - name: "Architecture and Dependencies"
+    content: |
+      Jcode remains a modular monolith with a layered Rust workspace: foundation
+      and stable contracts, domain/runtime behavior, interface surfaces, and a thin
+      composition layer. Crate extraction is justified by ownership, dependency
+      direction, or compile-impact improvement, not file tidiness. New dependencies
+      must be necessary, explicitly versioned, represented in Cargo.lock, and must
+      not increase type-crate fan-out into runtime-heavy layers. Public compatibility
+      paths remain until an intentional migration is complete.
+
+  - name: "Validation and Delivery"
+    content: |
+      Validation proceeds from the smallest deterministic check to the relevant
+      crate or binary build and repository guardrails. Record commands, results,
+      and any skipped or deferred evidence. Stage only explicit owned files, make
+      focused commits, and require the upstream branch to be an ancestor before
+      pushing; do not rewrite shared history. Release work additionally updates
+      Cargo.toml using product semantic versioning based on the complete release
+      delta and documents breaking behavior.
+
+governance:
+  amendment_process:
+    - step: 1
+      action: "Propose the constitutional change in a focused reviewed change"
+      requirements: "State the motivation, affected principles, compatibility impact, enforcement impact, and rejected simpler alternatives."
+    - step: 2
+      action: "Assess downstream impact"
+      requirements: "Identify specifications, plans, tasks, templates, architecture documents, tests, guardrails, and migrations that must change."
+    - step: 3
+      action: "Obtain maintainer approval"
+      requirements: "Approval is required before merge; a change that conflicts with a NON-NEGOTIABLE principle must amend the constitution first."
+    - step: 4
+      action: "Ratify and synchronize"
+      requirements: "Update the semantic version, last_amended date, sync_impact, dependent artifacts, and validation evidence in the same change."
+
+  versioning_policy: |
+    Constitution versions follow semantic versioning. MAJOR changes remove or
+    redefine a principle or governance rule so previously compliant work becomes
+    non-compliant. MINOR changes add a principle, section, enforcement obligation,
+    or materially expand governance. PATCH changes clarify wording or improve
+    enforcement detail without changing required behavior. The original ratified
+    date never changes; last_amended changes whenever constitution content changes.
+
+  compliance_review:
+    frequency: "At every specification, plan, implementation review, and release; formal review at least annually"
+    process: "Trace affected requirements and validation evidence to these principles, resolve conflicts before implementation, and review whether enforcement remains effective and aligned with repository commands."
+
+  rules:
+    - "This constitution governs all specifications, plans, tasks, implementations, reviews, and releases in the repository."
+    - "When repository instructions and this constitution differ, apply the stricter compatible rule; a direct conflict requires an approved amendment before implementation."
+    - "Every specification and plan must identify applicable principles and provide executable compliance checks."
+    - "Exceptions are valid only where a principle lists them and the change records the reason, scope, owner, and compensating validation."
+    - "NON-NEGOTIABLE principles cannot be waived by an implementation, deadline, emergency, or generated artifact."
+    - "Emergency process acceleration still requires post-hoc documentation, validation, and maintainer review, and cannot bypass compatibility, secret-handling, or delivery gates."
+
+sync_impact:
+  version_change: "none -> 1.0.0"
+  modified_principles: []
+  added_sections:
+    - "Initial project constitution with seven binding principles"
+    - "Change Scope and Design"
+    - "Compatibility and Configuration"
+    - "Architecture and Dependencies"
+    - "Validation and Delivery"
+  removed_sections: []
+  templates_requiring_updates: []
+  follow_up_todos: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-02T20:31:45Z"
+  artifact_type: "constitution"
