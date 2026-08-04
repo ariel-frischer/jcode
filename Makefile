@@ -1,6 +1,13 @@
 WORKTREE_SCRIPT ?= scripts/worktree-setup.sh
 BASE ?= $(shell git branch --show-current 2>/dev/null || echo HEAD)
 
+.PHONY: install install-fast
+install:
+	@scripts/install_release.sh
+
+install-fast:
+	@scripts/install_release.sh --fast
+
 .PHONY: worktree
 worktree:
 	@test -n "$(BRANCH)" || (echo "BRANCH is required: make worktree BRANCH=agent/name [BASE=$$(git branch --show-current)]" >&2; exit 1)
