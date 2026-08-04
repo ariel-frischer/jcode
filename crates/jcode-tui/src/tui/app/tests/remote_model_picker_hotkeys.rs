@@ -37,6 +37,43 @@ fn remote_model_picker_preview_state() -> crate::tui::InlineInteractiveState {
 }
 
 #[test]
+fn test_remote_command_palette_model_aliases_open_full_picker() {
+    with_temp_jcode_home(|| {
+        for query in ["model", "models"] {
+            let mut app = create_test_app();
+            configure_test_remote_models(&mut app);
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let _guard = rt.enter();
+            let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+            rt.block_on(app.handle_remote_key(
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                &mut remote,
+            ))
+            .expect("Ctrl+P should open the palette remotely");
+            for c in query.chars() {
+                rt.block_on(app.handle_remote_key(
+                    KeyCode::Char(c),
+                    KeyModifiers::empty(),
+                    &mut remote,
+                ))
+                .expect("palette query should be accepted remotely");
+            }
+            rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
+                .expect("model command should dispatch remotely");
+
+            let picker = app
+                .inline_interactive_state
+                .as_ref()
+                .expect("model command should open the picker");
+            assert_eq!(picker.kind, crate::tui::PickerKind::Model);
+            assert!(!picker.preview, "palette selection should open the full picker");
+        }
+    });
+}
+
+#[test]
 fn test_remote_model_picker_preview_ctrl_n_toggles_favorite() {
     with_temp_jcode_home(|| {
         let mut app = create_test_app();

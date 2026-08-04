@@ -349,6 +349,14 @@ async fn handle_remote_key_internal(
             if let Some(action) = app.accept_command_palette_selection() {
                 match action {
                     app_mod::command_palette::CommandPaletteAction::SlashCommand(command) => {
+                        if matches!(command.as_str(), "/model" | "/models") {
+                            app.dispatch_command_palette_action(
+                                app_mod::command_palette::CommandPaletteAction::SlashCommand(
+                                    command,
+                                ),
+                            );
+                            return Ok(());
+                        }
                         app.input = command;
                         app.cursor_pos = app.input.len();
                         app.sync_model_picker_preview_from_input();
