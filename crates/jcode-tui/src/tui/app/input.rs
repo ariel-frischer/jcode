@@ -1513,6 +1513,17 @@ impl App {
         }
 
         let todos = super::commands::poke_todos(self);
+        if !todos.is_empty()
+            && crate::todo::take_long_session_review_if_due(&self.session.id).unwrap_or(false)
+        {
+            self.push_display_message(DisplayMessage::system(
+                "🔍 Rechecking the plan and assessments after extended work...",
+            ));
+            self.queued_messages
+                .push(crate::todo::TODO_LONG_SESSION_REVIEW_MESSAGE.to_string());
+            self.pending_queued_dispatch = true;
+            return true;
+        }
         let incomplete: Vec<_> = todos
             .iter()
             .filter(|todo| super::commands::is_incomplete_poke_todo(todo))
@@ -1520,10 +1531,13 @@ impl App {
             .collect();
         if incomplete.is_empty() {
             if todos.is_empty() {
-                crate::logging::info(
-                    "AUTO_POKE_DECISION action=disarm reason=no_todos incomplete=0",
-                );
-                self.auto_poke_incomplete_todos = false;
+                // No todo list exists yet for this session. Auto-poke is armed
+                // by default (`features.auto_poke`), so disarming here would
+                // silently kill the feature for the whole session after the
+                // very first todo-free turn: every later turn that *does*
+                // leave incomplete todos would never be poked. Stay armed and
+                // simply do nothing this turn.
+                crate::logging::info("AUTO_POKE_DECISION action=idle reason=no_todos incomplete=0");
                 return false;
             }
             // Deferred quality checks land here, once, instead of interrupting
@@ -1534,13 +1548,28 @@ impl App {
             if self.deliver_deferred_gate_digest_if_needed() {
                 return true;
             }
+            let goals = crate::todo::load_goals(&self.session.id).unwrap_or_default();
+            let ownership_needs_followup =
+                !crate::todo::completed_groups_have_sufficient_delivery(&todos, &goals);
+            let gate_budget_left =
+                self.todo_completion_gate_attempts < Self::TODO_COMPLETION_GATE_MAX_ATTEMPTS;
+            if ownership_needs_followup && gate_budget_left {
+                self.todo_completion_gate_attempts =
+                    self.todo_completion_gate_attempts.saturating_add(1);
+                crate::telemetry::record_todo_gate(crate::telemetry::TodoGateKind::Ownership);
+                self.push_display_message(DisplayMessage::system(
+                    "🔍 Checking end-to-end ownership before finishing...",
+                ));
+                self.queued_messages
+                    .push(crate::todo::TODO_OWNERSHIP_CONTINUATION_MESSAGE.to_string());
+                self.pending_queued_dispatch = true;
+                return true;
+            }
             let confidence_summary = super::commands::todo_confidence_summary(&todos);
             let confidence_label =
                 super::commands::format_todo_completion_confidence(confidence_summary);
             let needs_spike_challenge = confidence_summary.confidence_spike_detected
                 && !self.todo_confidence_spike_challenged;
-            let gate_budget_left =
-                self.todo_completion_gate_attempts < Self::TODO_COMPLETION_GATE_MAX_ATTEMPTS;
             if (confidence_summary.completion_confidence_needs_validation || needs_spike_challenge)
                 && gate_budget_left
             {
@@ -1586,7 +1615,10 @@ impl App {
                 self.pending_queued_dispatch = false;
                 return false;
             }
-            self.auto_poke_incomplete_todos = false;
+            // Cycle finished cleanly. When auto-poke is the configured default
+            // it stays armed so the next batch of work is covered too; only an
+            // explicit /poke off (or a circuit breaker above) disarms it.
+            self.auto_poke_incomplete_todos = self.auto_poke_default_on;
             self.todo_confidence_spike_challenged = false;
             // A finished cycle re-arms the review for whatever work comes next;
             // without this a session could only ever deliver one digest.
