@@ -233,6 +233,14 @@ impl App {
     pub(super) fn dispatch_command_palette_action(&mut self, action: CommandPaletteAction) {
         match action {
             CommandPaletteAction::SlashCommand(command) => {
+                // `/model` and `/models` normally open a preview while typed in the
+                // composer. From the command palette, the command is already an
+                // explicit selection, so open the full picker instead of simulating
+                // typing the command and immediately activating its first row.
+                if matches!(command.as_str(), "/model" | "/models") {
+                    self.open_model_picker();
+                    return;
+                }
                 self.input = command;
                 self.cursor_pos = self.input.len();
                 self.sync_model_picker_preview_from_input();

@@ -129,6 +129,38 @@ fn command_palette_dispatches_shortcut_commands() {
     assert!(app.queue_mode);
     assert!(!app.command_palette_is_open());
 }
+
+#[test]
+fn command_palette_models_command_opens_model_picker() {
+    let mut app = create_test_app();
+    configure_test_remote_models(&mut app);
+    app.open_command_palette();
+
+    for c in "models".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    wait_for_model_picker_load(&mut app);
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("Models command should open the model picker");
+    assert_eq!(picker.kind, crate::tui::PickerKind::Model);
+    assert!(
+        !picker.preview,
+        "palette selection should open the full picker"
+    );
+}
+
 #[test]
 fn kv_cache_signature_prefix_match_allows_appended_messages() {
     let baseline_messages = vec![
