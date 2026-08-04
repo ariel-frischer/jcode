@@ -850,6 +850,14 @@ Then symlink to your PATH:
 scripts/install_release.sh
 ```
 
+From the repository root, the same global reinstall workflow is also available
+through Make:
+
+```bash
+make install-fast  # Fast release rebuild, install, and server reload
+make install       # Full LTO release rebuild, install, and server reload
+```
+
 ### Uninstall
 
 Removes installed binaries and the launcher but keeps your config, auth, and
