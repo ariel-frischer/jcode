@@ -22,6 +22,7 @@ impl Config {
 - Page down: `{}`
 - Model next: `{}`
 - Model prev: `{}`
+- Open model picker: `{}`
 - Effort increase: `{}`
 - Effort decrease: `{}`
 - Centered toggle: `{}`
@@ -138,6 +139,7 @@ impl Config {
             self.keybindings.scroll_page_down,
             self.keybindings.model_switch_next,
             self.keybindings.model_switch_prev,
+            self.keybindings.open_model_picker,
             self.keybindings.effort_increase,
             self.keybindings.effort_decrease,
             self.keybindings.centered_toggle,

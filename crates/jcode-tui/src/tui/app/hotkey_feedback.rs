@@ -98,6 +98,7 @@ pub(super) struct RegistryInputs<'a> {
     pub dictation: &'a OptionalBinding,
     pub new_terminal: &'a OptionalBinding,
     pub open_resume: &'a OptionalBinding,
+    pub open_model_picker: &'a OptionalBinding,
     pub fallback_switch: &'a OptionalBinding,
     /// Workspace navigation only dispatches in remote/client mode.
     pub remote: bool,
@@ -169,6 +170,11 @@ pub(super) fn build_registry(inputs: &RegistryInputs<'_>) -> Vec<KnownHotkey> {
         inputs.open_resume.binding.clone(),
         "open_resume",
         "open the session picker",
+    );
+    push(
+        inputs.open_model_picker.binding.clone(),
+        "open_model_picker",
+        "open the model picker",
     );
     // Context-armed accept key (fallback offer / update merge). Quiet: it only
     // acts when an offer is on screen, which already explains itself.
@@ -718,6 +724,7 @@ impl App {
             dictation: &self.dictation_key,
             new_terminal: &self.new_terminal_key,
             open_resume: &self.open_resume_key,
+            open_model_picker: &self.open_model_picker_key,
             fallback_switch: &self.fallback_switch_key,
             remote,
         })
@@ -887,6 +894,10 @@ mod tests {
             binding: Some(alt('r')),
             label: Some("Alt+R".to_string()),
         };
+        let open_model_picker = OptionalBinding {
+            binding: Some(ctrl('m')),
+            label: Some("Ctrl+M".to_string()),
+        };
         let fallback_switch = OptionalBinding {
             binding: Some(ctrl('y')),
             label: Some("Ctrl+Y".to_string()),
@@ -901,6 +912,7 @@ mod tests {
             dictation: &dictation,
             new_terminal: &new_terminal,
             open_resume: &open_resume,
+            open_model_picker: &open_model_picker,
             fallback_switch: &fallback_switch,
             remote,
         })
@@ -962,10 +974,14 @@ mod tests {
     #[test]
     fn nearest_suggests_same_letter_under_other_modifier() {
         let registry = test_inputs_registry(false);
-        // Ctrl+M is unbound; Alt+M toggles the side panel.
-        let near = nearest_hotkey(&registry, KeyCode::Char('m'), KeyModifiers::CONTROL)
-            .expect("suggestion for ctrl+m");
-        assert_eq!(near.action, "side_panel_toggle");
+        // Ctrl+Shift+M is unbound; Ctrl+M opens the model picker.
+        let near = nearest_hotkey(
+            &registry,
+            KeyCode::Char('m'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        )
+        .expect("suggestion for ctrl+shift+m");
+        assert_eq!(near.action, "open_model_picker");
     }
 
     #[test]
@@ -1052,6 +1068,7 @@ mod tests {
             ("workspace_right", Some(&["workspace_right"])),
             ("new_terminal", Some(&["new_terminal"])),
             ("open_resume", Some(&["open_resume"])),
+            ("open_model_picker", Some(&["open_model_picker"])),
         ];
 
         let registry = test_inputs_registry(true);

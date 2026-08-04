@@ -6,19 +6,22 @@ fn unknown_ctrl_chord_sets_hotkey_feedback_with_suggestion() {
     let mut app = create_test_app();
     assert!(app.hotkey_feedback.is_none());
 
-    // Ctrl+M is unbound (no control-key handler claims 'm'); the nearest
-    // known hotkey is Alt+M (side panel toggle).
-    app.handle_key(KeyCode::Char('m'), KeyModifiers::CONTROL)
+    // Ctrl+Shift+M is unbound; the nearest known hotkey is Ctrl+M
+    // (open the model picker).
+    app.handle_key(
+        KeyCode::Char('m'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    )
         .unwrap();
 
     let (message, _) = app
         .hotkey_feedback
         .clone()
         .expect("unknown chord should set feedback");
-    assert!(message.contains("Ctrl+M"), "{message}");
+    assert!(message.contains("Ctrl+Shift+M"), "{message}");
     assert!(message.contains("isn't bound"), "{message}");
-    assert!(message.contains("Alt+M"), "{message}");
-    assert!(message.contains("side panel"), "{message}");
+    assert!(message.contains("Ctrl+M"), "{message}");
+    assert!(message.contains("model picker"), "{message}");
 
     // The renderer consumes the trait accessor; it must surface the same text
     // (and expire it later) so the notification line actually shows it.

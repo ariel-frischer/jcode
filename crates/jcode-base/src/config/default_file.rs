@@ -37,6 +37,8 @@ scroll_page_down = "alt+d"
 # Model switching
 model_switch_next = "ctrl+tab"
 model_switch_prev = "ctrl+shift+tab"
+# Open the model picker. Set "" to disable.
+open_model_picker = "ctrl+m"
 
 # Reasoning effort switching (OpenAI models)
 # Defaults: cmd+right / cmd+left on macOS, alt+right / alt+left elsewhere.

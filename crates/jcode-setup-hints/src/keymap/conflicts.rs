@@ -112,6 +112,11 @@ pub fn jcode_bindings(cfg: &KeybindingsConfig) -> Vec<JcodeBinding> {
             cfg.model_switch_prev.as_str(),
         ),
         (
+            "open_model_picker",
+            "Open model picker",
+            cfg.open_model_picker.as_str(),
+        ),
+        (
             "effort_increase",
             "Increase reasoning effort",
             cfg.effort_increase.as_str(),
