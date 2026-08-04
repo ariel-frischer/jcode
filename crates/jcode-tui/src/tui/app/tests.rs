@@ -134,7 +134,12 @@ fn command_palette_dispatches_shortcut_commands() {
 fn command_palette_models_command_opens_model_picker() {
     let mut app = create_test_app();
     configure_test_remote_models(&mut app);
-    app.open_command_palette();
+    app.handle_key(
+        crossterm::event::KeyCode::Char('p'),
+        crossterm::event::KeyModifiers::CONTROL,
+    )
+    .unwrap();
+    assert!(app.command_palette_is_open());
 
     for c in "models".chars() {
         app.handle_key(
