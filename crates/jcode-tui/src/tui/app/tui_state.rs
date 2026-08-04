@@ -777,6 +777,10 @@ impl crate::tui::TuiState for App {
         self.prompt_history_search_view()
     }
 
+    fn command_palette(&self) -> Option<crate::tui::CommandPaletteView> {
+        self.command_palette_view()
+    }
+
     fn active_skill(&self) -> Option<String> {
         self.active_skill.clone()
     }

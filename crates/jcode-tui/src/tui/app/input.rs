@@ -2426,6 +2426,10 @@ pub(super) fn handle_modal_key(
     code: KeyCode,
     modifiers: KeyModifiers,
 ) -> Result<bool> {
+    if app.command_palette.is_some() {
+        app.handle_command_palette_key(code, modifiers);
+        return Ok(true);
+    }
     if app.prompt_history_search.is_some() {
         app.handle_prompt_history_search_key(code, modifiers);
         return Ok(true);
@@ -2532,6 +2536,10 @@ pub(super) fn handle_global_control_shortcuts(
         }
         KeyCode::Char('r') => {
             app.open_prompt_history_search();
+            true
+        }
+        KeyCode::Char('p') => {
+            app.open_command_palette();
             true
         }
         KeyCode::Char('a') if app.input.is_empty() => {

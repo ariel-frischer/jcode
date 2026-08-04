@@ -52,6 +52,7 @@ pub enum AppRuntimeMode {
 mod auth;
 mod auth_account_picker_saved_accounts;
 mod catchup;
+pub(super) mod command_palette;
 mod commands;
 mod commands_colors;
 mod commands_dispatch;
@@ -844,6 +845,9 @@ pub struct App {
     /// visibly jump. Resolved into `scroll_offset` by the next render frame.
     pending_history_anchor: Option<HistoryScrollAnchor>,
     input: String,
+    /// Transient Ctrl+P command palette state. The composer draft remains in
+    /// `input` while the palette owns its own query and selection.
+    command_palette: Option<command_palette::CommandPaletteState>,
     command_candidates_cache: RefCell<Option<CommandCandidatesCache>>,
     /// Per-input memo for `command_suggestions()`; see
     /// [`CommandSuggestionsCache`].

@@ -8,7 +8,7 @@
 //!    persist across sessions, so the notes stop once an action is familiar.
 //! 2. **Near-miss suggestions.** When a modified chord falls through every
 //!    dispatcher unhandled, we tell the user instead of silently swallowing it:
-//!    `⌨ Ctrl+Shift+P isn't bound · nearest: Ctrl+P → toggle auto-poke`.
+//!    `⌨ Ctrl+Shift+P isn't bound · nearest: Ctrl+P → open the command palette`.
 //!
 //! The registry mirrors the real dispatch tables (configured bindings first,
 //! then built-in readline/navigation chords). Matching, familiarity, and the
@@ -350,8 +350,8 @@ pub(super) fn build_registry(inputs: &RegistryInputs<'_>) -> Vec<KnownHotkey> {
     ));
     out.push(KnownHotkey::new(
         ctrl('p'),
-        "auto_poke_toggle",
-        "toggle auto-poke",
+        "command_palette",
+        "open the command palette",
     ));
     out.push(KnownHotkey::new(
         ctrl('t'),
@@ -919,11 +919,11 @@ mod tests {
     }
 
     #[test]
-    fn lookup_finds_builtin_ctrl_p_auto_poke() {
+    fn lookup_finds_builtin_ctrl_p_command_palette() {
         let registry = test_inputs_registry(false);
         let info = lookup(&registry, true, KeyCode::Char('p'), KeyModifiers::CONTROL)
             .expect("ctrl+p known");
-        assert_eq!(info.action, "auto_poke_toggle");
+        assert_eq!(info.action, "command_palette");
     }
 
     #[test]
@@ -968,7 +968,7 @@ mod tests {
             KeyModifiers::CONTROL | KeyModifiers::SHIFT,
         )
         .expect("suggestion for ctrl+shift+p");
-        assert_eq!(near.action, "auto_poke_toggle");
+        assert_eq!(near.action, "command_palette");
     }
 
     #[test]
@@ -1000,7 +1000,7 @@ mod tests {
         );
         assert!(msg.contains("Ctrl+Shift+P"), "{msg}");
         assert!(msg.contains("Ctrl+P"), "{msg}");
-        assert!(msg.contains("auto-poke"), "{msg}");
+        assert!(msg.contains("command palette"), "{msg}");
 
         let fallback = unknown_chord_message(&registry, KeyCode::Char(';'), KeyModifiers::CONTROL);
         assert!(fallback.contains("isn't bound"), "{fallback}");

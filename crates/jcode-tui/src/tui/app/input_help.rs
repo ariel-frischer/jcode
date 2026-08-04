@@ -119,7 +119,7 @@ impl App {
             }
             "poke" => {
                 "/poke [on|off|status]\nPoke the model to resume when it has stopped with incomplete todos.\n\n\
-                Auto-poke now starts enabled by default, and Ctrl+P toggles it on/off.\n\
+                Auto-poke now starts enabled by default. Open the command palette with Ctrl+P, then choose Toggle auto-poke.\n\
                 Set auto_poke = false under [features] in ~/.jcode/config.toml to start with it disabled.\n\
                 /poke or /poke on arms auto-poke and immediately pokes if work remains.\n\
                 /poke off disarms auto-poke and clears any queued poke follow-ups.\n\

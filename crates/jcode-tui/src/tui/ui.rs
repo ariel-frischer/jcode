@@ -3529,6 +3529,8 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     // instead of reserving layout height and shoving everything around.
     input_ui::draw_command_suggestions_overlay(frame, app, chunks[7]);
 
+    input_ui::draw_command_palette_overlay(frame, app, chunks[7]);
+
     // Ctrl+R reverse prompt-history search overlay (drawn after the command
     // palette so it wins when both could be visible).
     input_ui::draw_prompt_history_search_overlay(frame, app, chunks[7]);

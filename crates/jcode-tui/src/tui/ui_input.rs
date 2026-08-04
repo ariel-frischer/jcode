@@ -208,6 +208,66 @@ pub(super) fn draw_prompt_history_search_overlay(
     frame.render_widget(Paragraph::new(lines), rect);
 }
 
+/// Draw the Ctrl+P command palette. It is a late overlay so the composer and
+/// transcript keep their existing geometry while the picker is open.
+pub(super) fn draw_command_palette_overlay(frame: &mut Frame, app: &dyn TuiState, area: Rect) {
+    let Some(view) = app.command_palette() else {
+        return;
+    };
+    let accent = Style::default().fg(rgb(255, 213, 128));
+    let normal = Style::default().fg(rgb(128, 203, 196));
+    let dim = Style::default().fg(dim_color());
+    let mut lines = vec![Line::from(vec![
+        Span::styled("(command palette) ", dim),
+        Span::styled(view.query, accent),
+        Span::styled("█  ↑↓ select · ↵ run · Esc close", dim),
+    ])];
+
+    if view.entries.is_empty() {
+        lines.push(Line::from(Span::styled("  no matching commands", dim)));
+    } else {
+        let selected = view.selected.min(view.entries.len() - 1);
+        let start = selected
+            .saturating_sub(app::COMMAND_SUGGESTION_VISIBLE_LIMIT.saturating_sub(1))
+            .min(
+                view.entries
+                    .len()
+                    .saturating_sub(MAX_COMMAND_PALETTE_VISIBLE),
+            );
+        for (index, entry) in view
+            .entries
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(MAX_COMMAND_PALETTE_VISIBLE)
+        {
+            let selected_style = if index == selected { accent } else { normal };
+            let marker = if index == selected { "▸ " } else { "  " };
+            lines.push(Line::from(vec![
+                Span::styled(marker, selected_style),
+                Span::styled(
+                    format!("[{}] {}", entry.kind, entry.command),
+                    selected_style,
+                ),
+                Span::styled(
+                    format!("  {}", entry.description),
+                    if index == selected { accent } else { dim },
+                ),
+            ]));
+        }
+    }
+
+    let Some(rect) = command_suggestions_overlay_rect(area, lines.len() as u16, frame.area())
+    else {
+        return;
+    };
+    lines.truncate(rect.height as usize);
+    frame.render_widget(ratatui::widgets::Clear, rect);
+    frame.render_widget(Paragraph::new(lines), rect);
+}
+
+const MAX_COMMAND_PALETTE_VISIBLE: usize = 10;
+
 /// Draw the command-suggestion popover as a late overlay pass.
 ///
 /// Called after the chunked layout (and info widgets) have rendered so the

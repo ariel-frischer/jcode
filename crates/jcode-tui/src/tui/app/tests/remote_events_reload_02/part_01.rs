@@ -92,7 +92,7 @@ fn test_remote_poke_queues_when_turn_is_in_progress() {
 }
 
 #[test]
-fn test_remote_ctrl_p_toggles_auto_poke() {
+fn test_remote_ctrl_p_opens_palette_and_toggles_auto_poke() {
     with_temp_jcode_home(|| {
         let mut app = create_test_app();
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -103,18 +103,93 @@ fn test_remote_ctrl_p_toggles_auto_poke() {
         assert!(app.auto_poke_incomplete_todos);
 
         rt.block_on(app.handle_remote_key(KeyCode::Char('p'), KeyModifiers::CONTROL, &mut remote))
-            .expect("Ctrl+P should disable poke remotely");
+            .expect("Ctrl+P should open the palette remotely");
+        for c in "automatic todo follow-ups".chars() {
+            rt.block_on(app.handle_remote_key(KeyCode::Char(c), KeyModifiers::empty(), &mut remote))
+                .expect("palette query should be accepted remotely");
+        }
+        rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
+            .expect("palette should dispatch auto-poke remotely");
         assert!(!app.auto_poke_incomplete_todos);
         assert_eq!(app.status_notice(), Some("Poke: OFF".to_string()));
 
         rt.block_on(app.handle_remote_key(KeyCode::Char('p'), KeyModifiers::CONTROL, &mut remote))
-            .expect("Ctrl+P should enable poke remotely");
+            .expect("Ctrl+P should reopen the palette remotely");
+        for c in "automatic todo follow-ups".chars() {
+            rt.block_on(app.handle_remote_key(KeyCode::Char(c), KeyModifiers::empty(), &mut remote))
+                .expect("palette query should be accepted remotely");
+        }
+        rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
+            .expect("palette should dispatch auto-poke remotely");
         assert!(app.auto_poke_incomplete_todos);
         assert_eq!(app.status_notice(), Some("Poke: ON".to_string()));
         assert!(app.display_messages().iter().any(|msg| {
             msg.content
                 .contains("Auto-poke enabled. Nothing unfinished right now")
         }));
+    });
+}
+
+#[test]
+fn test_remote_palette_auto_poke_dispatches_incomplete_followup() {
+    with_temp_jcode_home(|| {
+        use tokio::io::AsyncBufReadExt;
+
+        let mut app = create_test_app();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        let peer = remote
+            .take_dummy_peer()
+            .expect("dummy remote should retain peer stream");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        crate::todo::save_todos(
+            &app.session.id,
+            &[crate::todo::TodoItem {
+                group: None,
+                id: "todo-1".to_string(),
+                content: "Continue the requested work".to_string(),
+                status: "pending".to_string(),
+                priority: "high".to_string(),
+                blocked_by: Vec::new(),
+                assigned_to: None,
+                confidence: None,
+                completion_confidence: None,
+                confidence_history: Vec::new(),
+            }],
+        )
+        .expect("save todos");
+
+        app.is_remote = true;
+        app.auto_poke_incomplete_todos = false;
+        rt.block_on(app.handle_remote_key(KeyCode::Char('p'), KeyModifiers::CONTROL, &mut remote))
+            .expect("Ctrl+P should open the palette remotely");
+        for c in "automatic todo follow-ups".chars() {
+            rt.block_on(app.handle_remote_key(KeyCode::Char(c), KeyModifiers::empty(), &mut remote))
+                .expect("palette query should be accepted remotely");
+        }
+        rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
+            .expect("palette should dispatch auto-poke remotely");
+
+        assert!(app.auto_poke_incomplete_todos);
+        assert!(app.is_processing);
+        let mut line = String::new();
+        rt.block_on(tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            reader.read_line(&mut line),
+        ))
+        .expect("remote auto-poke request should be sent")
+        .expect("remote auto-poke request should be readable");
+        match serde_json::from_str::<crate::protocol::Request>(&line)
+            .expect("remote auto-poke request should deserialize")
+        {
+            crate::protocol::Request::Message { content, .. } => {
+                assert!(content.contains("You have 1 incomplete todo"));
+            }
+            request => panic!("expected remote auto-poke message, got {request:?}"),
+        }
     });
 }
 

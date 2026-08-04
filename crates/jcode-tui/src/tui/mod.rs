@@ -323,6 +323,10 @@ pub trait TuiState {
     fn prompt_history_search(&self) -> Option<PromptHistorySearchView> {
         None
     }
+    /// Snapshot of the Ctrl+P command palette, or None when it is closed.
+    fn command_palette(&self) -> Option<CommandPaletteView> {
+        None
+    }
     fn active_skill(&self) -> Option<String>;
     fn subagent_status(&self) -> Option<String>;
     /// Progress of a currently-running batch tool call.
@@ -896,6 +900,23 @@ pub struct PromptHistorySearchView {
     pub query: String,
     pub matches: Vec<String>,
     pub selected: usize,
+}
+
+/// Render snapshot of the Ctrl+P command palette. Entries are intentionally
+/// categorized so slash commands, skills, and direct shortcuts can share one
+/// picker without looking like the same kind of action.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandPaletteView {
+    pub query: String,
+    pub entries: Vec<CommandPaletteEntryView>,
+    pub selected: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandPaletteEntryView {
+    pub kind: &'static str,
+    pub command: String,
+    pub description: String,
 }
 
 /// What the first-run onboarding welcome screen should render in its body,
