@@ -26,6 +26,9 @@ impl Config {
         if let Ok(v) = std::env::var("JCODE_MODEL_SWITCH_PREV_KEY") {
             self.keybindings.model_switch_prev = v;
         }
+        if let Ok(v) = std::env::var("JCODE_OPEN_MODEL_PICKER_KEY") {
+            self.keybindings.open_model_picker = v;
+        }
         if let Ok(v) = std::env::var("JCODE_EFFORT_INCREASE_KEY") {
             self.keybindings.effort_increase = v;
         }

@@ -876,6 +876,8 @@ pub struct KeybindingsConfig {
     pub model_switch_next: String,
     /// Model switch previous key (default: "ctrl+shift+tab")
     pub model_switch_prev: String,
+    /// Open the model picker (default: "ctrl+m")
+    pub open_model_picker: String,
     /// Accept the post-error fallback offer: switch to the next best
     /// model/auth-method and resend the failed turn (default: "ctrl+y").
     pub fallback_switch: String,
@@ -950,6 +952,7 @@ impl Default for KeybindingsConfig {
             scroll_page_down: get("scroll_page_down", "alt+d"),
             model_switch_next: get("model_switch_next", "ctrl+tab"),
             model_switch_prev: get("model_switch_prev", "ctrl+shift+tab"),
+            open_model_picker: get("open_model_picker", "ctrl+m"),
             fallback_switch: get("fallback_switch", "ctrl+y"),
             effort_increase: get("effort_increase", "alt+right"),
             effort_decrease: get("effort_decrease", "alt+left"),

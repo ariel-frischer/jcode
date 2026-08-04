@@ -464,6 +464,11 @@ async fn handle_remote_key_internal(
         return Ok(());
     }
 
+    if app.open_model_picker_key_matches(code, modifiers) {
+        app.open_model_picker_preserving_input();
+        return Ok(());
+    }
+
     if handle_workspace_navigation_key(app, code, modifiers, remote).await? {
         return Ok(());
     }

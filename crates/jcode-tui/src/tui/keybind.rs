@@ -59,6 +59,22 @@ pub fn load_model_switch_keys() -> ModelSwitchKeys {
     ModelSwitchKeys { next, prev }
 }
 
+/// Optional binding that opens the model picker. Default: Ctrl+M. Set "" to disable.
+pub fn load_open_model_picker_key() -> OptionalBinding {
+    let cfg = config();
+    let raw = cfg.keybindings.open_model_picker.trim();
+    if raw.is_empty() || is_disabled(raw) {
+        return OptionalBinding::default();
+    }
+    match parse_keybinding(raw) {
+        Some(binding) => OptionalBinding {
+            label: Some(format_binding(&binding)),
+            binding: Some(binding),
+        },
+        None => OptionalBinding::default(),
+    }
+}
+
 /// Binding that accepts the post-error fallback offer (switch to the next best
 /// model/auth-method and resend). Defaults to Ctrl+Y; set "" to disable.
 pub fn load_fallback_switch_key() -> OptionalBinding {

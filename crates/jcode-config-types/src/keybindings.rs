@@ -231,6 +231,12 @@ pub const KEYBINDING_DEFAULTS: &[KeybindingDefault] = &[
         other: PlatformDefault::dev("ctrl+shift+tab"),
     },
     KeybindingDefault {
+        id: "open_model_picker",
+        description: "Open the model picker",
+        macos: PlatformDefault::dev("ctrl+m"),
+        other: PlatformDefault::dev("ctrl+m"),
+    },
+    KeybindingDefault {
         id: "fallback_switch",
         description: "Accept the post-error fallback offer (switch model/auth-method and resend)",
         macos: PlatformDefault::dev("ctrl+y"),

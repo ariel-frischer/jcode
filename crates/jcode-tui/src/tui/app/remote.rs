@@ -1907,6 +1907,11 @@ fn handle_disconnected_key_internal(
         return Ok(());
     }
 
+    if app.open_model_picker_key_matches(code, modifiers) {
+        app.open_model_picker_preserving_input();
+        return Ok(());
+    }
+
     if crate::tui::app::input::newline::enter_inserts_newline(app, code, modifiers) {
         return Ok(());
     }

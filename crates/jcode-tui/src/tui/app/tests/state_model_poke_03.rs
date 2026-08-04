@@ -42,6 +42,22 @@ fn test_model_picker_preview_arrow_keys_navigate() {
 }
 
 #[test]
+fn test_ctrl_m_opens_model_picker() {
+    let mut app = create_test_app();
+    configure_test_remote_models(&mut app);
+
+    app.handle_key(KeyCode::Char('m'), KeyModifiers::CONTROL)
+        .unwrap();
+    wait_for_model_picker_load(&mut app);
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("Ctrl+M should open the model picker");
+    assert!(!picker.preview, "the direct hotkey should open the full picker");
+}
+
+#[test]
 fn test_open_model_picker_without_routes_shows_actionable_guidance() {
     let mut app = create_test_app();
 

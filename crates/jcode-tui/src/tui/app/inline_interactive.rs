@@ -985,7 +985,7 @@ impl App {
         self.open_model_picker_inner(false);
     }
 
-    fn open_model_picker_preserving_input(&mut self) {
+    pub(super) fn open_model_picker_preserving_input(&mut self) {
         self.open_model_picker_inner(true);
     }
 
