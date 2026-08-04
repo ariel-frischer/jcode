@@ -1,7 +1,9 @@
 WORKTREE_SCRIPT ?= scripts/worktree-setup.sh
 BASE ?= $(shell git branch --show-current 2>/dev/null || echo HEAD)
 
-.PHONY: install install-fast
+.PHONY: i install install-fast
+i: install
+
 install:
 	@scripts/install_release.sh
 

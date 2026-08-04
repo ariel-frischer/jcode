@@ -856,6 +856,7 @@ through Make:
 ```bash
 make install-fast  # Fast release rebuild, install, and server reload
 make install       # Full LTO release rebuild, install, and server reload
+make i             # Short alias for make install
 ```
 
 ### Uninstall
