@@ -337,7 +337,7 @@ impl App {
             .collect()
     }
 
-    fn command_candidates(&self) -> Vec<(String, &'static str)> {
+    pub(super) fn command_candidates(&self) -> Vec<(String, &'static str)> {
         if let Some(cache) = self.command_candidates_cache.borrow().as_ref() {
             return cache.candidates.clone();
         }

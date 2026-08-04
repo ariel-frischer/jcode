@@ -3,6 +3,56 @@ use crate::tui::app as app_mod;
 use crate::tui::app::PendingRemoteRewindNotice;
 use crate::tui::core;
 
+async fn dispatch_command_palette_action_remote(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+    action: app_mod::command_palette::CommandPaletteAction,
+) -> Result<()> {
+    match action {
+        app_mod::command_palette::CommandPaletteAction::Shortcut(
+            app_mod::command_palette::ShortcutAction::ToggleAutoPoke,
+        ) => {
+            if app.auto_poke_incomplete_todos {
+                let cleared = app_mod::commands::disable_auto_poke(app);
+                app.set_status_notice("Poke: OFF");
+                app.push_display_message(DisplayMessage::system(
+                    app_mod::commands::poke_disabled_message(cleared),
+                ));
+            } else {
+                match app_mod::commands::activate_auto_poke(app) {
+                    app_mod::commands::PokeActivation::EnabledNoIncomplete => {
+                        app.push_display_message(DisplayMessage::system(
+                            app_mod::commands::poke_enabled_without_incomplete_message(),
+                        ));
+                    }
+                    app_mod::commands::PokeActivation::Queued => {
+                        app.push_display_message(DisplayMessage::system(
+                            app_mod::commands::poke_queued_display_message(),
+                        ));
+                    }
+                    app_mod::commands::PokeActivation::SendNow {
+                        incomplete_count,
+                        poke_msg,
+                    } => {
+                        app.push_display_message(DisplayMessage::system(
+                            app_mod::commands::poke_triggered_display_message(incomplete_count),
+                        ));
+                        let _ =
+                            begin_remote_send(app, remote, poke_msg, vec![], true, None, true, 0)
+                                .await;
+                        app.visible_turn_started = Some(Instant::now());
+                    }
+                }
+            }
+            Ok(())
+        }
+        action => {
+            app.dispatch_command_palette_action(action);
+            Ok(())
+        }
+    }
+}
+
 pub(in crate::tui::app) fn handle_remote_char_input(app: &mut App, c: char) {
     input::handle_text_input(app, &c.to_string());
 }
@@ -291,6 +341,34 @@ async fn handle_remote_key_internal(
 
     if app.prompt_history_search.is_some() {
         app.handle_prompt_history_search_key(code, modifiers);
+        return Ok(());
+    }
+
+    if app.command_palette.is_some() {
+        if code == KeyCode::Enter && modifiers.is_empty() {
+            if let Some(action) = app.accept_command_palette_selection() {
+                match action {
+                    app_mod::command_palette::CommandPaletteAction::SlashCommand(command) => {
+                        app.input = command;
+                        app.cursor_pos = app.input.len();
+                        app.sync_model_picker_preview_from_input();
+                        return Box::pin(handle_remote_key_internal(
+                            app,
+                            KeyCode::Enter,
+                            KeyModifiers::empty(),
+                            remote,
+                            None,
+                        ))
+                        .await;
+                    }
+                    action => {
+                        dispatch_command_palette_action_remote(app, remote, action).await?;
+                    }
+                }
+            }
+        } else {
+            app.handle_command_palette_key(code, modifiers);
+        }
         return Ok(());
     }
 
@@ -637,6 +715,10 @@ async fn handle_remote_key_internal(
                 app.open_prompt_history_search();
                 return Ok(());
             }
+            KeyCode::Char('p') => {
+                app.open_command_palette();
+                return Ok(());
+            }
             KeyCode::Char('l') => {
                 // Terminal-style clear: a viewport-height blank spacer pushes
                 // the transcript up into scrollback, leaving a clean prompt.
@@ -694,50 +776,6 @@ async fn handle_remote_key_internal(
             }
             KeyCode::Char('s') => {
                 app.toggle_input_stash();
-                return Ok(());
-            }
-            KeyCode::Char('p') => {
-                if app.auto_poke_incomplete_todos {
-                    let cleared = app_mod::commands::disable_auto_poke(app);
-                    app.set_status_notice("Poke: OFF");
-                    app.push_display_message(DisplayMessage::system(
-                        app_mod::commands::poke_disabled_message(cleared),
-                    ));
-                } else {
-                    match app_mod::commands::activate_auto_poke(app) {
-                        app_mod::commands::PokeActivation::EnabledNoIncomplete => {
-                            app.push_display_message(DisplayMessage::system(
-                                app_mod::commands::poke_enabled_without_incomplete_message(),
-                            ));
-                        }
-                        app_mod::commands::PokeActivation::Queued => {
-                            app.push_display_message(DisplayMessage::system(
-                                app_mod::commands::poke_queued_display_message(),
-                            ));
-                        }
-                        app_mod::commands::PokeActivation::SendNow {
-                            incomplete_count,
-                            poke_msg,
-                        } => {
-                            app.push_display_message(DisplayMessage::system(
-                                app_mod::commands::poke_triggered_display_message(incomplete_count),
-                            ));
-
-                            let _ = begin_remote_send(
-                                app,
-                                remote,
-                                poke_msg,
-                                vec![],
-                                true,
-                                None,
-                                true,
-                                0,
-                            )
-                            .await;
-                            app.visible_turn_started = Some(Instant::now());
-                        }
-                    }
-                }
                 return Ok(());
             }
             KeyCode::Char('v') => {

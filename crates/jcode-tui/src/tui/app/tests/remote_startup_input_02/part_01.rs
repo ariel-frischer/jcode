@@ -1230,18 +1230,28 @@ fn test_auto_poke_starts_enabled_by_default() {
 }
 
 #[test]
-fn test_ctrl_p_toggles_auto_poke_locally() {
+fn test_ctrl_p_opens_palette_and_toggles_auto_poke_locally() {
     let mut app = create_test_app();
 
     assert!(app.auto_poke_incomplete_todos);
 
     app.handle_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
         .unwrap();
+    for c in "Toggle auto-poke".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty()).unwrap();
     assert!(!app.auto_poke_incomplete_todos);
     assert_eq!(app.status_notice(), Some("Poke: OFF".to_string()));
 
     app.handle_key(KeyCode::Char('p'), KeyModifiers::CONTROL)
         .unwrap();
+    for c in "Toggle auto-poke".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty()).unwrap();
     assert!(app.auto_poke_incomplete_todos);
     assert_eq!(app.status_notice(), Some("Poke: ON".to_string()));
     assert!(app.display_messages().iter().any(|msg| {

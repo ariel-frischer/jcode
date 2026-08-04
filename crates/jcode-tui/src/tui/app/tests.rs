@@ -52,6 +52,83 @@ include!("tests/spinner_slash_commands.rs");
 include!("tests/command_suggestions_cache.rs");
 include!("tests/skill_invocation_multi_word.rs");
 include!("tests/prompt_history_cross_session.rs");
+
+#[test]
+fn ctrl_p_opens_categorized_command_palette_and_filters_entries() {
+    let mut app = create_test_app();
+    app.handle_key(
+        crossterm::event::KeyCode::Char('p'),
+        crossterm::event::KeyModifiers::CONTROL,
+    )
+    .unwrap();
+
+    assert!(app.command_palette_is_open());
+    let kinds = app.command_palette_entry_kinds();
+    assert!(kinds.contains(&"Command"));
+    assert!(kinds.contains(&"Shortcut"));
+
+    for c in "queue".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    assert_eq!(app.command_palette_query(), Some("queue"));
+    let view = app.command_palette_view().expect("palette view");
+    assert!(!view.entries.is_empty());
+    assert!(
+        view.entries
+            .iter()
+            .all(|entry| entry.command.contains("queue") || entry.description.contains("queue"))
+    );
+}
+
+#[test]
+fn command_palette_navigation_and_escape_are_transient() {
+    let mut app = create_test_app();
+    app.handle_key(
+        crossterm::event::KeyCode::Char('p'),
+        crossterm::event::KeyModifiers::CONTROL,
+    )
+    .unwrap();
+    assert_eq!(app.command_palette_selected(), 0);
+
+    app.handle_key(
+        crossterm::event::KeyCode::Down,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    assert_eq!(app.command_palette_selected(), 1);
+    app.handle_key(
+        crossterm::event::KeyCode::Esc,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    assert!(!app.command_palette_is_open());
+    assert!(app.input.is_empty());
+}
+
+#[test]
+fn command_palette_dispatches_shortcut_commands() {
+    let mut app = create_test_app();
+    assert!(!app.queue_mode);
+    app.open_command_palette();
+    for c in "queue".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    assert!(app.queue_mode);
+    assert!(!app.command_palette_is_open());
+}
 #[test]
 fn kv_cache_signature_prefix_match_allows_appended_messages() {
     let baseline_messages = vec![
