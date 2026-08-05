@@ -1673,9 +1673,32 @@ No extra text.\n\nRequest:\n{message}"
                     effort: agent_guard.session_reasoning_effort(),
                 }
             };
-            let selection =
-                resolve_swarm_task_selection(&task, &crate::config::config().agents, &coordinator)?;
-            let output = run_swarm_task(agent, &description, &role, &prompt, selection).await?;
+            let selection = match resolve_swarm_task_selection(
+                &task,
+                &crate::config::config().agents,
+                &coordinator,
+            ) {
+                Ok(selection) => selection,
+                Err(error) => {
+                    crate::logging::event_warn(
+                        "SWARM_LIFECYCLE",
+                        vec![
+                            ("phase", "task_route_rejected".to_string()),
+                            ("role", role.clone()),
+                            ("error", error.to_string()),
+                        ],
+                    );
+                    return Ok::<(String, String), anyhow::Error>((
+                        description,
+                        format!("Task route rejected before execution: {error}"),
+                    ));
+                }
+            };
+            let output = match run_swarm_task(agent, &description, &role, &prompt, selection).await
+            {
+                Ok(output) => output,
+                Err(error) => format!("Task failed during execution: {error}"),
+            };
             Ok::<(String, String), anyhow::Error>((description, output))
         }
     });
@@ -1742,7 +1765,7 @@ fn parse_swarm_tasks(text: &str) -> Result<Vec<SwarmTaskSpec>> {
         .into_iter()
         .map(|mut task| {
             if let (Some(role), Some(alias)) = (&task.role, &task.subagent_type)
-                && role.trim() != alias.trim()
+                && !role.trim().eq_ignore_ascii_case(alias.trim())
             {
                 anyhow::bail!(
                     "task '{}' specifies conflicting role='{}' and subagent_type='{}'",
@@ -1781,7 +1804,6 @@ impl SwarmTaskSelection {
         let api_method = self
             .route_api_method
             .as_deref()
-            .or(self.provider_key.as_deref())
             .map(str::trim)
             .filter(|method| !method.is_empty())?;
         let api_method_kind = crate::provider::ModelRouteApiMethod::parse(api_method);
@@ -1821,7 +1843,9 @@ impl SwarmTaskSelection {
             "code-assist-oauth" => "gemini",
             "antigravity-https" => "antigravity",
             "openrouter" => "openrouter",
-            profile => profile,
+            profile => profile
+                .strip_prefix("openai-compatible:")
+                .unwrap_or(profile),
         };
         Some(format!("{prefix}:{model}"))
     }
@@ -1973,7 +1997,15 @@ pub(super) fn resolve_swarm_task_selection(
     } else if inherits_coordinator_route {
         coordinator.provider_key.clone()
     } else {
-        selected_provider.clone()
+        selected_provider
+            .as_deref()
+            .and_then(|provider| {
+                crate::provider::MultiProvider::session_provider_key_for_model_request(
+                    selected_model.as_deref().unwrap_or_default(),
+                    provider,
+                )
+            })
+            .or_else(|| selected_provider.clone())
     };
     let provider = provider_from_route(
         selected_model.as_deref().unwrap_or_default(),
@@ -2052,12 +2084,13 @@ pub(super) fn resolve_swarm_task_route(
 #[cfg(test)]
 mod tests {
     use super::{
-        SwarmTaskSpec, broadcast_swarm_plan, broadcast_swarm_plan_with_previous,
-        broadcast_swarm_status, member_in_status_broadcast, member_status_is_dead, now_unix_ms,
-        parse_swarm_tasks, refresh_swarm_task_staleness, remove_session_from_swarm,
-        resolve_swarm_task_selection, salvage_assignments_of_dead_member, swarm_ancestors,
-        swarm_is_self_or_ancestor, swarm_spawn_depth, touch_swarm_task_progress,
-        update_member_status, update_member_status_with_report,
+        SwarmTaskSelection, SwarmTaskSpec, broadcast_swarm_plan,
+        broadcast_swarm_plan_with_previous, broadcast_swarm_status, member_in_status_broadcast,
+        member_status_is_dead, now_unix_ms, parse_swarm_tasks, refresh_swarm_task_staleness,
+        remove_session_from_swarm, resolve_swarm_task_selection,
+        salvage_assignments_of_dead_member, swarm_ancestors, swarm_is_self_or_ancestor,
+        swarm_spawn_depth, touch_swarm_task_progress, update_member_status,
+        update_member_status_with_report,
     };
     use crate::plan::PlanItem;
     use crate::protocol::{NotificationType, ServerEvent};
@@ -2135,6 +2168,17 @@ mod tests {
 
         assert!(error.to_string().contains("role"));
         assert!(error.to_string().contains("subagent_type"));
+    }
+
+    #[test]
+    fn parse_swarm_tasks_accepts_role_aliases_that_only_differ_in_case() {
+        let tasks = parse_swarm_tasks(
+            r#"[{"description":"A","prompt":"B","role":"Reviewer","subagent_type":"reviewer"}]"#,
+        )
+        .expect("case-insensitive role aliases should describe the same role");
+
+        assert_eq!(tasks[0].role.as_deref(), Some("Reviewer"));
+        assert_eq!(tasks[0].subagent_type.as_deref(), Some("reviewer"));
     }
 
     #[test]
@@ -2266,6 +2310,22 @@ mod tests {
         assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
         assert_eq!(selection.provider_key.as_deref(), Some("openai"));
         assert_eq!(selection.route_api_method.as_deref(), None);
+    }
+
+    #[test]
+    fn swarm_task_route_keeps_openai_compatible_profile_in_model_spec() {
+        let selection = SwarmTaskSelection {
+            model: Some("nvidia/llama-3.3".to_string()),
+            provider_key: Some("nvidia".to_string()),
+            route_api_method: Some("openai-compatible:nvidia-nim".to_string()),
+            effort: None,
+        };
+
+        assert_eq!(
+            selection.model_spec().as_deref(),
+            Some("nvidia-nim:nvidia/llama-3.3")
+        );
+        assert!(selection.route_selection().is_some());
     }
 
     #[test]

@@ -10,6 +10,7 @@ use super::swarm_mutation_state::{
     begin_or_replay as begin_swarm_mutation_or_replay,
     finish_request as finish_swarm_mutation_request, request_key as swarm_mutation_request_key,
 };
+use super::util::models_are_equivalent;
 use super::{
     ClientConnectionInfo, SwarmEvent, SwarmEventType, SwarmMember, SwarmMutationRuntime,
     SwarmState, SwarmTaskProgress, VersionedPlan, broadcast_swarm_plan,
@@ -29,21 +30,6 @@ use jcode_agent_runtime::SoftInterruptSource;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, watch};
-
-fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
-    fn normalize(model: &str) -> String {
-        let model = model.trim().to_ascii_lowercase();
-        let bare = model.rsplit('/').next().unwrap_or(&model);
-        let bare = bare.split(':').next().unwrap_or(bare);
-        bare.split('[').next().unwrap_or(bare).trim().to_string()
-    }
-    let resolved = normalize(resolved);
-    let requested = normalize(requested);
-    resolved.is_empty()
-        || requested.is_empty()
-        || resolved.starts_with(&requested)
-        || requested.starts_with(&resolved)
-}
 
 type SessionAgents = Arc<RwLock<HashMap<String, Arc<Mutex<Agent>>>>>;
 
@@ -956,10 +942,17 @@ fn spawn_assigned_task_run(
                     Ok(()) => None,
                 }
             } else if let Some(model_request) = route.model_spec() {
-                agent
-                    .set_model(&model_request)
-                    .err()
-                    .map(|error| error.to_string())
+                match agent.set_model(&model_request) {
+                    Err(error) => Some(error.to_string()),
+                    Ok(()) if !models_are_equivalent(&agent.provider_model(), &model_request) => {
+                        Some(format!(
+                            "resolved child model '{}' does not match requested '{}'",
+                            agent.provider_model(),
+                            model_request
+                        ))
+                    }
+                    Ok(()) => None,
+                }
             } else {
                 None
             };

@@ -1,6 +1,7 @@
 use crate::agent::Agent;
 use crate::protocol::ServerEvent;
 use crate::provider::Provider;
+use crate::server::util::models_are_equivalent;
 use crate::server::{
     SessionInterruptQueues, SwarmMember, VersionedPlan, broadcast_swarm_status,
     register_background_tool_signal, register_session_interrupt_queue, swarm_id_for_dir,
@@ -306,30 +307,9 @@ pub(super) async fn create_headless_session(
     .to_string())
 }
 
-/// Whether a resolved provider model satisfies a requested model id.
-///
-/// Routes legitimately canonicalize ids (dated aliases, `[1m]`/`[web]` suffixes,
-/// and vendor prefixes like `anthropic/`), so compare on a normalized form and
-/// allow either side to be a prefix of the other. This exists only to decide
-/// whether to log a mismatch, so it errs toward staying quiet.
-fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
-    fn normalize(model: &str) -> String {
-        let model = model.trim().to_ascii_lowercase();
-        let bare = model.rsplit('/').next().unwrap_or(&model);
-        let bare = bare.split(':').next().unwrap_or(bare);
-        bare.split('[').next().unwrap_or(bare).trim().to_string()
-    }
-    let resolved = normalize(resolved);
-    let requested = normalize(requested);
-    if resolved.is_empty() || requested.is_empty() {
-        return true;
-    }
-    resolved.starts_with(&requested) || requested.starts_with(&resolved)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::models_are_equivalent;
+    use super::super::util::models_are_equivalent;
 
     #[test]
     fn equivalent_models_tolerate_route_canonicalization() {

@@ -31,6 +31,36 @@ pub(crate) fn debug_control_allowed() -> bool {
     false
 }
 
+/// Whether two provider model identifiers refer to compatible models.
+///
+/// Providers may add route prefixes, vendor namespaces, dated aliases, or
+/// bracketed capability suffixes. Colon tags can also be part of an Ollama
+/// model id, so retain both the full value and each colon side as candidates.
+pub(crate) fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
+    fn normalize(model: &str) -> Vec<String> {
+        let model = model.trim().to_ascii_lowercase();
+        let bare = model.rsplit('/').next().unwrap_or(&model);
+        let bare = bare.split('[').next().unwrap_or(bare).trim();
+        let mut candidates = vec![bare.to_string()];
+        if let Some((prefix, rest)) = bare.split_once(':') {
+            candidates.push(prefix.trim().to_string());
+            candidates.push(rest.trim().to_string());
+        }
+        candidates.retain(|candidate| !candidate.is_empty());
+        candidates
+    }
+
+    let resolved = normalize(resolved);
+    let requested = normalize(requested);
+    resolved.is_empty()
+        || requested.is_empty()
+        || resolved.iter().any(|left| {
+            requested
+                .iter()
+                .any(|right| left.starts_with(right) || right.starts_with(left))
+        })
+}
+
 pub(crate) fn embedding_idle_unload_secs() -> u64 {
     parse_embedding_idle_unload_secs(
         std::env::var("JCODE_EMBEDDING_IDLE_UNLOAD_SECS")
