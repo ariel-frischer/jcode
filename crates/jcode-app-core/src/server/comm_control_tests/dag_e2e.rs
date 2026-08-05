@@ -18,6 +18,9 @@ fn node_spec(id: &str, kind: &str, deps: &[&str]) -> TaskGraphNodeSpec {
         kind: Some(kind.to_string()),
         depends_on: deps.iter().map(|d| d.to_string()).collect(),
         priority: 0,
+        role: None,
+        model: None,
+        reasoning_effort: None,
     }
 }
 

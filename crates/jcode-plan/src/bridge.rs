@@ -113,6 +113,9 @@ pub fn to_task_graph(plan: &VersionedPlan) -> TaskGraph {
             priority: crate::priority_rank(&item.priority),
             output: artifact,
             origin: parse_origin(meta.origin.as_deref()),
+            role: meta.role.clone(),
+            model: meta.model.clone(),
+            reasoning_effort: meta.reasoning_effort.clone(),
         });
     }
     graph
@@ -161,6 +164,9 @@ pub fn apply_task_graph(plan: &mut VersionedPlan, graph: &TaskGraph) {
                     .as_ref()
                     .and_then(|a| serde_json::to_string(a).ok()),
                 origin: node.origin.map(|o| origin_str(o).to_string()),
+                role: node.role.clone(),
+                model: node.model.clone(),
+                reasoning_effort: node.reasoning_effort.clone(),
             },
         );
     }

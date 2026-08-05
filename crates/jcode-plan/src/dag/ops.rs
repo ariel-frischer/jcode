@@ -203,6 +203,9 @@ fn ensure_root_gate(graph: &mut TaskGraph) {
                 priority: 0,
                 output: None,
                 origin: Some(NodeOrigin::Gate),
+                role: None,
+                model: None,
+                reasoning_effort: None,
             });
         }
     }
@@ -326,6 +329,9 @@ pub fn expand_node(
             priority: 0,
             output: None,
             origin: Some(NodeOrigin::Gate),
+            role: None,
+            model: None,
+            reasoning_effort: None,
         };
         staged.push(gate);
         synth_deps.push(gate_id.clone());
@@ -667,6 +673,9 @@ fn spec_to_node(spec: NodeSpec, parent: Option<String>, origin: NodeOrigin) -> T
         priority: spec.priority,
         output: None,
         origin: Some(origin),
+        role: spec.role,
+        model: spec.model,
+        reasoning_effort: spec.reasoning_effort,
     }
 }
 

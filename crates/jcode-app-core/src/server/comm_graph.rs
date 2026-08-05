@@ -29,6 +29,9 @@ fn spec_from_wire(spec: TaskGraphNodeSpec) -> NodeSpec {
         kind: parse_kind(spec.kind.as_deref()),
         depends_on: spec.depends_on,
         priority: spec.priority,
+        role: spec.role,
+        model: spec.model,
+        reasoning_effort: spec.reasoning_effort,
     }
 }
 

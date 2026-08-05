@@ -195,6 +195,17 @@ impl Agent {
         self.session.route_api_method.clone()
     }
 
+    pub fn session_reasoning_effort(&self) -> Option<String> {
+        self.session
+            .reasoning_effort
+            .clone()
+            .or_else(|| self.provider.reasoning_effort())
+    }
+
+    pub fn provider_reasoning_effort(&self) -> Option<String> {
+        self.provider.reasoning_effort()
+    }
+
     /// The credential the active provider will use for the next request, when
     /// the provider distinguishes OAuth (subscription) from API key (cost).
     /// Resolved authoritatively here so remote clients can render billing/usage

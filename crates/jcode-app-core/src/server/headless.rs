@@ -316,7 +316,7 @@ fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
     fn normalize(model: &str) -> String {
         let model = model.trim().to_ascii_lowercase();
         let bare = model.rsplit('/').next().unwrap_or(&model);
-        let bare = bare.split(':').next_back().unwrap_or(bare);
+        let bare = bare.split(':').next().unwrap_or(bare);
         bare.split('[').next().unwrap_or(bare).trim().to_string()
     }
     let resolved = normalize(resolved);

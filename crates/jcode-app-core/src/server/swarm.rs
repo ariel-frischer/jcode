@@ -1525,37 +1525,36 @@ pub(super) async fn update_member_status_with_report_tldr(
     }
 }
 
-pub(super) async fn run_swarm_task(
+async fn run_swarm_task(
     agent: Arc<Mutex<Agent>>,
     description: &str,
-    subagent_type: &str,
+    role: &str,
     prompt: &str,
+    selection: SwarmTaskSelection,
 ) -> Result<String> {
     let started = Instant::now();
-    let (provider, registry, session_id, working_dir, coordinator_model, provider_key, route) = {
+    let (provider, registry, session_id, working_dir) = {
         let agent = agent.lock().await;
         (
             agent.provider_fork(),
             agent.registry(),
             agent.session_id().to_string(),
             agent.working_dir().map(PathBuf::from),
-            agent.provider_model(),
-            agent.session_provider_key(),
-            agent.session_route_api_method(),
         )
     };
     let parent_session_id = session_id.clone();
     let mut session = Session::create(
         Some(session_id),
-        Some(format!("{} (@{} swarm)", description, subagent_type)),
+        Some(format!("{} (@{} swarm)", description, role)),
     );
     let child_session_id = session.id.clone();
-    session.model = Some(coordinator_model);
+    session.model = selection.model.clone();
     // Inherit the coordinator's exact auth identity so the forked worker keeps
     // the same provider/auth route (OAuth vs API, openai-compatible profile)
     // instead of silently falling back to the config default on persistence.
-    session.provider_key = provider_key;
-    session.route_api_method = route;
+    session.provider_key = selection.provider_key;
+    session.route_api_method = selection.route_api_method;
+    session.reasoning_effort = selection.effort;
     if let Some(dir) = working_dir {
         session.working_dir = Some(dir.display().to_string());
     }
@@ -1566,7 +1565,7 @@ pub(super) async fn run_swarm_task(
         vec![
             ("parent_session_id", parent_session_id.clone()),
             ("child_session_id", child_session_id.clone()),
-            ("subagent_type", subagent_type.to_string()),
+            ("role", role.to_string()),
             ("description_chars", description.chars().count().to_string()),
             ("prompt_chars", prompt.chars().count().to_string()),
         ],
@@ -1588,7 +1587,7 @@ pub(super) async fn run_swarm_task(
                 vec![
                     ("parent_session_id", parent_session_id),
                     ("child_session_id", child_session_id),
-                    ("subagent_type", subagent_type.to_string()),
+                    ("role", role.to_string()),
                     ("output_chars", output.chars().count().to_string()),
                     ("elapsed_ms", started.elapsed().as_millis().to_string()),
                 ],
@@ -1602,7 +1601,7 @@ pub(super) async fn run_swarm_task(
                     ("phase", "task_error".to_string()),
                     ("parent_session_id", parent_session_id),
                     ("child_session_id", child_session_id),
-                    ("subagent_type", subagent_type.to_string()),
+                    ("role", role.to_string()),
                     ("error", error.to_string()),
                     ("elapsed_ms", started.elapsed().as_millis().to_string()),
                 ],
@@ -1629,7 +1628,7 @@ pub(super) async fn run_swarm_message(agent: Arc<Mutex<Agent>>, message: &str) -
 
     let planner_prompt = format!(
         "{working_dir_hint}You are a task planner. Break the request into 2-4 subtasks. \
-Return ONLY a JSON array of objects with keys: description, prompt, subagent_type. \
+Return ONLY a JSON array of objects with keys: description, prompt, role, model, reasoning_effort. \
 No extra text.\n\nRequest:\n{message}"
     );
 
@@ -1638,12 +1637,15 @@ No extra text.\n\nRequest:\n{message}"
         agent.run_once_capture(&planner_prompt).await?
     };
 
-    let mut tasks = parse_swarm_tasks(&plan_text);
+    let mut tasks = parse_swarm_tasks(&plan_text)?;
     if tasks.is_empty() {
         tasks.push(SwarmTaskSpec {
             description: "Main task".to_string(),
             prompt: message.to_string(),
-            subagent_type: Some("general".to_string()),
+            role: Some("general".to_string()),
+            subagent_type: None,
+            model: None,
+            reasoning_effort: None,
         });
     }
     log_swarm_lifecycle(
@@ -1659,12 +1661,21 @@ No extra text.\n\nRequest:\n{message}"
         let working_dir_hint = working_dir_hint.clone();
         let description = task.description.clone();
         let prompt = format!("{working_dir_hint}{}", task.prompt);
-        let subagent_type = task
-            .subagent_type
-            .clone()
-            .unwrap_or_else(|| "general".to_string());
+        let role = task.role.clone().unwrap_or_else(|| "general".to_string());
+        let task = task.clone();
         async move {
-            let output = run_swarm_task(agent, &description, &subagent_type, &prompt).await?;
+            let coordinator = {
+                let agent_guard = agent.lock().await;
+                CoordinatorTaskIdentity {
+                    model: Some(agent_guard.provider_model()),
+                    provider_key: agent_guard.session_provider_key(),
+                    route_api_method: agent_guard.session_route_api_method(),
+                    effort: agent_guard.session_reasoning_effort(),
+                }
+            };
+            let selection =
+                resolve_swarm_task_selection(&task, &crate::config::config().agents, &coordinator)?;
+            let output = run_swarm_task(agent, &description, &role, &prompt, selection).await?;
             Ok::<(String, String), anyhow::Error>((description, output))
         }
     });
@@ -1700,38 +1711,353 @@ No extra text.\n\nRequest:\n{message}"
     Ok(final_output)
 }
 
-#[derive(Debug, Deserialize)]
-struct SwarmTaskSpec {
-    description: String,
-    prompt: String,
+#[derive(Debug, Clone, Deserialize)]
+pub(super) struct SwarmTaskSpec {
+    pub(super) description: String,
+    pub(super) prompt: String,
     #[serde(default)]
-    subagent_type: Option<String>,
+    pub(super) role: Option<String>,
+    #[serde(default)]
+    pub(super) subagent_type: Option<String>,
+    #[serde(default)]
+    pub(super) model: Option<String>,
+    #[serde(default)]
+    pub(super) reasoning_effort: Option<String>,
 }
 
-fn parse_swarm_tasks(text: &str) -> Vec<SwarmTaskSpec> {
-    if let Ok(tasks) = serde_json::from_str::<Vec<SwarmTaskSpec>>(text) {
-        return tasks;
+fn parse_swarm_tasks(text: &str) -> Result<Vec<SwarmTaskSpec>> {
+    let tasks = serde_json::from_str::<Vec<SwarmTaskSpec>>(text).or_else(|_| {
+        if let (Some(start), Some(end)) = (text.find('['), text.rfind(']'))
+            && start < end
+        {
+            return serde_json::from_str::<Vec<SwarmTaskSpec>>(&text[start..=end]);
+        }
+        Err(serde_json::Error::io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "no JSON task array found",
+        )))
+    })?;
+
+    tasks
+        .into_iter()
+        .map(|mut task| {
+            if let (Some(role), Some(alias)) = (&task.role, &task.subagent_type)
+                && role.trim() != alias.trim()
+            {
+                anyhow::bail!(
+                    "task '{}' specifies conflicting role='{}' and subagent_type='{}'",
+                    task.description,
+                    role,
+                    alias
+                );
+            }
+            if task.role.is_none() {
+                task.role = task.subagent_type.take();
+            }
+            Ok(task)
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct CoordinatorTaskIdentity {
+    pub(super) model: Option<String>,
+    pub(super) provider_key: Option<String>,
+    pub(super) route_api_method: Option<String>,
+    pub(super) effort: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SwarmTaskSelection {
+    pub(super) model: Option<String>,
+    pub(super) provider_key: Option<String>,
+    pub(super) route_api_method: Option<String>,
+    pub(super) effort: Option<String>,
+}
+
+impl SwarmTaskSelection {
+    pub(super) fn route_selection(&self) -> Option<crate::provider::RouteSelection> {
+        let model = self.model.as_deref()?.trim();
+        let api_method = self
+            .route_api_method
+            .as_deref()
+            .or(self.provider_key.as_deref())
+            .map(str::trim)
+            .filter(|method| !method.is_empty())?;
+        let api_method_kind = crate::provider::ModelRouteApiMethod::parse(api_method);
+        let provider_label = self
+            .provider_key
+            .as_deref()
+            .unwrap_or(api_method)
+            .to_string();
+        Some(crate::provider::RouteSelection {
+            model: model.to_string(),
+            runtime_key: crate::provider::RuntimeKey::from_api_method(
+                &api_method_kind,
+                &provider_label,
+            ),
+            api_method: api_method.to_string(),
+            provider_label,
+            detail: String::new(),
+        })
     }
 
-    if let (Some(start), Some(end)) = (text.find('['), text.rfind(']'))
-        && start < end
-        && let Ok(tasks) = serde_json::from_str::<Vec<SwarmTaskSpec>>(&text[start..=end])
+    pub(super) fn model_spec(&self) -> Option<String> {
+        let model = self.model.as_deref()?.trim();
+        let route = self
+            .route_api_method
+            .as_deref()
+            .or(self.provider_key.as_deref())
+            .map(str::trim)
+            .filter(|route| !route.is_empty());
+        let Some(route) = route else {
+            return Some(model.to_string());
+        };
+        let prefix = match route {
+            "claude-oauth" => "claude-oauth",
+            "anthropic-api-key" => "claude-api",
+            "openai-oauth" => "openai-oauth",
+            "openai-api-key" => "openai-api",
+            "code-assist-oauth" => "gemini",
+            "antigravity-https" => "antigravity",
+            "openrouter" => "openrouter",
+            profile => profile,
+        };
+        Some(format!("{prefix}:{model}"))
+    }
+}
+
+fn normalized_value(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn is_inherit_value(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "inherit" | "coordinator"
+    )
+}
+
+fn model_without_route_prefix(model: &str) -> &str {
+    crate::provider::explicit_model_provider_prefix(model)
+        .map(|(_, _, bare)| bare)
+        .unwrap_or(model)
+        .trim()
+}
+
+fn provider_from_route(
+    model: &str,
+    route_api_method: Option<&str>,
+    provider_key: Option<&str>,
+) -> Option<String> {
+    if let Some((_, prefix, _)) = crate::provider::explicit_model_provider_prefix(model) {
+        return Some(
+            match prefix.trim_end_matches(':').to_ascii_lowercase().as_str() {
+                "claude" | "claude-api" | "claude-oauth" | "anthropic" => "claude".to_string(),
+                "openai" | "openai-api" | "openai-oauth" => "openai".to_string(),
+                other => other.to_string(),
+            },
+        );
+    }
+    if let Some(provider) = crate::provider::provider_for_model(model) {
+        return Some(provider.to_string());
+    }
+    if let Some(route) = route_api_method
+        .map(str::trim)
+        .filter(|route| !route.is_empty())
     {
-        return tasks;
+        let route = route.to_ascii_lowercase();
+        return Some(
+            if let Some(profile) = route.strip_prefix("openai-compatible:") {
+                profile.to_string()
+            } else if route.starts_with("claude") || route.starts_with("anthropic") {
+                "claude".to_string()
+            } else if route.starts_with("openai") {
+                "openai".to_string()
+            } else {
+                route.split(':').next().unwrap_or(&route).to_string()
+            },
+        );
+    }
+    provider_key
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(|key| match key.to_ascii_lowercase().as_str() {
+            "claude-api" | "claude-oauth" | "anthropic-api-key" => "claude".to_string(),
+            "openai-api" | "openai-oauth" | "openai-api-key" => "openai".to_string(),
+            _ => key.to_string(),
+        })
+}
+
+fn route_for_model(model: &str) -> (Option<String>, Option<String>) {
+    let Some((_, prefix, bare)) = crate::provider::explicit_model_provider_prefix(model) else {
+        return (None, None);
+    };
+    let route = match prefix {
+        "claude-oauth:" => "claude-oauth",
+        "claude-api:" | "anthropic:" => "anthropic-api-key",
+        "openai-oauth:" => "openai-oauth",
+        "openai-api:" => "openai-api-key",
+        "openrouter:" => "openrouter",
+        "copilot:" => "copilot",
+        "gemini:" => "code-assist-oauth",
+        "cursor:" => "cursor",
+        "bedrock:" => "bedrock",
+        "antigravity:" => "antigravity-https",
+        _ => return (None, None),
+    };
+    (Some(route.to_string()), Some(bare.trim().to_string()))
+}
+
+fn allowlist_contains(values: &[String], value: &str) -> bool {
+    values
+        .iter()
+        .any(|candidate| candidate.trim().eq_ignore_ascii_case(value))
+}
+
+pub(super) fn resolve_swarm_task_selection(
+    task: &SwarmTaskSpec,
+    agents: &crate::config::AgentsConfig,
+    coordinator: &CoordinatorTaskIdentity,
+) -> Result<SwarmTaskSelection> {
+    let role = normalized_value(task.role.as_deref());
+    let policy = role.as_deref().and_then(|role| {
+        agents.swarm_role_policies.get(role).or_else(|| {
+            agents
+                .swarm_role_policies
+                .iter()
+                .find(|(key, _)| key.trim().eq_ignore_ascii_case(role))
+                .map(|(_, policy)| policy)
+        })
+    });
+    let requested_model =
+        normalized_value(task.model.as_deref()).filter(|model| !is_inherit_value(model));
+    let policy_model = policy.and_then(|policy| normalized_value(policy.model.as_deref()));
+    let override_model = requested_model
+        .clone()
+        .or_else(|| policy_model.filter(|model| !is_inherit_value(model)));
+    let selected_model = override_model.clone().or_else(|| coordinator.model.clone());
+    let (explicit_route, explicit_model) = selected_model
+        .as_deref()
+        .map(route_for_model)
+        .unwrap_or_default();
+    let selected_provider = selected_model
+        .as_deref()
+        .and_then(|model| provider_from_route(model, None, None));
+    let coordinator_provider = coordinator.model.as_deref().and_then(|model| {
+        provider_from_route(
+            model,
+            coordinator.route_api_method.as_deref(),
+            coordinator.provider_key.as_deref(),
+        )
+    });
+    let inherits_coordinator_route = override_model.is_none()
+        || selected_provider.is_none()
+        || selected_provider == coordinator_provider;
+    let route_api_method = explicit_route.or_else(|| {
+        inherits_coordinator_route
+            .then(|| coordinator.route_api_method.clone())
+            .flatten()
+    });
+    let model = explicit_model.clone().or_else(|| {
+        selected_model
+            .as_deref()
+            .map(model_without_route_prefix)
+            .map(str::to_string)
+    });
+    let provider_key = if explicit_model.is_some() {
+        route_api_method.clone()
+    } else if inherits_coordinator_route {
+        coordinator.provider_key.clone()
+    } else {
+        selected_provider.clone()
+    };
+    let provider = provider_from_route(
+        selected_model.as_deref().unwrap_or_default(),
+        route_api_method.as_deref(),
+        provider_key.as_deref(),
+    );
+    let effort = normalized_value(task.reasoning_effort.as_deref())
+        .or_else(|| policy.and_then(|policy| normalized_value(policy.reasoning_effort.as_deref())))
+        .or_else(|| coordinator.effort.clone());
+
+    if let Some(policy) = policy {
+        if !policy.allowed_models.is_empty()
+            && !allowlist_contains(&policy.allowed_models, model.as_deref().unwrap_or_default())
+            && !allowlist_contains(
+                &policy.allowed_models,
+                selected_model.as_deref().unwrap_or_default(),
+            )
+        {
+            anyhow::bail!(
+                "swarm task role '{}' resolved model '{}' which is not in allowed_models",
+                role.as_deref().unwrap_or("<unnamed>"),
+                model.as_deref().unwrap_or("<unset>")
+            );
+        }
+        if !policy.allowed_providers.is_empty()
+            && !allowlist_contains(
+                &policy.allowed_providers,
+                provider.as_deref().unwrap_or_default(),
+            )
+        {
+            anyhow::bail!(
+                "swarm task role '{}' resolved provider '{}' which is not in allowed_providers",
+                role.as_deref().unwrap_or("<unnamed>"),
+                provider.as_deref().unwrap_or("<unset>")
+            );
+        }
+        if !policy.allowed_reasoning_efforts.is_empty()
+            && !effort
+                .as_deref()
+                .is_some_and(|effort| allowlist_contains(&policy.allowed_reasoning_efforts, effort))
+        {
+            anyhow::bail!(
+                "swarm task role '{}' resolved reasoning effort '{}' which is not in allowed_reasoning_efforts",
+                role.as_deref().unwrap_or("<unnamed>"),
+                effort.as_deref().unwrap_or("<unset>")
+            );
+        }
     }
 
-    Vec::new()
+    Ok(SwarmTaskSelection {
+        model,
+        provider_key,
+        route_api_method,
+        effort,
+    })
+}
+
+pub(super) fn resolve_swarm_task_route(
+    role: Option<&str>,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+    agents: &crate::config::AgentsConfig,
+    coordinator: &CoordinatorTaskIdentity,
+) -> Result<SwarmTaskSelection> {
+    let task = SwarmTaskSpec {
+        description: "task-DAG assignment".to_string(),
+        prompt: String::new(),
+        role: role.map(str::to_string),
+        subagent_type: None,
+        model: model.map(str::to_string),
+        reasoning_effort: reasoning_effort.map(str::to_string),
+    };
+    resolve_swarm_task_selection(&task, agents, coordinator)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        broadcast_swarm_plan, broadcast_swarm_plan_with_previous, broadcast_swarm_status,
-        member_in_status_broadcast, member_status_is_dead, now_unix_ms, parse_swarm_tasks,
-        refresh_swarm_task_staleness, remove_session_from_swarm,
-        salvage_assignments_of_dead_member, swarm_ancestors, swarm_is_self_or_ancestor,
-        swarm_spawn_depth, touch_swarm_task_progress, update_member_status,
-        update_member_status_with_report,
+        SwarmTaskSpec, broadcast_swarm_plan, broadcast_swarm_plan_with_previous,
+        broadcast_swarm_status, member_in_status_broadcast, member_status_is_dead, now_unix_ms,
+        parse_swarm_tasks, refresh_swarm_task_staleness, remove_session_from_swarm,
+        resolve_swarm_task_selection, salvage_assignments_of_dead_member, swarm_ancestors,
+        swarm_is_self_or_ancestor, swarm_spawn_depth, touch_swarm_task_progress,
+        update_member_status, update_member_status_with_report,
     };
     use crate::plan::PlanItem;
     use crate::protocol::{NotificationType, ServerEvent};
@@ -1780,12 +2106,166 @@ mod tests {
     fn parse_swarm_tasks_accepts_wrapped_json() {
         let text =
             "Plan:\n[{\"description\":\"A\",\"prompt\":\"B\",\"subagent_type\":\"general\"}]";
-        let tasks = parse_swarm_tasks(text);
+        let tasks = parse_swarm_tasks(text).expect("legacy task shape should parse");
 
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].description, "A");
         assert_eq!(tasks[0].prompt, "B");
-        assert_eq!(tasks[0].subagent_type.as_deref(), Some("general"));
+        assert_eq!(tasks[0].role.as_deref(), Some("general"));
+    }
+
+    #[test]
+    fn parse_swarm_tasks_accepts_canonical_role_model_and_effort() {
+        let tasks = parse_swarm_tasks(
+            r#"[{"description":"A","prompt":"B","role":"reviewer","model":"openai-oauth:gpt-5.5","reasoning_effort":"high"}]"#,
+        )
+        .expect("canonical task shape should parse");
+
+        assert_eq!(tasks[0].role.as_deref(), Some("reviewer"));
+        assert_eq!(tasks[0].model.as_deref(), Some("openai-oauth:gpt-5.5"));
+        assert_eq!(tasks[0].reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn parse_swarm_tasks_rejects_conflicting_role_aliases() {
+        let error = parse_swarm_tasks(
+            r#"[{"description":"A","prompt":"B","role":"reviewer","subagent_type":"researcher"}]"#,
+        )
+        .expect_err("conflicting role aliases must fail visibly");
+
+        assert!(error.to_string().contains("role"));
+        assert!(error.to_string().contains("subagent_type"));
+    }
+
+    #[test]
+    fn swarm_task_policy_enforces_model_provider_and_effort_allow_lists() {
+        use crate::config::{AgentsConfig, SwarmRolePolicy};
+
+        let mut config = AgentsConfig::default();
+        config.swarm_role_policies.insert(
+            "reviewer".to_string(),
+            SwarmRolePolicy {
+                model: None,
+                reasoning_effort: None,
+                allowed_models: vec!["gpt-5.5".to_string()],
+                allowed_providers: vec!["openai".to_string()],
+                allowed_reasoning_efforts: vec!["high".to_string()],
+            },
+        );
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: Some("reviewer".to_string()),
+            subagent_type: None,
+            model: Some("openai-oauth:gpt-5.5".to_string()),
+            reasoning_effort: Some("high".to_string()),
+        };
+        let coordinator = super::CoordinatorTaskIdentity {
+            model: Some("claude-sonnet-4".to_string()),
+            provider_key: Some("claude-oauth".to_string()),
+            route_api_method: Some("claude-oauth".to_string()),
+            effort: Some("low".to_string()),
+        };
+
+        let selection = resolve_swarm_task_selection(&task, &config, &coordinator)
+            .expect("allowed selection should resolve");
+        assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(selection.effort.as_deref(), Some("high"));
+
+        let mut disallowed = task.clone();
+        disallowed.reasoning_effort = Some("low".to_string());
+        let error = resolve_swarm_task_selection(&disallowed, &config, &coordinator)
+            .expect_err("disallowed effort must fail before startup");
+        assert!(error.to_string().contains("reasoning effort"));
+    }
+
+    #[test]
+    fn swarm_task_policy_allows_legacy_inherited_task_without_policy() {
+        use crate::config::AgentsConfig;
+
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: None,
+            subagent_type: None,
+            model: None,
+            reasoning_effort: None,
+        };
+        let coordinator = super::CoordinatorTaskIdentity {
+            model: Some("claude-sonnet-4".to_string()),
+            provider_key: Some("claude-oauth".to_string()),
+            route_api_method: Some("claude-oauth".to_string()),
+            effort: Some("low".to_string()),
+        };
+
+        let selection = resolve_swarm_task_selection(&task, &AgentsConfig::default(), &coordinator)
+            .expect("legacy task should inherit");
+        assert_eq!(selection.model.as_deref(), Some("claude-sonnet-4"));
+        assert_eq!(selection.effort.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn swarm_task_route_treats_inherit_sentinel_as_omitted_and_matches_policy_case() {
+        use crate::config::{AgentsConfig, SwarmRolePolicy};
+
+        let mut config = AgentsConfig::default();
+        config.swarm_role_policies.insert(
+            "Reviewer".to_string(),
+            SwarmRolePolicy {
+                model: Some("gpt-5.5".to_string()),
+                reasoning_effort: None,
+                allowed_models: vec!["gpt-5.5".to_string()],
+                allowed_providers: vec!["openai".to_string()],
+                allowed_reasoning_efforts: Vec::new(),
+            },
+        );
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: Some("reviewer".to_string()),
+            subagent_type: None,
+            model: Some("inherit".to_string()),
+            reasoning_effort: None,
+        };
+        let selection = resolve_swarm_task_selection(
+            &task,
+            &config,
+            &super::CoordinatorTaskIdentity {
+                model: Some("claude-sonnet-4".to_string()),
+                provider_key: Some("claude-oauth".to_string()),
+                route_api_method: Some("claude-oauth".to_string()),
+                effort: None,
+            },
+        )
+        .expect("inherit should allow policy fallback");
+        assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(selection.provider_key.as_deref(), Some("openai"));
+        assert_eq!(selection.route_api_method.as_deref(), None);
+    }
+
+    #[test]
+    fn swarm_task_route_derives_provider_from_bare_model_before_coordinator_route() {
+        use crate::config::AgentsConfig;
+
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: None,
+            subagent_type: None,
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: None,
+        };
+        let coordinator = super::CoordinatorTaskIdentity {
+            model: Some("claude-sonnet-4".to_string()),
+            provider_key: Some("claude-oauth".to_string()),
+            route_api_method: Some("claude-oauth".to_string()),
+            effort: None,
+        };
+        let selection = resolve_swarm_task_selection(&task, &AgentsConfig::default(), &coordinator)
+            .expect("bare model should resolve");
+        assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(selection.provider_key.as_deref(), Some("openai"));
+        assert_eq!(selection.route_api_method.as_deref(), None);
     }
 
     #[test]
