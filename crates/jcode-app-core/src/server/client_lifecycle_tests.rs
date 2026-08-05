@@ -288,6 +288,14 @@ async fn cancel_without_local_task_still_signals_session_control() {
         soft_interrupt_queue,
         stop_signal.clone(),
     );
+    // The point of this path is a turn this connection does not own (attach
+    // after reload, server-initiated turn). Without a registered active turn
+    // the cancel is a deliberate no-op, because arming the signal with nothing
+    // running only kills the *next* message.
+    let _active_turn = crate::turn_cancel_registry::register_active_turn(
+        "session_detached_cancel",
+        InterruptSignal::new(),
+    );
     let (client_event_tx, mut client_event_rx) = mpsc::unbounded_channel::<ServerEvent>();
     let swarm_members = Arc::new(RwLock::new(HashMap::new()));
     let swarms_by_id = Arc::new(RwLock::new(HashMap::new()));
@@ -347,6 +355,12 @@ async fn deferred_cancel_reset_does_not_erase_newer_cancel() {
         "session_detached_cancel_race",
         Arc::clone(&soft_interrupt_queue),
         stop_signal.clone(),
+    );
+    // A turn owned by another connection is what makes this the signalling
+    // path rather than the idle no-op; see the sibling test.
+    let _active_turn = crate::turn_cancel_registry::register_active_turn(
+        "session_detached_cancel_race",
+        InterruptSignal::new(),
     );
     let (client_event_tx, _client_event_rx) = mpsc::unbounded_channel::<ServerEvent>();
     let swarm_members = Arc::new(RwLock::new(HashMap::new()));
@@ -906,6 +920,7 @@ fn reload_starting_rejects_new_turn_without_spawning_processing_task() {
             &agent,
             &client_event_tx,
             &processing_done_tx,
+            Vec::new(),
             &SwarmStatusRefs {
                 members: &swarm_members,
                 swarms_by_id: &swarms_by_id,
@@ -1005,6 +1020,7 @@ async fn client_initiated_turn_fans_out_stream_and_terminal_events_to_live_attac
         &agent,
         &origin_tx,
         &processing_done_tx,
+        Vec::new(),
         &SwarmStatusRefs {
             members: &swarm_members,
             swarms_by_id: &swarms_by_id,
@@ -1128,6 +1144,7 @@ fn accepted_reload_recovery_continuation_marks_intent_delivered() -> anyhow::Res
             &agent,
             &client_event_tx,
             &processing_done_tx,
+            Vec::new(),
             &SwarmStatusRefs {
                 members: &swarm_members,
                 swarms_by_id: &swarms_by_id,
@@ -1226,6 +1243,7 @@ fn reload_starting_rejects_new_turns_for_multiple_sessions() {
                 &agent,
                 &client_event_tx,
                 &processing_done_tx,
+                Vec::new(),
                 &SwarmStatusRefs {
                     members: &swarm_members,
                     swarms_by_id: &swarms_by_id,

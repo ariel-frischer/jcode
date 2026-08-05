@@ -3311,7 +3311,7 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
 name = "jcode"
-version = "0.67.0"
+version = "0.68.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3409,6 +3409,7 @@ dependencies = [
  "jcode-pdf",
  "jcode-plan",
  "jcode-provider-core",
+ "jcode-schema-dialect",
  "jcode-selfdev-types",
  "jcode-session-types",
  "jcode-setup-hints",
@@ -3794,6 +3795,7 @@ dependencies = [
  "jcode-logging",
  "jcode-message-types",
  "jcode-provider-core",
+ "jcode-schema-dialect",
  "serde",
  "serde_json",
 ]
@@ -3825,6 +3827,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "jcode-provider-gemini",
+ "jcode-schema-dialect",
  "serde",
  "serde_json",
 ]
@@ -3841,6 +3844,7 @@ dependencies = [
  "jcode-provider-antigravity",
  "jcode-provider-core",
  "jcode-provider-gemini",
+ "jcode-schema-dialect",
  "reqwest 0.12.28",
  "serde_json",
  "tempfile",
@@ -3934,6 +3938,7 @@ dependencies = [
  "httpdate",
  "jcode-logging",
  "jcode-message-types",
+ "jcode-schema-dialect",
  "rand 0.9.3",
  "reqwest 0.12.28",
  "serde",
@@ -4006,6 +4011,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "jcode-message-types",
+ "jcode-schema-dialect",
  "serde",
  "serde_json",
 ]
@@ -4019,8 +4025,13 @@ dependencies = [
  "chrono",
  "jcode-base",
  "jcode-message-types",
+ "jcode-provider-anthropic",
+ "jcode-provider-antigravity",
  "jcode-provider-core",
  "jcode-provider-gemini",
+ "jcode-provider-openai",
+ "jcode-provider-openrouter",
+ "jcode-schema-dialect",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -4068,6 +4079,7 @@ dependencies = [
  "jcode-message-types",
  "jcode-provider-core",
  "jcode-provider-openai",
+ "jcode-schema-dialect",
  "reqwest 0.12.28",
  "serde_json",
  "tempfile",
@@ -4087,6 +4099,7 @@ dependencies = [
  "jcode-core",
  "jcode-logging",
  "jcode-message-types",
+ "jcode-schema-dialect",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -4121,6 +4134,17 @@ dependencies = [
  "pulldown-cmark",
  "serde",
  "unicode-width",
+]
+
+[[package]]
+name = "jcode-schema-dialect"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "jcode-schema-dialect",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
