@@ -6,7 +6,7 @@ use crate::plan::{PlanItem, newly_ready_item_ids};
 use crate::protocol::{NotificationType, ServerEvent};
 use crate::session::Session;
 use anyhow::Result;
-use futures::future::try_join_all;
+use futures::stream::{self, StreamExt, TryStreamExt};
 use jcode_swarm_core::{
     completion_notification_message, normalize_completion_report, truncate_detail,
 };
@@ -1656,13 +1656,12 @@ No extra text.\n\nRequest:\n{message}"
         ],
     );
 
-    let task_futures = tasks.iter().map(|task| {
+    let task_futures = tasks.into_iter().map(|task| {
         let agent = agent.clone();
         let working_dir_hint = working_dir_hint.clone();
         let description = task.description.clone();
         let prompt = format!("{working_dir_hint}{}", task.prompt);
         let role = task.role.clone().unwrap_or_else(|| "general".to_string());
-        let task = task.clone();
         async move {
             let coordinator = {
                 let agent_guard = agent.lock().await;
@@ -1710,7 +1709,18 @@ No extra text.\n\nRequest:\n{message}"
             Ok::<(String, String), anyhow::Error>((description, output))
         }
     });
-    let task_outputs = try_join_all(task_futures).await?;
+    // A swarm message can be processed concurrently with many other swarm
+    // messages. Do not turn every planner result into an unbounded burst of
+    // agent/tool runtimes, since each runtime may create OS threads and child
+    // processes. The live-agent admission limit protects session registration,
+    // but this fanout happens before those workers are necessarily visible to
+    // the admission path.
+    let configured_limit = crate::config::config().agents.swarm_max_concurrent_agents;
+    let fanout_limit = configured_limit.max(1);
+    let task_outputs = stream::iter(task_futures)
+        .buffered(fanout_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
 
     let mut integration_prompt = String::new();
     integration_prompt.push_str(
