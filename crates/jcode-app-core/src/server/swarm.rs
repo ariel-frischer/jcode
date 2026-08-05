@@ -1694,6 +1694,14 @@ No extra text.\n\nRequest:\n{message}"
                     ));
                 }
             };
+            crate::logging::event_info(
+                "SWARM_LIFECYCLE",
+                vec![
+                    ("phase", "task_route_resolved".to_string()),
+                    ("role", role.clone()),
+                    ("route_explanation", selection.explanation.clone()),
+                ],
+            );
             let output = match run_swarm_task(agent, &description, &role, &prompt, selection).await
             {
                 Ok(output) => output,
@@ -1796,6 +1804,8 @@ pub(super) struct SwarmTaskSelection {
     pub(super) provider_key: Option<String>,
     pub(super) route_api_method: Option<String>,
     pub(super) effort: Option<String>,
+    /// Non-secret explanation of the precedence path used for this selection.
+    pub(super) explanation: String,
 }
 
 impl SwarmTaskSelection {
@@ -1960,9 +1970,11 @@ pub(super) fn resolve_swarm_task_selection(
     let requested_model =
         normalized_value(task.model.as_deref()).filter(|model| !is_inherit_value(model));
     let policy_model = policy.and_then(|policy| normalized_value(policy.model.as_deref()));
-    let override_model = requested_model
-        .clone()
-        .or_else(|| policy_model.filter(|model| !is_inherit_value(model)));
+    let override_model = requested_model.clone().or_else(|| {
+        policy_model
+            .clone()
+            .filter(|model| !is_inherit_value(model))
+    });
     let selected_model = override_model.clone().or_else(|| coordinator.model.clone());
     let (explicit_route, explicit_model) = selected_model
         .as_deref()
@@ -2012,10 +2024,28 @@ pub(super) fn resolve_swarm_task_selection(
         route_api_method.as_deref(),
         provider_key.as_deref(),
     );
+
     let effort = normalized_value(task.reasoning_effort.as_deref())
         .or_else(|| policy.and_then(|policy| normalized_value(policy.reasoning_effort.as_deref())))
         .or_else(|| coordinator.effort.clone());
 
+    let explanation = if requested_model.is_some() {
+        "explicit task model"
+    } else if policy_model.is_some() {
+        "configured role model"
+    } else if coordinator.model.is_some() {
+        "coordinator inheritance"
+    } else {
+        "built-in default"
+    };
+    let explanation = format!(
+        "{}; role={}; model={}; route={}; effort={}",
+        explanation,
+        role.as_deref().unwrap_or("<none>"),
+        model.as_deref().unwrap_or("<unset>"),
+        route_api_method.as_deref().unwrap_or("<unset>"),
+        effort.as_deref().unwrap_or("<unset>"),
+    );
     if let Some(policy) = policy {
         if !policy.allowed_models.is_empty()
             && !allowlist_contains(&policy.allowed_models, model.as_deref().unwrap_or_default())
@@ -2060,6 +2090,7 @@ pub(super) fn resolve_swarm_task_selection(
         provider_key,
         route_api_method,
         effort,
+        explanation,
     })
 }
 
@@ -2084,10 +2115,10 @@ pub(super) fn resolve_swarm_task_route(
 #[cfg(test)]
 mod tests {
     use super::{
-        SwarmTaskSelection, SwarmTaskSpec, broadcast_swarm_plan,
+        CoordinatorTaskIdentity, SwarmTaskSelection, SwarmTaskSpec, broadcast_swarm_plan,
         broadcast_swarm_plan_with_previous, broadcast_swarm_status, member_in_status_broadcast,
         member_status_is_dead, now_unix_ms, parse_swarm_tasks, refresh_swarm_task_staleness,
-        remove_session_from_swarm, resolve_swarm_task_selection,
+        remove_session_from_swarm, resolve_swarm_task_route, resolve_swarm_task_selection,
         salvage_assignments_of_dead_member, swarm_ancestors, swarm_is_self_or_ancestor,
         swarm_spawn_depth, touch_swarm_task_progress, update_member_status,
         update_member_status_with_report,
@@ -2319,6 +2350,7 @@ mod tests {
             provider_key: Some("nvidia".to_string()),
             route_api_method: Some("openai-compatible:nvidia-nim".to_string()),
             effort: None,
+            explanation: "test selection".to_string(),
         };
 
         assert_eq!(
@@ -2326,6 +2358,38 @@ mod tests {
             Some("nvidia-nim:nvidia/llama-3.3")
         );
         assert!(selection.route_selection().is_some());
+    }
+
+    #[test]
+    fn swarm_task_route_records_precedence_explanation() {
+        use crate::config::{AgentsConfig, SwarmRolePolicy};
+
+        let mut config = AgentsConfig::default();
+        config.swarm_role_policies.insert(
+            "reviewer".to_string(),
+            SwarmRolePolicy {
+                model: Some("gpt-5.5".to_string()),
+                reasoning_effort: Some("high".to_string()),
+                ..Default::default()
+            },
+        );
+        let selection = resolve_swarm_task_route(
+            Some("reviewer"),
+            None,
+            None,
+            &config,
+            &CoordinatorTaskIdentity {
+                model: Some("claude-sonnet-4".to_string()),
+                provider_key: Some("claude-oauth".to_string()),
+                route_api_method: Some("claude-oauth".to_string()),
+                effort: Some("low".to_string()),
+            },
+        )
+        .expect("role policy should resolve");
+
+        assert!(selection.explanation.starts_with("configured role model;"));
+        assert!(selection.explanation.contains("role=reviewer"));
+        assert!(selection.explanation.contains("model=gpt-5.5"));
     }
 
     #[test]
