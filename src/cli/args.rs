@@ -164,6 +164,10 @@ pub(crate) enum Command {
         #[arg(long, conflicts_with = "json")]
         ndjson: bool,
 
+        /// Validate the response as JSON against a JSON Schema file
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["json", "ndjson"])]
+        schema: Option<String>,
+
         /// The message to send
         message: String,
     },

@@ -1,12 +1,13 @@
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::{Child, Command as ProcessCommand, Stdio};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::{browser, gateway, memory, session, storage, tui};
 
@@ -1992,6 +1993,25 @@ struct RunCommandReport {
     usage: crate::agent::TokenUsage,
 }
 
+#[derive(Debug, Serialize)]
+struct StructuredRunUsage {
+    input_tokens: u64,
+    output_tokens: u64,
+    cache_read_input_tokens: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+struct StructuredRunCommandReport {
+    /// The JSON value that passed the requested JSON Schema.
+    data: serde_json::Value,
+    session_id: String,
+    provider: Option<String>,
+    model: Option<String>,
+    /// Total model attempts, including corrective retries.
+    attempts: usize,
+    usage: Option<StructuredRunUsage>,
+}
+
 #[derive(Debug, Default)]
 struct NdjsonRunState {
     text: String,
@@ -2368,11 +2388,25 @@ Re-run with `--force` if you really want to stop the server.";
 pub async fn run_single_message_command(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
+    provider_profile: Option<&str>,
     resume_session: Option<&str>,
     message: &str,
     emit_json: bool,
     emit_ndjson: bool,
+    schema_path: Option<&str>,
 ) -> Result<()> {
+    if let Some(schema_path) = schema_path {
+        return run_single_message_command_schema(
+            choice,
+            model,
+            provider_profile,
+            resume_session,
+            message,
+            schema_path,
+        )
+        .await;
+    }
+
     let provider = if emit_json || emit_ndjson {
         super::provider_init::init_provider_quiet(choice, model).await?
     } else {
@@ -2418,6 +2452,178 @@ pub async fn run_single_message_command(
     }
 
     Ok(())
+}
+
+async fn run_single_message_command_schema(
+    choice: &super::provider_init::ProviderChoice,
+    model: Option<&str>,
+    provider_profile: Option<&str>,
+    resume_session: Option<&str>,
+    message: &str,
+    schema_path: &str,
+) -> Result<()> {
+    // Read and parse the schema before starting a server or creating a session.
+    // The SDK owns schema compilation and validation, but malformed file input
+    // is a CLI trust-boundary error and must not reach a model turn.
+    let schema = load_structured_schema(schema_path)?;
+
+    // Structured mode goes through the SDK's API boundary. Start the same
+    // daemon selected by ordinary `jcode run` first, then use a private,
+    // per-command bridge socket so an unrelated bridge cannot capture this
+    // command's custom --socket or session traffic.
+    super::dispatch::spawn_server(choice, model, provider_profile).await?;
+
+    let model = model.map(str::to_string);
+    let resume_session = resume_session.map(str::to_string);
+    let message = message.to_string();
+    let provider = choice.as_arg_value().to_string();
+    let working_dir = std::env::current_dir()?;
+    let daemon_socket = crate::server::socket_path();
+    let report = tokio::task::spawn_blocking(move || {
+        run_structured_sdk_turn(
+            schema,
+            &provider,
+            model.as_deref(),
+            resume_session.as_deref(),
+            &message,
+            working_dir,
+            daemon_socket,
+        )
+    })
+    .await??;
+
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+fn load_structured_schema(path: &str) -> Result<serde_json::Value> {
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("could not read JSON Schema file `{path}` as UTF-8"))?;
+    serde_json::from_str(&contents)
+        .with_context(|| format!("invalid JSON in JSON Schema file `{path}`"))
+}
+
+#[cfg(unix)]
+struct SchemaApiBridgeGuard {
+    child: Option<Child>,
+    socket: PathBuf,
+}
+
+#[cfg(unix)]
+impl Drop for SchemaApiBridgeGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = std::fs::remove_file(&self.socket);
+    }
+}
+
+#[cfg(unix)]
+fn schema_api_socket_path() -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    jcode_harness_api::runtime_dir()
+        .join(format!("jcode-schema-{}-{nonce}.sock", std::process::id()))
+}
+
+#[cfg(unix)]
+fn start_schema_api_bridge(daemon_socket: &Path) -> Result<(PathBuf, SchemaApiBridgeGuard)> {
+    let api_socket = schema_api_socket_path();
+    let executable = std::env::current_exe().context("could not locate the jcode executable")?;
+    let child = ProcessCommand::new(executable)
+        .args(schema_bridge_command_args(daemon_socket, &api_socket))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .with_context(|| format!("could not start the schema API bridge at {api_socket:?}"))?;
+    let guard = SchemaApiBridgeGuard {
+        child: Some(child),
+        socket: api_socket.clone(),
+    };
+    if let Err(error) =
+        jcode_sdk::wait_for_socket(&api_socket, "schema API bridge", Duration::from_secs(30))
+    {
+        drop(guard);
+        return Err(error.into());
+    }
+    Ok((api_socket, guard))
+}
+
+fn schema_bridge_command_args(daemon_socket: &Path, api_socket: &Path) -> Vec<String> {
+    vec![
+        "--quiet".to_string(),
+        "--no-update".to_string(),
+        "--no-selfdev".to_string(),
+        "--socket".to_string(),
+        daemon_socket.display().to_string(),
+        "api-bridge".to_string(),
+        "--api-socket".to_string(),
+        api_socket.display().to_string(),
+    ]
+}
+
+#[cfg(unix)]
+fn run_structured_sdk_turn(
+    schema: serde_json::Value,
+    provider: &str,
+    model: Option<&str>,
+    resume_session: Option<&str>,
+    message: &str,
+    working_dir: PathBuf,
+    daemon_socket: PathBuf,
+) -> Result<StructuredRunCommandReport> {
+    let (api_socket, _bridge) = start_schema_api_bridge(&daemon_socket)?;
+    let client = jcode_sdk::JcodeClient::connect(jcode_sdk::ConnectOptions {
+        socket_path: Some(api_socket),
+        client_name: format!("jcode-run-schema/{}", env!("CARGO_PKG_VERSION")),
+        request_timeout: Some(Duration::from_secs(30)),
+        ensure_runtime: false,
+    })?;
+
+    let session = match resume_session {
+        Some(session_id) => client.attach_session(session_id)?,
+        None => client.create_session(Some(working_dir.display().to_string()))?,
+    };
+    if let Some(model) = model {
+        client.set_model(&session.session_id, model)?;
+    }
+    let runtime = client.get_runtime_info(&session.session_id)?;
+    let result = client.run_structured::<serde_json::Value>(
+        &session.session_id,
+        message,
+        jcode_sdk::RunStructuredOptions::new(schema),
+    )?;
+    let usage = result.usage.map(|usage| StructuredRunUsage {
+        input_tokens: usage.input,
+        output_tokens: usage.output,
+        cache_read_input_tokens: usage.cache_read_input,
+    });
+
+    Ok(StructuredRunCommandReport {
+        data: result.data,
+        session_id: session.session_id,
+        provider: runtime.provider.or_else(|| Some(provider.to_string())),
+        model: runtime.model.or_else(|| model.map(str::to_string)),
+        attempts: result.attempts.len(),
+        usage,
+    })
+}
+
+#[cfg(not(unix))]
+async fn run_single_message_command_schema(
+    _choice: &super::provider_init::ProviderChoice,
+    _model: Option<&str>,
+    _provider_profile: Option<&str>,
+    _resume_session: Option<&str>,
+    _message: &str,
+    _schema_path: &str,
+) -> Result<()> {
+    anyhow::bail!("jcode run --schema currently requires a Unix API bridge")
 }
 
 fn run_command_auto_poke_enabled() -> bool {

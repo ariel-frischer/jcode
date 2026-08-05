@@ -52,6 +52,39 @@ jcode --quiet model list --verbose
 jcode --quiet run --json "Reply with exactly OK"
 ```
 
+## Run one prompt with schema-validated JSON
+
+Pass a UTF-8 JSON Schema file to make the Rust SDK parse and validate the final
+response. The SDK makes at most two corrective retries when the model returns
+invalid JSON or a schema mismatch:
+
+```bash
+jcode --quiet run --schema result-schema.json "Return the requested result"
+```
+
+The successful stdout object has this stable shape:
+
+```json
+{
+  "data": {"status": "ok"},
+  "session_id": "session_...",
+  "provider": "OpenAI",
+  "model": "gpt-5.4",
+  "attempts": 1,
+  "usage": {
+    "input_tokens": 123,
+    "output_tokens": 7,
+    "cache_read_input_tokens": 0
+  }
+}
+```
+
+`data` is the value that passed the supplied schema. `attempts` includes the
+initial response and any corrective retries. Invalid or unreadable schema files,
+and exhausted structured-output retries, return a non-zero exit status with an
+actionable error on `stderr`; no partial structured result is printed to stdout.
+`--schema` is mutually exclusive with `--json` and `--ndjson`.
+
 ## Stream one prompt as NDJSON
 
 ```bash
