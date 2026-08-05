@@ -22,6 +22,17 @@ pub struct TaskGraphNodeSpec {
     pub depends_on: Vec<String>,
     #[serde(default, skip_serializing_if = "is_zero_u8")]
     pub priority: u8,
+    /// Optional task role used to resolve configured swarm routing policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Optional explicit model route. Missing means configured-role or
+    /// coordinator inheritance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Optional reasoning effort. Missing means configured-role or provider
+    /// default/inherited effort.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 fn is_zero_u8(value: &u8) -> bool {

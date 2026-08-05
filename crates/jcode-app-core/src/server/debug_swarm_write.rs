@@ -573,6 +573,9 @@ fn debug_specs(specs: Vec<DebugNodeSpec>) -> Vec<jcode_plan::dag::NodeSpec> {
             kind: jcode_plan::bridge::parse_kind(s.kind.as_deref()),
             depends_on: s.depends_on,
             priority: s.priority,
+            role: None,
+            model: None,
+            reasoning_effort: None,
         })
         .collect()
 }

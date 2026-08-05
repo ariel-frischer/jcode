@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 mod display;
 pub use display::DisplayConfig;
@@ -512,6 +513,25 @@ pub struct AuthConfig {
 }
 
 /// Agent-specific model defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct SwarmRolePolicy {
+    /// Optional model selected when a task has this role and does not specify one.
+    pub model: Option<String>,
+    /// Optional reasoning effort selected when a task has this role and does not
+    /// specify one.
+    pub reasoning_effort: Option<String>,
+    /// Empty means unrestricted. Values use canonical model ids without route
+    /// prefixes, but prefixed values are accepted for compatibility.
+    pub allowed_models: Vec<String>,
+    /// Empty means unrestricted. Values are stable provider keys such as
+    /// `openai`, `claude`, `openrouter`, or an OpenAI-compatible profile id.
+    pub allowed_providers: Vec<String>,
+    /// Empty means unrestricted. Values are provider-supported effort names.
+    pub allowed_reasoning_efforts: Vec<String>,
+}
+
+/// Agent-specific model defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentsConfig {
@@ -590,6 +610,10 @@ pub struct AgentsConfig {
     /// Env override: `JCODE_SWARM_MAX_CONCURRENT_AGENTS`.
     #[serde(default = "default_swarm_max_concurrent_agents")]
     pub swarm_max_concurrent_agents: usize,
+    /// Optional role-specific routing defaults and restrictions. Missing roles
+    /// and empty allowlists preserve the legacy unrestricted behavior.
+    #[serde(default)]
+    pub swarm_role_policies: BTreeMap<String, SwarmRolePolicy>,
 }
 
 fn default_swarm_max_concurrent_agents() -> usize {
@@ -634,7 +658,42 @@ impl Default for AgentsConfig {
             memory_embedding_base_url: None,
             memory_embedding_dim: None,
             swarm_max_concurrent_agents: default_swarm_max_concurrent_agents(),
+            swarm_role_policies: BTreeMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AgentsConfig, SwarmRolePolicy};
+
+    #[test]
+    fn legacy_agents_config_deserializes_without_swarm_role_policies() {
+        let config: AgentsConfig =
+            serde_json::from_str(r#"{"swarm_model":"gpt-5.5","swarm_spawn_mode":"inline"}"#)
+                .expect("legacy agents config should remain valid");
+
+        assert_eq!(config.swarm_model.as_deref(), Some("gpt-5.5"));
+        assert!(config.swarm_role_policies.is_empty());
+    }
+
+    #[test]
+    fn swarm_role_policy_round_trips_independent_allow_lists() {
+        let mut config = AgentsConfig::default();
+        config.swarm_role_policies.insert(
+            "reviewer".to_string(),
+            SwarmRolePolicy {
+                model: Some("openai-oauth:gpt-5.5".to_string()),
+                reasoning_effort: Some("high".to_string()),
+                allowed_models: vec!["gpt-5.5".to_string()],
+                allowed_providers: vec!["openai".to_string()],
+                allowed_reasoning_efforts: vec!["high".to_string(), "xhigh".to_string()],
+            },
+        );
+
+        let encoded = serde_json::to_string(&config).expect("policy should serialize");
+        let decoded: AgentsConfig = serde_json::from_str(&encoded).expect("policy should parse");
+        assert_eq!(decoded.swarm_role_policies, config.swarm_role_policies);
     }
 }
 

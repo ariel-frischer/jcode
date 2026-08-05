@@ -56,6 +56,9 @@ fn conflicting_seed_ids_are_scoped_and_dependencies_follow_the_remap() {
             kind: Some("explore".to_string()),
             depends_on: Vec::new(),
             priority: 10,
+            role: None,
+            model: None,
+            reasoning_effort: None,
         },
         crate::protocol::TaskGraphNodeSpec {
             id: "final-synthesis".to_string(),
@@ -63,6 +66,9 @@ fn conflicting_seed_ids_are_scoped_and_dependencies_follow_the_remap() {
             kind: Some("synthesize".to_string()),
             depends_on: vec!["explore".to_string()],
             priority: 20,
+            role: None,
+            model: None,
+            reasoning_effort: None,
         },
         crate::protocol::TaskGraphNodeSpec {
             id: "verify".to_string(),
@@ -70,6 +76,9 @@ fn conflicting_seed_ids_are_scoped_and_dependencies_follow_the_remap() {
             kind: Some("verify".to_string()),
             depends_on: vec!["final-synthesis".to_string()],
             priority: 30,
+            role: None,
+            model: None,
+            reasoning_effort: None,
         },
     ];
     let occupied = HashSet::from([

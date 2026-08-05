@@ -2,7 +2,8 @@
 
 use super::append_swarm_completion_report_instructions;
 use super::swarm::{
-    now_unix_ms, swarm_task_heartbeat_interval, swarm_task_stale_after, touch_swarm_task_progress,
+    now_unix_ms, resolve_swarm_task_route, swarm_task_heartbeat_interval, swarm_task_stale_after,
+    touch_swarm_task_progress,
 };
 use super::swarm_mutation_state::{
     PersistedSwarmMutationResponse, begin_or_join_in_flight as begin_swarm_mutation_no_replay,
@@ -28,6 +29,21 @@ use jcode_agent_runtime::SoftInterruptSource;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, watch};
+
+fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
+    fn normalize(model: &str) -> String {
+        let model = model.trim().to_ascii_lowercase();
+        let bare = model.rsplit('/').next().unwrap_or(&model);
+        let bare = bare.split(':').next_back().unwrap_or(bare);
+        bare.split('[').next().unwrap_or(bare).trim().to_string()
+    }
+    let resolved = normalize(resolved);
+    let requested = normalize(requested);
+    resolved.is_empty()
+        || requested.is_empty()
+        || resolved.starts_with(&requested)
+        || requested.starts_with(&resolved)
+}
 
 type SessionAgents = Arc<RwLock<HashMap<String, Arc<Mutex<Agent>>>>>;
 
@@ -334,6 +350,9 @@ struct TaskSnapshot {
     status: String,
     assigned_to: Option<String>,
     progress: Option<SwarmTaskProgress>,
+    role: Option<String>,
+    model: Option<String>,
+    reasoning_effort: Option<String>,
 }
 
 /// Attach the deep-mode execution contract to an assignment's content when the
@@ -426,6 +445,18 @@ async fn task_snapshot_for(
         status: item.status.clone(),
         assigned_to: item.assigned_to.clone(),
         progress: plan.task_progress.get(task_id).cloned(),
+        role: plan
+            .node_meta
+            .get(task_id)
+            .and_then(|meta| meta.role.clone()),
+        model: plan
+            .node_meta
+            .get(task_id)
+            .and_then(|meta| meta.model.clone()),
+        reasoning_effort: plan
+            .node_meta
+            .get(task_id)
+            .and_then(|meta| meta.reasoning_effort.clone()),
     })
 }
 
@@ -495,6 +526,31 @@ async fn task_agent_session(
 ) -> Option<Arc<Mutex<Agent>>> {
     let guard = sessions.read().await;
     guard.get(session_id).cloned()
+}
+
+async fn coordinator_task_identity(
+    session_id: &str,
+    sessions: &SessionAgents,
+) -> super::swarm::CoordinatorTaskIdentity {
+    if let Some(agent) = task_agent_session(session_id, sessions).await {
+        let agent = agent.lock().await;
+        return super::swarm::CoordinatorTaskIdentity {
+            model: Some(agent.provider_model()),
+            provider_key: agent.session_provider_key(),
+            route_api_method: agent.session_route_api_method(),
+            effort: agent.session_reasoning_effort(),
+        };
+    }
+
+    crate::session::Session::load_startup_stub(session_id)
+        .ok()
+        .map(|session| super::swarm::CoordinatorTaskIdentity {
+            model: session.model,
+            provider_key: session.provider_key,
+            route_api_method: session.route_api_method,
+            effort: session.reasoning_effort,
+        })
+        .unwrap_or_default()
 }
 
 async fn resolve_assignment_target_session(
@@ -763,6 +819,7 @@ fn spawn_assigned_task_run(
     swarm_id: String,
     task_id: String,
     assignment_text: String,
+    route: super::swarm::SwarmTaskSelection,
     swarm_members: Arc<RwLock<HashMap<String, SwarmMember>>>,
     swarms_by_id: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     swarm_plans: Arc<RwLock<HashMap<String, VersionedPlan>>>,
@@ -884,6 +941,93 @@ fn spawn_assigned_task_run(
             Arc::clone(&event_counter),
             swarm_event_tx.clone(),
         );
+        let startup_error = {
+            let mut agent = agent_arc.lock().await;
+            let route_error = if let Some(selection) = route.route_selection() {
+                match agent.set_route_selection(&selection) {
+                    Err(error) => Some(error.to_string()),
+                    Ok(()) if !models_are_equivalent(&agent.provider_model(), &selection.model) => {
+                        Some(format!(
+                            "resolved child model '{}' does not match requested '{}'",
+                            agent.provider_model(),
+                            selection.model
+                        ))
+                    }
+                    Ok(()) => None,
+                }
+            } else if let Some(model_request) = route.model_spec() {
+                agent
+                    .set_model(&model_request)
+                    .err()
+                    .map(|error| error.to_string())
+            } else {
+                None
+            };
+            route_error.or_else(|| {
+                route
+                    .effort
+                    .as_deref()
+                    .and_then(|effort| agent.set_reasoning_effort(effort).err())
+                    .map(|error| error.to_string())
+            })
+        };
+        if let Some(error) = startup_error {
+            let _ = heartbeat_stop_tx.send(true);
+            let _ = heartbeat_task.await;
+            {
+                let now_ms = now_unix_ms();
+                let mut plans = swarm_plans.write().await;
+                if let Some(plan) = plans.get_mut(&swarm_id)
+                    && let Some(item) = plan.items.iter_mut().find(|item| item.id == task_id)
+                {
+                    item.status = "failed".to_string();
+                    item.assigned_to = None;
+                    let progress = plan.task_progress.entry(task_id.clone()).or_default();
+                    progress.assigned_session_id = None;
+                    progress.last_heartbeat_unix_ms = Some(now_ms);
+                    progress.last_checkpoint_unix_ms = Some(now_ms);
+                    progress.last_detail = Some(truncate_detail(
+                        &format!("task route rejected: {error}"),
+                        120,
+                    ));
+                    progress.checkpoint_summary = Some("task route rejected".to_string());
+                    progress.completed_at_unix_ms = Some(now_ms);
+                    progress.stale_since_unix_ms = None;
+                    progress.checkpoint_count = Some(progress.checkpoint_count.unwrap_or(0) + 1);
+                    plan.version += 1;
+                }
+            }
+            let swarm_state = SwarmState {
+                members: Arc::clone(&swarm_members),
+                swarms_by_id: Arc::clone(&swarms_by_id),
+                plans: Arc::clone(&swarm_plans),
+                coordinators: Arc::clone(&swarm_coordinators),
+            };
+            persist_swarm_state_for(&swarm_id, &swarm_state).await;
+            broadcast_swarm_plan(
+                &swarm_id,
+                Some("task_route_rejected".to_string()),
+                &swarm_plans,
+                &swarm_members,
+                &swarms_by_id,
+            )
+            .await;
+            update_member_status(
+                &target_session,
+                "failed",
+                Some(truncate_detail(
+                    &format!("task route rejected: {error}"),
+                    120,
+                )),
+                &swarm_members,
+                &swarms_by_id,
+                Some(&event_history),
+                Some(&event_counter),
+                Some(&swarm_event_tx),
+            )
+            .await;
+            return;
+        }
         let start_message_index = {
             let agent = agent_arc.lock().await;
             agent.message_count()
@@ -1544,7 +1688,8 @@ async fn handle_comm_assign_task_with_mode(
         }
     };
 
-    let (selected_task_id, task_content, participant_ids, plan_item_count, blocked_reason) = {
+    let coordinator = coordinator_task_identity(&req_session_id, sessions).await;
+    let (selected_task_id, task_content, participant_ids, plan_item_count, blocked_reason, route) = {
         let now_ms = now_unix_ms();
         let mut plans = swarm_plans.write().await;
         let plan = plans
@@ -1616,34 +1761,55 @@ async fn handle_comm_assign_task_with_mode(
             let content =
                 deep_mode_assignment_content(plan, &item_id, is_composite_synthesis, &hydrated);
 
-            // Index resolved under this same plan lock, so it stays valid.
-            let item = &mut plan.items[found_idx];
-            item.assigned_to = Some(target_session.clone());
-            item.status = "queued".to_string();
-            plan.task_progress.insert(
-                item_id.clone(),
-                SwarmTaskProgress {
-                    assigned_session_id: Some(target_session.clone()),
-                    assignment_summary: Some(truncate_detail(
-                        &combine_assignment_text(&content, message.as_deref()),
-                        120,
-                    )),
-                    assigned_at_unix_ms: Some(now_ms),
-                    ..SwarmTaskProgress::default()
-                },
-            );
-            plan.version += 1;
-            plan.participants.insert(req_session_id.clone());
-            plan.participants.insert(target_session.clone());
-            (
-                Some(item_id.clone()),
-                Some(content),
-                plan.participants.clone(),
-                plan.items.len(),
-                None,
-            )
+            let route = {
+                resolve_swarm_task_route(
+                    plan.node_meta
+                        .get(&item_id)
+                        .and_then(|meta| meta.role.as_deref()),
+                    plan.node_meta
+                        .get(&item_id)
+                        .and_then(|meta| meta.model.as_deref()),
+                    plan.node_meta
+                        .get(&item_id)
+                        .and_then(|meta| meta.reasoning_effort.as_deref()),
+                    &crate::config::config().agents,
+                    &coordinator,
+                )
+            };
+            match route {
+                Err(error) => (None, None, HashSet::new(), 0, Some(error.to_string()), None),
+                Ok(route) => {
+                    // Index resolved under this same plan lock, so it stays valid.
+                    let item = &mut plan.items[found_idx];
+                    item.assigned_to = Some(target_session.clone());
+                    item.status = "queued".to_string();
+                    plan.task_progress.insert(
+                        item_id.clone(),
+                        SwarmTaskProgress {
+                            assigned_session_id: Some(target_session.clone()),
+                            assignment_summary: Some(truncate_detail(
+                                &combine_assignment_text(&content, message.as_deref()),
+                                120,
+                            )),
+                            assigned_at_unix_ms: Some(now_ms),
+                            ..SwarmTaskProgress::default()
+                        },
+                    );
+                    plan.version += 1;
+                    plan.participants.insert(req_session_id.clone());
+                    plan.participants.insert(target_session.clone());
+                    (
+                        Some(item_id.clone()),
+                        Some(content),
+                        plan.participants.clone(),
+                        plan.items.len(),
+                        None,
+                        Some(route),
+                    )
+                }
+            }
         } else {
-            (None, None, HashSet::new(), 0, blocked_reason)
+            (None, None, HashSet::new(), 0, blocked_reason, None)
         }
     };
 
@@ -1689,6 +1855,7 @@ async fn handle_comm_assign_task_with_mode(
         .await;
         return;
     };
+    let route = route.expect("assigned task route must be resolved");
 
     let swarm_state = SwarmState {
         members: Arc::clone(swarm_members),
@@ -1798,6 +1965,7 @@ async fn handle_comm_assign_task_with_mode(
             swarm_id_for_run,
             task_id_for_run,
             assignment_text,
+            route,
             swarm_members_for_run,
             swarms_for_run,
             swarm_plans_for_run,
@@ -2211,6 +2379,29 @@ pub(super) async fn handle_comm_task_control(
                 return;
             };
 
+            // Some task-control callers are lightweight protocol/test paths with
+            // no live Agent or persisted startup stub for the coordinator. An
+            // omitted route still means legacy behavior, so the helper returns an
+            // empty identity in that case.
+            let coordinator = coordinator_task_identity(&req_session_id, sessions).await;
+            let route = match resolve_swarm_task_route(
+                snapshot.role.as_deref(),
+                snapshot.model.as_deref(),
+                snapshot.reasoning_effort.as_deref(),
+                &crate::config::config().agents,
+                &coordinator,
+            ) {
+                Ok(route) => route,
+                Err(error) => {
+                    let _ = client_event_tx.send(ServerEvent::Error {
+                        id,
+                        message: format!("Task '{}' route rejected: {}", task_id, error),
+                        retry_after_secs: None,
+                    });
+                    return;
+                }
+            };
+
             let agent_is_idle = match agent_arc.try_lock() {
                 Ok(guard) => {
                     drop(guard);
@@ -2255,6 +2446,7 @@ pub(super) async fn handle_comm_task_control(
                     swarm_id.clone(),
                     task_id.clone(),
                     assignment_text,
+                    route,
                     Arc::clone(swarm_members),
                     Arc::clone(swarms_by_id),
                     Arc::clone(swarm_plans),

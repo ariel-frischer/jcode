@@ -385,6 +385,15 @@ pub struct TaskNode {
     /// on legacy nodes, which are treated as seeded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<NodeOrigin>,
+    /// Optional routing role for this node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Optional explicit model route for this node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Optional reasoning effort for this node.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 impl TaskNode {
@@ -413,6 +422,12 @@ pub struct NodeSpec {
     pub depends_on: Vec<NodeId>,
     #[serde(default)]
     pub priority: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 impl NodeSpec {
@@ -423,6 +438,9 @@ impl NodeSpec {
             kind,
             depends_on: Vec::new(),
             priority: 0,
+            role: None,
+            model: None,
+            reasoning_effort: None,
         }
     }
 
