@@ -1818,8 +1818,9 @@ impl SwarmTaskSelection {
             "anthropic-api-key" => "claude-api",
             "openai-oauth" => "openai-oauth",
             "openai-api-key" => "openai-api",
+            "code-assist-oauth" => "gemini",
+            "antigravity-https" => "antigravity",
             "openrouter" => "openrouter",
-            "copilot" | "gemini" | "cursor" | "bedrock" | "antigravity" => route,
             profile => profile,
         };
         Some(format!("{prefix}:{model}"))
@@ -1852,6 +1853,18 @@ fn provider_from_route(
     route_api_method: Option<&str>,
     provider_key: Option<&str>,
 ) -> Option<String> {
+    if let Some((_, prefix, _)) = crate::provider::explicit_model_provider_prefix(model) {
+        return Some(
+            match prefix.trim_end_matches(':').to_ascii_lowercase().as_str() {
+                "claude" | "claude-api" | "claude-oauth" | "anthropic" => "claude".to_string(),
+                "openai" | "openai-api" | "openai-oauth" => "openai".to_string(),
+                other => other.to_string(),
+            },
+        );
+    }
+    if let Some(provider) = crate::provider::provider_for_model(model) {
+        return Some(provider.to_string());
+    }
     if let Some(route) = route_api_method
         .map(str::trim)
         .filter(|route| !route.is_empty())
@@ -1868,18 +1881,6 @@ fn provider_from_route(
                 route.split(':').next().unwrap_or(&route).to_string()
             },
         );
-    }
-    if let Some((_, prefix, _)) = crate::provider::explicit_model_provider_prefix(model) {
-        return Some(
-            match prefix.trim_end_matches(':').to_ascii_lowercase().as_str() {
-                "claude" | "claude-api" | "claude-oauth" | "anthropic" => "claude".to_string(),
-                "openai" | "openai-api" | "openai-oauth" => "openai".to_string(),
-                other => other.to_string(),
-            },
-        );
-    }
-    if let Some(provider) = crate::provider::provider_for_model(model) {
-        return Some(provider.to_string());
     }
     provider_key
         .map(str::trim)
@@ -1923,19 +1924,44 @@ pub(super) fn resolve_swarm_task_selection(
     coordinator: &CoordinatorTaskIdentity,
 ) -> Result<SwarmTaskSelection> {
     let role = normalized_value(task.role.as_deref());
-    let policy = role
-        .as_deref()
-        .and_then(|role| agents.swarm_role_policies.get(role));
-    let requested_model = normalized_value(task.model.as_deref());
+    let policy = role.as_deref().and_then(|role| {
+        agents.swarm_role_policies.get(role).or_else(|| {
+            agents
+                .swarm_role_policies
+                .iter()
+                .find(|(key, _)| key.trim().eq_ignore_ascii_case(role))
+                .map(|(_, policy)| policy)
+        })
+    });
+    let requested_model =
+        normalized_value(task.model.as_deref()).filter(|model| !is_inherit_value(model));
     let policy_model = policy.and_then(|policy| normalized_value(policy.model.as_deref()));
-    let selected_model = requested_model
-        .or_else(|| policy_model.filter(|model| !is_inherit_value(model)))
-        .or_else(|| coordinator.model.clone());
+    let override_model = requested_model
+        .clone()
+        .or_else(|| policy_model.filter(|model| !is_inherit_value(model)));
+    let selected_model = override_model.clone().or_else(|| coordinator.model.clone());
     let (explicit_route, explicit_model) = selected_model
         .as_deref()
         .map(route_for_model)
         .unwrap_or_default();
-    let route_api_method = explicit_route.or_else(|| coordinator.route_api_method.clone());
+    let selected_provider = selected_model
+        .as_deref()
+        .and_then(|model| provider_from_route(model, None, None));
+    let coordinator_provider = coordinator.model.as_deref().and_then(|model| {
+        provider_from_route(
+            model,
+            coordinator.route_api_method.as_deref(),
+            coordinator.provider_key.as_deref(),
+        )
+    });
+    let inherits_coordinator_route = override_model.is_none()
+        || selected_provider.is_none()
+        || selected_provider == coordinator_provider;
+    let route_api_method = explicit_route.or_else(|| {
+        inherits_coordinator_route
+            .then(|| coordinator.route_api_method.clone())
+            .flatten()
+    });
     let model = explicit_model.clone().or_else(|| {
         selected_model
             .as_deref()
@@ -1944,8 +1970,10 @@ pub(super) fn resolve_swarm_task_selection(
     });
     let provider_key = if explicit_model.is_some() {
         route_api_method.clone()
-    } else {
+    } else if inherits_coordinator_route {
         coordinator.provider_key.clone()
+    } else {
+        selected_provider.clone()
     };
     let provider = provider_from_route(
         selected_model.as_deref().unwrap_or_default(),
@@ -2174,6 +2202,70 @@ mod tests {
             .expect("legacy task should inherit");
         assert_eq!(selection.model.as_deref(), Some("claude-sonnet-4"));
         assert_eq!(selection.effort.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn swarm_task_route_treats_inherit_sentinel_as_omitted_and_matches_policy_case() {
+        use crate::config::{AgentsConfig, SwarmRolePolicy};
+
+        let mut config = AgentsConfig::default();
+        config.swarm_role_policies.insert(
+            "Reviewer".to_string(),
+            SwarmRolePolicy {
+                model: Some("gpt-5.5".to_string()),
+                reasoning_effort: None,
+                allowed_models: vec!["gpt-5.5".to_string()],
+                allowed_providers: vec!["openai".to_string()],
+                allowed_reasoning_efforts: Vec::new(),
+            },
+        );
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: Some("reviewer".to_string()),
+            subagent_type: None,
+            model: Some("inherit".to_string()),
+            reasoning_effort: None,
+        };
+        let selection = resolve_swarm_task_selection(
+            &task,
+            &config,
+            &super::CoordinatorTaskIdentity {
+                model: Some("claude-sonnet-4".to_string()),
+                provider_key: Some("claude-oauth".to_string()),
+                route_api_method: Some("claude-oauth".to_string()),
+                effort: None,
+            },
+        )
+        .expect("inherit should allow policy fallback");
+        assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(selection.provider_key.as_deref(), Some("openai"));
+        assert_eq!(selection.route_api_method.as_deref(), None);
+    }
+
+    #[test]
+    fn swarm_task_route_derives_provider_from_bare_model_before_coordinator_route() {
+        use crate::config::AgentsConfig;
+
+        let task = SwarmTaskSpec {
+            description: "A".to_string(),
+            prompt: "B".to_string(),
+            role: None,
+            subagent_type: None,
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: None,
+        };
+        let coordinator = super::CoordinatorTaskIdentity {
+            model: Some("claude-sonnet-4".to_string()),
+            provider_key: Some("claude-oauth".to_string()),
+            route_api_method: Some("claude-oauth".to_string()),
+            effort: None,
+        };
+        let selection = resolve_swarm_task_selection(&task, &AgentsConfig::default(), &coordinator)
+            .expect("bare model should resolve");
+        assert_eq!(selection.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(selection.provider_key.as_deref(), Some("openai"));
+        assert_eq!(selection.route_api_method.as_deref(), None);
     }
 
     #[test]
