@@ -357,6 +357,81 @@ fn run_auto_poke_followup_prioritizes_incomplete_todos() {
     }
 }
 
+#[test]
+fn structured_schema_loader_reports_file_and_json_errors() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let valid = dir.path().join("schema.json");
+    std::fs::write(&valid, r#"{"type":"object"}"#).expect("write schema");
+    assert_eq!(
+        super::load_structured_schema(valid.to_str().unwrap()).unwrap()["type"],
+        "object"
+    );
+
+    let invalid = dir.path().join("invalid.json");
+    std::fs::write(&invalid, "not json").expect("write invalid schema");
+    let error = super::load_structured_schema(invalid.to_str().unwrap()).unwrap_err();
+    assert!(error.to_string().contains("invalid JSON"));
+
+    let missing = dir.path().join("missing.json");
+    let error = super::load_structured_schema(missing.to_str().unwrap()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("could not read JSON Schema file")
+    );
+}
+
+#[test]
+fn structured_schema_preflight_rejects_invalid_json_before_runtime_start() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let invalid = dir.path().join("invalid.json");
+    std::fs::write(&invalid, "not json").expect("write invalid schema");
+    let error = super::load_structured_schema(invalid.to_str().unwrap()).unwrap_err();
+    assert!(error.to_string().contains("invalid JSON"));
+}
+
+#[cfg(unix)]
+#[test]
+fn structured_schema_bridge_args_preserve_custom_daemon_socket() {
+    let args = super::schema_bridge_command_args(
+        std::path::Path::new("/tmp/custom-daemon.sock"),
+        std::path::Path::new("/tmp/private-api.sock"),
+    );
+    assert_eq!(
+        args,
+        vec![
+            "--quiet",
+            "--no-update",
+            "--no-selfdev",
+            "--socket",
+            "/tmp/custom-daemon.sock",
+            "api-bridge",
+            "--api-socket",
+            "/tmp/private-api.sock",
+        ]
+    );
+}
+
+#[test]
+fn structured_schema_report_serializes_data_before_metadata() {
+    let report = super::StructuredRunCommandReport {
+        data: serde_json::json!({"status": "ok"}),
+        session_id: "session-test".to_string(),
+        provider: Some("OpenAI".to_string()),
+        model: Some("gpt-test".to_string()),
+        attempts: 2,
+        usage: Some(super::StructuredRunUsage {
+            input_tokens: 3,
+            output_tokens: 4,
+            cache_read_input_tokens: Some(5),
+        }),
+    };
+    let value = serde_json::to_value(report).expect("serialize report");
+    assert_eq!(value["data"]["status"], "ok");
+    assert_eq!(value["attempts"], 2);
+    assert_eq!(value["usage"]["cache_read_input_tokens"], 5);
+}
+
 /// Headless `jcode run` is what the benchmarks and scripted use go through, so
 /// the deferred quality review must reach that path too, not only the TUI.
 #[test]

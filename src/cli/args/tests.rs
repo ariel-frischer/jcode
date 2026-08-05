@@ -566,6 +566,7 @@ fn run_json_subcommand_parses() {
             json,
             ndjson,
             message,
+            ..
         }) => {
             assert!(json);
             assert!(!ndjson);
@@ -583,6 +584,7 @@ fn run_ndjson_subcommand_parses() {
             json,
             ndjson,
             message,
+            ..
         }) => {
             assert!(!json);
             assert!(ndjson);
@@ -590,6 +592,45 @@ fn run_ndjson_subcommand_parses() {
         }
         other => panic!("unexpected command: {:?}", other),
     }
+}
+
+#[test]
+fn run_schema_subcommand_parses_and_conflicts_with_streaming() {
+    let args = Args::try_parse_from(["jcode", "run", "--schema", "schema.json", "return data"])
+        .expect("run --schema should parse");
+    match args.command {
+        Some(Command::Run {
+            json,
+            ndjson,
+            schema,
+            message,
+        }) => {
+            assert!(!json);
+            assert!(!ndjson);
+            assert_eq!(schema.as_deref(), Some("schema.json"));
+            assert_eq!(message, "return data");
+        }
+        other => panic!("unexpected command: {:?}", other),
+    }
+
+    Args::try_parse_from([
+        "jcode",
+        "run",
+        "--schema",
+        "schema.json",
+        "--json",
+        "return data",
+    ])
+    .expect_err("--schema and --json must not combine");
+    Args::try_parse_from([
+        "jcode",
+        "run",
+        "--schema",
+        "schema.json",
+        "--ndjson",
+        "return data",
+    ])
+    .expect_err("--schema and --ndjson must not combine");
 }
 
 #[test]
