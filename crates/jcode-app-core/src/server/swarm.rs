@@ -17,7 +17,21 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{Mutex, RwLock, Semaphore, broadcast};
+
+static SWARM_TASK_SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+
+fn swarm_task_semaphore() -> Arc<Semaphore> {
+    SWARM_TASK_SEMAPHORE
+        .get_or_init(|| {
+            let limit = crate::config::config()
+                .agents
+                .swarm_max_concurrent_agents
+                .max(1);
+            Arc::new(Semaphore::new(limit))
+        })
+        .clone()
+}
 
 fn status_age_secs(last_status_change: Instant) -> u64 {
     last_status_change.elapsed().as_secs()
@@ -1663,6 +1677,10 @@ No extra text.\n\nRequest:\n{message}"
         let prompt = format!("{working_dir_hint}{}", task.prompt);
         let role = task.role.clone().unwrap_or_else(|| "general".to_string());
         async move {
+            let _permit = swarm_task_semaphore()
+                .acquire_owned()
+                .await
+                .map_err(|error| anyhow::anyhow!("swarm worker budget closed: {error}"))?;
             let coordinator = {
                 let agent_guard = agent.lock().await;
                 CoordinatorTaskIdentity {
