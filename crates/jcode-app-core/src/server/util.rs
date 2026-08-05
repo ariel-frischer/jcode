@@ -42,8 +42,7 @@ pub(crate) fn models_are_equivalent(resolved: &str, requested: &str) -> bool {
         let bare = model.rsplit('/').next().unwrap_or(&model);
         let bare = bare.split('[').next().unwrap_or(bare).trim();
         let mut candidates = vec![bare.to_string()];
-        if let Some((prefix, rest)) = bare.split_once(':') {
-            candidates.push(prefix.trim().to_string());
+        if let Some((_prefix, rest)) = bare.split_once(':') {
             candidates.push(rest.trim().to_string());
         }
         candidates.retain(|candidate| !candidate.is_empty());

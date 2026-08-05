@@ -334,6 +334,10 @@ mod tests {
             "gpt-5.6-pro",
             "openai-api:gpt-5.6-pro"
         ));
+        assert!(!models_are_equivalent(
+            "openai-api:gpt-5.5",
+            "openai-api:gpt-5.6-pro"
+        ));
         // Unknown/empty resolution should stay quiet rather than cry wolf.
         assert!(models_are_equivalent("", "claude-sonnet-4-6"));
     }
