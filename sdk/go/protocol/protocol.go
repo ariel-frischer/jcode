@@ -13,6 +13,11 @@ const (
 	DefaultClient   = "jcode-sdk-go"
 )
 
+// IsCompatibleVersion accepts the current major protocol version and future
+// minor revisions. Unknown major versions are rejected because their framing
+// and request semantics may not be safe to assume.
+func IsCompatibleVersion(version int) bool { return version == APIVersionMajor }
+
 var (
 	ErrMalformedFrame = errors.New("malformed protocol frame")
 	ErrInvalidFrame   = errors.New("invalid protocol frame")

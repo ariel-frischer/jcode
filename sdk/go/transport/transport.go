@@ -3,14 +3,49 @@ package transport
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"sync"
 )
 
-var ErrClosed = errors.New("transport closed")
+var (
+	ErrClosed      = errors.New("transport closed")
+	ErrUnsupported = errors.New("transport unsupported on this operating system")
+)
 
 type Transport interface{ io.ReadWriteCloser }
+
+// Factory creates a fresh transport. It is used by the SDK's explicit
+// reconnect operation. Factories must not reuse a transport after Close.
+type Factory func(context.Context) (Transport, error)
+
+// Safe serializes writes and makes Close idempotent for transports whose
+// implementations do not provide those guarantees themselves.
+type Safe struct {
+	Transport
+	writeMu sync.Mutex
+	once    sync.Once
+	err     error
+}
+
+func NewSafe(t Transport) Transport {
+	if t == nil {
+		return nil
+	}
+	return &Safe{Transport: t}
+}
+
+func (s *Safe) Write(p []byte) (int, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.Transport.Write(p)
+}
+
+func (s *Safe) Close() error {
+	s.once.Do(func() { s.err = s.Transport.Close() })
+	return s.err
+}
 
 type Pipe struct {
 	reader *io.PipeReader
