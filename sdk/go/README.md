@@ -16,7 +16,7 @@ After this fork is published, install it with:
 go get github.com/ariel-frischer/jcode-go@v0.1.0
 ```
 
-Until then, use a local `replace` directive as described in [`docs/GO_SDK.md`](../../docs/GO_SDK.md).
+Until then, use a local `replace` directive pointing at your checkout of this module.
 
 For a source checkout:
 
