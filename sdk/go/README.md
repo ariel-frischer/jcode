@@ -2,7 +2,7 @@
 
 The Go SDK is the Go client for the jcode harness API. It speaks protocol v1 over an `io.ReadWriteCloser`, completes the `hello` handshake, correlates request replies, and delivers asynchronous events through bounded subscriptions.
 
-> **API status:** The Go package provides both a transport-level client (`NewClient`) and private-instance helpers (`Launch`, `LaunchInstance`, and `LaunchOptions`). It does not yet provide typed session convenience methods such as `createSession` or `run`; those flows use `protocol.NewRawRequest` and `Client.Request`. The examples below show the supported Go API.
+> **API status:** The Go package provides a transport-level client, typed session helpers (`CreateSession`, `AttachSession`, `Session.Send`), typed event streams, and private-instance helpers (`Launch`, `LaunchInstance`, and `LaunchOptions`). Raw `Request` and `Subscribe` remain available for forward-compatible protocol additions.
 
 ## Install
 
@@ -64,9 +64,32 @@ defer client.Close()
 
 `NewClient` starts its reader goroutine and performs a protocol v1 handshake. `Client.Close` is idempotent and wakes pending requests and subscriptions.
 
-## Requests and session lifecycle
+## Typed session lifecycle
 
-The Go SDK deliberately keeps request helpers close to the wire. Build a request with `protocol.NewRawRequest`, send it with `Client.Request`, and decode the correlated `ServerFrame` or inspect its event kind:
+Use typed helpers for the common create/send/stream flow:
+
+```go
+session, err := client.CreateSession(ctx, jcode.CreateSessionOptions{WorkingDir: workingDir})
+if err != nil { return err }
+stream := session.Events(ctx)
+defer stream.Close()
+if err := session.Send(ctx, prompt, jcode.SendOptions{}); err != nil { return err }
+for {
+    event, err := stream.Next(ctx)
+    if err != nil { return err }
+    switch value := event.(type) {
+    case *jcode.TextDelta:
+        io.WriteString(out, value.Text)
+    case *jcode.PermissionRequest:
+        // Apply an explicit application policy before responding.
+    case *jcode.TurnDone:
+        return nil
+    }
+}
+```
+
+`AttachSession` creates the same lightweight typed view for an existing ID. `Session.Send` does not retry because a timeout can leave a mutation with an unknown server-side outcome.
+
 
 ```go
 create, err := protocol.NewRawRequest("create_session", map[string]any{
@@ -90,13 +113,13 @@ if err := json.Unmarshal(fields, &sessions); err != nil {
 }
 ```
 
-For production code, keep the session ID in application state, subscribe before sending a message when event loss matters, and close the subscription when the session is no longer needed. Typical request tags are `create_session`, `attach`, `detach`, `send_message`, and `cancel`; their fields are the protocol schema, not Go SDK abstractions. Inspect the protocol definitions when adding a new request.
+The raw request path remains available when an application needs a request or event added by a newer server:
+
 
 `Request` waits for the correlated reply or `ctx.Done()`. Cancellation removes the pending request locally, but it does not necessarily cancel work already accepted by the server. To stop a model turn, send the protocol `cancel` request for the session.
 
-## Streaming event consumption
+[`examples/streaming`](examples/streaming) demonstrates a long-lived service. For a typed stream, use `session.Events(ctx)` and switch on `*TextDelta`, `*ToolStart`, `*TokenUsage`, `*PermissionRequest`, and `*TurnDone`. The lower-level `Subscription` API remains useful when a service wants raw event fields:
 
-[`examples/streaming`](examples/streaming) demonstrates a long-lived service. It uses one subscription and one consumer goroutine per client. `Subscription.Next` blocks until an event, context cancellation, client shutdown, or a backpressure error:
 
 ```go
 for {
