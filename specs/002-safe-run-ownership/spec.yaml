@@ -1,0 +1,70 @@
+feature:
+  branch: "jcode-44d-safe-run"
+  created: "2026-08-06"
+  status: "Draft"
+  input: "Implement bead jcode-44d: provide explicit sticky safe-run ownership for SDK-driven sessions without changing shared runtime semantics."
+user_stories:
+  - id: US-001
+    title: Own an isolated runtime explicitly
+    priority: P1
+    as_a: SDK application
+    i_want: an explicit ownership handle for a private Jcode runtime
+    so_that: unrelated client or worker shutdown cannot terminate my session
+    independent_test: Launch a private instance, close a shared client, and verify the private instance remains available; release the owner and verify it terminates.
+  - id: US-002
+    title: Preserve shared ownership boundaries
+    priority: P1
+    as_a: application attached to the user's runtime
+    i_want: Connect to remain non-owning
+    so_that: closing an attached client never stops the shared daemon
+    independent_test: Connect to a fake transport or shared socket and verify Close does not invoke an instance shutdown.
+  - id: US-003
+    title: Observe bounded reconnect behavior
+    priority: P1
+    as_a: SDK application
+    i_want: reconnect attempts to be bounded and observable
+    so_that: a disconnected sticky session cannot retry forever silently
+    independent_test: Configure a finite reconnect policy and assert failed attempts and terminal result.
+requirements:
+  functional:
+    - id: FR-001
+      description: The Go SDK MUST expose an explicit owner handle for private runtimes and a way to transfer or retain ownership independently of a client connection.
+      acceptance_criteria: Private launch returns or exposes an Instance whose lifecycle is independent of unrelated Connect clients.
+    - id: FR-002
+      description: Connect MUST never claim process or runtime ownership.
+      acceptance_criteria: Closing a Connect client only closes its transport and does not stop a runtime.
+    - id: FR-003
+      description: Intentional owner shutdown MUST stop the private runtime and clean up SDK-owned temporary state.
+      acceptance_criteria: Instance.Shutdown is idempotent and the owned socket/home are gone after shutdown.
+    - id: FR-004
+      description: Reconnect MUST remain explicit, finite, and observable through existing policy and observations.
+      acceptance_criteria: MaxAttempts bounds factory calls and reconnect_failed/reconnected observations identify attempts.
+    - id: FR-005
+      description: Documentation MUST define shared versus private ownership, shutdown semantics, and safe-run usage.
+      acceptance_criteria: Go SDK README documents the contract and non-goals.
+  non_functional:
+    - id: NFR-001
+      category: compatibility
+      description: Existing Connect, Launch, Close, and Reconnect behavior remains compatible when the new ownership API is unused.
+      measurable_target: Existing SDK tests pass unchanged.
+    - id: NFR-002
+      category: reliability
+      description: Ownership operations are deterministic and race-safe.
+      measurable_target: Focused tests pass under go test -race.
+constraints:
+  - Apply PRIN-001 through PRIN-007 in .autospec/constitution.yaml.
+  - Keep ownership in sdk/go and do not make arbitrary clients immortal.
+  - Do not change provider routing, credentials, or shared daemon policy.
+out_of_scope:
+  - Autospec-specific policy or configuration.
+  - Making Connect own or supervise the shared runtime.
+  - Infinite retries or credential embedding.
+success_criteria:
+  - Private SDK ownership survives unrelated client shutdown.
+  - Explicit owner shutdown terminates the private runtime.
+  - Shared Connect remains non-owning.
+  - Bounded reconnect behavior is documented and tested.
+_meta:
+  version: "1.0.0"
+  generator: "jcode-session"
+  artifact_type: spec

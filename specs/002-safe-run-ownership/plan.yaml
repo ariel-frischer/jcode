@@ -1,0 +1,33 @@
+feature:
+  branch: "jcode-44d-safe-run"
+  status: "Draft"
+  architecture:
+    owner: "sdk/go"
+    reuse: "Existing Connect non-owning contract, Launch/LaunchInstance private process supervision, Client instance attachment, and Reconnect policy/observations."
+    boundary: "Connect owns only its transport. Launch owns a private bridge, daemon, instance home, and cleanup through an explicit Instance handle attached to the client."
+    compatibility: "No changes to shared runtime shutdown, provider routing, credentials, or wire protocol. Existing APIs remain valid."
+    non_goals: "Immortal clients, implicit ownership, infinite reconnect, Autospec policy, credential embedding."
+  components:
+    - name: "Go SDK ownership API"
+      files: ["sdk/go/launch.go", "sdk/go/client.go", "sdk/go/connect.go"]
+      responsibility: "Represent and enforce private versus shared lifecycle ownership."
+    - name: "Lifecycle tests"
+      files: ["sdk/go/client_api_test.go", "sdk/go/client_validation_test.go", "sdk/go/launch_test.go"]
+      responsibility: "Deterministic ownership, shutdown, non-ownership, and reconnect evidence."
+    - name: "Contract documentation"
+      files: ["sdk/go/README.md"]
+      responsibility: "Explain safe-run ownership and bounded reconnect semantics."
+  decisions:
+    - "Prefer an explicit private Instance handle over changing shared Connect behavior."
+    - "Keep Launch client convenience while making ownership visible and idempotent through Instance."
+    - "Use existing finite ReconnectPolicy and Observation events rather than adding a hidden supervisor loop."
+  validation:
+    - "go test ./... from sdk/go"
+    - "go test -race ./... from sdk/go"
+    - "go vet ./... from sdk/go"
+    - "go mod verify from sdk/go"
+    - "Review diff and run relevant runtime tests without live provider calls."
+_meta:
+  version: "1.0.0"
+  generator: "jcode-session"
+  artifact_type: plan

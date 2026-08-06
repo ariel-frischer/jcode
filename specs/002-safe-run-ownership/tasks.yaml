@@ -1,0 +1,37 @@
+feature: jcode-44d-safe-run
+status: pending
+tasks:
+  - id: T001
+    phase: inspect
+    description: Confirm existing Go SDK ownership, shutdown, and reconnect contracts and identify exact test seams.
+    files: [sdk/go/launch.go, sdk/go/client.go, sdk/go/connect.go, sdk/go/*_test.go]
+    acceptance: Existing behavior and gaps are recorded in bead comment.
+  - id: T002
+    phase: implement
+    description: Add or refine explicit private Instance ownership semantics without changing Connect ownership.
+    files: [sdk/go/launch.go, sdk/go/client.go, sdk/go/connect.go]
+    acceptance: Private runtime ownership is explicit, idempotent, and isolated from unrelated clients.
+  - id: T003
+    phase: test
+    description: Add deterministic tests for private survival, intentional owner shutdown, shared non-ownership, and bounded reconnect observations.
+    files: [sdk/go/*_test.go]
+    acceptance: Focused tests verify all bead acceptance criteria.
+  - id: T004
+    phase: docs
+    description: Document safe-run ownership model, process supervision, session pinning, and bounded reconnect behavior.
+    files: [sdk/go/README.md]
+    acceptance: Public Go SDK contract is clear and distinguishes Connect from Launch.
+  - id: T005
+    phase: validate
+    description: Run Go SDK tests, race checks, vet, module verification, and relevant runtime checks.
+    files: []
+    acceptance: Validation evidence is recorded; failures are classified as changed-surface or pre-existing.
+  - id: T006
+    phase: deliver
+    description: Commit explicit owned changes, update bead, and hand off branch for merge to dev.
+    files: []
+    acceptance: Worktree commit is ready for merge and bead status reflects validation.
+_meta:
+  version: "1.0.0"
+  generator: "jcode-session"
+  artifact_type: tasks
