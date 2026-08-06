@@ -324,11 +324,11 @@ impl std::fmt::Display for UpdateChannel {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CrossProviderFailoverMode {
-    /// Show a 3-second cancelable countdown, then resend on another provider.
-    #[default]
-    Countdown,
     /// Do not resend the prompt to another provider automatically.
+    #[default]
     Manual,
+    /// Show a 3-second cancelable countdown, then resend on another provider.
+    Countdown,
 }
 
 impl CrossProviderFailoverMode {
@@ -1289,7 +1289,7 @@ impl Default for ProviderConfig {
             openai_native_compaction_mode: "auto".to_string(),
             openai_native_compaction_threshold_tokens: 200_000,
             preserve_reasoning_context: true,
-            cross_provider_failover: CrossProviderFailoverMode::Countdown,
+            cross_provider_failover: CrossProviderFailoverMode::Manual,
             same_provider_account_failover: true,
             copilot_premium: None,
             model_picker_providers: None,

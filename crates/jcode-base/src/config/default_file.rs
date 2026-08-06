@@ -362,7 +362,7 @@ preserve_reasoning_context = true
 # cross_provider_failover = "manual"
 # Try another account on the same provider before switching providers (default: true)
 # same_provider_account_failover = false
-cross_provider_failover = "countdown"
+cross_provider_failover = "manual"
 # Copilot premium mode: "normal" (default), "one" (first msg only), "zero" (all free)
 # Set to "zero" if you have premium Copilot and want free requests
 # copilot_premium = "zero"
