@@ -15,6 +15,50 @@ env:
   SCCACHE_GHA_ENABLED: "true"
 
 jobs:
+  go-sdk:
+    name: Go SDK Quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        go-version: ['1.23.x', '1.24.x']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache-dependency-path: sdk/go/go.mod
+
+      - name: Check formatting
+        working-directory: sdk/go
+        run: test -z "$(gofmt -l .)"
+
+      - name: Verify modules
+        working-directory: sdk/go
+        run: go mod verify
+
+      - name: Build
+        working-directory: sdk/go
+        run: go build ./...
+
+      - name: Test
+        working-directory: sdk/go
+        run: go test ./...
+
+      - name: Race test
+        working-directory: sdk/go
+        run: go test -race ./...
+
+      - name: Vet
+        working-directory: sdk/go
+        run: go vet ./...
+
+      - name: Windows compile boundary
+        if: matrix.go-version == '1.24.x'
+        working-directory: sdk/go
+        run: GOOS=windows GOARCH=amd64 go build ./...
+
   quality:
     name: Quality Guardrails
     runs-on: ubuntu-latest

@@ -1,127 +1,74 @@
-# Go SDK CI and Release Integration
+# Go SDK CI and Release Plan
 
-## CI Pipeline Extension
+## Decision and module ownership
 
-Add Go SDK checks to the existing CI workflow:
+The SDK remains in this repository under `sdk/go/` as the independently versioned Go module:
 
-```yaml
-# Addition to .github/workflows/ci.yml
-  go-sdk:
-    name: Go SDK Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ssh-key: ${{ secrets.DEPLOY_KEY }}
-          submodules: recursive
-
-      - uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'  # Pin to supported version
-          
-      - name: Go SDK format check
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then
-            echo "Go SDK not present, skipping"
-            exit 0
-          fi
-          gofmt -d . | tee /tmp/gofmt-output
-          [ ! -s /tmp/gofmt-output ]
-
-      - name: Go SDK vet
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then exit 0; fi
-          go vet ./...
-
-      - name: Go SDK build
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then exit 0; fi
-          go build ./...
-
-      - name: Go SDK test
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then exit 0; fi
-          go test ./...
-
-      - name: Go SDK test with race detector
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then exit 0; fi
-          go test -race ./...
-
-      - name: Go SDK module validation
-        working-directory: sdk/go
-        run: |
-          if [ ! -f go.mod ]; then exit 0; fi
-          go mod verify
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+```text
+module github.com/1jehuang/jcode-go
 ```
 
-## Go Version Matrix
+Publishing is a separate human-approved release action. No module is published by CI automatically.
 
-Test against multiple Go versions once implementation stabilizes:
-- Go 1.21 (minimum supported)
-- Go 1.22 (current stable)
-- Go 1.23 (latest)
+## Supported matrix
 
-## Release Checklist Template
+| Go | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| 1.23.x | test and race | test before release | compile boundary only |
+| 1.24.x | test and race | test before release | compile boundary only |
 
-```markdown
-# Go SDK Release Checklist
+The v1 transport contract supports Linux and macOS Unix-domain sockets. Windows has no supported production transport in v1, but the package must compile and return `transport.ErrUnsupported` from `transport.UnixSocket`.
 
-## Pre-Release Validation
-- [ ] All jcode-zqc beads completed and closed
-- [ ] Go SDK tests pass (`go test ./...`)
-- [ ] Race detector clean (`go test -race ./...`)
-- [ ] Format check passes (`gofmt -d .`)
-- [ ] Vet passes (`go vet ./...`)
-- [ ] Module validation passes (`go mod verify && go mod tidy`)
-- [ ] Examples compile and run
-- [ ] Documentation reviewed
-- [ ] Protocol compatibility verified with Rust/TypeScript SDKs
+## Required CI gates
 
-## Version and Compatibility
-- [ ] Semantic version chosen (e.g., v0.1.0)
-- [ ] Protocol version compatibility documented
-- [ ] Breaking change policy documented
-- [ ] Minimum Go version tested and documented
+The `go-sdk` job in `.github/workflows/ci.yml` runs on every push and pull request. It performs:
 
-## Release Artifacts
-- [ ] CHANGELOG.md entry added
-- [ ] Release notes drafted
-- [ ] License files present
-- [ ] README.md complete with installation and examples
-- [ ] Security review completed
+- `gofmt` cleanliness
+- `go mod verify`
+- `go build ./...`
+- `go test ./...`
+- `go test -race ./...`
+- `go vet ./...`
+- Windows cross-compilation on the latest supported Go version
 
-## Publication (Manual Gate)
-- [ ] Human approval for publication
-- [ ] Module tagged: `git tag sdk/go/v0.1.0`
-- [ ] Tag pushed: `git push origin sdk/go/v0.1.0`
-- [ ] Verify module proxy availability
-- [ ] Update main documentation to reference Go SDK
-- [ ] Announce in appropriate channels
+All checks are local and deterministic. They do not require provider credentials, a live daemon, or a paid model call. Protocol parity tests read the checked-in Rust schema source and are supplemented by fake-server tests.
 
-## Post-Release
-- [ ] Monitor for initial adoption issues
-- [ ] Update integration documentation
-- [ ] Plan next iteration based on feedback
-```
+## Version and compatibility policy
 
-## Module Organization
+- The first public SDK release is expected to use semantic version `v0.1.0` after a human release review.
+- The Go module path is immutable. A breaking public API or protocol-major contract requires a new major module path or an explicitly approved migration.
+- Protocol v1 accepts server major version 1 and additive minor fields/events. Unknown event kinds are preserved as `UnknownEvent`; unknown major versions are rejected.
+- Release notes must identify the minimum Go version, supported OS transports, protocol compatibility, and any known limitations.
+- CI must never publish to the public module proxy or mutate production release channels.
 
-Keep Go SDK in monorepo under `sdk/go/` with module path:
-```
-module github.com/1jehuang/jcode/sdk/go
-```
+## Release checklist
 
-This allows:
-- Shared CI and tooling
-- Coordinated releases with main project
-- Cross-SDK compatibility testing
-- Unified documentation
+### Pre-release
+
+- [ ] All implementation and validation jcode-zqc beads are complete and closed.
+- [ ] `cd sdk/go && go test ./...` passes.
+- [ ] `cd sdk/go && go test -race ./...` passes.
+- [ ] `cd sdk/go && gofmt -l .` is empty.
+- [ ] `cd sdk/go && go vet ./...` passes.
+- [ ] `cd sdk/go && go mod verify` passes.
+- [ ] Linux and macOS Unix-socket checks pass.
+- [ ] Windows compile-boundary check passes.
+- [ ] Connect, launch cleanup, reconnect, cancellation, malformed-frame, and parity tests pass.
+- [ ] Documentation examples compile.
+- [ ] Security review confirms credential inheritance and logging behavior.
+
+### Human publication gate
+
+- [ ] Maintainer approves the release scope and version.
+- [ ] Release notes and changelog entry are reviewed.
+- [ ] The tag `sdk/go/v0.1.0` is created only after approval.
+- [ ] The tag is pushed and module proxy availability is verified manually.
+- [ ] No credentials, prompts, or sensitive payloads appear in release artifacts or logs.
+
+### Rollback
+
+Do not delete tags or rewrite history. If a release is found to be defective, hold subsequent publication, document the issue, and ship a corrective semantic version after review. Existing source remains available for inspection.
+
+## Ownership and security review
+
+The Jcode maintainers own the module and release process. Changes to protocol tags, credential inheritance, process cleanup, transport support, or public error codes require maintainer review. Never enable credential inheritance or log raw prompts and tokens implicitly in examples or tests.

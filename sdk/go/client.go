@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,7 +123,7 @@ func (s *Subscription) Next(ctx context.Context) (Event, error) {
 		return event, nil
 	case err, ok := <-s.errors:
 		if !ok {
-			return Event{}, ErrClosed
+			return Event{}, s.client.subscriptionError(s.id, s.sub)
 		}
 		return Event{}, err
 	case <-ctx.Done():
@@ -310,6 +311,19 @@ func (c *Client) Supports(capability string) bool {
 	_, ok := c.capabilities[capability]
 	c.capMu.RUnlock()
 	return ok
+}
+
+// Capabilities returns the server-advertised capabilities in stable order.
+// The returned slice is a copy and may be modified by the caller.
+func (c *Client) Capabilities() []string {
+	c.capMu.RLock()
+	capabilities := make([]string, 0, len(c.capabilities))
+	for capability := range c.capabilities {
+		capabilities = append(capabilities, capability)
+	}
+	c.capMu.RUnlock()
+	sort.Strings(capabilities)
+	return capabilities
 }
 
 // RequireCapability returns a stable error before a capability-gated request.

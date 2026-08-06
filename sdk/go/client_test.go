@@ -112,7 +112,9 @@ func TestSubscriptionOverflowTerminatesOnlySubscriber(t *testing.T) {
 	}
 	deadline := time.After(time.Second)
 	for {
-		_, err := sub.Next(ctx)
+		nextCtx, cancelNext := context.WithTimeout(ctx, 10*time.Millisecond)
+		_, err := sub.Next(nextCtx)
+		cancelNext()
 		if errors.Is(err, ErrSubscriberOverflow) {
 			break
 		}
