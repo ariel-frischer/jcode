@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/1jehuang/jcode-go/protocol"
-	"github.com/1jehuang/jcode-go/transport"
+	"github.com/ariel-frischer/jcode-go/protocol"
+	"github.com/ariel-frischer/jcode-go/transport"
 )
 
 func TestClientCorrelatesReplyAndPublishesEvents(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	jcode "github.com/1jehuang/jcode-go"
+	jcode "github.com/ariel-frischer/jcode-go"
 )
 
 // Example: own a private process and isolate its home/socket from the user.

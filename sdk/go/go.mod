@@ -1,3 +1,3 @@
-module github.com/1jehuang/jcode-go
+module github.com/ariel-frischer/jcode-go
 
 go 1.23

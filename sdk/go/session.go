@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/1jehuang/jcode-go/protocol"
+	"github.com/ariel-frischer/jcode-go/protocol"
 )
 
 // SessionInfo is the stable session metadata returned by the harness API.

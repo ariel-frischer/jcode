@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	jcode "github.com/1jehuang/jcode-go"
-	"github.com/1jehuang/jcode-go/protocol"
+	jcode "github.com/ariel-frischer/jcode-go"
+	"github.com/ariel-frischer/jcode-go/protocol"
 )
 
 // Example: connect to the user's bridge, create one session, stream one turn.

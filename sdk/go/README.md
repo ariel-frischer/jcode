@@ -2,16 +2,18 @@
 
 The Go SDK is the Go client for the jcode harness API. It speaks protocol v1 over an `io.ReadWriteCloser`, completes the `hello` handshake, correlates request replies, and delivers asynchronous events through bounded subscriptions.
 
+> **Unofficial community fork:** This is an independent, vibe-coded fork maintained by Ariel Frischer. It is not an official Jcode release, is not endorsed or supported by the upstream Jcode maintainers, and may be incomplete or incompatible with future Jcode versions. Use it experimentally and review the code before relying on it.
+
 > **API status:** The Go package provides a transport-level client, typed session helpers (`CreateSession`, `AttachSession`, `Session.Send`), typed event streams, and private-instance helpers (`Launch`, `LaunchInstance`, and `LaunchOptions`). Raw `Request` and `Subscribe` remain available for forward-compatible protocol additions.
 
 ## Install
 
-The module is available in this repository under `sdk/go/`. It has not yet been published to the public Go module proxy. See [`docs/GO_SDK.md`](../../docs/GO_SDK.md) for source-checkout use and the future release workflow.
+This fork is distributed as its own Go module. Before a tagged release is published, use a local checkout or a `replace` directive in your application. The upstream Jcode repository contains the original SDK design and implementation context, but this fork is maintained independently.
 
-After the package is published, install it with:
+After this fork is published, install it with:
 
 ```bash
-go get github.com/1jehuang/jcode-go@v0.1.0
+go get github.com/ariel-frischer/jcode-go@v0.1.0
 ```
 
 Until then, use a local `replace` directive as described in [`docs/GO_SDK.md`](../../docs/GO_SDK.md).

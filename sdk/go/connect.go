@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/1jehuang/jcode-go/transport"
+	"github.com/ariel-frischer/jcode-go/transport"
 )
 
 // ConnectOptions controls attaching to an already-running local harness.
