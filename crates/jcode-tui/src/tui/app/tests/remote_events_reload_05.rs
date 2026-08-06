@@ -258,6 +258,47 @@ fn low_ownership_is_gated_after_the_completed_todo_was_saved() {
 }
 
 #[test]
+fn remote_ownership_gate_reads_the_remote_goal_assessment() {
+    with_temp_jcode_home(|| {
+        let mut app = create_test_app();
+        app.auto_poke_incomplete_todos = true;
+        app.is_remote = true;
+        let remote_session_id = format!("remote-ownership-{}", std::process::id());
+        app.remote_session_id = Some(remote_session_id.clone());
+
+        crate::todo::save_todos(
+            &remote_session_id,
+            &[crate::todo::TodoItem {
+                id: "todo-1".to_string(),
+                content: "Ship the complete workflow".to_string(),
+                status: "completed".to_string(),
+                priority: "high".to_string(),
+                group: Some("release".to_string()),
+                confidence: Some(crate::todo::ConfidenceState::Verified),
+                completion_confidence: Some(crate::todo::ConfidenceState::Verified),
+                confidence_history: vec![crate::todo::ConfidenceState::Verified],
+                ..Default::default()
+            }],
+        )
+        .expect("save remote completed todo");
+        crate::todo::save_goals(
+            &remote_session_id,
+            &[crate::todo::TodoGoal {
+                group: Some("release".to_string()),
+                delivery_state: Some(crate::todo::DeliveryState::WorkflowValidated),
+                autonomy: Some(crate::todo::Autonomy::NecessaryFollowthrough),
+                iteration_maturity: Some(crate::todo::IterationMaturity::OutcomeReached),
+                ..Default::default()
+            }],
+        )
+        .expect("save remote goal assessment");
+
+        assert!(!app.schedule_auto_poke_followup_if_needed());
+        assert!(app.queued_messages.is_empty());
+    });
+}
+
+#[test]
 fn test_save_input_for_reload_removes_stale_file_when_state_is_empty() {
     let mut app = create_test_app();
     let session_id = format!("test-391-stale-{}", std::process::id());
@@ -530,6 +571,51 @@ fn auto_poke_stays_armed_when_a_turn_has_no_todos() {
         assert!(
             app.schedule_auto_poke_followup_if_needed(),
             "incomplete todos on a later turn must still schedule a poke"
+        );
+    });
+}
+
+#[test]
+fn auto_poke_does_not_repeat_until_incomplete_todos_change() {
+    with_temp_jcode_home(|| {
+        let mut app = create_test_app();
+        app.auto_poke_incomplete_todos = true;
+        let pending = |content: &str| crate::todo::TodoItem {
+            id: "todo-1".to_string(),
+            content: content.to_string(),
+            status: "pending".to_string(),
+            priority: "high".to_string(),
+            confidence: Some(crate::todo::ConfidenceState::from_legacy_score(80)),
+            ..Default::default()
+        };
+
+        crate::todo::save_todos(&app.session.id, &[pending("Wait for worker")]).expect("save");
+        assert!(app.schedule_auto_poke_followup_if_needed());
+
+        // Simulate dispatch and completion of the automatically poked turn.
+        app.queued_messages.clear();
+        app.pending_queued_dispatch = false;
+        assert!(
+            !app.schedule_auto_poke_followup_if_needed(),
+            "an unchanged list must not consume another model turn"
+        );
+
+        crate::todo::save_todos(&app.session.id, &[pending("Review worker result")])
+            .expect("update");
+        assert!(
+            app.schedule_auto_poke_followup_if_needed(),
+            "changing the todo list must re-arm the automatic nudge"
+        );
+
+        app.queued_messages.clear();
+        app.pending_queued_dispatch = false;
+        crate::todo::save_todos(&app.session.id, &[]).expect("finish cycle");
+        assert!(!app.schedule_auto_poke_followup_if_needed());
+        crate::todo::save_todos(&app.session.id, &[pending("Review worker result")])
+            .expect("start equivalent new cycle");
+        assert!(
+            app.schedule_auto_poke_followup_if_needed(),
+            "an equivalent todo in a new cycle must receive one fresh nudge"
         );
     });
 }

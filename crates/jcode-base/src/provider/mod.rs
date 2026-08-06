@@ -60,9 +60,9 @@ pub use jcode_provider_core::{
     ModelRouteApiMethod, NativeCompactionResult, NativeToolResult, NativeToolResultSender,
     PremiumMode, Provider, RouteBillingKind, RouteCheapnessEstimate, RouteCostConfidence,
     RouteCostSource, RouteSelection, RuntimeKey, dedupe_model_routes,
-    explicit_model_provider_prefix, fresh_transport_client, model_name_for_provider,
-    normalize_copilot_model_name, provider_from_model_key, shared_http_client,
-    summarize_model_catalog_refresh,
+    explicit_model_provider_prefix, fresh_transport_client, inferred_reasoning_efforts,
+    model_name_for_provider, normalize_copilot_model_name, provider_from_model_key,
+    shared_http_client, summarize_model_catalog_refresh,
 };
 pub use jcode_provider_core::{
     FallbackPickOptions, error_looks_like_credential_failure, model_route_provider_labels_match,
@@ -613,6 +613,13 @@ impl MultiProvider {
     ) -> Result<EventStream> {
         self.spawn_anthropic_catalog_refresh_if_needed();
         self.spawn_openai_catalog_refresh_if_needed();
+
+        // Provider capabilities are authoritative at this request chokepoint.
+        // Keep images in persisted history, but replace them in the ephemeral
+        // request snapshot when the selected model/provider is text-only (#755).
+        let filtered_messages =
+            image_clamp::filter_unsupported_outbound_images(messages, self.supports_image_input());
+        let messages: &[Message] = filtered_messages.as_deref().unwrap_or(messages);
 
         // Downscale any images whose pixel dimensions exceed provider per-image
         // limits before they reach the wire. Resuming a session with >20 large
