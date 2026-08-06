@@ -17,6 +17,12 @@
 - On Windows, the equivalents are `%LOCALAPPDATA%\\jcode\\bin\\jcode.exe` for the launcher, `%LOCALAPPDATA%\\jcode\\builds\\stable\\jcode.exe` for stable, and `%LOCALAPPDATA%\\jcode\\builds\\versions\\<version>\\jcode.exe` for immutable installs; `scripts/install.ps1` currently installs the stable channel.
 - Ensure `~/.local/bin` is **before** `~/.cargo/bin` in `PATH`.
 
+## Go SDK Synchronization
+
+- When a Bead affecting the Go SDK is completed, update the published SDK repository at `github.com/ariel-frischer/jcode-go` from the corresponding `sdk/go/` source. Work from that repository's `main` branch: fetch `origin`, merge or fast-forward the relevant changes into `main`, and inspect the resulting diff before publishing.
+- Before pushing the SDK update, run the repository's complete validation (`scripts/validate_go_sdk.sh`, or the equivalent formatting, vet, build, test, race, and module checks), and do not publish if validation fails.
+- Push the validated result to `origin/main`. Confirm the remote branch and commit after pushing, and record the SDK commit and validation commands in the completed Bead.
+
 ## Swarm and Agent Limits
 
 - Run at most **3-5 Jcode threads/instances concurrently**. Keep the total
