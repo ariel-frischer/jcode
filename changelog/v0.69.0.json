@@ -16,6 +16,7 @@
     "Ctrl+L now provides a true terminal-style clear while preserving scrollback"
   ],
   "fixes": [
+    "Session restores no longer let a stale provider identity reroute OpenRouter models to an unrelated provider",
     "Cross-provider failover now defaults to manual mode to prevent unauthorized model switching",
     "Explicitly resumed TUI sessions now replay their history",
     "Text-only provider requests no longer include unsupported image content",

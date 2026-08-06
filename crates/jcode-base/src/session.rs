@@ -272,7 +272,30 @@ pub fn derive_session_provider_key(provider_name: &str) -> Option<String> {
 
     if let Ok(runtime_provider) = std::env::var("JCODE_RUNTIME_PROVIDER") {
         let runtime_provider = runtime_provider.trim().to_ascii_lowercase();
-        if !runtime_provider.is_empty() && runtime_provider != "openai-compatible" {
+        // JCODE_RUNTIME_PROVIDER is process-global and can describe the auth
+        // transport used by a different provider slot. Do not let a built-in
+        // identity such as `claude` leak into an OpenRouter session's persisted
+        // route key, while still honoring it for a direct Claude/OpenAI session.
+        let runtime_active_provider = jcode_provider_core::parse_provider_hint(&runtime_provider)
+            .or_else(|| {
+                jcode_provider_core::AuthRoute::parse(&runtime_provider)
+                    .map(|route| route.active_provider())
+            });
+        let provider_matches_runtime = match normalized_name.as_str() {
+            "openrouter" => runtime_active_provider
+                .is_none_or(|provider| provider == jcode_provider_core::ActiveProvider::OpenRouter),
+            "anthropic" | "claude" | "claude cli" => runtime_active_provider
+                .is_none_or(|provider| provider == jcode_provider_core::ActiveProvider::Claude),
+            "openai" => runtime_active_provider
+                .is_none_or(|provider| provider == jcode_provider_core::ActiveProvider::OpenAI),
+            _ => true,
+        };
+        if !runtime_provider.is_empty()
+            && runtime_provider != "auto"
+            && runtime_provider != "jcode"
+            && runtime_provider != "openai-compatible"
+            && provider_matches_runtime
+        {
             return Some(runtime_provider);
         }
     }

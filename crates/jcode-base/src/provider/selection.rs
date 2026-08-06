@@ -379,6 +379,21 @@ impl MultiProvider {
         else {
             return model.to_string();
         };
+
+        // A stale session can carry a built-in provider key while retaining a
+        // namespaced model selected through OpenRouter. Never replay that model
+        // through the stale provider: doing so fails, and the old restore path
+        // continued with whatever model the provider happened to have active.
+        // That is how a Luna session could resume on an unrelated Claude route.
+        let canonical_provider_key = Self::canonical_session_provider_key(provider_key);
+        if matches!(
+            canonical_provider_key,
+            "claude" | "claude-oauth" | "claude-api" | "openai" | "openai-oauth" | "openai-api"
+        ) && crate::provider::provider_for_model(model) == Some("openrouter")
+        {
+            return format!("openrouter:{model}");
+        }
+
         // Dual-auth keys map to a model prefix via the single shared parser,
         // keeping the emitted prefix in lockstep with the parsers.
         //

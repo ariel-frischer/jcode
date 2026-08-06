@@ -43,6 +43,19 @@ fn derive_session_provider_key_prefers_runtime_identity_over_transport() {
 }
 
 #[test]
+fn derive_session_provider_key_ignores_unrelated_runtime_identity_for_openrouter() {
+    let _lock = lock_env();
+    let _runtime = EnvVarGuard::set("JCODE_RUNTIME_PROVIDER", "claude");
+    let _namespace = EnvVarGuard::remove("JCODE_OPENROUTER_CACHE_NAMESPACE");
+    let _active = EnvVarGuard::set("JCODE_ACTIVE_PROVIDER", "openrouter");
+
+    assert_eq!(
+        derive_session_provider_key("openrouter").as_deref(),
+        Some("openrouter")
+    );
+}
+
+#[test]
 fn derive_session_provider_key_falls_back_to_openrouter_namespace() {
     let _lock = lock_env();
     let _runtime = EnvVarGuard::remove("JCODE_RUNTIME_PROVIDER");

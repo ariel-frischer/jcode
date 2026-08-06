@@ -570,6 +570,18 @@ fn test_session_route_restore_request_matrix_preserves_runtime_identity() {
 }
 
 #[test]
+fn test_session_restore_repairs_mismatched_direct_provider_for_namespaced_model() {
+    assert_eq!(
+        MultiProvider::model_switch_request_for_session_route(
+            "openai/gpt-5.6-luna",
+            Some("claude"),
+            None,
+        ),
+        "openrouter:openai/gpt-5.6-luna"
+    );
+}
+
+#[test]
 fn test_openrouter_and_compatible_profile_transition_invariants() {
     with_clean_provider_test_env(|| {
         let nvidia = crate::provider_catalog::openai_compatible_profile_by_id("nvidia-nim")
