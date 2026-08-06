@@ -6,11 +6,15 @@ The Go SDK is the Go client for the jcode harness API. It speaks protocol v1 ove
 
 ## Install
 
-The module is currently published from this repository:
+The module is available in this repository under `sdk/go/`. It has not yet been published to the public Go module proxy. See [`docs/GO_SDK.md`](../../docs/GO_SDK.md) for source-checkout use and the future release workflow.
+
+After the package is published, install it with:
 
 ```bash
-go get github.com/1jehuang/jcode-go
+go get github.com/1jehuang/jcode-go@v0.1.0
 ```
+
+Until then, use a local `replace` directive as described in [`docs/GO_SDK.md`](../../docs/GO_SDK.md).
 
 For a source checkout:
 
