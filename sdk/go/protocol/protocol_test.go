@@ -66,6 +66,21 @@ func TestHandshakeAndErrorClassification(t *testing.T) {
 	}
 }
 
+func TestAPIVersionCompatibilityMatrix(t *testing.T) {
+	for _, tc := range []struct {
+		version int
+		want    bool
+	}{
+		{0, false},
+		{1, true},
+		{2, false},
+	} {
+		if got := IsCompatibleVersion(tc.version); got != tc.want {
+			t.Fatalf("version %d compatible=%v, want %v", tc.version, got, tc.want)
+		}
+	}
+}
+
 func TestDecoderBoundariesMalformedAndOversized(t *testing.T) {
 	var wire bytes.Buffer
 	wire.WriteString(`{"v":1,"ev":"pong"}`)

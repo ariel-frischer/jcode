@@ -320,6 +320,16 @@ func (c *Client) RequireCapability(capability string) error {
 	return fmt.Errorf("%w: %s", ErrCapability, capability)
 }
 
+// RequestCapability sends req only when the server advertised capability.
+// Unlike Request, this performs a local check and never writes an unsupported
+// request to the wire.
+func (c *Client) RequestCapability(ctx context.Context, capability string, req protocol.RawRequest) (protocol.ServerFrame, error) {
+	if err := c.RequireCapability(capability); err != nil {
+		return protocol.ServerFrame{}, err
+	}
+	return c.Request(ctx, req)
+}
+
 // SessionID returns the caller-selected identity retained across reconnects.
 func (c *Client) SessionID() string { c.stateMu.RLock(); defer c.stateMu.RUnlock(); return c.sessionID }
 func (c *Client) SetSessionID(sessionID string) {

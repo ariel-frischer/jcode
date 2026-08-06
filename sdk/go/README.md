@@ -202,7 +202,14 @@ The private example uses the lower-level process/sockets pattern intentionally, 
 
 ## Platforms and protocol compatibility
 
-The SDK is pure Go and compiles on platforms supported by Go. `transport.DialUnix` is available on Unix-like systems; Windows builds use the platform transport implementation where available. The examples are Unix examples and are not expected to run on Windows unchanged.
+The SDK is pure Go and compiles on platforms supported by Go. The transport support matrix is:
+
+| Platform | `transport.UnixSocket` | Notes |
+| --- | --- | --- |
+| Linux, macOS, and other Unix-like targets | Supported and tested by build | Uses the OS Unix-domain socket transport. |
+| Windows | Explicitly unsupported | Supply a named-pipe/TCP `Transport` until a named-pipe adapter is added. |
+
+The examples are Unix examples and are not expected to run on Windows unchanged. Cross-platform package compilation is covered by the release checks; live transport interoperability remains platform-specific.
 
 The client negotiates **protocol major version 1** (`protocol.APIVersionMajor == 1`). Minor, additive event fields should be decoded permissively. Unknown event kinds are represented as `protocol.UnknownEvent`; preserve or ignore them rather than failing the whole connection. A major-version mismatch requires upgrading the bridge and SDK together. Go SDK releases are independent package releases, so pin a compatible jcode version in deployment and test the pair.
 
