@@ -16,6 +16,17 @@
 - On Windows, the equivalents are `%LOCALAPPDATA%\\jcode\\bin\\jcode.exe` for the launcher, `%LOCALAPPDATA%\\jcode\\builds\\stable\\jcode.exe` for stable, and `%LOCALAPPDATA%\\jcode\\builds\\versions\\<version>\\jcode.exe` for immutable installs; `scripts/install.ps1` currently installs the stable channel.
 - Ensure `~/.local/bin` is **before** `~/.cargo/bin` in `PATH`.
 
+## Swarm and Agent Limits
+
+- Run at most **3-5 Jcode threads/instances concurrently**. Keep the total
+  bounded by host capacity rather than opening unbounded sessions.
+- Each Jcode thread may spawn at most **3 direct swarm workers**. Prefer 2 when
+  the task does not clearly benefit from a third independent worker.
+- **Sub-subagents are forbidden.** Workers must not spawn, assign, or delegate to
+  additional agents. Only the root Jcode instance may create swarm workers.
+- Keep swarm work bounded and cancel or stop workers promptly when their task is
+  complete. Do not create large fan-out bursts or parallel build commands.
+
 ## Verifying a change at runtime
 
 `cargo build` alone proves nothing about behavior. `jcode run` and interactive
