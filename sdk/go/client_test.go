@@ -186,7 +186,10 @@ func TestSubscriptionOverflowTerminatesOnlySubscriber(t *testing.T) {
 	}
 	defer client.Close()
 	sub := client.Subscribe("")
-	for i := 0; i < 2; i++ {
+	// Two frames can be observed by the transport before the read loop has
+	// dispatched the first one. A third frame guarantees that the subscriber
+	// remains full long enough for the overflow path to run under -race too.
+	for i := 0; i < 3; i++ {
 		text, err := protocol.EncodeServerFrame(1, nil, "text_delta", map[string]any{})
 		if err != nil {
 			t.Fatal(err)
