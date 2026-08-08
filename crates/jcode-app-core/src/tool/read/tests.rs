@@ -376,6 +376,16 @@ async fn read_tool_streaming_preserves_crlf_blank_lines_and_exact_total() {
         "output={:?}",
         output.output
     );
+    assert!(
+        !output.output.contains("1\tone"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        !output.output.contains("4\tfour"),
+        "output={:?}",
+        output.output
+    );
     assert!(!output.output.contains('\r'), "output={:?}", output.output);
 }
 
@@ -433,12 +443,11 @@ async fn read_tool_streaming_bounds_oversized_line_and_preserves_following_lines
 #[tokio::test]
 async fn read_tool_rejects_overflowing_offset_and_limit() {
     let temp = tempfile::tempdir().expect("tempdir");
-    std::fs::write(temp.path().join("sample.txt"), "one\n").expect("write sample file");
 
     let error = ReadTool::new()
         .execute(
             json!({
-                "file_path": "sample.txt",
+                "file_path": "missing.txt",
                 "offset": usize::MAX,
                 "limit": 2
             }),

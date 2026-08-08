@@ -157,6 +157,10 @@ impl Tool for ReadTool {
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
         let params: ReadInput = serde_json::from_value(input)?;
         let range = normalize_read_range(&params)?;
+        let end_exclusive = range
+            .offset
+            .checked_add(range.limit)
+            .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
 
         let path = ctx.resolve_path(Path::new(&params.file_path));
 
@@ -198,10 +202,6 @@ impl Tool for ReadTool {
         // memory is bounded by the buffered reader, one input line, and output.
         // The synchronous buffered scan runs on the blocking pool so large files
         // cannot stall a Tokio worker or the TUI render/input loop.
-        let end_exclusive = range
-            .offset
-            .checked_add(range.limit)
-            .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
         let read_path = path.clone();
         let text = tokio::task::spawn_blocking(move || read_text_range(&read_path, range))
             .await
