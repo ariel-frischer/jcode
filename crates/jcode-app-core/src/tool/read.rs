@@ -46,6 +46,12 @@ struct NormalizedReadRange {
     style: ReadRangeStyle,
 }
 
+struct TextReadResult {
+    output: String,
+    total_lines: usize,
+    truncated_line_count: usize,
+}
+
 impl NormalizedReadRange {
     fn next_offset(self) -> usize {
         self.offset + self.limit
@@ -151,6 +157,10 @@ impl Tool for ReadTool {
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
         let params: ReadInput = serde_json::from_value(input)?;
         let range = normalize_read_range(&params)?;
+        let end_exclusive = range
+            .offset
+            .checked_add(range.limit)
+            .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
 
         let path = ctx.resolve_path(Path::new(&params.file_path));
 
@@ -187,40 +197,18 @@ impl Tool for ReadTool {
             )));
         }
 
-        // Read file
-        let content = tokio::fs::read_to_string(&path).await?;
-
-        // Single-pass: count lines while building output
-        let mut output = String::with_capacity(range.limit.min(2000) * 80);
-        let mut total_lines = 0usize;
-        let mut truncated_line_count = 0usize;
-        let end_exclusive = range.offset + range.limit;
-        {
-            use std::fmt::Write;
-            for (i, line) in content.lines().enumerate() {
-                total_lines = i + 1;
-                if i < range.offset {
-                    continue;
-                }
-                if i >= end_exclusive {
-                    // Still need to count remaining lines
-                    continue;
-                }
-                let line_num = i + 1;
-                if line.len() > MAX_LINE_LEN {
-                    truncated_line_count += 1;
-                    let _ = writeln!(
-                        output,
-                        "{:>5}\t{}...",
-                        line_num,
-                        crate::util::truncate_str(line, MAX_LINE_LEN)
-                    );
-                } else {
-                    let _ = writeln!(output, "{:>5}\t{}", line_num, line);
-                }
-            }
-        }
-
+        // Stream text instead of materializing the whole file. We still scan to
+        // EOF so total-line and continuation metadata remain exact, but peak
+        // memory is bounded by the buffered reader, one input line, and output.
+        // The synchronous buffered scan runs on the blocking pool so large files
+        // cannot stall a Tokio worker or the TUI render/input loop.
+        let read_path = path.clone();
+        let text = tokio::task::spawn_blocking(move || read_text_range(&read_path, range))
+            .await
+            .map_err(|err| anyhow::anyhow!("read task failed to join: {err}"))??;
+        let mut output = text.output;
+        let total_lines = text.total_lines;
+        let truncated_line_count = text.truncated_line_count;
         let end = end_exclusive.min(total_lines);
 
         // Publish file touch event for swarm coordination
@@ -270,6 +258,155 @@ impl Tool for ReadTool {
             Ok(ToolOutput::new(output))
         }
     }
+}
+
+fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)?;
+    let mut chunk = [0u8; 64 * 1024];
+    let mut utf8_carry = Vec::with_capacity(3);
+    let mut line_prefix = Vec::with_capacity(MAX_LINE_LEN + 4);
+    let mut line_len = 0usize;
+    let mut line_last_byte = None;
+    let mut output = String::with_capacity(range.limit.min(2000) * 80);
+    let mut total_lines = 0usize;
+    let mut truncated_line_count = 0usize;
+    let end_exclusive = range
+        .offset
+        .checked_add(range.limit)
+        .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
+
+    loop {
+        let bytes_read = file.read(&mut chunk)?;
+        if bytes_read == 0 {
+            break;
+        }
+        validate_utf8_chunk(&mut utf8_carry, &chunk[..bytes_read])?;
+
+        let bytes = &chunk[..bytes_read];
+        let mut segment_start = 0;
+        for newline in memchr::memchr_iter(b'\n', bytes) {
+            retain_line_segment(
+                &mut line_prefix,
+                &mut line_len,
+                &mut line_last_byte,
+                &bytes[segment_start..newline],
+            );
+            total_lines += 1;
+            append_text_line(
+                &mut output,
+                total_lines,
+                range,
+                end_exclusive,
+                &line_prefix,
+                line_len,
+                line_last_byte,
+                &mut truncated_line_count,
+            )?;
+            line_prefix.clear();
+            line_len = 0;
+            line_last_byte = None;
+            segment_start = newline + 1;
+        }
+        retain_line_segment(
+            &mut line_prefix,
+            &mut line_len,
+            &mut line_last_byte,
+            &bytes[segment_start..],
+        );
+    }
+
+    if !utf8_carry.is_empty() {
+        anyhow::bail!("stream did not contain valid UTF-8");
+    }
+    if line_len > 0 {
+        total_lines += 1;
+        append_text_line(
+            &mut output,
+            total_lines,
+            range,
+            end_exclusive,
+            &line_prefix,
+            line_len,
+            line_last_byte,
+            &mut truncated_line_count,
+        )?;
+    }
+
+    Ok(TextReadResult {
+        output,
+        total_lines,
+        truncated_line_count,
+    })
+}
+
+fn retain_line_segment(
+    line_prefix: &mut Vec<u8>,
+    line_len: &mut usize,
+    line_last_byte: &mut Option<u8>,
+    segment: &[u8],
+) {
+    *line_len = line_len.saturating_add(segment.len());
+    if let Some(&last) = segment.last() {
+        *line_last_byte = Some(last);
+    }
+    let remaining = (MAX_LINE_LEN + 4).saturating_sub(line_prefix.len());
+    line_prefix.extend_from_slice(&segment[..segment.len().min(remaining)]);
+}
+
+fn validate_utf8_chunk(carry: &mut Vec<u8>, chunk: &[u8]) -> Result<()> {
+    let mut combined = Vec::with_capacity(carry.len() + chunk.len());
+    combined.extend_from_slice(carry);
+    combined.extend_from_slice(chunk);
+    carry.clear();
+
+    if let Err(error) = std::str::from_utf8(&combined) {
+        if error.error_len().is_some() {
+            anyhow::bail!("stream did not contain valid UTF-8");
+        }
+        carry.extend_from_slice(&combined[error.valid_up_to()..]);
+    }
+    Ok(())
+}
+
+fn append_text_line(
+    output: &mut String,
+    line_number: usize,
+    range: NormalizedReadRange,
+    end_exclusive: usize,
+    line_prefix: &[u8],
+    line_len: usize,
+    line_last_byte: Option<u8>,
+    truncated_line_count: &mut usize,
+) -> Result<()> {
+    if line_number <= range.offset || line_number > end_exclusive {
+        return Ok(());
+    }
+
+    let logical_len = line_len - usize::from(line_last_byte == Some(b'\r'));
+    let retained_len = logical_len.min(line_prefix.len());
+    let retained_bytes = &line_prefix[..retained_len];
+    let retained = match std::str::from_utf8(retained_bytes) {
+        Ok(retained) => retained,
+        Err(error) if error.error_len().is_none() => {
+            std::str::from_utf8(&retained_bytes[..error.valid_up_to()])?
+        }
+        Err(error) => return Err(error.into()),
+    };
+    use std::fmt::Write;
+    if logical_len > MAX_LINE_LEN {
+        *truncated_line_count += 1;
+        writeln!(
+            output,
+            "{:>5}\t{}...",
+            line_number,
+            crate::util::truncate_str(retained, MAX_LINE_LEN)
+        )?;
+    } else {
+        writeln!(output, "{:>5}\t{}", line_number, retained)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
