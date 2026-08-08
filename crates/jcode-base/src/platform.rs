@@ -424,52 +424,6 @@ pub fn spawn_detached(cmd: &mut std::process::Command) -> std::io::Result<std::p
     cmd.spawn()
 }
 
-/// Spawn a detached observer without installing a `pre_exec` callback.
-///
-/// On Unix, `pre_exec` forces `std::process::Command` down the fork path. The
-/// shared server is large enough for that path to dominate tiny observer
-/// hooks. The `setsid` utility performs the same session detachment in the
-/// spawned process and lets Rust use its faster spawn implementation. Keep the
-/// existing implementation as the fallback so this remains portable across
-/// Unix environments without `setsid`.
-#[cfg(unix)]
-pub fn spawn_detached_observer(
-    cmd: &mut std::process::Command,
-) -> std::io::Result<std::process::Child> {
-    let mut detached = std::process::Command::new("setsid");
-    detached.arg("--").arg(cmd.get_program()).args(cmd.get_args());
-    for (key, value) in cmd.get_envs() {
-        match value {
-            Some(value) => {
-                detached.env(key, value);
-            }
-            None => {
-                detached.env_remove(key);
-            }
-        }
-    }
-    if let Some(dir) = cmd.get_current_dir() {
-        detached.current_dir(dir);
-    }
-    match detached
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(child) => Ok(child),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => spawn_detached(cmd),
-        Err(error) => Err(error),
-    }
-}
-
-#[cfg(not(unix))]
-pub fn spawn_detached_observer(
-    cmd: &mut std::process::Command,
-) -> std::io::Result<std::process::Child> {
-    spawn_detached(cmd)
-}
-
 #[cfg(windows)]
 fn spawn_replacement_process(
     cmd: &mut std::process::Command,

@@ -232,7 +232,7 @@ pub fn dispatch_observer(event: HookEvent) {
                 cmd.stdin(std::process::Stdio::null())
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null());
-                match crate::platform::spawn_detached_observer(&mut cmd) {
+                match crate::platform::spawn_detached(&mut cmd) {
                     Ok(_) => crate::logging::debug(&format!(
                         "Hook '{event_name}' dispatched to '{command_line}' (session={:?})",
                         event.session_id
