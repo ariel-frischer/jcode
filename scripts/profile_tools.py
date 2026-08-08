@@ -154,6 +154,8 @@ def main() -> int:
                     f"{process.stderr}\n{process.stdout}"
                 )
             row = json.loads(process.stdout)
+            if not isinstance(row, dict) or row.get("case") != case:
+                raise SystemExit(f"{case} returned an invalid result case: {row!r}")
             row["round"] = round_number
             rows.append(row)
             completed += 1
