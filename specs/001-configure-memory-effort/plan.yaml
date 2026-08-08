@@ -84,6 +84,15 @@ constitution_check:
     - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
       status: "PASS"
       notes: "Requires exact tests first, cargo check/build for affected packages, current-stable guardrails, and isolation of the already-recorded unrelated baseline failures."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Reuses the existing sidecar override and Config load path as the sole owner, adds no dependency or duplicate extension surface, and preserves intentional local memory behavior."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Acceptance criteria cover the complete user-visible configuration, fallback, diagnostics, summary, and isolation outcomes; implementation has no destructive or externally visible side effect requiring approval."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Requires zero additional requests or persistent reads, preserves unset cost characteristics, and validates changed runtime behavior through focused requests plus the newly built binary."
 
 research_findings:
   decisions:
