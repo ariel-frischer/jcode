@@ -1,14 +1,15 @@
 constitution:
   project_name: "Jcode"
-  version: "1.0.0"
+  version: "1.1.0"
   ratified: "2026-08-02"
-  last_amended: "2026-08-02"
+  last_amended: "2026-08-08"
 
 preamble: |
-  Jcode is a Rust coding-agent product whose shared server, clients, providers,
-  tools, configuration, and persisted contracts must evolve without surprising
-  existing users. These principles keep changes narrow, compatible, testable,
-  and aligned with the workspace's established architecture and CI guardrails.
+  Jcode is a Rust coding-agent product, and this repository is Ariel Frischer's
+  custom, experimental, upstream-aware development distribution. Its shared
+  server, clients, providers, tools, configuration, and persisted contracts must
+  evolve through simple architecture, proactive outcome ownership, measurable
+  efficiency, and strong engineering quality without surprising existing users.
 
 principles:
   - name: "Surgical, Scope-Bound Changes"
@@ -89,13 +90,22 @@ principles:
       High-churn orchestration may depend on stable lower layers, but stable lower
       layers MUST NOT depend back on product-specific runtime or interface code.
       The single-server, multi-client runtime model MUST remain intact unless an
-      approved architecture change explicitly replaces it.
+      approved architecture change explicitly replaces it. The server remains the
+      source of truth for sessions, agent execution, tools, persistence, shared
+      provider state, and shared background services. Clients own interface-specific
+      presentation and transient interaction state unless an explicit shared
+      contract promotes that state to the server. Cross-process and SDK behavior
+      MUST use explicit protocol or harness contracts rather than terminal-output
+      parsing or duplicated server definitions. Self-development is a capability
+      of the normal Jcode runtime, not a second product architecture.
     rationale: "The existing crate seams reduce compile invalidation and make ownership testable without forcing a big-bang rewrite."
     enforcement:
       - mechanism: "Dependency boundary guard"
         description: "scripts/check_dependency_boundaries.py and Cargo metadata verify allowed crate direction and lockfile consistency."
       - mechanism: "Architecture review"
-        description: "Plans identify the owning crate, reused contracts, dependency impact, compatibility seams, and explicit non-goals."
+        description: "Plans identify the owning crate and runtime authority, reused contracts, affected clients or SDKs, dependency impact, compatibility seams, and explicit non-goals."
+      - mechanism: "Protocol boundary review"
+        description: "Cross-process and SDK changes identify the canonical wire owner and test compatibility without parsing CLI output or duplicating runtime definitions."
     exceptions:
       - "A temporary compatibility adapter is allowed during a staged migration when the old path remains usable and the adapter's removal condition is documented."
 
@@ -132,12 +142,22 @@ principles:
       documented fallback; implementations MUST NOT silently swallow errors,
       introduce panic-prone production paths, or log secret values. Diagnostic
       output may expose names, presence, lengths, or redacted fingerprints only.
+      Persisted memories, transcripts, prompts, tool calls, file content, and
+      credentials MUST be treated as sensitive user data. Secrets, credentials,
+      sensitive files, and unnecessary personal identifying information MUST NOT
+      be retained as memory. User-facing persisted memory MUST support inspection
+      and deletion and MUST be disableable. Automatic destructive consolidation
+      or deletion MUST be reversible, user-confirmed, or governed by a separately
+      accepted retention contract. SDKs, hooks, tools, providers, and telemetry
+      MUST transmit only the data required by their explicit contracts.
     rationale: "Jcode coordinates local state and external providers, so hidden failures and leaked credentials have a wide operational blast radius."
     enforcement:
       - mechanism: "Repository ratchets"
         description: "Panic, swallowed-error, and warning-budget checks prevent growth in known unsafe failure patterns."
       - mechanism: "Negative-path tests"
         description: "Focused tests verify invalid input, unsupported values, and provider or persistence failures where the change touches those boundaries."
+      - mechanism: "Privacy and retention review"
+        description: "Changes touching memory, telemetry, hooks, SDKs, tools, or providers verify sensitive-data filtering, user controls, and contract-bounded transmission."
     exceptions: []
 
   - name: "Repository Guardrails Are Delivery Gates"
@@ -166,7 +186,94 @@ principles:
       - "A proven pre-existing failure outside the changed surface may be reported without expanding scope; the change must not worsen it, and ratchet baselines must not be updated to hide it."
       - "Live, costly, production-adjacent, or unavailable-platform validation may be deferred only with explicit approval and a recorded validation owner."
 
+  - name: "Custom-First, Upstream-Aware Simplicity"
+    id: "PRIN-008"
+    category: "architecture"
+    priority: "NON-NEGOTIABLE"
+    description: |
+      This repository MUST evolve as an intentional custom Jcode distribution.
+      Changes MUST preserve and improve its coherent product identity, especially
+      self-development, jcode run, named session profiles, efficient multi-session
+      workflows, and other intentional local behavior. Upstream compatibility and
+      synchronization are valuable, but upstream changes MUST NOT silently remove
+      or weaken local improvements. Every capability MUST have one clear owner and
+      one canonical resolution or execution path. Prefer reuse, direct composition,
+      and small explicit contracts over parallel implementations, generalized
+      frameworks, or a new general plugin ABI or duplicate extension mechanism
+      when existing MCP, hook, or skill surfaces own the use case. Experimental
+      work MUST be identified, bounded, testable, and removable or reversible.
+    rationale: "A coherent custom product and simple ownership model preserve Ariel-specific value without letting experimental work become permanent architectural complexity."
+    enforcement:
+      - mechanism: "Local-versus-upstream impact review"
+        description: "Upstream fixes and architecture changes are checked against current local behavior, intentional customizations, and priority workflows before integration."
+      - mechanism: "Complexity and ownership review"
+        description: "Plans name the canonical owner and reused path, identify duplicate paths avoided, and define a removal or stabilization condition for experiments."
+    exceptions:
+      - "A temporary adapter or parallel path is allowed only for a staged migration with an owner, compatibility purpose, and documented removal condition."
+
+  - name: "Outcome Ownership and Safe Autonomy"
+    id: "PRIN-009"
+    category: "process"
+    priority: "MUST"
+    description: |
+      Jcode MUST optimize for completing the user's real goal rather than producing
+      the smallest passing artifact or merely reporting a problem. Agent behavior
+      and supporting workflows MUST preserve user intent across turns, make relevant
+      progress without unnecessary blocking questions, fix discovered problems
+      within accepted scope, and continue iterating while a usable feedback loop
+      remains. Autonomy MUST remain bounded by user control. Destructive,
+      irreversible, externally visible, costly, production-adjacent,
+      credential-changing, or otherwise regret-prone actions require explicit
+      authorization. Work MUST NOT redefine success around what is already complete.
+    rationale: "Jcode's product value comes from safely delivering the requested outcome, not from stopping at plausible code or partial evidence."
+    enforcement:
+      - mechanism: "Outcome-based acceptance criteria"
+        description: "Specifications and plans include the observable user outcome, not only internal implementation artifacts."
+      - mechanism: "Completion evidence audit"
+        description: "Completion reports trace each requirement to current evidence and disclose remaining gaps, weak checks, and deferred validation."
+      - mechanism: "Permission and safety tests"
+        description: "Relevant irreversible, credential-affecting, or external side effects exercise their approval and refusal paths."
+    exceptions:
+      - "Ordinary low-risk implementation choices may proceed without extra approval when user intent is clear; irreversible or secret-affecting actions have no implicit-approval exception."
+
+  - name: "Measured Efficiency and Runtime Truth"
+    id: "PRIN-010"
+    category: "quality"
+    priority: "MUST"
+    description: |
+      Performance and resource efficiency are product requirements, especially
+      startup and first-input latency, RAM use, multi-session scaling, provider and
+      tool responsiveness, and self-development build iteration. Changes touching
+      a relevant hot path MUST preserve the maintained budget. Any regression MUST
+      be documented and explicitly approved. Numeric thresholds belong in
+      benchmark or budget documents rather than this constitution. Runtime behavior
+      MUST be validated against the binary and process that actually execute the
+      workflow. Compilation alone is not behavioral evidence. Runtime checks MUST
+      use the newly built binary through an isolated socket or private instance,
+      or reload the intended daemon, and MUST confirm the resolved executable when
+      multiple build channels or symlinks exist.
+    rationale: "Efficiency is central to Jcode's multi-session and self-development experience, and validation against an old daemon creates false confidence."
+    enforcement:
+      - mechanism: "Performance and resource evidence"
+        description: "Affected hot paths record an appropriate before-and-after benchmark, resource measurement, or maintained-budget check."
+      - mechanism: "Built-binary workflow validation"
+        description: "Changed user workflows run through the newly built or deliberately reloaded runtime, with the executable identity verified when ambiguous."
+      - mechanism: "Self-development lifecycle validation"
+        description: "Self-dev changes verify build, activation or reload, reconnection, and continued session behavior as applicable."
+    exceptions:
+      - "Changes proven unable to affect runtime or performance may use dedicated static or artifact validation."
+
 sections:
+  - name: "Project Identity and Direction"
+    content: |
+      Jcode is Ariel Frischer's custom development and experimental distribution
+      of the open-source Jcode project. It remains upstream-aware while intentionally
+      optimizing for local product improvements, simple architecture, strong
+      engineering quality, self-development, efficient multi-session work, and
+      reliable non-interactive execution. Experimental status is not permission to
+      reduce quality. Experiments must be explicit and bounded, while stable user
+      and data contracts retain normal compatibility expectations.
+
   - name: "Change Scope and Design"
     content: |
       Substantial work is owned by one Bead through local validation. The Bead,
@@ -195,7 +302,24 @@ sections:
       direction, or compile-impact improvement, not file tidiness. New dependencies
       must be necessary, explicitly versioned, represented in Cargo.lock, and must
       not increase type-crate fan-out into runtime-heavy layers. Public compatibility
-      paths remain until an intentional migration is complete.
+      paths remain until an intentional migration is complete. Each feature identifies
+      affected clients, platforms, transports, protocols, providers, and SDKs.
+      Platform-specific scope is acceptable when explicit and tested; accidental
+      platform assumptions must not leak beneath transport or interface boundaries.
+      Changes to mirrored SDK contracts follow repository synchronization,
+      validation, and publication requirements.
+
+  - name: "Documentation Authority"
+    content: |
+      Normative direction descends from this constitution to repository-specific
+      instructions, accepted contracts and architecture decisions, approved
+      specifications and plans, and finally drafts, proposals, and explorations.
+      Draft or proposed documents are not binding until accepted. Descriptive truth
+      comes from current source, tests, generated schemas, built binaries, and
+      observed runtime behavior. Documentation that disagrees with implementation
+      must be corrected or clearly marked as target-state material. Architecture
+      documents must declare whether they describe current state, an accepted target,
+      an active migration, or exploration.
 
   - name: "Validation and Delivery"
     content: |
@@ -241,19 +365,26 @@ governance:
     - "Exceptions are valid only where a principle lists them and the change records the reason, scope, owner, and compensating validation."
     - "NON-NEGOTIABLE principles cannot be waived by an implementation, deadline, emergency, or generated artifact."
     - "Emergency process acceleration still requires post-hoc documentation, validation, and maintainer review, and cannot bypass compatibility, secret-handling, or delivery gates."
+    - "Repository-specific instructions and accepted decisions may strengthen this constitution but cannot silently weaken or contradict it."
+    - "Drafts, proposals, explorations, and unaccepted target-state documents are informative rather than binding."
+    - "Current source, tests, schemas, built binaries, and runtime observations determine implemented behavior; normative documents determine required behavior."
 
 sync_impact:
-  version_change: "none -> 1.0.0"
-  modified_principles: []
+  version_change: "1.0.0 -> 1.1.0"
+  modified_principles:
+    - "PRIN-004: Clarified server, client, protocol, SDK, and self-development ownership."
+    - "PRIN-006: Added privacy, memory control, retention, and contract-bounded transmission requirements."
+    - "PRIN-008: Added custom-first, upstream-aware simplicity and experiment governance."
+    - "PRIN-009: Added outcome ownership and safe autonomy."
+    - "PRIN-010: Added measurable efficiency and validation against the executing runtime."
   added_sections:
-    - "Initial project constitution with seven binding principles"
-    - "Change Scope and Design"
-    - "Compatibility and Configuration"
-    - "Architecture and Dependencies"
-    - "Validation and Delivery"
+    - "Project Identity and Direction"
+    - "Documentation Authority"
+    - "Supported surfaces and mirrored SDK obligations in Architecture and Dependencies"
   removed_sections: []
   templates_requiring_updates: []
-  follow_up_todos: []
+  follow_up_todos:
+    - "Future architecture documents should consistently declare current, accepted-target, migration, proposal, or exploration status."
 
 _meta:
   version: "1.0.0"
