@@ -1,0 +1,301 @@
+plan:
+  branch: "agent/jcode-d5o-hook-startup"
+  created: "2026-08-08"
+  spec_path: "specs/003-eliminate-hook-startup/spec.yaml"
+
+summary: |
+  Remove the measured observer-hook overhead without introducing a resident
+  broker or changing the hook contract. The current shared server detaches each
+  observer through a Unix pre-exec callback that calls setsid; Rust documents
+  that pre-exec runs after fork, so the large server address space is duplicated
+  before every cheap post-tool hook. Add an observer-only Linux launch path that
+  executes the existing hook command through the system setsid launcher, allowing
+  Rust to retain its lower-overhead spawn path, and fall back to the existing
+  detachment helper when that launcher is unavailable. Keep the synchronous
+  pre_tool gate and every user-authored hook definition unchanged.
+
+  Preserve command arguments, inherited and explicitly removed environment
+  entries, client terminal identity, current directory, null stdio, recursion
+  suppression, declaration-order dispatch, and failure isolation. Extend the
+  landed tool profiling harness with deterministic hooks-enabled and
+  hooks-disabled comparison modes, delivery accounting, child CPU measurement,
+  and executable identity so the optimized build can prove the 80% median
+  hook-attributable latency reduction and zero missing or duplicate deliveries
+  over 10,000 eligible events.
+
+technical_context:
+  language: "Rust 2024 edition and Python 3 for the existing benchmark driver"
+  framework: "None"
+  primary_dependencies:
+    - name: "Rust standard library std::process"
+      version: "current stable toolchain"
+      purpose: "Builds hook commands and uses the ordinary platform spawn path when no pre_exec callback is installed."
+    - name: "libc"
+      version: "0.2"
+      purpose: "Retains the existing Unix setsid fallback and process/session assertions; no new native dependency is introduced."
+    - name: "tokio"
+      version: "1"
+      purpose: "Preserves the existing asynchronous pre_tool gate, timeout, and process handling without modification."
+    - name: "serde_json"
+      version: "1"
+      purpose: "Preserves lifecycle-hook payload serialization and benchmark result parsing."
+    - name: "util-linux setsid"
+      version: "host-provided on the measured Linux target"
+      purpose: "Creates the observer hook session in the spawned launcher process so the shared server does not require a pre_exec callback."
+  storage: "None; benchmark results and deterministic delivery markers are temporary files under the existing JCODE_SCRATCH_DIR workflow"
+  testing:
+    framework: "Rust built-in test harness plus the existing tool_profile binary and scripts/profile_tools.py driver"
+    approach: "Run exact hook and platform tests first; add Linux fast-path, fallback, environment, cwd, detachment, failure, configuration, sequential/concurrent, recursion, and disabled/no-match scenarios; then run paired built-binary profiling with at least 10,000 eligible events and repository guardrails."
+  target_platform: "Jcode-supported Linux, macOS, and Windows behavior; the measured fast path and 80% performance target apply to Linux, while other targets retain the existing detachment implementation"
+  project_type: "cli"
+  performance_goals: "At least 80% lower median hook-attributable latency for agreed tiny-read and bash-true workloads versus the approximately 50 ms baseline; no material disabled-hook regression; zero missing or duplicate deliveries across at least 10,000 eligible events."
+  constraints:
+    - "Observer hooks remain detached, fire-and-forget external commands; pre_tool remains synchronous, ordered, timeout-bounded, and fail-open."
+    - "Every event resolves current hook configuration before launch; no queue or resident worker may retain stale commands, payloads, environment, or enablement state."
+    - "Existing hook payloads, command syntax, declaration-order dispatch, client terminal environment, recursion suppression, and tool-result isolation remain unchanged."
+    - "The fast launcher must preserve both explicit environment assignments and env_remove entries; reconstructed commands must not accidentally re-inherit removed daemon variables."
+    - "Failure to locate or start the Linux setsid launcher falls back to the existing detached spawn path without changing the completed tool result."
+    - "No new protocol, configuration field, persisted state, general-purpose broker, daemon authority, or third-party Rust crate is introduced."
+    - "Benchmark evidence must identify the resolved executing binary and use isolated, deterministic, local workloads without live or production-adjacent services."
+    - "Implementation validation runs focused checks before the relevant build and scripts/check_guardrails.sh, isolating rather than rebaselining unrelated failures."
+  scale_scope: "One direct launch attempt per configured observer command and event, including bursts of at least 10,000 post-tool events; constant Jcode-side state and no retained event queue."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits runtime edits to observer hook dispatch and platform detachment, plus focused tests and the already-landed profiler; pre_tool and unrelated process launchers are non-goals."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Preserves hook definitions, event payloads, configuration, environment names, ordering contract, disabled behavior, and fire-and-forget failure semantics without migration."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Adds no setting and continues resolving the current config and environment override path independently for every event."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Keeps hook lifecycle ownership in jcode-base, leaves Registry execution in jcode-app-core, adds no lower-layer dependency, and does not change shared-server authority."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps detachment, arguments, cwd, environment removals, fallback, failures, filtering, recursion, concurrency, and disabled/no-match behavior to focused tests before broader checks."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Preserves contract-bounded payload and environment transmission, logs launch failures without secret values, retains recursion suppression, and falls back safely when the launcher is unavailable."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Requires exact tests, the affected package and binary build, deterministic profiler checks, and scripts/check_guardrails.sh before delivery."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Uses one hook-dispatch path and the existing profiler rather than creating a persistent broker, plugin ABI, duplicate harness, or unrelated execution framework."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Completion requires both the user-visible latency outcome and full compatibility/failure evidence; all validation is local, reversible, and non-production."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Requires paired latency and child-CPU evidence against the resolved newly built binary, plus a private-socket public Registry workflow rather than compilation-only evidence."
+
+research_findings:
+  decisions:
+    - topic: "Root cause of observer hook startup cost"
+      decision: "Treat the Unix pre_exec setsid callback, not hook parsing or tool execution, as the first optimization target."
+      rationale: "Rust's current standard-library contract states that pre_exec runs after fork and duplicates mapped resources; the landed profile shows approximately 50 ms of child CPU per enabled cheap-tool call, while observers are the only hook path using the generic pre_exec-based detached launcher."
+      alternatives_considered:
+        - "Optimize JSON payload construction, which is too small to explain the measured child CPU and would not remove process startup cost."
+        - "Bypass post_tool for cheap tools, which would violate event delivery compatibility."
+    - topic: "Execution architecture"
+      decision: "Keep one external process per observer event and introduce an observer-specific Linux setsid launcher path with the existing detachment helper as fallback."
+      rationale: "Moving setsid into a small spawned launcher permits the shared server to avoid its pre_exec fork path while preserving process isolation, per-event configuration freshness, direct command execution, and rollback as a small call-site change."
+      alternatives_considered:
+        - "A persistent local broker, which adds lifecycle, IPC, queueing, stale-configuration, replay, authorization, and recovery contracts that the measured problem does not require."
+        - "Removing session detachment, which could let terminal or daemon lifecycle affect observer hooks."
+        - "Calling libc posix_spawn directly, which duplicates standard-library process construction and adds platform-specific file-action and environment handling risk."
+    - topic: "Synchronous gate scope"
+      decision: "Do not change pre_tool spawning or execution."
+      rationale: "pre_tool deliberately waits for exit status, stderr, stdin consumption, and timeout; its synchronous policy cost is semantically different from detached post-tool observer overhead and is not the approximately 50 ms observer baseline targeted by this feature."
+      alternatives_considered:
+        - "Route pre_tool through a broker, which would alter policy ordering, timeout, failure, and blocking contracts."
+        - "Launch pre_tool through setsid, which provides no observer detachment benefit and expands regression scope."
+    - topic: "Environment and command reconstruction"
+      decision: "Rebuild the launcher command from Command introspection while copying program, arguments, current directory, explicit environment values, and explicit environment removals, then force null stdio exactly as observer dispatch already does."
+      rationale: "Command::get_envs excludes inherited values and represents env_remove entries as None; replaying only assigned values would silently re-inherit variables intentionally removed from the hook environment."
+      alternatives_considered:
+        - "Copy only non-null get_envs entries, which changes the environment trust boundary."
+        - "Change build_hook_process to return a custom command DTO, which broadens the hook construction contract for a single launch optimization."
+    - topic: "Portability and launcher availability"
+      decision: "Compile the setsid-launcher fast path for Linux, fall back immediately when the launcher cannot be spawned, and retain the existing implementation unchanged on macOS and Windows."
+      rationale: "The performance baseline and available launcher are Linux-specific; explicit fallback preserves supported-platform behavior without making util-linux a Cargo or product installation dependency."
+      alternatives_considered:
+        - "Assume setsid on every Unix platform, which is false on supported macOS installations."
+        - "Make setsid a required external dependency, which would turn an optimization into a startup compatibility break."
+    - topic: "Performance and delivery evidence"
+      decision: "Extend tool_profile and profile_tools.py with a deterministic paired hook mode rather than create a separate benchmark harness."
+      rationale: "The existing harness already owns production Registry execution, wall time, self and child CPU, randomization, fixtures, and binary identity; paired suppression and deterministic marker accounting provide attributable evidence with minimal duplication."
+      alternatives_considered:
+        - "Use arbitrary user-configured hooks with --include-hooks, which is not reproducible and cannot prove delivery counts."
+        - "Measure only a platform spawn microbenchmark, which would not prove end-to-end tool behavior or the executing Jcode path."
+
+data_model:
+  entities:
+    - name: "ObserverHookInvocation"
+      description: "The ephemeral command invocation produced for one configured observer hook and one lifecycle event."
+      fields:
+        - name: "event"
+          type: "HookEvent"
+          description: "Existing event name, session, cwd, and contract-bounded fields."
+          constraints: "Payload and environment representation remain byte-compatible with the current hook contract."
+        - name: "command_line"
+          type: "String"
+          description: "One command selected from the current effective hook configuration."
+          constraints: "Parsed with the existing direct-execution parser; blank and suppressed commands remain ineligible."
+        - name: "environment_delta"
+          type: "Iterator of key and optional value"
+          description: "Explicit assignments and removals applied on top of inherited process environment."
+          constraints: "None values must remain removals and may not be converted back to inherited daemon values."
+        - name: "launch_strategy"
+          type: "ObserverLaunchStrategy"
+          description: "Linux fast launcher or existing portable fallback selected without changing the hook contract."
+          constraints: "Failure is contained and never changes the originating tool result."
+      relationships:
+        - target: "HookDeliveryEvidence"
+          type: "one-to-one"
+          description: "A deterministic benchmark hook records whether this eligible invocation was delivered exactly once."
+    - name: "ObserverLaunchStrategy"
+      description: "The internal, non-persisted method used to create a detached observer process."
+      fields:
+        - name: "fast_launcher"
+          type: "Optional platform command"
+          description: "Linux system setsid launcher used without a Jcode pre_exec callback."
+          constraints: "Must create a new session and preserve reconstructed command state."
+        - name: "fallback"
+          type: "Existing spawn_detached function"
+          description: "Current Unix pre_exec or Windows creation-flags implementation."
+          constraints: "Used when the fast launcher is unsupported or cannot start."
+      relationships:
+        - target: "ObserverHookInvocation"
+          type: "one-to-many"
+          description: "One internal strategy handles any number of independent observer invocations without retaining their data."
+    - name: "HookDeliveryEvidence"
+      description: "The temporary benchmark record used to attribute performance and verify lossless delivery."
+      fields:
+        - name: "build_identity"
+          type: "String"
+          description: "Canonical path and version or commit identity of the measured executable."
+          constraints: "Must identify the binary that actually runs the Registry workload."
+        - name: "eligible_event_count"
+          type: "Unsigned integer"
+          description: "Number of post-tool events expected from the deterministic workload."
+          constraints: "At least 10,000 for reliability acceptance."
+        - name: "observed_event_ids"
+          type: "Temporary sequence"
+          description: "Identifiers written by the deterministic hook for missing, duplicate, and ordering analysis."
+          constraints: "Must contain every eligible identifier exactly once and no excluded identifier."
+        - name: "wall_and_cpu_distributions"
+          type: "Paired benchmark summary"
+          description: "Enabled, disabled, and hook-attributable median wall and processing cost."
+          constraints: "Reports workload, volume, controls, medians, and at least 80% latency improvement relative to baseline."
+      relationships:
+        - target: "ObserverHookInvocation"
+          type: "one-to-many"
+          description: "Aggregates delivery and performance evidence for the eligible invocation set."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/003-eliminate-hook-startup/spec.yaml"
+      description: "Behavioral requirements, measurable targets, compatibility constraints, and non-goals."
+    - path: "specs/003-eliminate-hook-startup/plan.yaml"
+      description: "Implementation architecture, research decisions, phased validation, and rollback contract."
+    - path: "docs/TOOL_PERFORMANCE_PROFILE.md"
+      description: "Extend the current-state profiler documentation with the deterministic paired hook workload, results, executing binary identity, and source-level rollback."
+  source_code:
+    - path: "crates/jcode-base/src/hooks.rs"
+      description: "Route observer commands through the optimized detached launcher while preserving hook selection, payload, environment, and failure logging."
+    - path: "crates/jcode-base/src/platform.rs"
+      description: "Own the Linux observer-only setsid launcher, exact Command state transfer, and existing portable fallback."
+    - path: "src/bin/tool_profile.rs"
+      description: "Reuse production Registry execution and expose deterministic per-event identities or completion synchronization needed by paired hook profiling."
+    - path: "scripts/profile_tools.py"
+      description: "Run controlled hooks-enabled and hooks-disabled workloads, aggregate medians and child CPU, verify delivery counts, and record canonical binary identity."
+  tests:
+    - path: "crates/jcode-base/src/platform_tests.rs"
+      description: "Linux fast-path session detachment, arguments, cwd, environment assignment/removal, unavailable-launcher fallback, and non-Linux fallback coverage."
+    - path: "crates/jcode-base/src/hooks.rs"
+      description: "Focused observer payload, multiple-command, failure containment, recursion suppression, terminal-environment isolation, and configuration-transition tests; existing pre_tool tests remain unchanged."
+    - path: "crates/jcode-app-core/src/tool/tests.rs"
+      description: "Registry-level disabled, no-match, post-tool success/error, and unchanged tool-result behavior where existing fixtures provide the narrowest reliable contract test."
+    - path: "scripts/profile_tools.py"
+      description: "Deterministic end-to-end benchmark assertions for 80% median reduction, disabled controls, and 10,000-event exact delivery."
+
+implementation_phases:
+  - phase: 1
+    name: "Observer launch boundary"
+    goal: "Avoid the shared-server pre_exec fork path while preserving detached-process semantics and a portable rollback path."
+    deliverables:
+      - "Add the Linux observer-only setsid launcher and immediate fallback to the existing spawn_detached implementation when it cannot start."
+      - "Preserve program, arguments, cwd, inherited environment, explicit assignments, explicit removals, and null stdio during command reconstruction."
+      - "Add focused platform tests proving new-session detachment, command fidelity, unavailable-launcher fallback, and unchanged non-Linux behavior."
+  - phase: 2
+    name: "Hook dispatch integration and compatibility"
+    goal: "Use the optimized boundary only for detached observers and prove the existing hook contract is unchanged."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Route dispatch_observer through the observer-specific launcher while leaving run_pre_tool_gate untouched."
+      - "Add focused success, invalid-start, non-zero or abrupt completion, multiple-command, filtering, recursion, configuration-transition, sequential, concurrent, disabled, and no-match coverage."
+      - "Verify observer failure never changes Registry tool success or error results and later events remain dispatchable."
+  - phase: 3
+    name: "Reproducible performance and delivery evidence"
+    goal: "Prove the user-visible latency target and exact-once compatibility through the landed production Registry profiler."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Extend tool_profile and profile_tools.py with deterministic paired tiny-read and bash-true hook workloads, hooks-disabled controls, event identifiers, completion synchronization, child CPU, and canonical executable identity."
+      - "Run before and after measurements and require at least 80% lower median hook-attributable latency with no material disabled-hook regression."
+      - "Run at least 10,000 eligible events and assert zero missing, duplicate, payload-incompatible, excluded, or contractually misordered deliveries."
+  - phase: 4
+    name: "Executing-build validation and delivery"
+    goal: "Validate the optimized behavior through the actual Jcode runtime and leave a documented, migration-free rollback."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Build the selfdev binary and run a public Registry tool workflow against its own socket or private instance, recording the resolved executable identity."
+      - "Run focused package tests and build checks followed by scripts/check_guardrails.sh, isolating any pre-existing unrelated failures."
+      - "Document rollback as restoring observer dispatch to spawn_detached; verify existing hook definitions and compatibility fixtures require no changes."
+
+risks:
+  - id: "RISK-001"
+    risk: "Reconstructing Command could lose an explicit env_remove and expose a daemon environment variable to a hook."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Replay both Some assignments and None removals from get_envs and add a negative environment-inheritance test."
+  - id: "RISK-002"
+    risk: "The host setsid utility may be absent or incompatible on a supported environment."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Restrict the fast path to Linux, fall back on launcher startup failure, retain other platforms unchanged, and test the unavailable-launcher path explicitly."
+  - id: "RISK-003"
+    risk: "Fire-and-forget completion timing could make a delivery benchmark report false missing events."
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Use unique event identifiers and a bounded completion barrier or marker-count poll before evaluating the deterministic 10,000-event record."
+  - id: "RISK-004"
+    risk: "A broad hook benchmark could measure arbitrary user configuration or shared-daemon binaries instead of the implementation."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Set a deterministic hook environment explicitly, isolate runtime and scratch paths, canonicalize the measured binary, and retain hooks-disabled controls in the same campaign."
+  - id: "RISK-005"
+    risk: "Concurrent detached processes can complete in a different order even though dispatch attempts occur in declaration order."
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Pin tests to the existing documented dispatch-order contract and do not invent completion ordering or serialization that would change current concurrency behavior."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-08T22:27:34Z"
+  artifact_type: "plan"
