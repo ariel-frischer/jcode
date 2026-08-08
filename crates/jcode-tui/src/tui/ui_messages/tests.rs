@@ -563,6 +563,8 @@ fn render_todos_message_shows_goal_scores_without_verbose_feedback() {
         group: Some("todo rendering".to_string()),
         closed_feedback_loop: Some(crate::todo::FeedbackLoopState::from_legacy_score(95)),
         feedback_loop: Some("Inspect a debug frame".to_string()),
+        feedback_loop_relevance: Some(crate::todo::FeedbackLoopRelevance::Representative),
+        feedback_loop_coverage: Some(crate::todo::FeedbackLoopCoverage::MainPaths),
         delivery_state: Some(crate::todo::DeliveryState::from_legacy_score(90)),
         ..Default::default()
     }];
@@ -581,10 +583,11 @@ fn render_todos_message_shows_goal_scores_without_verbose_feedback() {
         .collect::<Vec<_>>()
         .join("\n");
 
-    assert!(
-        plain.contains("Closed feedback loop strong · Delivery workflow_validated"),
-        "{plain}"
-    );
+    for assessment in ["Closed feedback loop strong", "Delivery workflow_validated"] {
+        assert!(plain.contains(assessment), "{plain}");
+    }
+    assert!(!plain.contains("Relevance representative"), "{plain}");
+    assert!(!plain.contains("Coverage main_paths"), "{plain}");
     // Plan-level intent renders once, above the groups.
     assert!(plain.contains("Understands user intent clear"), "{plain}");
     assert!(
@@ -665,8 +668,15 @@ fn render_todos_message_compacts_long_details_at_narrow_widths() {
         .map(extract_line_text)
         .collect::<Vec<_>>();
     assert!(
-        wide.len() > narrow.len(),
-        "wide={wide:?}\nnarrow={narrow:?}"
+        wide.iter()
+            .any(|line| line.contains("narrow terminal window")),
+        "wide={wide:?}"
+    );
+    assert!(
+        !narrow
+            .iter()
+            .any(|line| line.contains("narrow terminal window")),
+        "narrow={narrow:?}"
     );
 }
 
@@ -712,7 +722,57 @@ fn render_todos_message_uses_readable_semantic_colors() {
     assert_eq!(color_for("● "), Some(asap_color()));
     assert_eq!(color_for(" (high)"), None);
     assert_eq!(color_for(" · plausible"), Some(todo_confidence_color()));
+    assert_eq!(color_for("strong"), Some(todo_warning_color()));
+    assert_eq!(color_for("missing"), Some(todo_failure_color()));
     assert_ne!(todo_meta_color(), dim_color());
+}
+
+#[test]
+fn render_todos_message_collapses_passing_quality_gates() {
+    let todos = vec![crate::todo::TodoItem {
+        id: "1".to_string(),
+        content: "Verify the result".to_string(),
+        status: "completed".to_string(),
+        priority: "high".to_string(),
+        group: Some("quality".to_string()),
+        confidence: None,
+        completion_confidence: Some(crate::todo::ConfidenceState::Validated),
+        confidence_history: Vec::new(),
+        blocked_by: Vec::new(),
+        assigned_to: None,
+    }];
+    let goals = vec![crate::todo::TodoGoal {
+        group: Some("quality".to_string()),
+        closed_feedback_loop: Some(crate::todo::FeedbackLoopState::Closed),
+        feedback_loop_relevance: Some(crate::todo::FeedbackLoopRelevance::AcceptanceAligned),
+        feedback_loop_coverage: Some(crate::todo::FeedbackLoopCoverage::EdgeAndIntegrationPaths),
+        feedback_loop_traceability: Some(crate::todo::FeedbackLoopTraceability::Complete),
+        delivery_state: Some(crate::todo::DeliveryState::OutcomeDelivered),
+        ..Default::default()
+    }];
+    let msg =
+        DisplayMessage::todos(serde_json::json!({ "todos": todos, "goals": goals }).to_string());
+    let lines = render_todos_message(&msg, 100, crate::config::DiffDisplayMode::Off);
+    let plain = lines
+        .iter()
+        .map(extract_line_text)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(plain.contains("✓ All quality gates passing"), "{plain}");
+    assert!(plain.contains("Delivery outcome_delivered"), "{plain}");
+    assert!(!plain.contains("Closed feedback loop closed"), "{plain}");
+    assert!(!plain.contains("Relevance acceptance_aligned"), "{plain}");
+    assert!(
+        !plain.contains("Coverage edge_and_integration_paths"),
+        "{plain}"
+    );
+    let passing = lines
+        .iter()
+        .flat_map(|line| line.spans.iter())
+        .find(|span| span.content.as_ref() == "✓ All quality gates passing")
+        .and_then(|span| span.style.fg);
+    assert_eq!(passing, Some(todo_score_color()));
 }
 
 #[test]
@@ -826,10 +886,10 @@ fn render_todo_tool_result_uses_borderless_card_with_goal_scores() {
 
     assert!(!plain.contains("Todos"), "{plain}");
     assert!(plain.contains("todo rendering  ●"), "{plain}");
-    assert!(
-        plain.contains("Closed feedback loop strong · Delivery workflow_validated"),
-        "{plain}"
-    );
+    assert!(plain.contains("Closed feedback loop strong"), "{plain}");
+    assert!(plain.contains("Relevance missing"), "{plain}");
+    assert!(plain.contains("Coverage missing"), "{plain}");
+    assert!(plain.contains("Delivery workflow_validated"), "{plain}");
     assert!(
         plain.contains("● Render the todo result · plausible"),
         "{plain}"
@@ -860,6 +920,8 @@ fn render_todo_quality_gate_retry_shows_only_changed_goal_fields() {
         group: Some("todo rendering".to_string()),
         closed_feedback_loop: Some(crate::todo::FeedbackLoopState::from_legacy_score(90)),
         feedback_loop: Some("Inspect one frame".to_string()),
+        feedback_loop_relevance: Some(crate::todo::FeedbackLoopRelevance::Indirect),
+        feedback_loop_coverage: Some(crate::todo::FeedbackLoopCoverage::Narrow),
         ..Default::default()
     };
     let after = crate::todo::TodoGoal {
@@ -867,6 +929,8 @@ fn render_todo_quality_gate_retry_shows_only_changed_goal_fields() {
         feedback_loop: Some(
             "Render before and after fixtures and assert unchanged fields are absent".to_string(),
         ),
+        feedback_loop_relevance: Some(crate::todo::FeedbackLoopRelevance::Representative),
+        feedback_loop_coverage: Some(crate::todo::FeedbackLoopCoverage::MainPaths),
         ..before.clone()
     };
     let updates = vec![crate::todo::TodoGoalChange {
@@ -875,6 +939,8 @@ fn render_todo_quality_gate_retry_shows_only_changed_goal_fields() {
         fields: vec![
             crate::todo::TodoGoalField::ClosedFeedbackLoop,
             crate::todo::TodoGoalField::FeedbackLoop,
+            crate::todo::TodoGoalField::FeedbackLoopRelevance,
+            crate::todo::TodoGoalField::FeedbackLoopCoverage,
         ],
     }];
     let content = format!(
@@ -908,6 +974,14 @@ fn render_todo_quality_gate_retry_shows_only_changed_goal_fields() {
     assert!(plain.contains("todo rendering  updated"), "{plain}");
     assert!(
         plain.contains("Closed feedback loop strong → closed"),
+        "{plain}"
+    );
+    assert!(
+        plain.contains("Feedback-loop relevance indirect → representative"),
+        "{plain}"
+    );
+    assert!(
+        plain.contains("Feedback-loop coverage narrow → main_paths"),
         "{plain}"
     );
     assert!(!plain.contains("Feedback ·"), "{plain}");
@@ -951,7 +1025,11 @@ fn render_goal_update_size_is_bounded_when_narrative_evidence_is_long() {
     };
 
     let lines = render_todo_goal_updates(&[update], 95);
-    let plain = lines.iter().map(extract_line_text).collect::<Vec<_>>().join("\n");
+    let plain = lines
+        .iter()
+        .map(extract_line_text)
+        .collect::<Vec<_>>()
+        .join("\n");
 
     assert_eq!(lines.len(), 5, "narrative text must not add rows:\n{plain}");
     assert!(!plain.contains("Feedback"), "{plain}");
@@ -1127,10 +1205,8 @@ fn unbiased_visual_prompt_retry_renders_complete_feedback_change() {
         }),
     );
     assert!(initial.contains("pelican-bike-animation"), "{initial}");
-    assert!(
-        without_whitespace(&initial).contains(&without_whitespace(INITIAL_FEEDBACK)),
-        "initial feedback loop was truncated:\n{initial}"
-    );
+    assert!(initial.contains("Closed feedback loop strong"), "{initial}");
+    assert!(!without_whitespace(&initial).contains(&without_whitespace(INITIAL_FEEDBACK)));
 
     // Simulate a restored/mirrored result whose ToolCall association was lost.
     // The structured result must still render as the same complete todo card.
@@ -1148,21 +1224,12 @@ fn unbiased_visual_prompt_retry_renders_complete_feedback_change() {
     let compact_revised = without_whitespace(&revised);
     assert!(revised.contains("pelican-bike-animation"), "{revised}");
     assert!(
-        compact_revised.contains(&without_whitespace(REVISED_OBJECTIVE)),
-        "revised plan intention was truncated:\n{revised}"
+        revised.contains("Relevance missing · Coverage missing · Traceability missing"),
+        "{revised}"
     );
-    assert!(
-        compact_revised.contains(&without_whitespace(REVISED_FEEDBACK)),
-        "revised feedback loop was truncated:\n{revised}"
-    );
-    let goal_details = revised
-        .split("● Implement")
-        .next()
-        .expect("todo item should follow the goal details");
-    assert!(
-        !goal_details.contains('…'),
-        "todo goal details must not truncate:\n{revised}"
-    );
+    assert!(!revised.contains("Closed feedback loop closed"));
+    assert!(!compact_revised.contains(&without_whitespace(REVISED_FEEDBACK)));
+    assert!(revised.contains("● Implement"), "{revised}");
 }
 
 #[test]
@@ -1193,6 +1260,7 @@ fn visually_appealing_prompt_batched_retry_renders_complete_todo_card() {
         group: Some("pelican-bike".to_string()),
         closed_feedback_loop: Some(crate::todo::FeedbackLoopState::from_legacy_score(98)),
         feedback_loop: Some(FEEDBACK.to_string()),
+        feedback_loop_traceability: Some(crate::todo::FeedbackLoopTraceability::Complete),
         ..Default::default()
     }];
     let plan = crate::todo::TodoPlan {
@@ -1250,10 +1318,11 @@ fn visually_appealing_prompt_batched_retry_renders_complete_todo_card() {
         compact.contains(&without_whitespace(OBJECTIVE)),
         "batched todo plan intention was truncated:\n{rendered}"
     );
-    assert!(
-        compact.contains(&without_whitespace(FEEDBACK)),
-        "batched todo feedback loop was truncated:\n{rendered}"
-    );
+    // Compact transcript cards show the goal's quality assessments rather than
+    // repeating its potentially long feedback-loop prose. The full prose remains
+    // available in the serialized todo payload and the todos side panel.
+    assert!(rendered.contains("Relevance missing · Coverage missing"));
+    assert!(!compact.contains(&without_whitespace(FEEDBACK)));
     let goal_details = rendered
         .split_once("pelican-bike")
         .map(|(_, details)| details)
@@ -1280,6 +1349,9 @@ fn render_ownership_gated_todo_result_keeps_the_full_card() {
         group: Some("ship outcome".to_string()),
         closed_feedback_loop: Some(crate::todo::FeedbackLoopState::from_legacy_score(100)),
         feedback_loop: Some("Run the complete workflow".to_string()),
+        feedback_loop_relevance: Some(crate::todo::FeedbackLoopRelevance::Representative),
+        feedback_loop_coverage: Some(crate::todo::FeedbackLoopCoverage::MainPaths),
+        feedback_loop_traceability: Some(crate::todo::FeedbackLoopTraceability::Complete),
         delivery_state: Some(crate::todo::DeliveryState::from_legacy_score(80)),
         ..Default::default()
     }];
@@ -1313,7 +1385,7 @@ fn render_ownership_gated_todo_result_keeps_the_full_card() {
     assert!(plain.contains("ship outcome  ●"), "{plain}");
     assert!(plain.contains("Deliver the complete workflow"), "{plain}");
     assert!(
-        plain.contains("Closed feedback loop closed · Delivery workflow_validated"),
+        plain.contains("✓ All quality gates passing · Delivery workflow_validated"),
         "{plain}"
     );
     assert!(!plain.contains("todo 1 items"), "{plain}");
@@ -1698,7 +1770,7 @@ fn render_system_message_centered_mode_caps_wrap_width_for_visible_gutters() {
 }
 
 #[test]
-fn render_system_message_uses_reload_card_for_reload_title() {
+fn render_system_message_uses_minimal_inline_style_for_reload_title() {
     let msg = DisplayMessage::system("Reloading server with newer binary...").with_title("Reload");
 
     let lines = render_system_message(&msg, 80, crate::config::DiffDisplayMode::Off);
@@ -1709,8 +1781,16 @@ fn render_system_message_uses_reload_card_for_reload_title() {
         .join("\n");
 
     assert!(
-        plain.contains("reload"),
-        "expected reload card title: {plain}"
+        !plain.contains('╭'),
+        "unexpected reload card border: {plain}"
+    );
+    assert!(
+        !plain.contains('╰'),
+        "unexpected reload card border: {plain}"
+    );
+    assert!(
+        !plain.contains("⚡ reload"),
+        "unexpected reload card title: {plain}"
     );
     assert!(plain.contains("Reloading server with newer binary"));
 }

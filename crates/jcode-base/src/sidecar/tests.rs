@@ -34,6 +34,42 @@ impl Drop for EnvVarGuard {
 #[test]
 fn test_sidecar_fast_model() {
     assert_eq!(SIDECAR_FAST_MODEL, "gpt-5.6-luna");
+    assert_eq!(SIDECAR_CLAUDE_MODEL, "claude-haiku-4-5-20251001");
+}
+
+#[test]
+fn sidecar_http_error_classifies_permanent_client_failures() {
+    for status in [
+        StatusCode::BAD_REQUEST,
+        StatusCode::UNAUTHORIZED,
+        StatusCode::FORBIDDEN,
+        StatusCode::NOT_FOUND,
+    ] {
+        let error: anyhow::Error = SidecarHttpError {
+            provider: "test",
+            status,
+            body: "failure".to_string(),
+        }
+        .into();
+        assert_eq!(classify_error(&error), SidecarErrorKind::Permanent);
+    }
+}
+
+#[test]
+fn sidecar_http_error_classifies_retryable_failures() {
+    for status in [StatusCode::TOO_MANY_REQUESTS, StatusCode::BAD_GATEWAY] {
+        let error: anyhow::Error = SidecarHttpError {
+            provider: "test",
+            status,
+            body: "failure".to_string(),
+        }
+        .into();
+        assert_eq!(classify_error(&error), SidecarErrorKind::Transient);
+    }
+    assert_eq!(
+        classify_error(&anyhow::anyhow!("connection reset")),
+        SidecarErrorKind::Transient
+    );
 }
 
 #[test]
