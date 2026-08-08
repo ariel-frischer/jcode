@@ -37,10 +37,13 @@
 
 ## Swarm and Agent Limits
 
-- Run at most **3-5 Jcode threads/instances concurrently**. Keep the total
-  bounded by host capacity rather than opening unbounded sessions.
-- Each Jcode thread may spawn at most **3 direct swarm workers**. Prefer 2 when
-  the task does not clearly benefit from a third independent worker.
+- On this resource-constrained development machine, default to **1 active
+  implementation worker** and never exceed **2 concurrent workers** without
+  Ariel's explicit approval.
+- Serialize Rust builds, tests, Clippy, and guardrail runs across workers. Do not
+  run multiple Cargo-heavy commands in parallel.
+- Each Jcode thread may spawn at most **2 direct swarm workers**, subject to the
+  stricter one-worker default above.
 - **Sub-subagents are forbidden.** Workers must not spawn, assign, or delegate to
   additional agents. Only the root Jcode instance may create swarm workers.
 - Keep swarm work bounded and cancel or stop workers promptly when their task is
