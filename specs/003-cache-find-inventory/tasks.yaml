@@ -1,0 +1,397 @@
+tasks:
+    branch: "003-cache-find-inventory"
+    created: "2026-08-08"
+    spec_path: "specs/003-cache-find-inventory/spec.yaml"
+    plan_path: "specs/003-cache-find-inventory/plan.yaml"
+summary:
+    total_tasks: 24
+    total_phases: 6
+    parallel_opportunities: 10
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Establish the exact agentgrep baseline and an immutable, reviewable dependency target before changing behavior"
+      tasks:
+        - id: "T001"
+          title: "Audit the pinned agentgrep baseline and select the minimal inventory-seam revision in crates/jcode-app-core/Cargo.toml"
+          status: "Blocked"
+          blocked_reason: No reviewed immutable agentgrep inventory-seam revision exists. The pinned v0.1.6 commit b01b804008ab0662fa14e6b60b10bff61716e6f1 has no reusable-inventory API; upstream v0.1.7/master contain broad unrelated changes and no seam. Completing T001 requires an approved agentgrep seam commit or maintainer-owned fork/branch.
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/Cargo.toml"
+          dependencies: []
+          acceptance_criteria:
+            - "Record the current v0.1.6 commit and the immutable candidate revision that will own FileInventory, freshness capture, and supplied-inventory evaluation."
+            - "Demonstrate by diff review that the candidate contains only the required seam, or enumerate every unrelated delta that must pass explicit v0.1.6 parity before adoption."
+            - "Do not select v0.1.7 or a mutable branch merely because it is newer."
+    - number: 2
+      title: "Foundational"
+      purpose: "Add the canonical reusable-inventory contract to agentgrep and make that exact contract available to Jcode"
+      tasks:
+        - id: "T002"
+          title: "Write agentgrep fresh-versus-supplied inventory contract tests in agentgrep/src/find.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "agentgrep/src/find.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests cover identical FindResult fields, scores, ordering, structure summaries, caps, path rebasing, and errors for fresh and supplied inventories."
+            - "Tests fail against the unmodified v0.1.6-compatible implementation because no reusable-inventory evaluator exists."
+        - id: "T003"
+          title: "Write agentgrep inventory and freshness-manifest tests in agentgrep/src/workspace.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "agentgrep/src/workspace.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests cover native path entries, empty traversed directories, repository-root identity, and content digests for .gitignore, .ignore, .rgignore, git exclude, and resolved global exclude sources."
+            - "Create, delete, rename, file-type, policy-content, policy-identity, unreadable-source, and root-replacement changes invalidate the manifest."
+        - id: "T004"
+          title: "Implement FileInventory collection and deterministic freshness manifests in agentgrep/src/workspace.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "agentgrep/src/workspace.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Inventory collection reuses the existing ignore::WalkBuilder traversal and captures no file contents or search matches."
+            - "Manifest validation synchronously checks canonical root identity, every traversed directory entry-name/file-type digest, and every applicable policy digest."
+            - "Any missing, unreadable, added, removed, replaced, or changed validation source returns an explicit invalid or indeterminate result."
+        - id: "T005"
+          title: "Implement run_find_with_inventory while retaining run_find as the fresh wrapper in agentgrep/src/find.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "agentgrep/src/find.rs"
+          dependencies: ["T002", "T004"]
+          acceptance_criteria:
+            - "run_find performs fresh collection and delegates to the same evaluator used by run_find_with_inventory."
+            - "The supplied-inventory seam adds no second scoring, sorting, filtering, rendering, or error path."
+            - "All T002 and T003 focused agentgrep tests pass on the immutable candidate revision."
+        - id: "T006"
+          title: "Pin the reviewed agentgrep inventory-seam revision in crates/jcode-app-core/Cargo.toml and Cargo.lock"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/Cargo.toml"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Cargo.toml references an exact immutable tag or revision and Cargo.lock resolves the same commit."
+            - "No second cache dependency or unrelated direct dependency is added."
+            - "cargo metadata resolves the pinned source without lockfile drift beyond agentgrep and strictly required transitive changes."
+    - number: 3
+      title: "User Story 2 - Trust every returned path"
+      purpose: "Make cache eligibility, repository isolation, invalidation, sensitive-path handling, and fallback correct before optimizing reuse"
+      story_reference: "US-002"
+      independent_test: "Prime an inventory, mutate files and every applicable ignore source, replace a repository root, and alternate overlapping repositories; every response must exactly match fresh discovery and disclose no excluded path."
+      tasks:
+        - id: "T007"
+          title: "Write cache identity, freshness, fallback, and diagnostic-redaction unit tests in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Tests cover canonical roots, platform file identity, non-repository absolute roots, subtree rebasing, create/delete/rename, empty-directory changes, root replacement, and validation I/O ambiguity."
+            - "Tests require fresh fallback whenever identity or complete freshness cannot be established."
+            - "Outcome assertions distinguish fresh, reused, invalidated, evicted, and fallback using opaque IDs and aggregate values only; raw paths and I/O error paths never appear."
+        - id: "T008"
+          title: "Write tool-level policy, isolation, and compatibility tests in crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Cold, warm, invalidated, and forced-fresh output is identical for overlapping repositories and for create, delete, rename, and ignore-policy changes."
+            - "Fixtures cover .gitignore, .ignore, .rgignore, git exclude, global exclude, malformed or unreadable policy sources, ignored credentials, and other sensitive paths."
+            - "hidden=true and no_ignore=true remain fresh-only and cannot seed or consume the default-policy inventory."
+        - id: "T009"
+          title: "Implement repository identity, freshness validation, outcomes, and fail-safe fallback in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "RepositoryIdentity combines the canonical repository root with platform file identity and uses a separate identity for a non-repository absolute root."
+            - "Only hidden=false and no_ignore=false requests are eligible; all other modes use unchanged fresh discovery."
+            - "Filesystem, identity, policy, synchronization, or compatibility ambiguity produces a bounded diagnostic reason and fresh fallback, never stale output."
+            - "Retained state contains path metadata and freshness evidence only."
+        - id: "T010"
+          title: "Route find requests through the inventory facade in crates/jcode-app-core/src/tool/agentgrep.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep.rs"
+          dependencies: ["T008", "T009"]
+          acceptance_criteria:
+            - "Normal find requests resolve scope once and call inventory::find; other agentgrep modes and model-facing schemas remain unchanged."
+            - "Fresh, invalidated, and fallback requests use agentgrep::find::run_find and preserve established output and error behavior."
+            - "T007 and T008 pass with zero sensitive-path disclosure and exact fresh-output parity."
+        - id: "T011"
+          title: "Complete the focused US-002 compatibility and negative-path checks in crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Exact-name tests demonstrate FR-002 through FR-005, FR-009, and FR-011 against the integrated facade."
+            - "A clean fresh-discovery comparison proves no path, ordering, cap, error, or policy regression for the P0 story."
+    - number: 4
+      title: "User Story 1 - Repeat file discovery quickly"
+      purpose: "Reuse one valid repository inventory across differently filtered requests and prove the requested warm-path gain without a cold regression"
+      story_reference: "US-001"
+      independent_test: "Run randomized cold, warm, differently filtered, invalidated, and forced-fresh requests through Registry::execute; warm median must improve by at least 30% and cold or invalidated median must regress by no more than 10%."
+      tasks:
+        - id: "T012"
+          title: "Write warm-reuse and cold-path behavior tests in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Tests prove that repeated queries, subtrees, globs, file types, and caps reuse one unchanged repository inventory."
+            - "A first request, an ineligible request, and a request after invalidation perform fresh discovery and retain established results."
+            - "Find content scoring rereads current file contents and is never served from retained inventory data."
+        - id: "T013"
+          title: "Write profiler case and budget parsing tests in scripts/test_profile_tools.py"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "scripts/test_profile_tools.py"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Tests require distinct cold, warm, invalidated, and forced-fresh case identities and randomized-round aggregation."
+            - "Budget checks fail below a 30% warm median improvement or above a 10% cold or invalidated median regression."
+            - "Reports retain wall time, CPU, high-water memory, retained bytes, and resolved executable identity."
+        - id: "T014"
+          title: "Implement eligible warm inventory reuse in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "A completely valid immutable inventory snapshot is reused across eligible filters and caps while agentgrep remains the only evaluator."
+            - "Manifest validation completes before each hit and no global cache lock is held during filesystem validation, file reads, scoring, or rendering."
+            - "Cold and invalidated paths remain direct fresh discovery plus optional admission."
+        - id: "T015"
+          title: "Add cold, warm, invalidated, and forced-fresh Registry::execute cases in src/bin/tool_profile.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/bin/tool_profile.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Each case exercises the production tool registry path under hooks-disabled controlled inputs."
+            - "The invalidated case performs an observable filesystem or policy change between prime and measurement."
+            - "Measurements identify the resolved newly built executable and include wall, CPU, and high-water memory evidence."
+        - id: "T016"
+          title: "Implement randomized find-inventory performance budgets in scripts/profile_tools.py"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "scripts/profile_tools.py"
+          dependencies: ["T013", "T015"]
+          acceptance_criteria:
+            - "The driver randomizes measurement order, reports medians for all four cases, and records retained bytes."
+            - "The command exits unsuccessfully unless warm median is at least 30% below forced fresh and cold and invalidated medians are no more than 10% above the established fresh baseline."
+            - "All T012 and T013 tests pass and the maintained representative campaign meets both budgets."
+    - number: 5
+      title: "User Story 3 - Preserve predictable find behavior"
+      purpose: "Bound process-resident inventories and make overlapping same- and cross-repository requests deterministic and corruption-free"
+      story_reference: "US-003"
+      independent_test: "Run concurrent same- and cross-repository find workloads while forcing validation, rebuild, eviction, and oversized admission; every result must match serialized fresh discovery and retained state must stop at all configured bounds."
+      tasks:
+        - id: "T017"
+          title: "Write cache concurrency, LRU, and byte-budget tests in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Tests overlap hits, validation, rebuilds, admission, and eviction for the same repository and across repositories without observing a partial snapshot."
+            - "Tests enforce 8 repositories, 64 MiB aggregate estimated metadata, and 16 MiB per inventory, including fresh-only service for an oversized inventory."
+            - "LRU eviction stops retained growth and never changes request correctness."
+        - id: "T018"
+          title: "Write concurrent tool-path parity and filter-cap matrix tests in crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Concurrent same-repository and cross-repository requests exactly match serialized fresh results for query, subtree, glob, file type, ordering, empty matches, and result caps."
+            - "A file change during discovery yields a self-consistent response and the next request reflects the completed change."
+            - "Concurrent exceptional traversal requests remain fresh-only and cannot leak into normal inventory state."
+        - id: "T019"
+          title: "Implement immutable snapshots, short-held locking, LRU, and hard admission budgets in crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Callers receive only fully built Arc inventory snapshots; filesystem traversal, manifest validation, scoring, rendering, and file reads occur outside the manager mutex."
+            - "Admission and LRU accounting enforce all three limits under concurrency and emit bounded eviction or oversized-fallback outcomes."
+            - "Mutex poisoning or a racing invalidation causes safe fresh fallback rather than panic, partial state, or stale output."
+        - id: "T020"
+          title: "Complete the integrated concurrency and bounded-state matrix in crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+          dependencies: ["T018", "T019"]
+          acceptance_criteria:
+            - "Exact-name tests demonstrate FR-006 through FR-008 and NFR-004 with 100% parity across repeated iterations."
+            - "Stress evidence shows no continued retained-state growth beyond the repository, aggregate-byte, or per-inventory limits."
+    - number: 6
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Validate the executing binary, trace every requirement, and synchronize maintained performance and release documentation"
+      tasks:
+        - id: "T021"
+          title: "Run focused, built-binary, and private-socket validation against crates/jcode-app-core/src/tool/agentgrep.rs"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/src/tool/agentgrep.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "Run the exact agentgrep and jcode-app-core tests first, then the relevant selfdev build, formatting, Clippy, and scripts/check_guardrails.sh."
+            - "Resolve the newly built binary and use an isolated socket for CLI-to-private-daemon cold, primed, filesystem-change, and ignore-change parity checks; do not measure the shared daemon."
+            - "Trace FR-001 through FR-011 to exact passing commands and disclose any skipped, platform-specific, or proven pre-existing failure."
+        - id: "T022"
+          title: "Document performance, resource, and runtime evidence in docs/TOOL_PERFORMANCE_PROFILE.md"
+          status: "Pending"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "docs/TOOL_PERFORMANCE_PROFILE.md"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Document randomized cold, warm, invalidated, and forced-fresh wall, CPU, high-water memory, and retained-byte results with environment and resolved binary identity."
+            - "Record whether the 30% warm improvement, 10% cold/invalidated regression ceilings, and 8-repository/64-MiB/16-MiB budgets passed."
+        - id: "T023"
+          title: "Add the compatible warm-find improvement to CHANGELOG.yaml"
+          status: "Pending"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "CHANGELOG.yaml"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "The entry describes faster repeated agentgrep find requests and explicitly notes unchanged filtering, ignore, sensitive-path, ordering, cap, and cold-path behavior."
+            - "The changelog schema validator passes."
+        - id: "T024"
+          title: "Run final artifact, documentation, and repository guardrails through scripts/check_guardrails.sh"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T022", "T023"]
+          acceptance_criteria:
+            - "autospec artifact validates spec.yaml, plan.yaml, and tasks.yaml and the changelog/documentation validators pass."
+            - "The relevant build and scripts/check_guardrails.sh pass on the final changed surface, with unrelated baseline failures isolated rather than hidden by ratchet changes."
+            - "The final diff contains only the dependency seam and pin, Jcode inventory integration, focused tests and profiler support, and directly required documentation."
+dependencies:
+    user_story_order:
+        - story_id: "US-002"
+          depends_on: []
+          blocks: ["US-001", "US-003"]
+        - story_id: "US-001"
+          depends_on: ["US-002"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-001", "US-002"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "The evaluator contract tests and workspace freshness tests modify different agentgrep modules and share only the completed baseline audit."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T007", "T008"]
+          rationale: "Cache-unit safety tests and tool-level policy fixtures live in different Jcode test surfaces and depend only on the pinned seam."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T012", "T013"]
+          rationale: "Rust warm-path behavior tests and Python profiler-driver contract tests modify different files."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T017", "T018"]
+          rationale: "Cache-manager stress tests and tool-path parity tests are independent test authoring tasks in different files."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T022", "T023"]
+          rationale: "Performance documentation and changelog updates consume the same completed evidence but modify different artifacts."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3]
+        description: "Dependency baseline + canonical agentgrep seam + P0 repository-isolated, policy-safe, fail-closed Jcode integration"
+        validation: "Run focused agentgrep tests plus the US-002 identity, filesystem-change, policy-change, sensitive-path, fallback, and fresh-parity matrices."
+    incremental_delivery:
+        - milestone: "Reusable Inventory Contract Ready"
+          phases: [1, 2]
+          deliverable: "A reviewed immutable agentgrep revision exposes one tested inventory evaluator and deterministic freshness manifest, pinned for Jcode use."
+        - milestone: "Safety MVP Complete"
+          phases: [1, 2, 3]
+          deliverable: "Jcode can integrate inventory selection without stale, cross-repository, ignored, or sensitive-path results and falls back safely on uncertainty."
+        - milestone: "Performance Outcome Proven"
+          phases: [1, 2, 3, 4]
+          deliverable: "Eligible repeated find requests reuse inventory and satisfy the maintained warm and cold latency budgets."
+        - milestone: "Bounded Concurrent Feature Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Concurrent multi-repository use remains exact and retained state is capped by tested LRU and byte budgets."
+        - milestone: "Delivery Ready"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "The executing private-daemon path, repository guardrails, performance documentation, changelog, and requirement traceability are complete."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-08T23:22:48Z"
+    artifact_type: "tasks"

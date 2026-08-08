@@ -1,0 +1,383 @@
+plan:
+  branch: "003-cache-find-inventory"
+  created: "2026-08-08"
+  spec_path: "specs/003-cache-find-inventory/spec.yaml"
+
+summary: |
+  Add one bounded, process-resident repository file-inventory cache to the
+  long-lived Jcode agentgrep tool path. The cache is keyed by canonical
+  repository identity, retains only discoverable path metadata, and validates
+  a synchronous freshness manifest before every reuse. Query, subtree, glob,
+  file-type, ordering, scoring, rendering, and result caps remain owned by
+  agentgrep and are applied after inventory selection, so warm and fresh paths
+  share one behavioral implementation.
+
+  Extend the pinned agentgrep dependency with the minimum reusable-inventory
+  seam needed to supply already-discovered entries while preserving its current
+  run_find entry point as the fresh-discovery wrapper. Jcode owns repository
+  identity, bounded retention, concurrency, diagnostics, and fallback. Default
+  eligibility preserves current ignore and hidden-file behavior; requests using
+  exceptional traversal modes or any inventory whose freshness cannot be proven
+  continue through the unchanged fresh path.
+
+technical_context:
+  language: "Rust 2024 edition on the current stable toolchain"
+  framework: "Tokio 1 async runtime with existing spawn_blocking tool execution"
+  primary_dependencies:
+    - name: "agentgrep"
+      version: "currently pinned v0.1.6; update to an exact reviewed revision that adds only the reusable-inventory seam or proves full output parity"
+      purpose: "Remains the canonical owner of file discovery semantics, path filtering, scoring, ordering, caps, structure extraction, and rendering."
+    - name: "ignore"
+      version: "0.4 through agentgrep"
+      purpose: "Remains the authoritative WalkBuilder implementation for gitignore, ignore-file, hidden-path, and traversal behavior."
+    - name: "tokio"
+      version: "1"
+      purpose: "Keeps blocking discovery, freshness validation, and scoring off async runtime worker threads."
+  storage: "Bounded in-memory metadata only; no file contents, search matches, or persistent index"
+  testing:
+    framework: "Rust unit and integration tests, existing tool_profile harness, Python profile driver tests, and isolated built-binary runtime checks"
+    approach: "Start with exact focused cache, freshness, policy, eviction, and concurrency tests; compare every warm or invalidated result with fresh run_find output; then run randomized before/after profiling and a private-socket CLI-to-daemon command-path parity check."
+  target_platform: "All Jcode-supported desktop platforms for correctness and fallback; Linux x86_64 for the maintained profiler and performance budget"
+  project_type: "cli"
+  performance_goals: "Warm median agentgrep find wall time at least 30% below fresh discovery; cold and invalidated medians no more than 10% above the current uncached baseline; no retained-state growth beyond 8 repositories, 64 MiB total estimated metadata, or 16 MiB for one inventory."
+  constraints:
+    - "Preserve exact current find output, error behavior, normalization, ignore rules, glob and path filtering, ordering, and caps."
+    - "Use one canonical repository inventory capability; do not add a whole-query cache, content cache, persistent index, or second scoring path."
+    - "Validate repository identity, directory entry state, and applicable ignore or exclusion sources synchronously before reuse."
+    - "Treat any validation ambiguity, unreadable freshness source, dependency incompatibility, or oversized inventory as a fresh-discovery fallback."
+    - "Retain path metadata only in process memory and emit only outcome, count, byte, and opaque process-local cache identifiers in diagnostics."
+    - "Do not hold the global cache lock during filesystem traversal, manifest validation, file reads, scoring, or rendering."
+    - "Do not silently absorb unrelated behavior changes from agentgrep v0.1.7 or later while acquiring the inventory-input seam."
+    - "Validate runtime behavior against a newly built binary and isolated socket rather than the shared daemon."
+  scale_scope: "Up to 8 recently used repositories and 64 MiB of estimated retained metadata per Jcode process, with LRU eviction and fresh-only handling above the 16 MiB per-inventory admission limit."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits work to the agentgrep inventory seam, one Jcode cache module, focused tests, profiler coverage, dependency pin, and directly affected documentation."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Keeps run_find as the fresh authority, requires byte-for-byte rendered parity, and falls back when reuse is unavailable, ineligible, oversized, or uncertain."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "N/A"
+      notes: "Introduces no user configuration or alternate resolver; fixed internal safety budgets and existing per-request traversal flags determine eligibility."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "agentgrep owns discovery and find semantics; jcode-app-core owns long-lived server-process retention and tool diagnostics. No protocol, SDK, provider, or client contract changes."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps every functional requirement to parity, freshness, isolation, policy, eviction, fallback, diagnostics, concurrency, or command-path checks before broad validation."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Freshness ambiguity is visible as fallback, poison and I/O failures do not serve stale state, and diagnostics exclude file contents, paths, credentials, and stable repository identifiers."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Requires focused dependency and jcode-app-core tests, profiler checks, the relevant build, scripts/check_guardrails.sh, and isolation of any proven baseline failure."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Uses one cache in the normal shared Jcode runtime, preserves upstream agentgrep as the semantic owner, and avoids a duplicate index, plugin surface, or query-result cache."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Completion requires warm latency, exact freshness, bounded memory, concurrency, and observable fallback outcomes rather than only a cache implementation."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Uses the existing 50.161 ms agentgrep-find profiler baseline, records wall/CPU/memory before and after, and verifies the newly built binary through a private daemon socket."
+
+research_findings:
+  decisions:
+    - topic: "Canonical implementation boundary"
+      decision: "Add a minimal agentgrep API that separates inventory discovery from find evaluation, with current run_find delegating to fresh discovery plus the same evaluation function; keep cache policy in jcode-app-core."
+      rationale: "The pinned v0.1.6 and current v0.1.7 APIs always call collect_file_entries inside run_find. A Jcode-only whole-query cache would not reuse inventory across filters, while copying private scoring logic would create a second find contract."
+      alternatives_considered:
+        - "Cache complete FindResult values by request key."
+        - "Duplicate agentgrep path evidence, scoring, sorting, and rendering inside Jcode."
+        - "Vendor the complete agentgrep crate into the Jcode workspace."
+    - topic: "Freshness and invalidation"
+      decision: "Capture a deterministic freshness manifest during discovery and synchronously validate it before reuse: canonical root identity, every traversed directory's native entry-name and file-type digest, and content digests for applicable .gitignore, .ignore, .rgignore, git exclude, and resolved global exclude sources."
+      rationale: "Directory entry digests detect create, delete, rename, new subdirectories, and file-type changes, while hashing policy files avoids timestamp granularity gaps. File-content changes do not invalidate the path inventory because find rereads candidate contents during scoring."
+      alternatives_considered:
+        - "Time-to-live invalidation."
+        - "Filesystem watcher events without a synchronous request-boundary check."
+        - "File or directory mtimes alone."
+        - "Git status as the only freshness source."
+    - topic: "Repository identity and filtered scopes"
+      decision: "Key retained state by canonical repository root plus platform file identity, then apply requested subtree, glob, file type, query, and max_files against the repository inventory while rebasing output exactly as current run_find does. Non-repository absolute roots receive their own canonical filesystem identity."
+      rationale: "This isolates repositories, rejects delete-and-recreate reuse, and lets differently filtered requests in one repository share discovery without changing relative output paths."
+      alternatives_considered:
+        - "Key only by path string."
+        - "Keep a separate inventory for every requested subtree or glob."
+        - "Use the current working directory without canonicalization."
+    - topic: "Eligibility and sensitive paths"
+      decision: "Cache only normal hidden=false and no_ignore=false traversal. Exceptional traversal modes remain fresh-only; no contents or matches are retained, and diagnostics use process-local opaque IDs plus aggregate counts and estimated bytes."
+      rationale: "The model-facing schema already omits hidden and no_ignore, so default requests get the optimization while unusual policy-bypassing calls cannot contaminate or reuse the normal inventory."
+      alternatives_considered:
+        - "Retain one inventory containing ignored and hidden paths and filter it later."
+        - "Maintain multiple policy-keyed inventories per repository."
+        - "Persist the inventory to disk for restart reuse."
+    - topic: "Resource bounds and eviction"
+      decision: "Use LRU admission and eviction with three enforced constants: 8 repositories, 64 MiB aggregate estimated retained bytes, and 16 MiB per inventory. Oversized inventories are served fresh and never admitted."
+      rationale: "The maintained Jcode workload has 1,917 discoverable paths and about 80 KiB of raw relative-path payload, so these limits leave ample multi-session headroom while bounding large-repository and repository-turnover memory."
+      alternatives_considered:
+        - "Entry-count-only bounds."
+        - "Unbounded process-lifetime retention."
+        - "A user-configurable cache size in this first implementation."
+    - topic: "Concurrency model"
+      decision: "Use a short-held cache-manager mutex with immutable Arc inventory snapshots, validate and compute outside the lock, publish only a fully built valid snapshot, and serialize only admission/LRU accounting."
+      rationale: "Concurrent callers can safely reuse one immutable inventory without blocking scoring, while invalid or racing builds can fall back or lose admission without exposing partial state."
+      alternatives_considered:
+        - "Hold one global mutex across discovery and find evaluation."
+        - "Mutable shared vectors updated incrementally during traversal."
+        - "Add an asynchronous cache service or actor."
+    - topic: "Performance and runtime evidence"
+      decision: "Extend the existing tool_profile agentgrep_find case with explicit cold, warm, invalidated, and fresh-forced variants, retain randomized rounds, and add an isolated CLI-to-private-daemon parity smoke against the resolved new binary."
+      rationale: "The existing profiler established a 50.161 ms median find baseline through Registry::execute and already reports wall, CPU, and high-water memory under controlled hooks-disabled conditions."
+      alternatives_considered:
+        - "Rely on cargo build or unit-test duration."
+        - "Benchmark the standalone agentgrep CLI only."
+        - "Exercise the shared long-lived daemon."
+
+data_model:
+  entities:
+    - name: "RepositoryIdentity"
+      description: "Canonical isolation key for one repository or non-repository search root."
+      fields:
+        - name: "canonical_root"
+          type: "PathBuf"
+          description: "Canonical repository root used for scope and output rebasing."
+          constraints: "Must resolve successfully before admission; never emitted verbatim in cache diagnostics."
+        - name: "filesystem_id"
+          type: "PlatformFileId"
+          description: "Stable identity for detecting delete, replace, or recreate at the same path."
+          constraints: "Must be available and unchanged for reuse; otherwise use fresh discovery."
+        - name: "opaque_runtime_id"
+          type: "u64"
+          description: "Process-local diagnostic identifier."
+          constraints: "Not stable across restarts and not derived from a logged path."
+      relationships:
+        - target: "RepositoryInventory"
+          type: "one-to-one"
+          description: "Each retained repository identity owns at most one eligible inventory snapshot."
+    - name: "RepositoryInventory"
+      description: "Immutable discoverable path entries for the default agentgrep traversal policy."
+      fields:
+        - name: "entries"
+          type: "Arc<[agentgrep::workspace::FileEntry]>"
+          description: "Path metadata supplied to the canonical agentgrep find evaluator."
+          constraints: "Contains no file contents or search matches and uses native path identity where required."
+        - name: "freshness"
+          type: "FreshnessManifest"
+          description: "Evidence required to establish safe reuse."
+          constraints: "Must validate completely before every hit."
+        - name: "estimated_bytes"
+          type: "usize"
+          description: "Conservative retained-memory estimate used for admission and eviction."
+          constraints: "At most 16 MiB for admission; aggregate cache at most 64 MiB."
+        - name: "last_used"
+          type: "u64"
+          description: "Monotonic access generation used for LRU eviction."
+          constraints: "Updated under cache-manager lock without exposing wall-clock data."
+      relationships:
+        - target: "FreshnessManifest"
+          type: "one-to-one"
+          description: "Every reusable inventory carries the complete validation evidence captured with it."
+        - target: "FindRequestScope"
+          type: "one-to-many"
+          description: "Many differently filtered requests may evaluate the same immutable inventory."
+    - name: "FreshnessManifest"
+      description: "Synchronous proof that retained paths and applicable exclusion policy still match the filesystem."
+      fields:
+        - name: "root_identity"
+          type: "PlatformFileId"
+          description: "Captured repository-root identity."
+          constraints: "Exact match required."
+        - name: "directory_digests"
+          type: "Vec<DirectoryDigest>"
+          description: "Native entry-name and file-type digest for every traversed directory, including empty eligible directories."
+          constraints: "Every directory must remain readable, present, and digest-identical."
+        - name: "policy_digests"
+          type: "Vec<PolicyDigest>"
+          description: "Content digests and identities for all applicable ignore and exclusion sources."
+          constraints: "Addition, removal, unreadability, identity change, or content change invalidates reuse."
+      relationships:
+        - target: "InventoryOutcome"
+          type: "one-to-many"
+          description: "Validation produces reuse, invalidation, or fallback outcomes for requests."
+    - name: "FindRequestScope"
+      description: "Existing request semantics applied after repository inventory selection."
+      fields:
+        - name: "relative_root"
+          type: "PathBuf"
+          description: "Requested repository subtree rebased against the canonical root."
+          constraints: "Must remain within the canonical root unless represented by a separate repository identity."
+        - name: "query_and_filters"
+          type: "FindArgs"
+          description: "Existing query terms, glob, file type, and max_files contract."
+          constraints: "Evaluated by agentgrep without cache-specific scoring or ordering changes."
+      relationships:
+        - target: "InventoryOutcome"
+          type: "one-to-one"
+          description: "Each request records one non-sensitive operational outcome."
+    - name: "InventoryOutcome"
+      description: "Non-sensitive request and lifecycle observation for effectiveness and fallback analysis."
+      fields:
+        - name: "kind"
+          type: "enum { fresh, reused, invalidated, evicted, fallback }"
+          description: "Outcome category required by the specification."
+          constraints: "Must distinguish all five paths without embedding path data."
+        - name: "counts"
+          type: "InventoryCounts"
+          description: "Entry count, estimated bytes, repository count, and elapsed timings."
+          constraints: "Aggregate numeric values only."
+        - name: "reason"
+          type: "enum"
+          description: "Bounded reason such as directory_changed, policy_changed, identity_changed, oversized, ineligible, or validation_error."
+          constraints: "No raw I/O error path or sensitive value in user-visible diagnostics."
+      relationships:
+        - target: "RepositoryInventory"
+          type: "many-to-one"
+          description: "Outcomes may describe reuse, invalidation, admission, or eviction of one inventory."
+
+api_contracts:
+  endpoints:
+    - method: "RUST"
+      path: "agentgrep::find::run_find_with_inventory"
+      description: "Internal library contract; no HTTP, wire, CLI, SDK, or model-facing API is added. Evaluates an existing FindArgs request against a supplied immutable inventory while preserving current run_find output."
+      request:
+        content_type: "Rust types"
+        body_schema: "repository root, request scope, &FindArgs, &[FileEntry]"
+      response:
+        success_code: 200
+        body_schema: "FindResult with the existing fields, ordering, scores, structure summaries, and caps"
+      errors:
+        - code: 400
+          description: "Invalid scope or incompatible inventory is rejected by the wrapper and handled through Jcode fresh discovery rather than serving retained paths."
+    - method: "RUST"
+      path: "jcode_app_core::tool::agentgrep::inventory::find"
+      description: "Internal cache facade that resolves identity, validates or builds inventory, invokes the canonical agentgrep evaluator, enforces bounds, and returns result plus diagnostic outcome."
+      request:
+        content_type: "Rust types"
+        body_schema: "resolved search root and existing FindArgs"
+      response:
+        success_code: 200
+        body_schema: "FindResult and InventoryOutcome"
+      errors:
+        - code: 503
+          description: "Cache-specific identity, freshness, admission, or synchronization failures cause an observable fresh fallback; established fresh-discovery errors remain unchanged."
+
+project_structure:
+  documentation:
+    - path: "specs/003-cache-find-inventory/plan.yaml"
+      description: "Accepted target architecture, research decisions, phases, and constitutional validation gates."
+    - path: "docs/TOOL_PERFORMANCE_PROFILE.md"
+      description: "Before-and-after agentgrep find measurements, cache budgets, environment, binary identity, and command-path evidence."
+    - path: "CHANGELOG.yaml"
+      description: "User-visible warm find performance improvement and compatibility note, updated through the repository polish workflow."
+  source_code:
+    - path: "agentgrep companion repository: src/workspace.rs"
+      description: "Canonical inventory collection and freshness-manifest capture using existing ignore traversal semantics."
+    - path: "agentgrep companion repository: src/find.rs"
+      description: "Reusable inventory evaluation seam with current run_find delegating to the same implementation."
+    - path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs"
+      description: "Repository identity, manifest validation, immutable snapshot cache, LRU and byte budgets, fallback, and non-sensitive outcomes."
+    - path: "crates/jcode-app-core/src/tool/agentgrep.rs"
+      description: "Routes find mode through the inventory facade while preserving all other agentgrep modes and current output rendering."
+    - path: "crates/jcode-app-core/Cargo.toml"
+      description: "Pins the reviewed agentgrep revision without introducing a second cache dependency."
+    - path: "Cargo.lock"
+      description: "Locks the exact reviewed agentgrep source revision."
+    - path: "src/bin/tool_profile.rs"
+      description: "Production Registry::execute cold, warm, invalidated, and forced-fresh benchmark cases."
+    - path: "scripts/profile_tools.py"
+      description: "Randomized campaign aggregation and performance-budget assertions for the new cases."
+  tests:
+    - path: "agentgrep companion repository: src/find.rs and src/workspace.rs test modules"
+      description: "Fresh versus supplied-inventory equivalence, scope rebasing, ignore sources, native paths, and manifest invalidation."
+    - path: "crates/jcode-app-core/src/tool/agentgrep/inventory.rs test module"
+      description: "Repository isolation, create/delete/rename, ignore changes, empty directories, root replacement, fallback, admission, LRU, byte accounting, and diagnostic redaction."
+    - path: "crates/jcode-app-core/src/tool/agentgrep_tests.rs"
+      description: "End-to-end tool-level compatibility matrix for queries, path/glob/type filters, caps, hidden/no_ignore fresh-only behavior, sensitive fixtures, and concurrent callers."
+    - path: "scripts/test_profile_tools.py"
+      description: "Profile driver parsing, case identity, summary, and budget-regression tests if the existing script tests are split into a dedicated file."
+
+implementation_phases:
+  - phase: 1
+    name: "Canonical reusable inventory seam"
+    goal: "Make inventory reuse possible without duplicating agentgrep find semantics or accepting unrelated dependency behavior changes."
+    deliverables:
+      - "Add FileInventory and freshness-manifest collection to agentgrep using the existing ignore traversal."
+      - "Refactor run_find so fresh discovery and supplied-inventory evaluation call one scoring, sorting, and rendering-compatible implementation."
+      - "Add dependency-level parity and invalidation tests, obtain a reviewed immutable commit, and pin it only after the Jcode compatibility matrix passes."
+      - "If the available revision includes unrelated v0.1.7 changes, either backport the seam to the v0.1.6 behavior line or prove and explicitly preserve every affected Jcode contract."
+  - phase: 2
+    name: "Bounded Jcode cache integration"
+    goal: "Reuse safe repository inventories across normal find calls in the long-lived server process."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Implement canonical repository identity and subtree rebasing."
+      - "Implement synchronous manifest validation, immutable snapshots, short-held locking, and fresh fallback."
+      - "Enforce 8-repository, 64 MiB aggregate, and 16 MiB per-inventory LRU admission limits."
+      - "Emit reuse, invalidation, eviction, and fallback diagnostics using opaque process-local IDs and aggregate counts only."
+  - phase: 3
+    name: "Correctness, security, and concurrency proof"
+    goal: "Demonstrate exact compatibility and current-path correctness across every cache lifecycle transition."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Add fresh-versus-warm output parity for query, subtree, glob, type, ordering, and cap combinations."
+      - "Add create, delete, rename, empty-directory, root-replacement, .gitignore, .ignore, .rgignore, git-exclude, and global-exclude invalidation tests."
+      - "Add ignored credential and sensitive-path fixtures for cold, warm, invalidated, fallback, and concurrent requests."
+      - "Add same-repository and cross-repository concurrent workloads plus LRU and oversized-inventory stress tests."
+      - "Trace FR-001 through FR-011 to exact focused checks and record commands in the Bead."
+  - phase: 4
+    name: "Performance and runtime validation"
+    goal: "Prove the requested gain on the executing Jcode path without cold regressions or unbounded memory."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Run randomized cold, warm, invalidated, and forced-fresh profiler campaigns with wall, CPU, high-water memory, retained bytes, and resolved binary identity."
+      - "Require at least 30% lower warm median and no more than 10% cold or invalidated median regression against the fresh baseline."
+      - "Build the selfdev binary and run private-socket CLI-to-daemon find parity after priming and filesystem or ignore-rule changes."
+      - "Run focused dependency and jcode-app-core tests, relevant build, formatting, Clippy, and scripts/check_guardrails.sh; isolate only proven unrelated baseline failures."
+      - "Run the polish workflow to synchronize performance documentation and changelog without unrelated cleanup."
+
+risks:
+  - id: "RISK-001"
+    risk: "The current agentgrep API cannot consume a pre-collected inventory, and a later upstream revision may include unrelated semantic changes."
+    likelihood: "high"
+    impact: "high"
+    mitigation: "Land the smallest dependency seam, pin an immutable reviewed revision, run exact v0.1.6 behavior parity before adoption, and backport rather than silently absorb incompatible changes."
+  - id: "RISK-002"
+    risk: "A freshness signal misses a completed filesystem or ignore-policy change and serves a stale or excluded path."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Use synchronous native directory-entry and policy-content digests, capture empty traversed directories, validate root identity, and fall back on every ambiguity or I/O failure."
+  - id: "RISK-003"
+    risk: "Manifest validation costs erase the required warm-path gain on directory-heavy repositories."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Benchmark representative and synthetic directory-heavy fixtures before enabling reuse, keep digest data compact, and retain fresh behavior if the 30% warm target is not met without weakening validation."
+  - id: "RISK-004"
+    risk: "Concurrent validation, rebuild, and eviction publish partial state or cause lock contention."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Publish immutable Arc snapshots only after successful validation, perform filesystem and find work outside the cache lock, and stress same-repository and cross-repository races."
+  - id: "RISK-005"
+    risk: "Diagnostics or retained metadata expose sensitive repository paths."
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Keep inventories memory-only, never retain contents or matches, use opaque process-local IDs, and test that logs expose only bounded reasons and aggregate counts."
+
+open_questions:
+  - question: "Which immutable agentgrep commit will provide the reusable-inventory seam?"
+    context: "v0.1.6 is pinned and lacks the seam; v0.1.7 also lacks it and contains additional behavior changes that cannot be accepted implicitly."
+    proposed_resolution: "Implement and review the minimal seam against current agentgrep, prefer an upstream release or commit, and pin it only after the Jcode v0.1.6 compatibility matrix passes; if unrelated deltas fail parity, backport the seam rather than widening this feature."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-08T23:07:24Z"
+  artifact_type: "plan"
