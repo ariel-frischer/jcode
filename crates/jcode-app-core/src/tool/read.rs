@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use jcode_terminal_image::{ImageDisplayParams, ImageProtocol, display_image};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::io::BufRead;
 use std::path::Path;
 
 const DEFAULT_LIMIT: usize = 5000;
@@ -44,6 +45,12 @@ struct NormalizedReadRange {
     offset: usize,
     limit: usize,
     style: ReadRangeStyle,
+}
+
+struct TextReadResult {
+    output: String,
+    total_lines: usize,
+    truncated_line_count: usize,
 }
 
 impl NormalizedReadRange {
@@ -187,39 +194,19 @@ impl Tool for ReadTool {
             )));
         }
 
-        // Read file
-        let content = tokio::fs::read_to_string(&path).await?;
-
-        // Single-pass: count lines while building output
-        let mut output = String::with_capacity(range.limit.min(2000) * 80);
-        let mut total_lines = 0usize;
-        let mut truncated_line_count = 0usize;
+        // Stream text instead of materializing the whole file. We still scan to
+        // EOF so total-line and continuation metadata remain exact, but peak
+        // memory is bounded by the buffered reader, one input line, and output.
+        // The synchronous buffered scan runs on the blocking pool so large files
+        // cannot stall a Tokio worker or the TUI render/input loop.
+        let read_path = path.clone();
+        let text = tokio::task::spawn_blocking(move || read_text_range(&read_path, range))
+            .await
+            .map_err(|err| anyhow::anyhow!("read task failed to join: {err}"))??;
+        let mut output = text.output;
+        let total_lines = text.total_lines;
+        let truncated_line_count = text.truncated_line_count;
         let end_exclusive = range.offset + range.limit;
-        {
-            use std::fmt::Write;
-            for (i, line) in content.lines().enumerate() {
-                total_lines = i + 1;
-                if i < range.offset {
-                    continue;
-                }
-                if i >= end_exclusive {
-                    // Still need to count remaining lines
-                    continue;
-                }
-                let line_num = i + 1;
-                if line.len() > MAX_LINE_LEN {
-                    truncated_line_count += 1;
-                    let _ = writeln!(
-                        output,
-                        "{:>5}\t{}...",
-                        line_num,
-                        crate::util::truncate_str(line, MAX_LINE_LEN)
-                    );
-                } else {
-                    let _ = writeln!(output, "{:>5}\t{}", line_num, line);
-                }
-            }
-        }
 
         let end = end_exclusive.min(total_lines);
 
@@ -270,6 +257,52 @@ impl Tool for ReadTool {
             Ok(ToolOutput::new(output))
         }
     }
+}
+
+fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
+    let file = std::fs::File::open(path)?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut line = String::new();
+    let mut output = String::with_capacity(range.limit.min(2000) * 80);
+    let mut total_lines = 0usize;
+    let mut truncated_line_count = 0usize;
+    let end_exclusive = range.offset + range.limit;
+
+    use std::fmt::Write;
+    loop {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        total_lines += 1;
+        if total_lines <= range.offset || total_lines > end_exclusive {
+            continue;
+        }
+
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+        }
+        if line.len() > MAX_LINE_LEN {
+            truncated_line_count += 1;
+            writeln!(
+                output,
+                "{:>5}\t{}...",
+                total_lines,
+                crate::util::truncate_str(&line, MAX_LINE_LEN)
+            )?;
+        } else {
+            writeln!(output, "{:>5}\t{}", total_lines, line)?;
+        }
+    }
+
+    Ok(TextReadResult {
+        output,
+        total_lines,
+        truncated_line_count,
+    })
 }
 
 #[cfg(test)]

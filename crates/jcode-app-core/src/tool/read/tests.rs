@@ -342,3 +342,63 @@ async fn read_tool_prefers_end_line_over_limit() {
         output.output
     );
 }
+
+#[tokio::test]
+async fn read_tool_streaming_preserves_crlf_blank_lines_and_exact_total() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("sample.txt");
+    std::fs::write(&path, "one\r\n\r\nthree\r\nfour\r\n").expect("write sample file");
+
+    let output = ReadTool::new()
+        .execute(
+            json!({
+                "file_path": "sample.txt",
+                "start_line": 2,
+                "limit": 2
+            }),
+            make_ctx(temp.path().to_path_buf()),
+        )
+        .await
+        .expect("read execution should succeed");
+
+    assert!(
+        output.output.contains("2\t\n"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        output.output.contains("3\tthree"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        output.output.contains("... 1 more lines"),
+        "output={:?}",
+        output.output
+    );
+    assert!(!output.output.contains('\r'), "output={:?}", output.output);
+}
+
+#[tokio::test]
+async fn read_tool_streaming_rejects_invalid_utf8_anywhere_in_file() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("invalid.txt");
+    std::fs::write(&path, b"valid first line\ninvalid: \xff\n").expect("write sample file");
+
+    let error = ReadTool::new()
+        .execute(
+            json!({
+                "file_path": "invalid.txt",
+                "start_line": 1,
+                "limit": 1
+            }),
+            make_ctx(temp.path().to_path_buf()),
+        )
+        .await
+        .expect_err("invalid UTF-8 after the requested range must still fail");
+
+    assert!(
+        error.to_string().to_lowercase().contains("utf-8"),
+        "error={error:#}"
+    );
+}
