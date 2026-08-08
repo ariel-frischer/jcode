@@ -1,5 +1,17 @@
 # Repository Guidelines
 
+## Project Identity
+
+- This checkout is Ariel Frischer's custom development version of Jcode, not the
+  official upstream Jcode distribution.
+- Keep the custom branch reasonably synchronized with upstream
+  (`1jehuang/jcode`) while preserving Ariel-specific improvements and clearly
+  treating experimental features as intentional local work.
+- When evaluating upstream issues or proposing work, first check whether the
+  issue is already fixed locally, conflicts with an intentional customization,
+  or is especially relevant to Ariel's workflows such as `jcode run` and named
+  session profiles.
+
 ## Development Workflow
 
 - **Stay on your own branch** - Do not take, cherry-pick, merge, or copy code from other
