@@ -1,5 +1,27 @@
 use super::*;
 
+#[test]
+fn lock_test_env_removes_and_restores_openai_credentials() {
+    let previous = std::env::var_os("OPENAI_API_KEY");
+    crate::env::set_var("OPENAI_API_KEY", "sk-test-inherited-secret");
+
+    {
+        let _guard = lock_test_env();
+        assert!(std::env::var_os("OPENAI_API_KEY").is_none());
+    }
+
+    assert_eq!(
+        std::env::var_os("OPENAI_API_KEY").as_deref(),
+        Some(std::ffi::OsStr::new("sk-test-inherited-secret"))
+    );
+
+    if let Some(previous) = previous {
+        crate::env::set_var("OPENAI_API_KEY", previous);
+    } else {
+        crate::env::remove_var("OPENAI_API_KEY");
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn harden_secret_file_permissions_sets_owner_only_modes() {

@@ -54,6 +54,45 @@ fn auth_file_with_oauth_tokens() {
 }
 
 #[test]
+fn codex_credentials_debug_output_redacts_tokens() {
+    let credentials = CodexCredentials {
+        access_token: "sk-test-access-secret".to_string(),
+        refresh_token: "rt-test-refresh-secret".to_string(),
+        id_token: Some("id-test-secret".to_string()),
+        account_id: Some("acct-test".to_string()),
+        expires_at: Some(1234),
+    };
+
+    let debug = format!("{credentials:?}");
+
+    assert!(!debug.contains("sk-test-access-secret"));
+    assert!(!debug.contains("rt-test-refresh-secret"));
+    assert!(!debug.contains("id-test-secret"));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[test]
+fn openai_account_debug_output_redacts_tokens() {
+    let account = OpenAiAccount {
+        label: "openai-1".to_string(),
+        access_token: "sk-test-account-access-secret".to_string(),
+        refresh_token: "rt-test-account-refresh-secret".to_string(),
+        id_token: Some("id-test-account-secret".to_string()),
+        account_id: Some("acct-test-account".to_string()),
+        expires_at: Some(1234),
+        email: Some("user@example.com".to_string()),
+    };
+
+    let debug = format!("{account:?}");
+
+    assert!(!debug.contains("sk-test-account-access-secret"));
+    assert!(!debug.contains("rt-test-account-refresh-secret"));
+    assert!(!debug.contains("id-test-account-secret"));
+    assert!(!debug.contains("user@example.com"));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[test]
 fn auth_file_with_api_key_only() {
     let json = r#"{
         "OPENAI_API_KEY": "sk-test-key-123"

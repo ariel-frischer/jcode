@@ -2,12 +2,13 @@ use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fmt;
 use std::path::PathBuf;
 
 const ALLOW_LEGACY_AUTH_ENV: &str = "JCODE_ALLOW_CODEX_LEGACY_AUTH";
 pub const LEGACY_CODEX_AUTH_SOURCE_ID: &str = "openai_codex_auth_json";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CodexCredentials {
     pub access_token: String,
     pub refresh_token: String,
@@ -16,7 +17,23 @@ pub struct CodexCredentials {
     pub expires_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl fmt::Debug for CodexCredentials {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CodexCredentials")
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &"[REDACTED]")
+            .field("id_token", &self.id_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "account_id",
+                &self.account_id.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OpenAiAccount {
     pub label: String,
     pub access_token: String,
@@ -31,6 +48,24 @@ pub struct OpenAiAccount {
     pub email: Option<String>,
 }
 
+impl fmt::Debug for OpenAiAccount {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OpenAiAccount")
+            .field("label", &self.label)
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &"[REDACTED]")
+            .field("id_token", &self.id_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "account_id",
+                &self.account_id.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("expires_at", &self.expires_at)
+            .field("email", &self.email.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct JcodeOpenAiAuthFile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -39,14 +74,14 @@ pub struct JcodeOpenAiAuthFile {
     pub active_openai_account: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct LegacyAuthFile {
     tokens: Option<LegacyTokens>,
     #[serde(rename = "OPENAI_API_KEY")]
     api_key: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct LegacyTokens {
     access_token: String,
     refresh_token: String,
