@@ -3,6 +3,7 @@ use anyhow::Result;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fmt;
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::net::TcpListener;
 use std::time::Duration;
@@ -47,7 +48,7 @@ pub mod openai {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OAuthTokens {
     pub access_token: String,
     pub refresh_token: String,
@@ -56,6 +57,19 @@ pub struct OAuthTokens {
     pub id_token: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scopes: Vec<String>,
+}
+
+impl fmt::Debug for OAuthTokens {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OAuthTokens")
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &"[REDACTED]")
+            .field("expires_at", &self.expires_at)
+            .field("id_token", &self.id_token.as_ref().map(|_| "[REDACTED]"))
+            .field("scopes", &self.scopes)
+            .finish()
+    }
 }
 
 fn parse_oauth_scopes(scope: Option<&str>) -> Vec<String> {

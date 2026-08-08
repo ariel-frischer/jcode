@@ -68,6 +68,24 @@ fn oauth_tokens_serialization_roundtrip() -> Result<()> {
 }
 
 #[test]
+fn oauth_tokens_debug_output_redacts_tokens() {
+    let tokens = OAuthTokens {
+        access_token: "sk-test-oauth-access-secret".to_string(),
+        refresh_token: "rt-test-oauth-refresh-secret".to_string(),
+        expires_at: 1234567890,
+        id_token: Some("id-test-oauth-secret".to_string()),
+        scopes: Vec::new(),
+    };
+
+    let debug = format!("{tokens:?}");
+
+    assert!(!debug.contains("sk-test-oauth-access-secret"));
+    assert!(!debug.contains("rt-test-oauth-refresh-secret"));
+    assert!(!debug.contains("id-test-oauth-secret"));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[test]
 fn oauth_tokens_without_id_token() -> Result<()> {
     let tokens = OAuthTokens {
         access_token: "at".to_string(),
