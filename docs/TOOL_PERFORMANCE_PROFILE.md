@@ -83,35 +83,41 @@ path:
 
 Five calls reading 20 lines near the tail of the 113 MB fixture observed:
 
-- CLI-to-daemon-to-registry median wall time: 60.19 ms
+- CLI-to-daemon-to-registry median wall time: 51.57 ms
 - Range returned: lines 900,000 through 900,019
 - Exact remaining count: 99,981 lines
 - Exact continuation hint: `start_line=900020`
 - Tool output: 2,458 bytes
 
-The five-call wall range was 52.02 to 64.54 ms. This includes launching the
+The final five-call wall range was 49.58 to 59.78 ms after review hardening. This includes launching the
 short-lived debug CLI client, Unix-socket transport, daemon dispatch, registry
 checks, tool execution, output guards, JSON serialization, and response parsing.
-Both temporary acceptance daemons were identified by their unique scratch
-sockets and worktree binary path, terminated after the check, and verified
-stopped. No shared daemon or other agent process was inspected or modified.
+The isolated acceptance daemon was stopped through its private socket and verified
+removed. No shared daemon or other agent process was inspected or modified.
 
 ## Implemented optimization: streamed text reads
 
 The old text path used `tokio::fs::read_to_string`, retaining the complete file
 while scanning every line for exact total-line and continuation metadata. The
-new path scans with a buffered reader on Tokio's blocking pool. It retains one
-input line plus rendered output while still scanning to EOF.
+new path scans fixed-size chunks on Tokio's blocking pool. A vectorized newline
+search retains at most the permitted output prefix for each line, plus rendered
+output, while still scanning to EOF and validating the complete UTF-8 stream.
 
 Paired results in the same binary and campaign:
 
 | Large-file case | Wall improvement | CPU improvement | HWM reduction |
 |---|---:|---:|---:|
-| First 20 lines | 50.6% | 49.1% | 108.76 to 2.59 MiB, 97.6% |
-| 20 lines near line 900,000 | 28.5% | 28.6% | 108.67 to 2.59 MiB, 97.6% |
+| First 20 lines | 50.6% | 49.4% | 108.45 to 3.27 MiB, 97.0% |
+| 20 lines near line 900,000 | 50.1% | 50.0% | 108.54 to 3.08 MiB, 97.2% |
+
+Those figures are from a final three-round randomized rerun after review
+hardening, with six ordinary iterations and three large-file iterations per
+round. It ran under the same shared-host constraint and used seed `20260808`.
+The earlier five-round campaign independently showed the same memory result and
+material CPU/latency reductions.
 
 The change preserves exact line counts and continuation hints, CRLF and blank
-line behavior, long-line truncation, full-file UTF-8 validation, binary/image/PDF
+line behavior, bounded oversized-line handling, long-line truncation, full-file UTF-8 validation, binary/image/PDF
 routing, path resolution, lifecycle logging, context-output guards, and file
 touch events. It does not relax any trust-boundary or command security check.
 
@@ -157,7 +163,7 @@ not be weakened for microsecond-scale savings.
 ## Conclusion
 
 The main proven core opportunity was large text-file reading. Streaming removes
-about 106 MiB of peak allocation for the 113 MB fixture and also materially cuts
+about 106 MiB from the peak resident-memory high-water mark for the 113 MB fixture and also materially cuts
 CPU and latency. The remaining common tools are mostly in the sub-3 ms range, or
 their cost is attributable to useful external work such as repository traversal.
 The next performance investigation should target configured hook process startup

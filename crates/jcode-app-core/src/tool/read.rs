@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use jcode_terminal_image::{ImageDisplayParams, ImageProtocol, display_image};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::io::BufRead;
 use std::path::Path;
 
 const DEFAULT_LIMIT: usize = 5000;
@@ -199,6 +198,10 @@ impl Tool for ReadTool {
         // memory is bounded by the buffered reader, one input line, and output.
         // The synchronous buffered scan runs on the blocking pool so large files
         // cannot stall a Tokio worker or the TUI render/input loop.
+        let end_exclusive = range
+            .offset
+            .checked_add(range.limit)
+            .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
         let read_path = path.clone();
         let text = tokio::task::spawn_blocking(move || read_text_range(&read_path, range))
             .await
@@ -206,8 +209,6 @@ impl Tool for ReadTool {
         let mut output = text.output;
         let total_lines = text.total_lines;
         let truncated_line_count = text.truncated_line_count;
-        let end_exclusive = range.offset + range.limit;
-
         let end = end_exclusive.min(total_lines);
 
         // Publish file touch event for swarm coordination
@@ -260,42 +261,77 @@ impl Tool for ReadTool {
 }
 
 fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
-    let file = std::fs::File::open(path)?;
-    let mut reader = std::io::BufReader::new(file);
-    let mut line = String::new();
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)?;
+    let mut chunk = [0u8; 64 * 1024];
+    let mut utf8_carry = Vec::with_capacity(3);
+    let mut line_prefix = Vec::with_capacity(MAX_LINE_LEN + 4);
+    let mut line_len = 0usize;
+    let mut line_last_byte = None;
     let mut output = String::with_capacity(range.limit.min(2000) * 80);
     let mut total_lines = 0usize;
     let mut truncated_line_count = 0usize;
-    let end_exclusive = range.offset + range.limit;
+    let end_exclusive = range
+        .offset
+        .checked_add(range.limit)
+        .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
 
-    use std::fmt::Write;
     loop {
-        line.clear();
-        if reader.read_line(&mut line)? == 0 {
+        let bytes_read = file.read(&mut chunk)?;
+        if bytes_read == 0 {
             break;
         }
-        total_lines += 1;
-        if total_lines <= range.offset || total_lines > end_exclusive {
-            continue;
-        }
+        validate_utf8_chunk(&mut utf8_carry, &chunk[..bytes_read])?;
 
-        if line.ends_with('\n') {
-            line.pop();
-            if line.ends_with('\r') {
-                line.pop();
-            }
-        }
-        if line.len() > MAX_LINE_LEN {
-            truncated_line_count += 1;
-            writeln!(
-                output,
-                "{:>5}\t{}...",
+        let bytes = &chunk[..bytes_read];
+        let mut segment_start = 0;
+        for newline in memchr::memchr_iter(b'\n', bytes) {
+            retain_line_segment(
+                &mut line_prefix,
+                &mut line_len,
+                &mut line_last_byte,
+                &bytes[segment_start..newline],
+            );
+            total_lines += 1;
+            append_text_line(
+                &mut output,
                 total_lines,
-                crate::util::truncate_str(&line, MAX_LINE_LEN)
+                range,
+                end_exclusive,
+                &line_prefix,
+                line_len,
+                line_last_byte,
+                &mut truncated_line_count,
             )?;
-        } else {
-            writeln!(output, "{:>5}\t{}", total_lines, line)?;
+            line_prefix.clear();
+            line_len = 0;
+            line_last_byte = None;
+            segment_start = newline + 1;
         }
+        retain_line_segment(
+            &mut line_prefix,
+            &mut line_len,
+            &mut line_last_byte,
+            &bytes[segment_start..],
+        );
+    }
+
+    if !utf8_carry.is_empty() {
+        anyhow::bail!("stream did not contain valid UTF-8");
+    }
+    if line_len > 0 {
+        total_lines += 1;
+        append_text_line(
+            &mut output,
+            total_lines,
+            range,
+            end_exclusive,
+            &line_prefix,
+            line_len,
+            line_last_byte,
+            &mut truncated_line_count,
+        )?;
     }
 
     Ok(TextReadResult {
@@ -303,6 +339,74 @@ fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadRe
         total_lines,
         truncated_line_count,
     })
+}
+
+fn retain_line_segment(
+    line_prefix: &mut Vec<u8>,
+    line_len: &mut usize,
+    line_last_byte: &mut Option<u8>,
+    segment: &[u8],
+) {
+    *line_len = line_len.saturating_add(segment.len());
+    if let Some(&last) = segment.last() {
+        *line_last_byte = Some(last);
+    }
+    let remaining = (MAX_LINE_LEN + 4).saturating_sub(line_prefix.len());
+    line_prefix.extend_from_slice(&segment[..segment.len().min(remaining)]);
+}
+
+fn validate_utf8_chunk(carry: &mut Vec<u8>, chunk: &[u8]) -> Result<()> {
+    let mut combined = Vec::with_capacity(carry.len() + chunk.len());
+    combined.extend_from_slice(carry);
+    combined.extend_from_slice(chunk);
+    carry.clear();
+
+    if let Err(error) = std::str::from_utf8(&combined) {
+        if error.error_len().is_some() {
+            anyhow::bail!("stream did not contain valid UTF-8");
+        }
+        carry.extend_from_slice(&combined[error.valid_up_to()..]);
+    }
+    Ok(())
+}
+
+fn append_text_line(
+    output: &mut String,
+    line_number: usize,
+    range: NormalizedReadRange,
+    end_exclusive: usize,
+    line_prefix: &[u8],
+    line_len: usize,
+    line_last_byte: Option<u8>,
+    truncated_line_count: &mut usize,
+) -> Result<()> {
+    if line_number <= range.offset || line_number > end_exclusive {
+        return Ok(());
+    }
+
+    let logical_len = line_len - usize::from(line_last_byte == Some(b'\r'));
+    let retained_len = logical_len.min(line_prefix.len());
+    let retained_bytes = &line_prefix[..retained_len];
+    let retained = match std::str::from_utf8(retained_bytes) {
+        Ok(retained) => retained,
+        Err(error) if error.error_len().is_none() => {
+            std::str::from_utf8(&retained_bytes[..error.valid_up_to()])?
+        }
+        Err(error) => return Err(error.into()),
+    };
+    use std::fmt::Write;
+    if logical_len > MAX_LINE_LEN {
+        *truncated_line_count += 1;
+        writeln!(
+            output,
+            "{:>5}\t{}...",
+            line_number,
+            crate::util::truncate_str(retained, MAX_LINE_LEN)
+        )?;
+    } else {
+        writeln!(output, "{:>5}\t{}", line_number, retained)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

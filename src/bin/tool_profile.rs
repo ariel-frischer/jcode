@@ -1,8 +1,9 @@
 //! Offline CPU, memory, and latency profiler for common built-in tools.
 //!
-//! This exercises the production `Registry::execute` path, including tool
-//! policy checks, lifecycle logging, hooks, telemetry, and context guards. It
-//! deliberately avoids provider calls and network access.
+//! This Linux-only driver exercises the production `Registry::execute` path,
+//! including tool policy checks, lifecycle logging, hooks, telemetry, and
+//! context guards. Memory and load metrics come from `/proc`, while CPU metrics
+//! use `getrusage`. It deliberately avoids provider calls and network access.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -166,6 +167,9 @@ const CASES: &[&str] = &[
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    anyhow::bail!("tool_profile currently supports Linux only");
+
     let args = Args::parse();
     if args.list {
         for case in CASES {
@@ -195,16 +199,18 @@ async fn main() -> anyhow::Result<()> {
         .register("profile_legacy_read".to_string(), Arc::new(LegacyReadTool))
         .await;
 
-    let case_rss_before = proc_status_kib("VmRSS").unwrap_or(0);
+    // VmHWM is monotonic for the process, so sample it before the case warm-up.
+    // Sampling it afterward would erase the peak-memory signal we are measuring.
     let case_hwm_before = proc_status_kib("VmHWM").unwrap_or(0);
-    let load_average_1m_before = load_average_1m();
-    let memory_available_kib_before = proc_meminfo_kib("MemAvailable");
 
     // Warm every case once so lazy regexes, logger setup, and base-tool
     // initialization are not charged to steady-state measurements.
     drop(execute_case(&registry, case, &repo, fixture_dir.as_deref(), 0).await?);
     wait_for_background_case(case).await;
 
+    let case_rss_before = proc_status_kib("VmRSS").unwrap_or(0);
+    let load_average_1m_before = load_average_1m();
+    let memory_available_kib_before = proc_meminfo_kib("MemAvailable");
     let self_cpu_before = get_usage(libc::RUSAGE_SELF);
     let child_cpu_before = get_usage(libc::RUSAGE_CHILDREN);
 
@@ -408,18 +414,17 @@ async fn execute_case(
         }
         "sequential_read_4" => {
             let path = fixture("tiny.txt")?;
-            let mut bytes = 0usize;
+            let mut last = ToolOutput::new(String::new());
             for index in 0..4 {
-                let output = registry
+                last = registry
                     .execute(
                         "read",
                         json!({"file_path": path}),
                         ctx.for_subcall(format!("sequential-{iteration}-{index}")),
                     )
                     .await?;
-                bytes += output.output.len();
             }
-            Ok(ToolOutput::new("x".repeat(bytes)))
+            Ok(last)
         }
         _ => unreachable!("case validated above"),
     }

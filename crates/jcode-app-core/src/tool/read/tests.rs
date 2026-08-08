@@ -402,3 +402,53 @@ async fn read_tool_streaming_rejects_invalid_utf8_anywhere_in_file() {
         "error={error:#}"
     );
 }
+
+#[tokio::test]
+async fn read_tool_streaming_bounds_oversized_line_and_preserves_following_lines() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("oversized.txt");
+    let oversized = "🙂".repeat(256 * 1024);
+    std::fs::write(&path, format!("{oversized}\nsecond\nthird\n"))
+        .expect("write oversized sample file");
+
+    let output = ReadTool::new()
+        .execute(
+            json!({
+                "file_path": "oversized.txt",
+                "start_line": 1,
+                "limit": 2
+            }),
+            make_ctx(temp.path().to_path_buf()),
+        )
+        .await
+        .expect("oversized line should be scanned with bounded retained memory");
+
+    assert!(output.output.contains("1\t🙂"), "output={:?}", output.output);
+    assert!(output.output.contains("...\n"), "output={:?}", output.output);
+    assert!(output.output.contains("2\tsecond"), "output={:?}", output.output);
+    assert!(output.output.contains("... 1 more lines"), "output={:?}", output.output);
+    assert!(output.output.len() < 3_000, "output was not bounded");
+}
+
+#[tokio::test]
+async fn read_tool_rejects_overflowing_offset_and_limit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::fs::write(temp.path().join("sample.txt"), "one\n").expect("write sample file");
+
+    let error = ReadTool::new()
+        .execute(
+            json!({
+                "file_path": "sample.txt",
+                "offset": usize::MAX,
+                "limit": 2
+            }),
+            make_ctx(temp.path().to_path_buf()),
+        )
+        .await
+        .expect_err("overflowing range must fail before scanning");
+
+    assert!(
+        error.to_string().contains("exceeds the supported line range"),
+        "error={error:#}"
+    );
+}

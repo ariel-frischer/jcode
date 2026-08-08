@@ -69,6 +69,14 @@ def median_summary(rows: list[dict]) -> dict[str, dict]:
         wall = [row["wall_us"]["p50"] / 1000 for row in selected]
         cpu = [row["cpu_total_us_per_iteration"] / 1000 for row in selected]
         high_water = [row["high_water_kib_delta"] / 1024 for row in selected]
+        load_averages = [
+            value
+            for row in selected
+            for value in (
+                row["load_average_1m_before"],
+                row["load_average_1m_after"],
+            )
+        ]
         result[case] = {
             "wall_p50_ms_median": statistics.median(wall),
             "wall_p50_ms_min": min(wall),
@@ -79,12 +87,8 @@ def median_summary(rows: list[dict]) -> dict[str, dict]:
             "high_water_delta_mib_median": statistics.median(high_water),
             "high_water_delta_mib_min": min(high_water),
             "high_water_delta_mib_max": max(high_water),
-            "load_average_1m_min": min(
-                row["load_average_1m_before"] for row in selected
-            ),
-            "load_average_1m_max": max(
-                row["load_average_1m_after"] for row in selected
-            ),
+            "load_average_1m_min": min(load_averages),
+            "load_average_1m_max": max(load_averages),
         }
     return result
 
@@ -161,6 +165,7 @@ def main() -> int:
         "rounds": args.rounds,
         "iterations": args.iterations,
         "large_iterations": args.large_iterations,
+        "seed": args.seed,
         "rows": rows,
         "summary": summary,
     }
