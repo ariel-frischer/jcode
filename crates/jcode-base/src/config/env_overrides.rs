@@ -7,6 +7,23 @@ impl Config {
         reason = "Environment override parsing is intentionally explicit and grouped by config area"
     )]
     pub(crate) fn apply_env_overrides(&mut self) {
+        // Unattended run safety bounds stay raw until the CLI resolver applies
+        // source-aware validation. In particular, retain empty and whitespace
+        // values so a higher-precedence invalid value cannot silently weaken a
+        // persisted bound.
+        if let Ok(v) = std::env::var("JCODE_RUN_MAX_TURNS") {
+            self.run_safety.max_turns = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_RUN_MAX_TOOL_STEPS") {
+            self.run_safety.max_tool_steps = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_RUN_TOKEN_BUDGET") {
+            self.run_safety.token_budget = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_RUN_DEADLINE") {
+            self.run_safety.deadline = Some(v);
+        }
+
         // Keybindings
         if let Ok(v) = std::env::var("JCODE_SCROLL_UP_KEY") {
             self.keybindings.scroll_up = v;

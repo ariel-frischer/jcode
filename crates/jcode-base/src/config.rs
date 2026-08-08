@@ -10,9 +10,9 @@ pub use jcode_config_types::{
     KeybindingsConfig, LatexRenderingMode, LaunchHotkeyEntry, LaunchHotkeysConfig,
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
     NamedProviderType, NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode,
-    PowerConfig, ProviderConfig, ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction,
-    SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
-    UpdateChannel, WebSearchConfig, WebSearchEngine,
+    PowerConfig, ProviderConfig, ReasoningDisplayMode, RunSafetyConfig, SafetyConfig,
+    SessionPickerResumeAction, SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout,
+    TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -42,6 +42,10 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_AMBIENT_VISIBLE",
     "JCODE_ANIMATION_FPS",
     "JCODE_AUTO_POKE",
+    "JCODE_RUN_MAX_TURNS",
+    "JCODE_RUN_MAX_TOOL_STEPS",
+    "JCODE_RUN_TOKEN_BUDGET",
+    "JCODE_RUN_DEADLINE",
     "JCODE_AUTOJUDGE_ENABLED",
     "JCODE_AUTOJUDGE_MODEL",
     "JCODE_AUTOREVIEW_ENABLED",
@@ -513,6 +517,9 @@ pub struct Config {
 
     /// Safety / notification configuration
     pub safety: SafetyConfig,
+
+    /// Optional bounds for unattended `jcode run` invocations.
+    pub run_safety: RunSafetyConfig,
 
     /// Desktop notifications for interactive sessions (e.g. turn completion)
     pub notifications: NotificationsConfig,

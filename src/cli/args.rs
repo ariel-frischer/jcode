@@ -168,6 +168,22 @@ pub(crate) enum Command {
         #[arg(long, value_name = "FILE", conflicts_with_all = ["json", "ndjson"])]
         schema: Option<String>,
 
+        /// Maximum completed turns for this unattended run.
+        #[arg(long)]
+        max_turns: Option<String>,
+
+        /// Maximum jcode Registry tool executions for this run.
+        #[arg(long)]
+        max_tool_steps: Option<String>,
+
+        /// Maximum native token-usage delta for this run.
+        #[arg(long)]
+        token_budget: Option<String>,
+
+        /// Absolute RFC3339 deadline with an explicit offset.
+        #[arg(long)]
+        deadline: Option<String>,
+
         /// The message to send
         message: String,
     },

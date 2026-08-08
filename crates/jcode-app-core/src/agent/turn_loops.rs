@@ -30,6 +30,9 @@ impl Agent {
 
     pub(super) async fn run_turn(&mut self, print_output: bool) -> Result<String> {
         self.set_log_context();
+        if !self.run_safety_before_turn() {
+            return Ok(String::new());
+        }
         crate::session_metrics::record_turn(&self.session.id);
         // Mark this session as actively streaming for presence UIs (e.g. the
         // macOS menu bar indicator). Cleared automatically on every exit path.
@@ -50,6 +53,9 @@ impl Agent {
         let mut batch_nudge_pending = false;
 
         loop {
+            if self.run_safety_observe_usage() {
+                break;
+            }
             // Do not start another provider request once a cancel has been
             // observed; the loop is re-entered by several recovery paths
             // (issue #732, regression of #428).
@@ -816,6 +822,10 @@ impl Agent {
                 assistant_message_id.as_ref(),
             );
 
+            if self.run_safety_observe_usage() {
+                break;
+            }
+
             if tool_calls.is_empty() && !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
                     self.add_message(Role::User, blocks);
@@ -913,7 +923,8 @@ impl Agent {
 
             // Execute tools and add results
             let mut tool_results_dirty = false;
-            for tc in tool_calls {
+            for tool_index in 0..tool_calls.len() {
+                let tc = tool_calls[tool_index].clone();
                 let message_id = assistant_message_id
                     .clone()
                     .unwrap_or_else(|| self.session.id.clone());
@@ -1001,6 +1012,21 @@ impl Agent {
                         tool_results_dirty = true;
                         continue;
                     }
+                }
+
+                if !self.run_safety_before_tool_step() {
+                    for skipped_tc in &tool_calls[tool_index..] {
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: skipped_tc.id.clone(),
+                                content: "[Skipped: run safety bound reached]".to_string(),
+                                is_error: Some(true),
+                            }],
+                        );
+                    }
+                    tool_results_dirty = true;
+                    break;
                 }
 
                 // SDK didn't execute this tool, run it locally
@@ -1126,6 +1152,10 @@ impl Agent {
 
             if tool_results_dirty {
                 self.session.save()?;
+            }
+
+            if self.run_safety_observe_usage() {
+                break;
             }
 
             if !generated_image_contexts.is_empty() {

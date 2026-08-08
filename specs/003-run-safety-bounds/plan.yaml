@@ -1,0 +1,335 @@
+plan:
+  branch: "agent/jcode-qwi-run-limits"
+  created: "2026-08-08"
+  spec_path: "specs/003-run-safety-bounds/spec.yaml"
+
+summary: |
+  Add optional safety-bound configuration to the existing unattended `jcode run`
+  path. Persisted values will live in the established TOML/config-types contract,
+  environment values will be applied through the existing config override and
+  fingerprint path, and invocation flags will be merged by one resolver with
+  invocation > environment > persisted > unset precedence. The resolver will
+  retain raw source values long enough to produce bound-, source-, value-, and
+  correction-specific diagnostics, then construct a typed policy with positive
+  counters and one RFC3339 absolute deadline resolved to a monotonic run instant.
+
+  Runtime enforcement will remain opt-in: the CLI owns top-level turn budgeting
+  and output reporting, while an optional Agent controller checks the deadline,
+  cumulative native token usage, and tool-call boundary before additional work
+  starts in both capture and streaming loops. A shared canonical stop-reason
+  enum will drive plain labels plus optional JSON/NDJSON result fields, with a
+  deterministic priority for simultaneous triggers and no new fields or limits
+  when all bounds are unset. The separate `--schema` SDK bridge remains outside
+  the three supported output contracts and will reject explicit safety flags
+  before starting its bridge rather than claim unenforced bounds.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "None"
+  primary_dependencies:
+    - name: "jcode-config-types"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns the serde-compatible optional run-safety configuration section and raw source fields."
+    - name: "jcode-app-core"
+      version: "workspace path dependency"
+      purpose: "Owns Agent turn/tool execution and the optional safety controller used at real work boundaries."
+    - name: "clap"
+      version: "4"
+      purpose: "Parses optional invocation overrides without committing malformed values to a lower-precedence source."
+    - name: "chrono"
+      version: "0.4"
+      purpose: "Parses documented RFC3339 absolute deadlines using an already-present dependency."
+    - name: "serde / serde_json"
+      version: "1"
+      purpose: "Preserves TOML/config defaults and serializes stable bounded-stop fields in JSON and NDJSON."
+    - name: "tokio"
+      version: "1"
+      purpose: "Integrates deadline observation with the existing asynchronous provider and tool loops."
+    - name: "anyhow"
+      version: "1"
+      purpose: "Carries actionable configuration errors through the existing CLI boundary."
+  storage: "Existing ~/.jcode/config.toml (or JCODE_HOME/config.toml) plus process environment; no new storage or quota service."
+  testing:
+    framework: "Rust built-in test harness with existing jcode-base, jcode-app-core, and root CLI test modules"
+    approach: "Focused pure resolver/controller tests first; clap/config precedence and invalid-input tests; fake-provider Agent tests for turn, tool-step, token, deadline, simultaneous-trigger, and unset behavior; serialization/golden-equivalent tests for plain, JSON, and NDJSON; affected-package check/build and repository guardrails afterward."
+  target_platform: "Jcode-supported Linux, macOS, and Windows CLI/server builds"
+  project_type: "cli"
+  performance_goals: "When every bound is unset, retain the existing run loops, provider requests, output shape, and cost characteristics; when enabled, perform only constant-time boundary checks and no additional network or persistent-storage work per check."
+  constraints:
+    - "All four bounds are optional and must not affect interactive sessions or unset unattended runs."
+    - "Every bound resolves independently as invocation > environment > persisted config > built-in unset; an invalid higher-precedence value is an error and never silently falls through."
+    - "Maximum turns, maximum tool steps, and token budgets are positive decimal whole numbers represented as u64; zero, negative, malformed, and overflowing values are rejected."
+    - "Deadlines use an absolute RFC3339 timestamp with an explicit offset; past or otherwise unparseable values are rejected before work, then converted once to a monotonic deadline for enforcement."
+    - "The native budget is the current invocation's delta of the existing session token totals, summing reported input, output, cache-read, and cache-creation tokens with saturating arithmetic; resumed-session history is the baseline, not fresh budget consumption."
+    - "A tool step is counted immediately before a jcode Registry execution, including native/local tools; provider-internal tools that never cross the Registry boundary are not counted as controllable jcode work."
+    - "Simultaneous triggers use the documented deterministic priority deadline_exceeded, token_budget_exceeded, max_tool_steps_exceeded, max_turns_exceeded."
+    - "Plain output gets a stable bounded-stop label; JSON and NDJSON add a canonical stop_reason only for bounded results, preserving the legacy unset shape."
+    - "The change must not post to, comment on, label, close, or otherwise mutate GitHub issue #803 or any remote repository data."
+  scale_scope: "One in-process unattended run at a time; counters are u64 and policy state is per invocation, with no cross-run aggregation or provider-pricing conversion."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits work to run-safety config, resolver/controller seams, ordinary run output, focused tests, and operator documentation; interactive behavior, provider pricing, and GitHub mutation remain non-goals."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Uses optional serde-defaulted config values, an opt-in Agent controller, and skip-when-none result fields so legacy unset runs and existing output remain unchanged."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "One per-bound resolver consumes invocation, environment, and persisted raw values in the required order, records each source, and rejects invalid or blank higher-precedence values without fallback."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Stable raw config data stays in jcode-config-types, Agent enforcement stays in jcode-app-core, and CLI merging/reporting stays in src/cli; no protocol or single-server boundary is changed."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "The plan maps defaults, all precedence combinations, invalid input, threshold enforcement, deadline/tool observations, simultaneous triggers, output formats, and legacy compatibility to exact focused test modules."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Raw values are validated before provider/session work, diagnostics identify only the bound/source/value/correction, and no prompt, credential, or provider-secret data is included."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Artifact validation is required now; implementation sequencing requires exact tests, affected-package build/check, current-stable formatting, and scripts/check_guardrails.sh with any unrelated baseline failure isolated rather than rebaselined."
+
+research_findings:
+  decisions:
+    - topic: "Runtime ownership and execution seam"
+      decision: "Keep persisted data in jcode-config-types and add an optional controller to the existing Agent loops, with src/cli owning policy resolution and result presentation."
+      rationale: "The root run command currently owns capture/plain/NDJSON orchestration, but only Agent and its Registry loops can prevent a second tool or provider request and observe usage during a turn. An opt-in controller avoids changing interactive callers or the server protocol."
+      alternatives_considered:
+        - "Enforce every bound only around the CLI's outer auto-poke loop, which cannot stop a tool call already queued inside one Agent turn or observe an active deadline safely."
+        - "Add a new server-wide quota service, which violates the single-run scope and would affect interactive/shared sessions."
+    - topic: "Raw values and validation boundary"
+      decision: "Store each persisted and environment value as an optional raw string, accept invocation values as strings, and parse all four fields exactly once in a source-aware resolver."
+      rationale: "The resolver can distinguish absent, empty, malformed, zero, negative, overflow, and past values and can name the winning source; invalid higher-precedence safety input cannot be discarded by the existing permissive environment parsing conventions."
+      alternatives_considered:
+        - "Use typed numeric config fields and let serde/clap reject input, which loses uniform source/value/correction diagnostics and makes invalid environment behavior inconsistent."
+        - "Ignore invalid environment values and fall back to persisted settings, which can silently weaken an operator's safety intent."
+    - topic: "Precedence and config reload integration"
+      decision: "Add JCODE_RUN_MAX_TURNS, JCODE_RUN_MAX_TOOL_STEPS, JCODE_RUN_TOKEN_BUDGET, and JCODE_RUN_DEADLINE to the existing Config environment override and fingerprint lists, then merge invocation values over the loaded config."
+      rationale: "Config::load already establishes file-then-environment behavior and its fingerprint keeps the process cache coherent; the run resolver supplies the required invocation layer without creating a second persisted-config loader."
+      alternatives_considered:
+        - "Read the environment directly from src/cli/commands.rs, which would bypass config reload tracking and duplicate precedence logic."
+        - "Persist invocation flags, which would make a one-run safety choice unexpectedly affect later runs."
+    - topic: "Usage and tool-step accounting"
+      decision: "Capture session token totals at invocation start, compare the per-run delta after each reported usage update and before another provider request, and count a tool step at the Registry execution boundary immediately before starting it."
+      rationale: "Session::token_usage_totals already aggregates native provider telemetry and supports resumed sessions; a baseline avoids charging historical work, while the Registry boundary is the earliest controllable point that prevents an over-bound local operation."
+      alternatives_considered:
+        - "Use provider-specific currency pricing, which is unavailable uniformly and out of scope."
+        - "Count only completed turns, which permits unbounded tool fan-out inside a single turn."
+        - "Count provider-internal tools as controllable steps, which cannot prevent those providers from starting work outside jcode's boundary."
+    - topic: "Deadline enforcement and simultaneous triggers"
+      decision: "Parse one future RFC3339 instant at run start, derive a monotonic deadline, check it before provider requests, before each Registry call, between streamed events, and after active tools, and choose the primary reason in deadline > token > tool steps > turns order."
+      rationale: "The existing async loops have safe observation points and cancellation signals; monotonic checks avoid wall-clock jumps, and prioritizing hard time/cost ceilings gives repeatable results when multiple counters become true together."
+      alternatives_considered:
+        - "Wrap the whole Agent future in tokio::time::timeout, which can drop partial state and produce malformed plain/NDJSON results."
+        - "Select the first observed reason nondeterministically, which makes automation and tests unstable."
+    - topic: "Output compatibility"
+      decision: "Introduce one canonical RunStopReason code/label mapping; add an optional stop_reason and bounded outcome metadata only to the final JSON/NDJSON result, and print the stable label in plain mode."
+      rationale: "The current JSON report and NDJSON done event already carry final run state, so an additive skip-when-none field preserves existing consumers while making bounded outcomes machine-readable."
+      alternatives_considered:
+        - "Replace the existing report shape with a new envelope, which would break consumers even when bounds are unset."
+        - "Expose only prose, which fails the stable automation contract."
+    - topic: "Structured schema mode boundary"
+      decision: "Keep `jcode run --schema` on its existing SDK bridge path; if an invocation flag requests a bound in schema mode, reject it before bridge startup with an actionable unsupported-mode diagnostic."
+      rationale: "The specification defines plain, JSON, and NDJSON contracts, while schema mode delegates execution to a separate SDK/server bridge with no local Agent handle. Rejecting explicit unsupported combinations is safer than silently ignoring a requested bound and avoids an unrelated API expansion."
+      alternatives_considered:
+        - "Extend the SDK bridge and server protocol in this feature, which broadens scope beyond ordinary unattended CLI runs."
+        - "Silently ignore persisted or environment bounds for schema mode, which would violate the safety intent."
+
+data_model:
+  entities:
+    - name: "RunSafetyConfig"
+      description: "Optional persisted configuration values for ordinary unattended `jcode run` invocations."
+      fields:
+        - name: "max_turns"
+          type: "Option<String>"
+          description: "Raw positive whole-number limit for completed top-level run turns."
+          constraints: "Absent means disabled; empty, non-decimal, zero, negative, or overflowing values are invalid."
+        - name: "max_tool_steps"
+          type: "Option<String>"
+          description: "Raw positive whole-number limit for jcode Registry tool executions."
+          constraints: "Resolved independently; invalid values fail before work and do not inherit another bound."
+        - name: "token_budget"
+          type: "Option<String>"
+          description: "Raw positive whole-number native token-usage budget for the current run."
+          constraints: "Compared with the per-run delta of input + output + cache-read + cache-creation telemetry."
+        - name: "deadline"
+          type: "Option<String>"
+          description: "Raw absolute RFC3339 timestamp for the run deadline."
+          constraints: "Must include an explicit offset, parse successfully, and be in the future when the run starts."
+      relationships:
+        - target: "EffectiveRunSafetyPolicy"
+          type: "one-to-one"
+          description: "One loaded config contributes the lowest-precedence candidate for each independently resolved bound."
+    - name: "EffectiveRunSafetyPolicy"
+      description: "Typed per-invocation policy after source precedence, validation, deadline resolution, and token baseline capture."
+      fields:
+        - name: "max_turns"
+          type: "Option<NonZeroU64>"
+          description: "Maximum completed top-level turns, including auto-poke follow-ups."
+          constraints: "No value means no turn bound."
+        - name: "max_tool_steps"
+          type: "Option<NonZeroU64>"
+          description: "Maximum controllable Registry executions started by this run."
+          constraints: "The controller denies the next execution once the threshold is reached."
+        - name: "token_budget"
+          type: "Option<NonZeroU64>"
+          description: "Maximum cumulative native usage delta for this invocation."
+          constraints: "The controller does not start another provider request after the budget is reached."
+        - name: "deadline"
+          type: "Option<Instant>"
+          description: "Monotonic deadline derived once from the validated absolute timestamp."
+          constraints: "Checked at provider, tool, stream, and post-tool observation points."
+        - name: "source_by_bound"
+          type: "Map<BoundName, BoundSource>"
+          description: "Winning source for diagnostics and optional bounded-result metadata."
+          constraints: "Each bound records invocation, environment, persisted, or unset independently."
+        - name: "usage_baseline"
+          type: "TokenUsageTotals"
+          description: "Session totals captured before the first turn, used to calculate current-run consumption."
+          constraints: "Must not expose prompt, credential, provider-secret, or unrelated usage data."
+      relationships:
+        - target: "RunSafetyController"
+          type: "one-to-one"
+          description: "The controller applies the policy while an Agent executes one unattended run."
+    - name: "RunSafetyController"
+      description: "Mutable per-run counters and stop state shared by capture and streaming Agent loops."
+      fields:
+        - name: "completed_turns"
+          type: "u64"
+          description: "Top-level turns completed by the CLI loop."
+          constraints: "Checked before starting a follow-up and incremented only after a turn returns."
+        - name: "tool_steps"
+          type: "u64"
+          description: "Registry executions authorized/started by the run."
+          constraints: "The next call is denied when the bound is reached."
+        - name: "observed_usage"
+          type: "u64"
+          description: "Saturating current-run native token total."
+          constraints: "Updated from existing telemetry, never provider pricing."
+        - name: "stop_reason"
+          type: "Option<RunStopReason>"
+          description: "First deterministic bounded-stop code selected by the policy order."
+          constraints: "Unset for normal completion, ordinary failure, cancellation, and legacy runs."
+      relationships:
+        - target: "BoundedStopResult"
+          type: "one-to-one"
+          description: "The final CLI result projects the controller's selected reason and observed state."
+    - name: "BoundedStopResult"
+      description: "Output-facing result metadata for a safety-bounded ordinary run."
+      fields:
+        - name: "stop_reason"
+          type: "RunStopReason"
+          description: "Canonical machine code and matching stable human label."
+          constraints: "One of max_turns_exceeded, max_tool_steps_exceeded, token_budget_exceeded, deadline_exceeded."
+        - name: "outcome"
+          type: "String"
+          description: "Explicit bounded-stop classification in structured output."
+          constraints: "Only emitted for bounded results; existing unset reports omit it."
+        - name: "observed_usage"
+          type: "Optional usage/counter summary"
+          description: "Non-secret values useful to operators interpreting the stop."
+          constraints: "No prompts, credentials, provider secrets, or unrelated session history."
+      relationships:
+        - target: "EffectiveRunSafetyPolicy"
+          type: "many-to-one"
+          description: "The result records which effective per-run policy ended execution."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/003-run-safety-bounds/spec.yaml"
+      description: "Approved safety-bound requirements, compatibility constraints, and acceptance scenarios."
+    - path: "specs/003-run-safety-bounds/plan.yaml"
+      description: "This implementation architecture, sequencing, contracts, and validation plan."
+    - path: "docs/RUN_SAFETY_BOUNDS.md"
+      description: "Operator-facing CLI/config/environment forms, precedence, unset/invalid behavior, accounting semantics, output fields, and canonical stop reasons."
+    - path: "crates/jcode-base/src/config/default_file.rs"
+      description: "Commented ~/.jcode/config.toml template guidance kept alongside the persisted settings."
+  source_code:
+    - path: "crates/jcode-config-types/src/lib.rs"
+      description: "Serde-defaulted RunSafetyConfig section with optional raw persisted fields and no new runtime dependencies."
+    - path: "crates/jcode-base/src/config.rs"
+      description: "Config field plus environment fingerprint keys so run-bound changes reload through the existing cache."
+    - path: "crates/jcode-base/src/config/env_overrides.rs"
+      description: "Environment-to-raw-config mapping for the four JCODE_RUN_* variables, retaining empty values for validation."
+    - path: "crates/jcode-base/src/config/default_file.rs"
+      description: "Persisted setting examples and accepted value/precedence/unset documentation."
+    - path: "crates/jcode-app-core/src/agent/run_safety.rs"
+      description: "Typed policy/controller, canonical RunStopReason mapping, counter checks, usage baseline delta, and pure enforcement helpers."
+    - path: "crates/jcode-app-core/src/agent.rs"
+      description: "Optional Agent safety state, setter/accessor, and non-persisted stop-state plumbing that is inert for interactive callers."
+    - path: "crates/jcode-app-core/src/agent/turn_loops.rs"
+      description: "Safety checks around provider-request, streamed usage, and Registry tool boundaries for capture/plain execution."
+    - path: "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+      description: "Equivalent safety observation and well-formed partial-result handling for streaming Agent execution."
+    - path: "src/cli/args.rs"
+      description: "Optional --max-turns, --max-tool-steps, --token-budget, and --deadline invocation flags on ordinary run."
+    - path: "src/cli/dispatch.rs"
+      description: "Passes invocation candidates into run command resolution and rejects unsupported schema combinations before work."
+    - path: "src/cli/commands.rs"
+      description: "Source merge/validation, policy installation, turn-loop integration, plain label emission, and JSON/NDJSON result projection."
+  tests:
+    - path: "crates/jcode-config-types/src/lib.rs or focused config tests"
+      description: "Serde defaults and backward-compatible parsing of files without the new section."
+    - path: "crates/jcode-base/src/config_tests.rs"
+      description: "TOML/env precedence inputs, empty-value retention, env fingerprint coverage, and default-template documentation."
+    - path: "crates/jcode-app-core/src/agent/run_safety.rs"
+      description: "Pure validation, source precedence, counter thresholds, usage arithmetic, deadline boundaries, and deterministic reason order."
+    - path: "crates/jcode-app-core/src/agent_tests.rs"
+      description: "Fake-provider Agent tests proving no extra provider/tool work after each threshold in both execution paths and preserving unset behavior."
+    - path: "src/cli/args/tests.rs"
+      description: "Flag parsing, raw-value acceptance, and schema/streaming conflicts for the new run options."
+    - path: "src/cli/commands_tests.rs"
+      description: "Structured report/NDJSON final-event serialization, plain reason labels, validation diagnostics, and output compatibility."
+
+implementation_phases:
+  - phase: 1
+    name: "Configuration contract and source-aware policy resolution"
+    goal: "Represent all optional bounds and resolve/validate them deterministically before any unattended work starts."
+    deliverables:
+      - "Add the serde-defaulted run-safety config section, Config field, environment override keys, fingerprint entries, and commented default-template guidance."
+      - "Add ordinary-run invocation flags and a single resolver implementing independent invocation > environment > persisted > unset precedence."
+      - "Parse positive u64 counters and RFC3339 future deadlines, reject empty/invalid/overflow/past values with source-specific actionable diagnostics, and capture the per-run token baseline."
+      - "Document accepted forms, source precedence, unset behavior, tool/token accounting, schema-mode boundary, and canonical reason priority."
+  - phase: 2
+    name: "Agent-bound enforcement controller"
+    goal: "Stop before additional controllable work can violate an effective bound while leaving interactive Agent callers unchanged."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Add an opt-in non-persisted Agent safety controller and canonical RunStopReason state/accessors."
+      - "Check deadline and token budget before provider requests and between stream events; update usage from existing native telemetry and stop before the next request when the current-run budget is reached."
+      - "Check max tool steps immediately before Registry execution, preserve valid tool-result/history state for skipped work, and observe deadline after active tools at the earliest safe point."
+      - "Integrate the same controller with capture/plain and streaming-mpsc turn loops without changing the default interactive path or server wire protocol."
+  - phase: 3
+    name: "CLI result contracts and deterministic trigger behavior"
+    goal: "Expose bounded stops consistently in each supported output mode and preserve existing output when no bound triggers."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Apply the policy across all ordinary run loops, including auto-poke follow-up turns, and select one reason using the fixed priority order when checks coincide."
+      - "Emit the stable plain label and add skip-when-none stop_reason/outcome metadata to JSON and NDJSON final results; keep errors and cancellations distinct."
+      - "Reject explicit safety options in the separate --schema bridge path before server/bridge startup."
+  - phase: 4
+    name: "Focused regression evidence and delivery gates"
+    goal: "Prove every acceptance path and validate the affected Rust surfaces and repository guardrails."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Add exact tests for defaults, every precedence matrix combination, malformed/empty/zero/negative/overflow/past inputs, each threshold, active-tool/deadline observation, simultaneous triggers, and no-over-bound follow-up work."
+      - "Add output-shape tests for plain, JSON, NDJSON, schema rejection, and unset legacy compatibility, including safe diagnostic content."
+      - "Run focused tests first, then affected-package check/build and scripts/check_guardrails.sh on the current stable toolchain; isolate any pre-existing unrelated failures without rebaselining."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-08T19:02:02Z"
+  artifact_type: "plan"

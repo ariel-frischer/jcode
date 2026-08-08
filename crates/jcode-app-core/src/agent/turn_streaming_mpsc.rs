@@ -81,6 +81,9 @@ impl Agent {
         event_tx: mpsc::UnboundedSender<ServerEvent>,
     ) -> Result<()> {
         self.set_log_context();
+        if !self.run_safety_before_turn() {
+            return Ok(());
+        }
         // Mark this session as actively streaming for presence UIs (e.g. the
         // macOS menu bar indicator). Cleared automatically on every exit path.
         let _streaming_guard = crate::session::StreamingGuard::new(self.session.id.clone());
@@ -99,6 +102,9 @@ impl Agent {
         let mut fable_guardrail_reconsiderations = 0u32;
 
         loop {
+            if self.run_safety_observe_usage() {
+                break;
+            }
             // Never open a new provider request after a cancel. Several paths
             // `continue` this loop (compaction retry, incomplete/stranded
             // continuation, empty-response recovery, soft-interrupt injection),
@@ -366,6 +372,9 @@ impl Agent {
             let mut retry_after_compaction = false;
             let mut keepalive = stream_keepalive_ticker();
             loop {
+                if self.run_safety_observe_usage() {
+                    break;
+                }
                 let next_event = std::pin::pin!(stream.next());
                 let event = tokio::select! {
                     _ = keepalive.tick() => {
@@ -1000,6 +1009,7 @@ impl Agent {
                 cache_read_input_tokens: usage_cache_read,
                 cache_creation_input_tokens: usage_cache_creation,
             };
+            let mut safety_stopped_after_usage = self.run_safety_observe_usage();
 
             // Detect a transparent mid-request model switch (e.g. Anthropic's
             // retired `claude-fable-5` falling back to `claude-opus-4-8`). The
@@ -1128,6 +1138,11 @@ impl Agent {
                 assistant_message_id.as_ref(),
             );
 
+            // The current request's usage is persisted with the assistant
+            // message above. Observe again so a budget reached by this stream
+            // prevents local tool execution in the same response.
+            safety_stopped_after_usage |= self.run_safety_observe_usage();
+
             if tool_calls.is_empty() && !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
                     self.add_message(Role::User, blocks);
@@ -1252,6 +1267,30 @@ impl Agent {
                 }
             }
 
+            if safety_stopped_after_usage {
+                for tc in &tool_calls {
+                    let content = "[Skipped: run safety bound reached]".to_string();
+                    let _ = event_tx.send(ServerEvent::ToolDone {
+                        id: tc.id.clone(),
+                        name: tc.name.clone(),
+                        output: content.clone(),
+                        error: Some(content.clone()),
+                    });
+                    self.add_message(
+                        Role::User,
+                        vec![ContentBlock::ToolResult {
+                            tool_use_id: tc.id.clone(),
+                            content,
+                            is_error: Some(true),
+                        }],
+                    );
+                }
+                if !tool_calls.is_empty() {
+                    self.session.save()?;
+                }
+                break;
+            }
+
             // Execute tools and add results
             let tool_count = tool_calls.len();
             let mut tool_results_dirty = false;
@@ -1342,6 +1381,28 @@ impl Agent {
                         continue;
                     }
                     // Fall through to local execution for native tools with SDK errors
+                }
+
+                if !self.run_safety_before_tool_step() {
+                    for skipped_tc in &tool_calls[tool_index..] {
+                        let content = "[Skipped: run safety bound reached]".to_string();
+                        let _ = event_tx.send(ServerEvent::ToolDone {
+                            id: skipped_tc.id.clone(),
+                            name: skipped_tc.name.clone(),
+                            output: content.clone(),
+                            error: Some(content.clone()),
+                        });
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: skipped_tc.id.clone(),
+                                content,
+                                is_error: Some(true),
+                            }],
+                        );
+                    }
+                    tool_results_dirty = true;
+                    break;
                 }
 
                 let ctx = ToolContext {

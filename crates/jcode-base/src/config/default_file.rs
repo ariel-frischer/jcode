@@ -621,6 +621,18 @@ prevent_sleep_while_streaming = true
 [safety]
 # Notification settings for ambient mode events
 
+[run_safety]
+# Optional bounds for unattended `jcode run`; absent values preserve legacy behavior.
+# Invocation flags override JCODE_RUN_* environment values, which override this section.
+# Values are retained as raw strings and validated before provider work starts.
+# max_turns = "10"              # positive decimal whole number
+# max_tool_steps = "100"        # positive decimal whole number
+# token_budget = "100000"        # native input + output/cache usage delta
+# deadline = "2030-01-01T00:00:00Z"  # future RFC3339 timestamp with explicit offset
+# Empty, malformed, zero, negative, overflowing, and past values are errors.
+# Stable bounded stop codes: max_turns_exceeded, max_tool_steps_exceeded,
+# token_budget_exceeded, deadline_exceeded.
+
 # ntfy.sh push notifications (free, phone app: https://ntfy.sh)
 # ntfy_topic = "jcode-ambient-your-secret-topic"
 # ntfy_server = "https://ntfy.sh"

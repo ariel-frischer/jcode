@@ -1991,6 +1991,14 @@ struct RunCommandReport {
     model: String,
     text: String,
     usage: crate::agent::TokenUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observed_usage: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    safety_bound: Option<crate::agent::run_safety::RunSafetyStopMetadata>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2394,8 +2402,10 @@ pub async fn run_single_message_command(
     emit_json: bool,
     emit_ndjson: bool,
     schema_path: Option<&str>,
+    invocation_safety: crate::config::RunSafetyConfig,
 ) -> Result<()> {
     if let Some(schema_path) = schema_path {
+        reject_schema_run_safety(&invocation_safety)?;
         return run_single_message_command_schema(
             choice,
             model,
@@ -2406,6 +2416,16 @@ pub async fn run_single_message_command(
         )
         .await;
     }
+
+    let (persisted_safety, environment_safety) = crate::config::config().run_safety_sources();
+    let safety_candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation: invocation_safety,
+        environment: environment_safety,
+        persisted: persisted_safety,
+    };
+    // Validate before provider/session startup. The baseline is replaced with
+    // the restored session total below once an Agent exists.
+    crate::agent::run_safety::resolve_run_safety(&safety_candidates, Default::default())?;
 
     let provider = if emit_json || emit_ndjson {
         super::provider_init::init_provider_quiet(choice, model).await?
@@ -2434,6 +2454,19 @@ pub async fn run_single_message_command(
     }
     let mut agent = crate::agent::Agent::new(provider.clone(), registry);
     restore_agent_session_if_requested(&mut agent, resume_session)?;
+    let safety_policy = crate::agent::run_safety::resolve_run_safety(
+        &safety_candidates,
+        agent.token_usage_totals(),
+    )?;
+    if safety_policy.max_turns.is_some()
+        || safety_policy.max_tool_steps.is_some()
+        || safety_policy.token_budget.is_some()
+        || safety_policy.deadline.is_some()
+    {
+        agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(
+            safety_policy,
+        ));
+    }
 
     if emit_json {
         let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;
@@ -2443,14 +2476,43 @@ pub async fn run_single_message_command(
             model: provider.model(),
             text,
             usage: agent.last_usage().clone(),
+            stop_reason: agent
+                .run_safety_stop_reason()
+                .map(|reason| reason.code().to_string()),
+            outcome: agent
+                .run_safety_stop_reason()
+                .map(|_| "bounded_stop".to_string()),
+            observed_usage: agent
+                .run_safety_stop_reason()
+                .and_then(|_| agent.run_safety_controller())
+                .map(|controller| controller.observed_usage()),
+            safety_bound: agent
+                .run_safety_controller()
+                .and_then(|controller| controller.stop_metadata()),
         };
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if emit_ndjson {
         run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
     } else {
         run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
+        if let Some(reason) = agent.run_safety_stop_reason() {
+            println!("Run stopped: {} ({})", reason.label(), reason.code());
+        }
     }
 
+    Ok(())
+}
+
+fn reject_schema_run_safety(safety: &crate::config::RunSafetyConfig) -> Result<()> {
+    if safety.max_turns.is_some()
+        || safety.max_tool_steps.is_some()
+        || safety.token_budget.is_some()
+        || safety.deadline.is_some()
+    {
+        anyhow::bail!(
+            "run safety options are unsupported with --schema; use ordinary --json, --ndjson, or plain output"
+        );
+    }
     Ok(())
 }
 
@@ -2885,7 +2947,11 @@ async fn run_single_message_command_plain_with_auto_poke(
     let mut gate_digest_delivered = false;
     loop {
         agent.run_once(&next_message).await?;
+        agent.run_safety_complete_turn();
         turns_completed += 1;
+        if agent.run_safety_stop_reason().is_some() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -2967,7 +3033,11 @@ async fn run_single_message_command_capture_with_auto_poke(
     let mut gate_digest_delivered = false;
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
+        agent.run_safety_complete_turn();
         turns_completed += 1;
+        if agent.run_safety_stop_reason().is_some() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3103,7 +3173,11 @@ async fn run_single_message_command_ndjson(
             result = Err(err);
             break;
         }
+        agent.run_safety_complete_turn();
         turns_completed += 1;
+        if agent.run_safety_stop_reason().is_some() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3196,21 +3270,40 @@ async fn run_single_message_command_ndjson(
 
     match result {
         Ok(()) => {
-            write_json_line(
-                &mut stdout,
-                &serde_json::json!({
-                    "type": "done",
-                    "session_id": session_id,
-                    "provider": provider.name(),
-                    "model": provider.model(),
-                    "text": state.text,
-                    "usage": state.usage,
-                    "upstream_provider": state.upstream_provider,
-                    "connection_type": state.connection_type,
-                    "connection_phase": state.connection_phase,
-                    "status_detail": state.status_detail,
-                }),
-            )?;
+            let mut done = serde_json::json!({
+                "type": "done",
+                "session_id": session_id,
+                "provider": provider.name(),
+                "model": provider.model(),
+                "text": state.text,
+                "usage": state.usage,
+                "upstream_provider": state.upstream_provider,
+                "connection_type": state.connection_type,
+                "connection_phase": state.connection_phase,
+                "status_detail": state.status_detail,
+            });
+            if let Some(reason) = agent.run_safety_stop_reason()
+                && let Some(object) = done.as_object_mut()
+            {
+                object.insert(
+                    "stop_reason".to_string(),
+                    serde_json::Value::String(reason.code().to_string()),
+                );
+                object.insert(
+                    "outcome".to_string(),
+                    serde_json::Value::String("bounded_stop".to_string()),
+                );
+                if let Some(usage) = agent.run_safety_controller() {
+                    object.insert(
+                        "observed_usage".to_string(),
+                        serde_json::Value::from(usage.observed_usage()),
+                    );
+                    if let Some(metadata) = usage.stop_metadata() {
+                        object.insert("safety_bound".to_string(), serde_json::to_value(metadata)?);
+                    }
+                }
+            }
+            write_json_line(&mut stdout, &done)?;
             Ok(())
         }
         Err(err) => {

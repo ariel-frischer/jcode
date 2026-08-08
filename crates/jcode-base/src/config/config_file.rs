@@ -3,6 +3,35 @@ use crate::storage::jcode_dir;
 use std::path::PathBuf;
 
 impl Config {
+    /// Return the raw persisted and environment run-safety candidates without
+    /// applying precedence. This keeps source attribution in the CLI resolver
+    /// while reusing the normal config-file path and environment contract.
+    pub fn run_safety_sources(
+        &self,
+    ) -> (
+        jcode_config_types::RunSafetyConfig,
+        jcode_config_types::RunSafetyConfig,
+    ) {
+        let _ = self;
+        let persisted = Self::load_from_file()
+            .map(|config| config.run_safety)
+            .unwrap_or_default();
+        let mut environment = jcode_config_types::RunSafetyConfig::default();
+        if let Ok(value) = std::env::var("JCODE_RUN_MAX_TURNS") {
+            environment.max_turns = Some(value);
+        }
+        if let Ok(value) = std::env::var("JCODE_RUN_MAX_TOOL_STEPS") {
+            environment.max_tool_steps = Some(value);
+        }
+        if let Ok(value) = std::env::var("JCODE_RUN_TOKEN_BUDGET") {
+            environment.token_budget = Some(value);
+        }
+        if let Ok(value) = std::env::var("JCODE_RUN_DEADLINE") {
+            environment.deadline = Some(value);
+        }
+        (persisted, environment)
+    }
+
     /// Get the config file path
     pub fn path() -> Option<PathBuf> {
         jcode_dir().ok().map(|d| d.join("config.toml"))
