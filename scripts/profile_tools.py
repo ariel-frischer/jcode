@@ -9,6 +9,7 @@ import os
 import random
 import statistics
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -56,9 +57,22 @@ def make_fixtures(root: Path) -> Path:
     expected_size = 113_000_000
     if not large.exists() or large.stat().st_size != expected_size:
         line = ("0123456789abcdef" * 7 + "\n").encode()
-        with large.open("wb") as handle:
-            for _ in range(1_000_000):
-                handle.write(line)
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=fixture_dir,
+                prefix="large-",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                for _ in range(1_000_000):
+                    handle.write(line)
+            temporary.replace(large)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
     return fixture_dir
 
 
