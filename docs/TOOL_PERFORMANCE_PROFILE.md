@@ -70,6 +70,32 @@ than treating a current HWM delta as file data retained by the tool.
 CPU consumed by completed child processes and ripgrep can use parallel workers.
 This is not a timing inconsistency.
 
+## Built-binary public-interface acceptance
+
+The optimized implementation was also exercised outside the custom profiler
+through a newly built `target/selfdev/jcode` binary and the real public control
+path:
+
+1. Start an isolated Jcode daemon with a private `XDG_RUNTIME_DIR`, `JCODE_HOME`,
+   and socket.
+2. Create a headless session with `jcode debug create_session`.
+3. Invoke the tool with `jcode debug tool 'read {...}' --session <id>`.
+
+Five calls reading 20 lines near the tail of the 113 MB fixture observed:
+
+- CLI-to-daemon-to-registry median wall time: 60.19 ms
+- Range returned: lines 900,000 through 900,019
+- Exact remaining count: 99,981 lines
+- Exact continuation hint: `start_line=900020`
+- Tool output: 2,458 bytes
+
+The five-call wall range was 52.02 to 64.54 ms. This includes launching the
+short-lived debug CLI client, Unix-socket transport, daemon dispatch, registry
+checks, tool execution, output guards, JSON serialization, and response parsing.
+Both temporary acceptance daemons were identified by their unique scratch
+sockets and worktree binary path, terminated after the check, and verified
+stopped. No shared daemon or other agent process was inspected or modified.
+
 ## Implemented optimization: streamed text reads
 
 The old text path used `tokio::fs::read_to_string`, retaining the complete file
