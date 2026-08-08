@@ -76,6 +76,30 @@ fn run_safety_environment_values_are_retained_raw() {
 }
 
 #[test]
+fn run_safety_sources_returns_persisted_config_errors() {
+    let _guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::tempdir().expect("temporary JCODE_HOME");
+    let previous_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp_home.path());
+    std::fs::write(temp_home.path().join("config.toml"), "[run_safety\n")
+        .expect("write malformed config");
+
+    let result = Config::default().run_safety_sources();
+
+    assert!(
+        result.is_err(),
+        "malformed persisted config must fail before run-safety resolution"
+    );
+    assert!(
+        result
+            .expect_err("the malformed config should have produced an error")
+            .to_string()
+            .contains("Failed to parse config file")
+    );
+    restore_env_var("JCODE_HOME", previous_home);
+}
+
+#[test]
 fn swarm_spawn_mode_defaults_to_inline() {
     assert_eq!(
         Config::default().agents.swarm_spawn_mode,

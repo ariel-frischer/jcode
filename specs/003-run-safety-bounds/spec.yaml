@@ -1,5 +1,5 @@
 feature:
-  branch: "003-run-safety-bounds"
+  branch: "agent/jcode-qwi-run-limits"
   created: "2026-08-08"
   status: "Draft"
   input: "Private internal fix for GitHub issue #803: add configurable safety bounds to unattended jcode run. Support optional max turns, max tool steps, a native token-usage/cost-equivalent budget, and a wall-clock deadline with explicit invocation/environment/persisted-config precedence, validation, and stable structured stop reasons in plain, JSON, and NDJSON output. Preserve legacy behavior when unset. Do not post or mutate anything on GitHub."
@@ -82,7 +82,7 @@ user_stories:
         then: "the run is rejected before unattended work begins with an actionable validation diagnostic"
       - given: "an environment value is empty or whitespace-only"
         when: "configuration is resolved"
-        then: "it follows the documented unset or invalid-value rule and never silently weakens a valid persisted bound"
+        then: "the value is rejected as invalid before work starts and never silently weakens a valid persisted bound"
 
 requirements:
   functional:
@@ -199,7 +199,7 @@ edge_cases:
   - scenario: "A wall-clock deadline is already past, or is reached while a tool operation is active."
     expected_behavior: "A past deadline is rejected before work; a reached deadline stops at the earliest safe observation point and reports deadline_exceeded."
   - scenario: "The environment contains an empty, whitespace-only, or malformed bound while persisted configuration contains a valid value."
-    expected_behavior: "The documented normalization or validation rule is applied consistently; an invalid higher-precedence value never silently falls through as though it were valid."
+    expected_behavior: "The value is rejected as invalid before work starts; an invalid higher-precedence value never silently falls through as though it were valid."
   - scenario: "Two or more bounds are reached at the same observation point."
     expected_behavior: "A deterministic primary reason is selected, and the result remains valid in plain, JSON, and NDJSON output."
   - scenario: "All bounds are unset, including when no persisted configuration file exists."

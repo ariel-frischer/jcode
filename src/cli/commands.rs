@@ -2417,7 +2417,7 @@ pub async fn run_single_message_command(
         .await;
     }
 
-    let (persisted_safety, environment_safety) = crate::config::config().run_safety_sources();
+    let (persisted_safety, environment_safety) = crate::config::config().run_safety_sources()?;
     let safety_candidates = crate::agent::run_safety::RunSafetyCandidates {
         invocation: invocation_safety,
         environment: environment_safety,

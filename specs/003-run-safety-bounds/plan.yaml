@@ -232,6 +232,10 @@ data_model:
           type: "Optional usage/counter summary"
           description: "Non-secret values useful to operators interpreting the stop."
           constraints: "No prompts, credentials, provider secrets, or unrelated session history."
+        - name: "safety_bound"
+          type: "SafetyBoundMetadata"
+          description: "The bound and source that selected the bounded stop."
+          constraints: "Only emitted for bounded results; source is invocation, environment, or persisted."
       relationships:
         - target: "EffectiveRunSafetyPolicy"
           type: "many-to-one"

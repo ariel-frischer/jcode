@@ -14,6 +14,16 @@ Each field resolves independently in this order:
 3. Persisted `[run_safety]` fields with the same names.
 4. Unset (disabled).
 
+Persisted configuration uses this TOML shape:
+
+```toml
+[run_safety]
+max_turns = "10"
+max_tool_steps = "100"
+token_budget = "100000"
+deadline = "2030-01-01T00:00:00Z"
+```
+
 Values remain raw until the resolver validates them. Positive bounds are
 decimal whole numbers greater than zero. Deadlines are future absolute RFC3339
 timestamps with an explicit offset, for example

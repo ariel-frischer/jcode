@@ -424,6 +424,7 @@ phases:
         - id: "T035"
           title: "Run repository guardrails and scoped diff review with scripts/check_guardrails.sh"
           status: "Pending"
+          notes: "Deferred after the 2026-08-08 run: scripts/check_guardrails.sh --skip-slow reproduced four unchanged baseline ratchet failures in both the qwi and untouched dev worktrees (oversized file/test, panic-prone usage, and swallowed-error usage). No baseline was changed; rerun after the CodeRabbit fix pass."
           type: "test"
           parallel: false
           story_id: null

@@ -266,6 +266,35 @@ async fn capture_tool_step_bound_stops_before_next_provider_request_and_repairs_
 }
 
 #[tokio::test]
+async fn capture_token_budget_repairs_history_after_provider_tool_calls() {
+    let provider: Arc<dyn Provider> = Arc::new(UsageAndToolProvider);
+    let registry = Registry::new(provider.clone()).await;
+    registry
+        .register(
+            "counting_tool".to_string(),
+            Arc::new(CountingTool {
+                calls: Arc::new(AtomicUsize::new(0)),
+            }),
+        )
+        .await;
+    let mut agent = Agent::new(provider, registry);
+    agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(
+        safety_test_policy(None, std::num::NonZeroU64::new(10)),
+    ));
+
+    agent
+        .run_once_capture("spend the budget")
+        .await
+        .expect("bounded capture run should complete");
+
+    assert_eq!(
+        agent.run_safety_stop_reason(),
+        Some(crate::agent::run_safety::RunStopReason::TokenBudgetExceeded)
+    );
+    assert!(agent_has_tool_result(&agent, "call-usage"));
+}
+
+#[tokio::test]
 async fn streaming_token_budget_stops_before_local_tool_execution() {
     let executions = Arc::new(AtomicUsize::new(0));
     let provider: Arc<dyn Provider> = Arc::new(UsageAndToolProvider);

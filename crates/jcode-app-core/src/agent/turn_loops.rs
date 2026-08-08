@@ -823,6 +823,22 @@ impl Agent {
             );
 
             if self.run_safety_observe_usage() {
+                // The assistant response is already persisted above. Close every
+                // remaining provider tool call with a synthetic result so the
+                // saved history cannot leave the next run with dangling calls.
+                for skipped_tc in &tool_calls {
+                    self.add_message(
+                        Role::User,
+                        vec![ContentBlock::ToolResult {
+                            tool_use_id: skipped_tc.id.clone(),
+                            content: "[Skipped: run safety bound reached]".to_string(),
+                            is_error: Some(true),
+                        }],
+                    );
+                }
+                if !tool_calls.is_empty() {
+                    self.session.save()?;
+                }
                 break;
             }
 
@@ -1015,6 +1031,8 @@ impl Agent {
                 }
 
                 if !self.run_safety_before_tool_step() {
+                    // This is the last gate before Registry execution. Every
+                    // denied call receives a result and the loop saves below.
                     for skipped_tc in &tool_calls[tool_index..] {
                         self.add_message(
                             Role::User,

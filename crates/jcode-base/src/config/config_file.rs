@@ -8,12 +8,12 @@ impl Config {
     /// while reusing the normal config-file path and environment contract.
     pub fn run_safety_sources(
         &self,
-    ) -> (
+    ) -> anyhow::Result<(
         jcode_config_types::RunSafetyConfig,
         jcode_config_types::RunSafetyConfig,
-    ) {
+    )> {
         let _ = self;
-        let persisted = Self::load_from_file()
+        let persisted = Self::load_from_file_strict()?
             .map(|config| config.run_safety)
             .unwrap_or_default();
         let mut environment = jcode_config_types::RunSafetyConfig::default();
@@ -29,7 +29,7 @@ impl Config {
         if let Ok(value) = std::env::var("JCODE_RUN_DEADLINE") {
             environment.deadline = Some(value);
         }
-        (persisted, environment)
+        Ok((persisted, environment))
     }
 
     /// Get the config file path
