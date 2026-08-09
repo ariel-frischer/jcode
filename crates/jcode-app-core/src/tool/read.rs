@@ -7,10 +7,16 @@ use async_trait::async_trait;
 use jcode_terminal_image::{ImageDisplayParams, ImageProtocol, display_image};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::Path;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 const DEFAULT_LIMIT: usize = 5000;
 const MAX_LINE_LEN: usize = 2000;
+const MIN_INDEX_FILE_BYTES: u64 = 64 * 1024;
+const MAX_INDEX_ENTRIES: usize = 1_000_000;
+const MAX_INDEX_CACHE_ENTRIES: usize = 64;
+const MAX_INDEX_CACHE_BYTES: usize = 8 * 1024 * 1024;
 
 pub struct ReadTool;
 
@@ -58,13 +64,164 @@ struct RetainedLine<'a> {
     last_byte: Option<u8>,
 }
 
-impl NormalizedReadRange {
-    fn next_offset(self) -> usize {
-        self.offset + self.limit
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FileFreshness {
+    len: u64,
+    modified: Option<std::time::SystemTime>,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+    #[cfg(unix)]
+    mtime: (i64, i64),
+    #[cfg(unix)]
+    ctime: (i64, i64),
+}
+
+struct LineIndex {
+    freshness: FileFreshness,
+    file_len: u64,
+    line_starts: Vec<u64>,
+}
+
+struct LineIndexCache {
+    entries: HashMap<PathBuf, Arc<LineIndex>>,
+    lru: VecDeque<PathBuf>,
+    bytes: usize,
+}
+
+impl LineIndexCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            bytes: 0,
+        }
     }
 
-    fn next_start_line(self) -> usize {
-        self.next_offset() + 1
+    fn entry_bytes(index: &LineIndex) -> usize {
+        index
+            .line_starts
+            .len()
+            .checked_mul(std::mem::size_of::<u64>())
+            .unwrap_or(usize::MAX)
+    }
+
+    fn remove(&mut self, key: &Path) {
+        if let Some(index) = self.entries.remove(key) {
+            self.bytes = self.bytes.saturating_sub(Self::entry_bytes(&index));
+        }
+        self.lru.retain(|candidate| candidate.as_path() != key);
+    }
+
+    fn touch(&mut self, key: PathBuf) {
+        self.lru
+            .retain(|candidate| candidate.as_path() != key.as_path());
+        self.lru.push_back(key);
+    }
+
+    fn get(&mut self, key: &Path, freshness: FileFreshness) -> Option<Arc<LineIndex>> {
+        let index = self.entries.get(key).cloned();
+        match index {
+            Some(index) if index.freshness == freshness => {
+                self.touch(key.to_path_buf());
+                Some(index)
+            }
+            Some(_) => {
+                self.remove(key);
+                None
+            }
+            None => None,
+        }
+    }
+
+    fn insert(&mut self, key: PathBuf, index: Arc<LineIndex>) {
+        let size = Self::entry_bytes(&index);
+        if size > MAX_INDEX_CACHE_BYTES || index.line_starts.len() > MAX_INDEX_ENTRIES {
+            return;
+        }
+        self.remove(&key);
+        while self.entries.len() >= MAX_INDEX_CACHE_ENTRIES
+            || self.bytes.saturating_add(size) > MAX_INDEX_CACHE_BYTES
+        {
+            let Some(oldest) = self.lru.pop_front() else {
+                break;
+            };
+            if let Some(old) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(Self::entry_bytes(&old));
+            }
+        }
+        self.bytes = self.bytes.saturating_add(size);
+        self.entries.insert(key.clone(), index);
+        self.lru.push_back(key);
+    }
+}
+
+fn line_index_cache() -> &'static Mutex<LineIndexCache> {
+    static CACHE: OnceLock<Mutex<LineIndexCache>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(LineIndexCache::new()))
+}
+
+fn freshness_from_metadata(metadata: &std::fs::Metadata) -> FileFreshness {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        return FileFreshness {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            mtime: (metadata.mtime(), metadata.mtime_nsec()),
+            ctime: (metadata.ctime(), metadata.ctime_nsec()),
+        };
+    }
+
+    #[cfg(not(unix))]
+    FileFreshness {
+        len: metadata.len(),
+        modified: metadata.modified().ok(),
+    }
+}
+
+fn freshness(path: &Path) -> Result<FileFreshness> {
+    Ok(freshness_from_metadata(&std::fs::metadata(path)?))
+}
+
+fn cache_key(path: &Path) -> PathBuf {
+    if let Ok(canonical) = std::fs::canonicalize(path) {
+        return canonical;
+    }
+    path.parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok())
+        .and_then(|parent| path.file_name().map(|name| parent.join(name)))
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+/// Invalidate an indexed read after a known mutation. Freshness checks still
+/// protect reads changed by other processes, including same-length writes.
+pub(crate) fn invalidate_read_index(path: &Path) {
+    let key = cache_key(path);
+    line_index_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&key);
+}
+
+#[cfg(test)]
+fn clear_read_index_for_tests() {
+    let mut cache = line_index_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *cache = LineIndexCache::new();
+}
+
+impl NormalizedReadRange {
+    fn next_offset(self) -> Option<usize> {
+        self.offset.checked_add(self.limit)
+    }
+
+    fn next_start_line(self) -> Option<usize> {
+        self.next_offset()?.checked_add(1)
     }
 }
 
@@ -248,8 +405,14 @@ impl Tool for ReadTool {
         // Add metadata
         if end < total_lines {
             let continuation_hint = match range.style {
-                ReadRangeStyle::OffsetLimit => format!("offset={}", range.next_offset()),
-                ReadRangeStyle::StartEnd => format!("start_line={}", range.next_start_line()),
+                ReadRangeStyle::OffsetLimit => range
+                    .next_offset()
+                    .map(|offset| format!("offset={offset}"))
+                    .unwrap_or_else(|| "a later offset".to_string()),
+                ReadRangeStyle::StartEnd => range
+                    .next_start_line()
+                    .map(|line| format!("start_line={line}"))
+                    .unwrap_or_else(|| "a later start_line".to_string()),
             };
             output.push_str(&format!(
                 "\n... {} more lines (use {} to continue)\n",
@@ -267,6 +430,31 @@ impl Tool for ReadTool {
 }
 
 fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
+    let key = cache_key(path);
+    let current_freshness = freshness(path)?;
+    if let Some(index) = line_index_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&key, current_freshness)
+    {
+        return read_indexed_range(path, range, &index);
+    }
+
+    if current_freshness.len < MIN_INDEX_FILE_BYTES {
+        return read_text_range_uncached(path, range);
+    }
+
+    let (result, index) = build_line_index_and_read(path, range, current_freshness)?;
+    if let Some(index) = index {
+        line_index_cache()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key, Arc::new(index));
+    }
+    Ok(result)
+}
+
+fn read_text_range_uncached(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
     use std::io::Read;
 
     let mut file = std::fs::File::open(path)?;
@@ -342,6 +530,276 @@ fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadRe
             },
             &mut truncated_line_count,
         )?;
+    }
+
+    Ok(TextReadResult {
+        output,
+        total_lines,
+        truncated_line_count,
+    })
+}
+
+fn build_line_index_and_read(
+    path: &Path,
+    range: NormalizedReadRange,
+    expected_freshness: FileFreshness,
+) -> Result<(TextReadResult, Option<LineIndex>)> {
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)?;
+    let actual_freshness = freshness_from_metadata(&file.metadata()?);
+    if actual_freshness != expected_freshness {
+        return Ok((read_text_range_uncached(path, range)?, None));
+    }
+
+    let mut chunk = [0u8; 64 * 1024];
+    let mut utf8_carry = Vec::with_capacity(3);
+    let mut line_prefix = Vec::with_capacity(MAX_LINE_LEN + 4);
+    let mut line_len = 0usize;
+    let mut line_last_byte = None;
+    let mut output = String::with_capacity(range.limit.min(2000) * 80);
+    let mut total_lines = 0usize;
+    let mut truncated_line_count = 0usize;
+    let end_exclusive = range
+        .offset
+        .checked_add(range.limit)
+        .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
+    let mut file_offset = 0u64;
+    let mut line_starts = vec![0u64];
+    let mut indexable = true;
+
+    loop {
+        let bytes_read = file.read(&mut chunk)?;
+        if bytes_read == 0 {
+            break;
+        }
+        validate_utf8_chunk(&mut utf8_carry, &chunk[..bytes_read])?;
+
+        let bytes = &chunk[..bytes_read];
+        let mut segment_start = 0;
+        for newline in memchr::memchr_iter(b'\n', bytes) {
+            retain_line_segment(
+                &mut line_prefix,
+                &mut line_len,
+                &mut line_last_byte,
+                &bytes[segment_start..newline],
+            );
+            total_lines = total_lines
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("file has too many lines"))?;
+            append_text_line(
+                &mut output,
+                total_lines,
+                range,
+                end_exclusive,
+                RetainedLine {
+                    prefix: &line_prefix,
+                    len: line_len,
+                    last_byte: line_last_byte,
+                },
+                &mut truncated_line_count,
+            )?;
+            if indexable {
+                let next = file_offset
+                    .checked_add(
+                        u64::try_from(newline)
+                            .map_err(|_| anyhow::anyhow!("file offset overflow"))?,
+                    )
+                    .and_then(|offset| offset.checked_add(1))
+                    .ok_or_else(|| anyhow::anyhow!("file offset overflow"))?;
+                if line_starts.len() < MAX_INDEX_ENTRIES.saturating_add(1) {
+                    line_starts.push(next);
+                } else {
+                    indexable = false;
+                    line_starts.clear();
+                }
+            }
+            line_prefix.clear();
+            line_len = 0;
+            line_last_byte = None;
+            segment_start = newline + 1;
+        }
+        retain_line_segment(
+            &mut line_prefix,
+            &mut line_len,
+            &mut line_last_byte,
+            &bytes[segment_start..],
+        );
+        file_offset = file_offset
+            .checked_add(
+                u64::try_from(bytes_read).map_err(|_| anyhow::anyhow!("file offset overflow"))?,
+            )
+            .ok_or_else(|| anyhow::anyhow!("file offset overflow"))?;
+    }
+
+    if !utf8_carry.is_empty() {
+        anyhow::bail!("stream did not contain valid UTF-8");
+    }
+    if line_len > 0 {
+        total_lines = total_lines
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("file has too many lines"))?;
+        append_text_line(
+            &mut output,
+            total_lines,
+            range,
+            end_exclusive,
+            RetainedLine {
+                prefix: &line_prefix,
+                len: line_len,
+                last_byte: line_last_byte,
+            },
+            &mut truncated_line_count,
+        )?;
+    }
+
+    if indexable {
+        if total_lines == 0 {
+            line_starts.clear();
+        }
+        if line_starts.last().copied() == Some(file_offset) {
+            line_starts.pop();
+        }
+        if freshness(path)? != expected_freshness {
+            return Ok((read_text_range_uncached(path, range)?, None));
+        }
+        let index = LineIndex {
+            freshness: expected_freshness,
+            file_len: file_offset,
+            line_starts,
+        };
+        return Ok((
+            TextReadResult {
+                output,
+                total_lines,
+                truncated_line_count,
+            },
+            Some(index),
+        ));
+    }
+
+    Ok((
+        TextReadResult {
+            output,
+            total_lines,
+            truncated_line_count,
+        },
+        None,
+    ))
+}
+
+fn read_indexed_range(
+    path: &Path,
+    range: NormalizedReadRange,
+    index: &LineIndex,
+) -> Result<TextReadResult> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let total_lines = index.line_starts.len();
+    let end_exclusive = range
+        .offset
+        .checked_add(range.limit)
+        .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
+    if range.offset >= total_lines {
+        return Ok(TextReadResult {
+            output: String::new(),
+            total_lines,
+            truncated_line_count: 0,
+        });
+    }
+
+    let start = index.line_starts[range.offset];
+    let end = index
+        .line_starts
+        .get(end_exclusive)
+        .copied()
+        .unwrap_or(index.file_len);
+    let length = end
+        .checked_sub(start)
+        .ok_or_else(|| anyhow::anyhow!("indexed line offsets are invalid"))?;
+    let mut file = std::fs::File::open(path)?;
+    let actual_freshness = freshness_from_metadata(&file.metadata()?);
+    if actual_freshness != index.freshness {
+        return read_text_range_uncached(path, range);
+    }
+    file.seek(SeekFrom::Start(start))?;
+    let mut reader = file.take(length);
+    let mut chunk = [0u8; 64 * 1024];
+    let mut utf8_carry = Vec::with_capacity(3);
+    let mut line_prefix = Vec::with_capacity(MAX_LINE_LEN + 4);
+    let mut line_len = 0usize;
+    let mut line_last_byte = None;
+    let mut output = String::with_capacity(range.limit.min(2000) * 80);
+    let mut line_number = range.offset;
+    let mut truncated_line_count = 0usize;
+    let mut segment_start;
+
+    loop {
+        let bytes_read = reader.read(&mut chunk)?;
+        if bytes_read == 0 {
+            break;
+        }
+        validate_utf8_chunk(&mut utf8_carry, &chunk[..bytes_read])?;
+        let bytes = &chunk[..bytes_read];
+        segment_start = 0;
+        for newline in memchr::memchr_iter(b'\n', bytes) {
+            retain_line_segment(
+                &mut line_prefix,
+                &mut line_len,
+                &mut line_last_byte,
+                &bytes[segment_start..newline],
+            );
+            line_number = line_number
+                .checked_add(1)
+                .ok_or_else(|| anyhow::anyhow!("line number overflow"))?;
+            append_text_line(
+                &mut output,
+                line_number,
+                range,
+                end_exclusive,
+                RetainedLine {
+                    prefix: &line_prefix,
+                    len: line_len,
+                    last_byte: line_last_byte,
+                },
+                &mut truncated_line_count,
+            )?;
+            line_prefix.clear();
+            line_len = 0;
+            line_last_byte = None;
+            segment_start = newline + 1;
+        }
+        retain_line_segment(
+            &mut line_prefix,
+            &mut line_len,
+            &mut line_last_byte,
+            &bytes[segment_start..],
+        );
+    }
+
+    if !utf8_carry.is_empty() {
+        anyhow::bail!("stream did not contain valid UTF-8");
+    }
+    if line_len > 0 {
+        line_number = line_number
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("line number overflow"))?;
+        append_text_line(
+            &mut output,
+            line_number,
+            range,
+            end_exclusive,
+            RetainedLine {
+                prefix: &line_prefix,
+                len: line_len,
+                last_byte: line_last_byte,
+            },
+            &mut truncated_line_count,
+        )?;
+    }
+
+    if freshness(path)? != index.freshness {
+        return read_text_range_uncached(path, range);
     }
 
     Ok(TextReadResult {

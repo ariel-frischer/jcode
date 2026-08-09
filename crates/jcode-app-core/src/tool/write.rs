@@ -76,6 +76,7 @@ impl Tool for WriteTool {
 
         // Write the file
         tokio::fs::write(&path, &params.content).await?;
+        super::read::invalidate_read_index(&path);
 
         let _new_len = params.content.len();
         let line_count = params.content.lines().count();

@@ -217,6 +217,7 @@ async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String
         if path.exists() {
             let old_content = tokio::fs::read_to_string(path).await.unwrap_or_default();
             tokio::fs::remove_file(path).await?;
+            super::read::invalidate_read_index(path);
             let diff = generate_diff(&old_content, "", 1);
             return Ok(("deleted".to_string(), diff));
         } else {
@@ -244,6 +245,7 @@ async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String
             .collect();
 
         tokio::fs::write(path, &content).await?;
+        super::read::invalidate_read_index(path);
         let diff = generate_diff("", &content, 1);
         return Ok(("created".to_string(), diff));
     }
@@ -270,6 +272,7 @@ async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String
 
     let new_content = lines.join("\n") + "\n";
     tokio::fs::write(path, &new_content).await?;
+    super::read::invalidate_read_index(path);
 
     let diff = generate_diff(&old_content, &new_content, first_line);
     Ok((format!("modified ({} hunks)", patch.hunks.len()), diff))

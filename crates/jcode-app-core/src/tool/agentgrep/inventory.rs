@@ -35,6 +35,10 @@ struct Stamp {
     modified: Option<SystemTime>,
     len: u64,
     is_dir: bool,
+    /// Unix ctime changes for writes even when a caller preserves mtime and
+    /// length.  On platforms without an equivalent, freshness falls back to
+    /// the stored content digest below.
+    change_id: Option<(u64, u64, i64, i64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -98,28 +102,34 @@ pub fn find(root: &Path, args: &FindArgs) -> FindResult {
         return result;
     }
 
-    let mut state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.next_use = state.next_use.wrapping_add(1);
+    let used = state.next_use;
     state.snapshots.retain(|snapshot| snapshot.key != key);
     state.snapshots.push(Snapshot {
         key,
         result: Arc::new(result.clone()),
         manifest,
         bytes,
-        used: state.next_use,
+        used,
     });
     evict(&mut state);
     result
 }
 
 fn lookup(key: &QueryKey, display_root: &Path) -> Option<FindResult> {
-    let mut state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let index = state.snapshots.iter().position(|snapshot| {
         snapshot.key == *key && manifest_is_fresh(&snapshot.key.root, &snapshot.manifest)
     })?;
     state.next_use = state.next_use.wrapping_add(1);
+    let used = state.next_use;
     let snapshot = &mut state.snapshots[index];
-    snapshot.used = state.next_use;
+    snapshot.used = used;
     let mut result = (*snapshot.result).clone();
     // Canonicalization is an internal key detail. Preserve the caller-visible
     // root spelling used by an uncached invocation.
@@ -127,7 +137,7 @@ fn lookup(key: &QueryKey, display_root: &Path) -> Option<FindResult> {
     Some(result)
 }
 
-fn build_manifest(root: &Path, result: &FindResult) -> Option<Manifest> {
+fn build_manifest(root: &Path, _result: &FindResult) -> Option<Manifest> {
     let mut directories = Vec::new();
     let mut policy_files = Vec::new();
     collect_directories(root, &mut directories, &mut policy_files)?;
@@ -176,8 +186,10 @@ fn collect_directories(
         if file_type.is_dir() {
             collect_directories(&path, directories, policy_files)?;
         } else if file_type.is_file()
-            && matches!(path.file_name().and_then(|name| name.to_str()),
-                Some(".gitignore" | ".ignore" | ".rgignore"))
+            && matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some(".gitignore" | ".ignore" | ".rgignore")
+            )
         {
             policy_files.push((path.clone(), stamp(&path)?, digest_file(&path)?));
         }
@@ -209,7 +221,11 @@ fn manifest_is_fresh(root: &Path, manifest: &Manifest) -> bool {
 
     manifest.policy_files.iter().all(policy_matches)
         && manifest.files.iter().all(|(path, expected, digest)| {
-            stamp(path).as_ref() == Some(expected) && digest_file(path) == Some(*digest)
+            let Some(actual) = stamp(path) else {
+                return false;
+            };
+            actual == *expected
+                && (expected.change_id.is_some() || digest_file(path) == Some(*digest))
         })
 }
 
@@ -223,7 +239,25 @@ fn stamp(path: &Path) -> Option<Stamp> {
         modified: metadata.modified().ok(),
         len: metadata.len(),
         is_dir: metadata.is_dir(),
+        change_id: change_id(&metadata),
     })
+}
+
+#[cfg(unix)]
+fn change_id(metadata: &std::fs::Metadata) -> Option<(u64, u64, i64, i64)> {
+    use std::os::unix::fs::MetadataExt;
+
+    Some((
+        metadata.dev(),
+        metadata.ino(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    ))
+}
+
+#[cfg(not(unix))]
+fn change_id(_metadata: &std::fs::Metadata) -> Option<(u64, u64, i64, i64)> {
+    None
 }
 
 fn digest_file(path: &Path) -> Option<u64> {
@@ -275,7 +309,11 @@ fn estimate_bytes(key: &QueryKey, result: &FindResult, manifest: &Manifest) -> u
 
 fn evict(state: &mut State) {
     while state.snapshots.len() > MAX_REPOSITORIES
-        || state.snapshots.iter().map(|snapshot| snapshot.bytes).sum::<usize>()
+        || state
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.bytes)
+            .sum::<usize>()
             > MAX_TOTAL_BYTES
     {
         let Some(index) = state
@@ -312,7 +350,11 @@ mod tests {
     }
 
     fn clear() {
-        STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).snapshots.clear();
+        STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .snapshots
+            .clear();
     }
 
     #[test]
@@ -322,19 +364,35 @@ mod tests {
         clear();
         let first = find(directory.path(), &args("visible"));
         let uncached = run_find(directory.path(), &args("visible"));
-        assert_eq!(serde_json::to_value(&first.files).unwrap(), serde_json::to_value(&uncached.files).unwrap());
+        assert_eq!(
+            serde_json::to_value(&first.files).unwrap(),
+            serde_json::to_value(&uncached.files).unwrap()
+        );
 
-        fs::write(directory.path().join("new_visible.rs"), "fn new_visible() {}\n").unwrap();
+        fs::write(
+            directory.path().join("new_visible.rs"),
+            "fn new_visible() {}\n",
+        )
+        .unwrap();
         let created = find(directory.path(), &args("new_visible"));
-        assert_eq!(created.files, run_find(directory.path(), &args("new_visible")).files);
+        assert_eq!(
+            serde_json::to_value(&created.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("new_visible")).files).unwrap()
+        );
 
         fs::remove_file(directory.path().join("visible.rs")).unwrap();
         let deleted = find(directory.path(), &args("visible"));
-        assert_eq!(deleted.files, run_find(directory.path(), &args("visible")).files);
+        assert_eq!(
+            serde_json::to_value(&deleted.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("visible")).files).unwrap()
+        );
 
         fs::write(directory.path().join(".gitignore"), "new_visible.rs\n").unwrap();
         let ignored = find(directory.path(), &args("new_visible"));
-        assert_eq!(ignored.files, run_find(directory.path(), &args("new_visible")).files);
+        assert_eq!(
+            serde_json::to_value(&ignored.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("new_visible")).files).unwrap()
+        );
     }
 
     #[test]
@@ -347,9 +405,49 @@ mod tests {
         let mut typed = args("one");
         typed.file_type = Some("rs".into());
         let typed_result = find(directory.path(), &typed);
-        assert!(typed_result.files.iter().all(|file| file.path.ends_with(".rs")));
-        let state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            typed_result
+                .files
+                .iter()
+                .all(|file| file.path.ends_with(".rs"))
+        );
+        let state = STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         assert!(state.snapshots.len() <= MAX_REPOSITORIES);
-        assert!(state.snapshots.iter().map(|snapshot| snapshot.bytes).sum::<usize>() <= MAX_TOTAL_BYTES);
+        assert!(
+            state
+                .snapshots
+                .iter()
+                .map(|snapshot| snapshot.bytes)
+                .sum::<usize>()
+                <= MAX_TOTAL_BYTES
+        );
+    }
+
+    #[test]
+    fn same_length_file_write_invalidates_snapshot() {
+        let directory = tempfile::Builder::new()
+            .prefix("jcode-inventory-test-")
+            .tempdir_in(std::env::current_dir().unwrap())
+            .unwrap();
+        let root = directory.path().to_path_buf();
+        let path = root.join("same.rs");
+        fs::write(&path, "fn visible() {}\n").unwrap();
+        clear();
+        let first = find(&root, &args("same"));
+        assert_eq!(first.files.len(), 1);
+
+        // Keep length stable so mtime/size-only validation cannot accept stale
+        // results.  Unix ctime is the cheap warm-path write detector.
+        fs::write(&path, "fn hiddenx() {}\n").unwrap();
+        let current = find(&root, &args("same"));
+        let uncached = run_find(&root, &args("same"));
+        assert_eq!(
+            serde_json::to_value(&current.files).unwrap(),
+            serde_json::to_value(&uncached.files).unwrap()
+        );
+        assert_eq!(current.files.len(), 1);
+        assert_eq!(current.files[0].structure.items[0].label, "hiddenx");
     }
 }

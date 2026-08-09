@@ -97,6 +97,7 @@ impl Tool for ApplyPatchTool {
                         tokio::fs::create_dir_all(parent).await?;
                     }
                     tokio::fs::write(&resolved, contents).await?;
+                    super::read::invalidate_read_index(&resolved);
                     let diff = generate_diff_summary("", contents);
                     publish_file_touch(
                         &ctx,
@@ -134,6 +135,7 @@ impl Tool for ApplyPatchTool {
                         .await
                         .unwrap_or_default();
                     if tokio::fs::remove_file(&resolved).await.is_ok() {
+                        super::read::invalidate_read_index(&resolved);
                         let diff = generate_diff_summary(&old_contents, "");
                         publish_file_touch(
                             &ctx,
@@ -169,6 +171,8 @@ impl Tool for ApplyPatchTool {
                                 }
                                 tokio::fs::write(&dest_resolved, &new_contents).await?;
                                 let _ = tokio::fs::remove_file(&resolved).await;
+                                super::read::invalidate_read_index(&resolved);
+                                super::read::invalidate_read_index(&dest_resolved);
                                 publish_file_touch(
                                     &ctx,
                                     &resolved,
@@ -205,6 +209,7 @@ impl Tool for ApplyPatchTool {
                                 }
                             } else {
                                 tokio::fs::write(&resolved, &new_contents).await?;
+                                super::read::invalidate_read_index(&resolved);
                                 publish_file_touch(
                                     &ctx,
                                     &resolved,

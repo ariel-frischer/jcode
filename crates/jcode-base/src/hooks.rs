@@ -349,6 +349,7 @@ enum PersistentBrokerRequest {
 struct PersistentChild {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
+    probe_startup: bool,
 }
 
 static PERSISTENT_BROKERS: OnceLock<Mutex<HashMap<String, PersistentBrokerEntry>>> =
@@ -463,6 +464,7 @@ fn persistent_broker_loop(
                         "Persistent observer hook '{command}' failed: {error}"
                     ));
                     stop_persistent_child(&mut process);
+                    spawn_observer_fallback(&command, &event);
                 }
             }
             PersistentBrokerRequest::Gate {
@@ -489,8 +491,42 @@ fn persistent_send_observer(
     ensure_persistent_child(command, event, false, process)?;
     let child = process.as_mut().expect("persistent child was started");
     write_persistent_envelope(&mut child.stdin, event, None)?;
-    let _ = child.child.try_wait()?;
+    if let Some(status) = child.child.try_wait()? {
+        return Err(std::io::Error::other(format!(
+            "worker exited after receiving event ({status})"
+        )));
+    }
+    if child.probe_startup {
+        child.probe_startup = false;
+        // Only the first event pays this bounded probe. It closes the race where
+        // an invalid worker exits just after accepting its first envelope, while
+        // steady-state events remain a single write plus a nonblocking poll.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        if let Some(status) = child.child.try_wait()? {
+            return Err(std::io::Error::other(format!(
+                "worker exited during startup ({status})"
+            )));
+        }
+    }
     Ok(())
+}
+
+fn spawn_observer_fallback(command: &str, event: &HookEvent) {
+    match build_hook_process(command, event) {
+        Ok(mut cmd) => {
+            cmd.stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            if let Err(error) = crate::platform::spawn_detached(&mut cmd) {
+                crate::logging::warn(&format!(
+                    "Persistent observer hook '{command}' fallback failed to start: {error}"
+                ));
+            }
+        }
+        Err(error) => crate::logging::warn(&format!(
+            "Persistent observer hook '{command}' fallback command is invalid: {error}"
+        )),
+    }
 }
 
 fn persistent_send_gate(
@@ -597,7 +633,11 @@ fn ensure_persistent_child(
             "persistent hook stdin unavailable",
         )
     })?;
-    *process = Some(PersistentChild { child, stdin });
+    *process = Some(PersistentChild {
+        child,
+        stdin,
+        probe_startup: true,
+    });
     Ok(())
 }
 
@@ -613,19 +653,19 @@ fn write_persistent_envelope(
     event: &HookEvent,
     tool_input_json: Option<&str>,
 ) -> std::io::Result<()> {
-    let mut env = BTreeMap::new();
-    env.insert("JCODE_HOOKS_DISABLED", "1".to_string());
-    env.insert("JCODE_HOOK_EVENT", event.event.to_string());
+    let mut env = BTreeMap::<String, String>::new();
+    env.insert("JCODE_HOOKS_DISABLED".to_string(), "1".to_string());
+    env.insert("JCODE_HOOK_EVENT".to_string(), event.event.to_string());
     if let Some(session_id) = &event.session_id {
-        env.insert("JCODE_HOOK_SESSION_ID", session_id.clone());
+        env.insert("JCODE_HOOK_SESSION_ID".to_string(), session_id.clone());
     }
     if let Some(cwd) = &event.cwd {
-        env.insert("JCODE_HOOK_CWD", cwd.clone());
+        env.insert("JCODE_HOOK_CWD".to_string(), cwd.clone());
     }
     for (key, value) in &event.fields {
         env.insert(format!("JCODE_HOOK_{key}"), value.clone());
     }
-    env.insert("JCODE_HOOK_PAYLOAD", payload_json(event));
+    env.insert("JCODE_HOOK_PAYLOAD".to_string(), payload_json(event));
     let envelope = serde_json::json!({
         "payload": payload_json(event),
         "tool_input": tool_input_json,
@@ -1010,6 +1050,152 @@ mod tests {
         }
         assert_eq!(std::fs::read_to_string(first_record).unwrap(), "first");
         assert_eq!(std::fs::read_to_string(second_record).unwrap(), "second");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persistent_observer_reuses_worker_and_preserves_lifecycle_order() {
+        let _guard = crate::storage::lock_test_env();
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let record = temp.path().join("persistent.txt");
+        let script = write_executable_script(
+            temp.path(),
+            "persistent.sh",
+            &format!(
+                "#!/bin/sh\nwhile IFS= read -r line; do printf '%s:%s\\n' \"$$\" \"$line\" >> {}; done\n",
+                crate::terminal_launch::sh_escape(&record.to_string_lossy())
+            ),
+        );
+        let previous = std::env::var_os("JCODE_HOOK_TURN_START");
+        crate::env::set_var(
+            "JCODE_HOOK_TURN_START",
+            format!("persistent:{}", script.to_string_lossy()),
+        );
+
+        dispatch_observer(HookEvent::new("turn_start").session_id("ses_order"));
+        dispatch_observer(
+            HookEvent::new("turn_start")
+                .session_id("ses_order")
+                .field("STATUS", "done"),
+        );
+        let mut lines = Vec::new();
+        for _ in 0..100 {
+            if let Ok(contents) = std::fs::read_to_string(&record) {
+                lines = contents.lines().map(str::to_owned).collect();
+                if lines.len() == 2 {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        match previous {
+            Some(value) => crate::env::set_var("JCODE_HOOK_TURN_START", value),
+            None => crate::env::remove_var("JCODE_HOOK_TURN_START"),
+        }
+
+        assert_eq!(lines.len(), 2);
+        let (first_pid, first_line) = lines[0].split_once(':').expect("first worker line");
+        let (second_pid, second_line) = lines[1].split_once(':').expect("second worker line");
+        assert_eq!(first_pid, second_pid, "events should reuse one worker");
+        let first: serde_json::Value = serde_json::from_str(first_line).unwrap();
+        let second: serde_json::Value = serde_json::from_str(second_line).unwrap();
+        let first_payload: serde_json::Value =
+            serde_json::from_str(first["payload"].as_str().unwrap()).unwrap();
+        let second_payload: serde_json::Value =
+            serde_json::from_str(second["payload"].as_str().unwrap()).unwrap();
+        assert_eq!(first_payload["event"], "turn_start");
+        assert_eq!(first_payload["session_id"], "ses_order");
+        assert_eq!(second_payload["status"], "done");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persistent_observer_restarts_worker_after_exit() {
+        let _guard = crate::storage::lock_test_env();
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let record = temp.path().join("restart.txt");
+        let script = write_executable_script(
+            temp.path(),
+            "one-shot.sh",
+            &format!(
+                "#!/bin/sh\nIFS= read -r line || exit 0\nprintf '%s\\n' \"$$\" >> {}\nexit 0\n",
+                crate::terminal_launch::sh_escape(&record.to_string_lossy())
+            ),
+        );
+        let previous = std::env::var_os("JCODE_HOOK_TURN_END");
+        crate::env::set_var(
+            "JCODE_HOOK_TURN_END",
+            format!("persistent:{}", script.to_string_lossy()),
+        );
+
+        dispatch_observer(HookEvent::new("turn_end").session_id("ses_restart"));
+        for _ in 0..100 {
+            if std::fs::read_to_string(&record)
+                .map(|contents| !contents.trim().is_empty())
+                .unwrap_or(false)
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        dispatch_observer(HookEvent::new("turn_end").session_id("ses_restart"));
+        let mut lines = Vec::new();
+        for _ in 0..100 {
+            if let Ok(contents) = std::fs::read_to_string(&record) {
+                lines = contents.lines().map(str::to_owned).collect();
+                if lines.len() == 2 {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        match previous {
+            Some(value) => crate::env::set_var("JCODE_HOOK_TURN_END", value),
+            None => crate::env::remove_var("JCODE_HOOK_TURN_END"),
+        }
+
+        assert_eq!(lines.len(), 2);
+        assert_ne!(lines[0], lines[1], "a dead worker must be replaced");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persistent_observer_falls_back_when_worker_exits() {
+        let _guard = crate::storage::lock_test_env();
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let record = temp.path().join("fallback.txt");
+        let script = write_executable_script(
+            temp.path(),
+            "failing-worker.sh",
+            &format!(
+                "#!/bin/sh\nif [ \"$JCODE_HOOK_BROKER\" = 1 ]; then exit 1; fi\nprintf 'fallback:%s\\n' \"$JCODE_HOOK_EVENT\" >> {}\n",
+                crate::terminal_launch::sh_escape(&record.to_string_lossy())
+            ),
+        );
+        let previous = std::env::var_os("JCODE_HOOK_SESSION_END");
+        crate::env::set_var(
+            "JCODE_HOOK_SESSION_END",
+            format!("persistent:{}", script.to_string_lossy()),
+        );
+
+        dispatch_observer(HookEvent::new("session_end").session_id("ses_fallback"));
+        let mut recorded = String::new();
+        for _ in 0..100 {
+            if let Ok(contents) = std::fs::read_to_string(&record)
+                && !contents.is_empty()
+            {
+                recorded = contents;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        match previous {
+            Some(value) => crate::env::set_var("JCODE_HOOK_SESSION_END", value),
+            None => crate::env::remove_var("JCODE_HOOK_SESSION_END"),
+        }
+
+        assert_eq!(recorded.trim(), "fallback:session_end");
     }
 
     #[tokio::test]
