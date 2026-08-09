@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+#[path = "agent_tests/run_safety.rs"]
 mod run_safety;
 
 struct DelayedProvider {
