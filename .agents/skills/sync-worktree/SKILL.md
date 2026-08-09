@@ -7,6 +7,25 @@ description: Sync a remote branch into dev through an isolated worktree, resolve
 
 Use this workflow for remote branch synchronization. It keeps conflict resolution and validation isolated until the result is ready to land.
 
+## Request semantics
+
+When the user says to "sync upstream into this branch," interpret the goal as
+ensuring that the target branch contains the latest tip of the configured
+`upstream` remote's default branch, not as requiring a merge commit. Confirm the
+remote and branch first, then fetch and compare the tips:
+
+- If the upstream tip is already an ancestor of the target branch, the branch is
+  already synchronized. Do not create an empty or unnecessary merge commit, and
+  report explicitly that no merge ran and therefore no conflicts were possible.
+- If the target branch does not contain the upstream tip, integrate it through
+  the isolated worktree workflow below, resolve any conflicts there, validate,
+  and land the result into the target branch without rewriting history.
+
+The completion report must distinguish among an actual merge, a fast-forward,
+and an already-synchronized no-op. Include concrete evidence such as the fetched
+upstream commit, the ancestor/divergence check, conflict status, and final
+working-tree state.
+
 ## 1. Inspect remotes and preserve local state
 
 From the repository root:
