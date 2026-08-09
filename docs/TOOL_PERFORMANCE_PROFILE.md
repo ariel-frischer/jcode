@@ -1,8 +1,8 @@
 # Common Tool CPU and Memory Profile
 
-Status: current-state measurement and implemented optimization
-Measured: 2026-08-08
-Bead: `jcode-skr`
+Status: current-state measurement and implementation retry evidence
+Measured: 2026-08-09
+Bead: `jcode-znm` (portfolio baseline: `jcode-skr`)
 
 ## Scope
 
@@ -168,6 +168,65 @@ outcomes, and the Beads workflow records `jcode-d5o`, `jcode-8mj`, and
 `jcode-yx7` as blocked `needs-redesign` while the other five are closed
 `investigation-only`. Thus no rejected or acceptance-incomplete runtime candidate
 crossed the repository, package, daemon, or client integration boundary.
+
+## 2026-08-09 implementation retry evidence
+
+The three redesign Beads were resumed in isolated worktrees and integrated into a
+fresh checkout for validation. The implementation is opt-in where behavior could
+change: persistent hooks require the `persistent:` command prefix, while ordinary
+hooks retain their one-process-per-event contract. The integrated checkout built
+both `target/selfdev/jcode` and `target/selfdev/tool_profile` after formatting.
+
+Focused fresh-base checks passed:
+
+- `jcode-base` hooks tests: 15 passed, including persistent reuse, restart,
+  fallback, lifecycle ordering, payload, environment, recursion suppression, and
+  fail-open behavior.
+- `jcode-app-core` read tests: 20 passed, including warm parity, same-length
+  replacement invalidation, UTF-8, CRLF, blank lines, oversized lines, and range
+  metadata.
+- `jcode-app-core` inventory tests: 3 passed, including bounded retention,
+  filter-key isolation, create/delete/policy invalidation, and same-length writes.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+
+The built profiler ran three randomized rounds with seed `20260809`. Its warm
+medians are useful evidence, but not a complete acceptance claim because the
+harness warms once before measuring each process:
+
+| Case | No hooks wall/CPU | Ordinary hook wall/CPU | Persistent hook wall/CPU |
+|---|---:|---:|---:|
+| `read_tiny` | 0.115/0.102 ms | 0.688/0.375 ms | 0.123/0.253 ms |
+| `bash_true` | 1.296/1.496 ms | 1.227/1.262 ms | 0.917/1.539 ms |
+| `read_large_head` | 0.278/0.222 ms | 1.490/0.895 ms | 0.935/0.841 ms |
+| `read_large_tail` | 0.336/0.249 ms | 1.105/0.547 ms | 0.758/0.577 ms |
+| `agentgrep_find` | 1.044/1.127 ms | 1.923/1.541 ms | 1.075/1.678 ms |
+
+Persistent observers reduced `read_tiny` wall time by 82.1% versus ordinary
+spawn and `bash_true` wall time by 25.3%. The profiler's parent `RUSAGE_CHILDREN`
+value is not a valid per-event CPU comparison for the persistent case because the
+broker worker remains alive instead of exiting per event. That accounting gap is
+explicitly retained as an acceptance limitation rather than reported as a CPU
+win.
+
+The private built-daemon path also passed representative behavior checks:
+
+- Five `read` calls through one persistent-hook daemon produced exactly five
+  NDJSON `post_tool` envelopes, with matching session ID, tool name, status,
+  payload, and `JCODE_HOOKS_DISABLED=1` recursion suppression. No duplicates or
+  drops were observed.
+- A near-tail read returned lines 900,000 through 900,019 with the exact
+  continuation count of 99,981. A same-length in-place mutation was observed on
+  the next read at line 123,456, proving index freshness in the daemon path.
+- Repeated daemon `agentgrep find` calls returned identical Cargo results. A
+  temporary fixture was then created, renamed, and deleted; the built daemon
+  returned 1, 1, and 0 matching files respectively, proving cache invalidation
+  across those transitions.
+
+The original Beads remain open pending the still-required cold/random benchmark
+matrix, complete built-binary CPU attribution for persistent workers, and full
+security/guardrail review. These results validate the implementation and public
+smoke path without overstating acceptance. Rollback is the integration merge
+commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
