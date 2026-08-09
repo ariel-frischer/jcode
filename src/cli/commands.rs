@@ -2533,19 +2533,40 @@ Re-run with `--force` if you really want to stop the server.";
     Ok(())
 }
 
+pub(crate) struct RunSingleMessageOptions<'a> {
+    pub(crate) reasoning_effort: Option<&'a str>,
+    pub(crate) profile_run_options: Option<&'a super::profile::ProfileRunOptions>,
+    pub(crate) resume_session: Option<&'a str>,
+    pub(crate) message: &'a str,
+    pub(crate) emit_json: bool,
+    pub(crate) emit_ndjson: bool,
+    pub(crate) schema_path: Option<&'a str>,
+    pub(crate) invocation_safety: crate::config::RunSafetyConfig,
+}
+
+struct RunSingleMessageSchemaOptions<'a> {
+    profile_run_options: Option<&'a super::profile::ProfileRunOptions>,
+    resume_session: Option<&'a str>,
+    message: &'a str,
+    schema_path: &'a str,
+}
+
 pub(crate) async fn run_single_message_command(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
-    reasoning_effort: Option<&str>,
-    profile_run_options: Option<&super::profile::ProfileRunOptions>,
-    resume_session: Option<&str>,
-    message: &str,
-    emit_json: bool,
-    emit_ndjson: bool,
-    schema_path: Option<&str>,
-    invocation_safety: crate::config::RunSafetyConfig,
+    options: RunSingleMessageOptions<'_>,
 ) -> Result<()> {
+    let RunSingleMessageOptions {
+        reasoning_effort,
+        profile_run_options,
+        resume_session,
+        message,
+        emit_json,
+        emit_ndjson,
+        schema_path,
+        invocation_safety,
+    } = options;
     let safety_candidates = run_safety::load_candidates(invocation_safety)?;
 
     if let Some(schema_path) = schema_path {
@@ -2554,11 +2575,12 @@ pub(crate) async fn run_single_message_command(
             choice,
             model,
             provider_profile,
-            reasoning_effort,
-            profile_run_options,
-            resume_session,
-            message,
-            schema_path,
+            RunSingleMessageSchemaOptions {
+                profile_run_options,
+                resume_session,
+                message,
+                schema_path,
+            },
         )
         .await;
     }
@@ -2627,12 +2649,14 @@ async fn run_single_message_command_schema(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
-    _reasoning_effort: Option<&str>,
-    _profile_run_options: Option<&super::profile::ProfileRunOptions>,
-    resume_session: Option<&str>,
-    message: &str,
-    schema_path: &str,
+    options: RunSingleMessageSchemaOptions<'_>,
 ) -> Result<()> {
+    let RunSingleMessageSchemaOptions {
+        profile_run_options,
+        resume_session,
+        message,
+        schema_path,
+    } = options;
     // Read and parse the schema before starting a server or creating a session.
     // The SDK owns schema compilation and validation, but malformed file input
     // is a CLI trust-boundary error and must not reach a model turn.
@@ -2642,7 +2666,7 @@ async fn run_single_message_command_schema(
     // cannot be handed to an already-running daemon by the current protocol,
     // so only reuse the ordinary bootstrap when this invocation has no profile;
     // profile runs reject an existing daemon before it can receive a request.
-    if let Some(options) = _profile_run_options {
+    if let Some(options) = profile_run_options {
         let profile_name = options.profile_name.as_deref().ok_or_else(|| {
             anyhow::anyhow!("structured profile run is missing its selected profile name")
         })?;

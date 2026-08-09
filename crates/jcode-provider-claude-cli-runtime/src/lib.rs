@@ -491,22 +491,18 @@ impl CliOutputParser {
                 let mut events = Vec::new();
                 for block in blocks {
                     match block {
-                        SdkContentBlock::Text { text } => {
-                            if !self.saw_stream_events {
-                                events.push(StreamEvent::TextDelta(text));
-                            }
+                        SdkContentBlock::Text { text } if !self.saw_stream_events => {
+                            events.push(StreamEvent::TextDelta(text));
                         }
-                        SdkContentBlock::ToolUse { id, name, input } => {
-                            if !self.saw_stream_events {
-                                events.push(StreamEvent::ToolUseStart {
-                                    id,
-                                    name: to_internal_tool_name(&name),
-                                });
-                                events.push(StreamEvent::ToolInputDelta(
-                                    serde_json::to_string(&input).unwrap_or_default(),
-                                ));
-                                events.push(StreamEvent::ToolUseEnd);
-                            }
+                        SdkContentBlock::ToolUse { id, name, input } if !self.saw_stream_events => {
+                            events.push(StreamEvent::ToolUseStart {
+                                id,
+                                name: to_internal_tool_name(&name),
+                            });
+                            events.push(StreamEvent::ToolInputDelta(
+                                serde_json::to_string(&input).unwrap_or_default(),
+                            ));
+                            events.push(StreamEvent::ToolUseEnd);
                         }
                         SdkContentBlock::ToolResult {
                             tool_use_id,

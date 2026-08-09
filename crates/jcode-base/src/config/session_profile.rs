@@ -220,8 +220,9 @@ pub struct ResolvedProfileSnapshot {
 
 /// Safe restore outcome persisted with a session so the client can explain
 /// profile drift without re-reading or printing profile secrets.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum ProfileRestoreStatus {
+    #[default]
     Legacy,
     Matching,
     Missing {
@@ -232,12 +233,6 @@ pub enum ProfileRestoreStatus {
         changed_fields: Vec<String>,
     },
     ExplicitNone,
-}
-
-impl Default for ProfileRestoreStatus {
-    fn default() -> Self {
-        Self::Legacy
-    }
 }
 
 impl ProfileRestoreStatus {
@@ -1001,7 +996,7 @@ fn builtin_tool_names() -> [&'static str; 29] {
     ]
 }
 
-fn closest_tool_names<'a>(needle: &str, available: &[&'a str]) -> Vec<String> {
+fn closest_tool_names(needle: &str, available: &[&str]) -> Vec<String> {
     let needle = normalize_tool_name(needle).to_ascii_lowercase();
     if needle.is_empty() {
         return Vec::new();

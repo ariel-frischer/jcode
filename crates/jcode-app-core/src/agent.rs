@@ -705,7 +705,7 @@ impl Agent {
                             .cloned()
                             .collect()
                     })
-                    .unwrap_or_else(HashSet::new),
+                    .unwrap_or_default(),
             }
         } else if let Some(snapshot) = inherited_snapshot.as_ref() {
             crate::config::ToolSelection {

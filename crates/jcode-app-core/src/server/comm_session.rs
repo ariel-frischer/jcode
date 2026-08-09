@@ -64,6 +64,12 @@ async fn client_terminal_env_for_session(
         .unwrap_or_default()
 }
 
+struct VisibleSpawnProfile {
+    profile_name: Option<String>,
+    profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+    profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
+}
+
 fn create_visible_spawn_session(
     working_dir: Option<&str>,
     model_override: Option<&str>,
@@ -71,9 +77,7 @@ fn create_visible_spawn_session(
     route_api_method_override: Option<&str>,
     effort_override: Option<&str>,
     selfdev_requested: bool,
-    profile_name: Option<String>,
-    profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
-    profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
+    profile: VisibleSpawnProfile,
 ) -> anyhow::Result<(String, PathBuf)> {
     let cwd = working_dir
         .map(PathBuf::from)
@@ -102,9 +106,9 @@ fn create_visible_spawn_session(
     if selfdev_requested {
         session.set_canary("self-dev");
     }
-    session.profile_name = profile_name;
-    session.profile_snapshot = profile_snapshot;
-    session.profile_restore_status = profile_restore_status;
+    session.profile_name = profile.profile_name;
+    session.profile_snapshot = profile.profile_snapshot;
+    session.profile_restore_status = profile.profile_restore_status;
     session.save()?;
 
     Ok((session.id.clone(), cwd))
@@ -488,9 +492,11 @@ where
         route_api_method_override,
         effort_override,
         selfdev_requested,
-        profile_name,
-        profile_snapshot,
-        profile_restore_status,
+        VisibleSpawnProfile {
+            profile_name,
+            profile_snapshot,
+            profile_restore_status,
+        },
     )?;
 
     if let Some(message) = startup_message {

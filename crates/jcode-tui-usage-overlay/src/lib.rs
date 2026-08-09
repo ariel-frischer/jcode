@@ -366,10 +366,8 @@ impl UsageOverlay {
             KeyCode::End | KeyCode::Char('G') => {
                 self.selected = self.filtered.len().saturating_sub(1);
             }
-            KeyCode::Backspace => {
-                if self.filter.pop().is_some() {
-                    self.apply_filter();
-                }
+            KeyCode::Backspace if self.filter.pop().is_some() => {
+                self.apply_filter();
             }
             KeyCode::Char(c)
                 if !modifiers.contains(KeyModifiers::CONTROL)

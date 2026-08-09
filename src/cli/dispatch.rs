@@ -230,14 +230,16 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 &args.provider,
                 args.model.as_deref(),
                 args.provider_profile.as_deref(),
-                args.reasoning_effort.as_deref(),
-                profile_run_options.as_ref(),
-                args.resume.as_deref(),
-                &message,
-                json,
-                ndjson,
-                schema.as_deref(),
-                run_safety.into(),
+                commands::RunSingleMessageOptions {
+                    reasoning_effort: args.reasoning_effort.as_deref(),
+                    profile_run_options: profile_run_options.as_ref(),
+                    resume_session: args.resume.as_deref(),
+                    message: &message,
+                    emit_json: json,
+                    emit_ndjson: ndjson,
+                    schema_path: schema.as_deref(),
+                    invocation_safety: run_safety.into(),
+                },
             )
             .await?;
         }
@@ -1310,10 +1312,8 @@ fn ensure_profile_server_bootstrap(
     socket_path: &std::path::Path,
     server_running: bool,
 ) -> Result<()> {
-    if server_running {
-        if let Some(profile_name) = profile_name {
-            return Err(profile_shared_daemon_error(profile_name, socket_path));
-        }
+    if server_running && let Some(profile_name) = profile_name {
+        return Err(profile_shared_daemon_error(profile_name, socket_path));
     }
     Ok(())
 }

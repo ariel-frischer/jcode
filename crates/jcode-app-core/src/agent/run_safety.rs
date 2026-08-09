@@ -158,7 +158,7 @@ pub struct RunSafetyStopMetadata {
     pub source: RunSafetySource,
 }
 
-fn source_value<'a>(config: &'a RunSafetyConfig, bound: RunSafetyBound) -> Option<&'a str> {
+fn source_value(config: &RunSafetyConfig, bound: RunSafetyBound) -> Option<&str> {
     match bound {
         RunSafetyBound::MaxTurns => config.max_turns.as_deref(),
         RunSafetyBound::MaxToolSteps => config.max_tool_steps.as_deref(),
@@ -167,10 +167,10 @@ fn source_value<'a>(config: &'a RunSafetyConfig, bound: RunSafetyBound) -> Optio
     }
 }
 
-fn resolve_raw<'a>(
-    candidates: &'a RunSafetyCandidates,
+fn resolve_raw(
+    candidates: &RunSafetyCandidates,
     bound: RunSafetyBound,
-) -> (Option<&'a str>, RunSafetySource) {
+) -> (Option<&str>, RunSafetySource) {
     for (source, config) in [
         (RunSafetySource::Invocation, &candidates.invocation),
         (RunSafetySource::Environment, &candidates.environment),
@@ -204,10 +204,7 @@ fn parse_positive(
 
 fn parse_deadline(source: RunSafetySource, value: &str) -> Result<Instant, RunSafetyError> {
     let correction = "use a future RFC3339 timestamp with an explicit UTC offset";
-    let parsed = match DateTime::parse_from_rfc3339(value.trim()) {
-        Ok(parsed) => Some(parsed),
-        Err(_) => None,
-    };
+    let parsed = DateTime::parse_from_rfc3339(value.trim()).ok();
     let Some(parsed) = parsed else {
         return Err(RunSafetyError {
             bound: RunSafetyBound::Deadline,

@@ -40,6 +40,13 @@ pub struct PromptCapabilities {
     pub mermaid: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PromptBuildOptions<'a> {
+    capabilities: PromptCapabilities,
+    profile_overlay: Option<&'a crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&'a crate::config::SkillPolicy>,
+}
+
 impl Default for PromptCapabilities {
     fn default() -> Self {
         Self { mermaid: true }
@@ -414,9 +421,11 @@ pub fn build_system_prompt_full_with_overlay(
         is_selfdev,
         memory_prompt,
         working_dir,
-        PromptCapabilities::current(),
-        profile_overlay,
-        None,
+        PromptBuildOptions {
+            capabilities: PromptCapabilities::current(),
+            profile_overlay,
+            skill_policy: None,
+        },
     )
 }
 
@@ -437,9 +446,11 @@ pub fn build_system_prompt_full_with_overlay_and_policy(
         is_selfdev,
         memory_prompt,
         working_dir,
-        PromptCapabilities::current(),
-        profile_overlay,
-        skill_policy,
+        PromptBuildOptions {
+            capabilities: PromptCapabilities::current(),
+            profile_overlay,
+            skill_policy,
+        },
     )
 }
 
@@ -457,9 +468,11 @@ pub fn build_system_prompt_full_with_capabilities(
         is_selfdev,
         memory_prompt,
         working_dir,
-        capabilities,
-        None,
-        None,
+        PromptBuildOptions {
+            capabilities,
+            profile_overlay: None,
+            skill_policy: None,
+        },
     )
 }
 
@@ -469,10 +482,13 @@ fn build_system_prompt_full_with_overlay_and_capabilities(
     is_selfdev: bool,
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
-    capabilities: PromptCapabilities,
-    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
-    skill_policy: Option<&crate::config::SkillPolicy>,
+    options: PromptBuildOptions<'_>,
 ) -> (String, ContextInfo) {
+    let PromptBuildOptions {
+        capabilities,
+        profile_overlay,
+        skill_policy,
+    } = options;
     let mut parts = base_system_prompt_parts(capabilities, working_dir);
     let mut info = ContextInfo {
         system_prompt_chars: parts.join("\n\n").len(),
@@ -581,9 +597,11 @@ pub fn build_system_prompt_split_with_overlay(
         is_selfdev,
         memory_prompt,
         working_dir,
-        PromptCapabilities::current(),
-        profile_overlay,
-        None,
+        PromptBuildOptions {
+            capabilities: PromptCapabilities::current(),
+            profile_overlay,
+            skill_policy: None,
+        },
     )
 }
 
@@ -603,9 +621,11 @@ pub fn build_system_prompt_split_with_overlay_and_policy(
         is_selfdev,
         memory_prompt,
         working_dir,
-        PromptCapabilities::current(),
-        profile_overlay,
-        skill_policy,
+        PromptBuildOptions {
+            capabilities: PromptCapabilities::current(),
+            profile_overlay,
+            skill_policy,
+        },
     )
 }
 
@@ -623,9 +643,11 @@ pub fn build_system_prompt_split_with_capabilities(
         is_selfdev,
         memory_prompt,
         working_dir,
-        capabilities,
-        None,
-        None,
+        PromptBuildOptions {
+            capabilities,
+            profile_overlay: None,
+            skill_policy: None,
+        },
     )
 }
 
@@ -635,10 +657,13 @@ fn build_system_prompt_split_with_overlay_and_capabilities(
     is_selfdev: bool,
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
-    capabilities: PromptCapabilities,
-    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
-    skill_policy: Option<&crate::config::SkillPolicy>,
+    options: PromptBuildOptions<'_>,
 ) -> (SplitSystemPrompt, ContextInfo) {
+    let PromptBuildOptions {
+        capabilities,
+        profile_overlay,
+        skill_policy,
+    } = options;
     let mut static_parts = base_system_prompt_parts(capabilities, working_dir);
     let mut dynamic_parts = Vec::new();
     let mut info = ContextInfo {

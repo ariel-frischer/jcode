@@ -250,6 +250,7 @@ impl BedrockProvider {
         jcode_provider_env::load_api_key_from_env_or_config(API_KEY_ENV, ENV_FILE)
     }
 
+    #[cfg(feature = "aws-sdk")]
     fn configured_bearer_token_for_runtime() -> Option<String> {
         Self::configured_profile()
             .is_none()
@@ -1279,10 +1280,10 @@ impl Provider for BedrockProvider {
                                 }
                             }
                         }
-                        ConverseStreamOutput::ContentBlockStop(_) => {
-                            if current_tool.take().is_some() {
-                                let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
-                            }
+                        ConverseStreamOutput::ContentBlockStop(_)
+                            if current_tool.take().is_some() =>
+                        {
+                            let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
                         }
                         ConverseStreamOutput::MessageStop(stop) => {
                             let reason = Some(format!("{:?}", stop.stop_reason()));

@@ -777,10 +777,8 @@ async fn consume_native_stream(
                 }
                 // Opaque reasoning signals: the model reasoned but the runtime
                 // surfaces only a signature/encrypted item, not readable text.
-                StreamEvent::ThinkingSignatureDelta(signature) => {
-                    if !signature.is_empty() {
-                        outcome.saw_reasoning_signal = true;
-                    }
+                StreamEvent::ThinkingSignatureDelta(signature) if !signature.is_empty() => {
+                    outcome.saw_reasoning_signal = true;
                 }
                 StreamEvent::OpenAIReasoning { .. } => {
                     outcome.saw_reasoning_signal = true;
