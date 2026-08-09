@@ -1,3 +1,7 @@
+use super::*;
+use crate::tool::{Tool, ToolContext};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 #[tokio::test]
 async fn agent_safety_state_is_opt_in_and_non_persisted() {
     let provider: Arc<dyn Provider> = Arc::new(DelayedProvider {

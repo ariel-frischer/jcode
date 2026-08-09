@@ -1,3 +1,5 @@
+use super::*;
+
 #[test]
 fn legacy_config_without_run_safety_section_remains_unset() {
     let cfg: Config =

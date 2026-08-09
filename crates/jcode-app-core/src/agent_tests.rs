@@ -2,13 +2,13 @@ use super::*;
 use crate::agent::environment::EnvSnapshotDetail;
 use crate::message::{Message, StreamEvent, ToolDefinition};
 use crate::provider::{EventStream, Provider};
-use crate::tool::{Registry, Tool, ToolContext, ToolOutput};
+use crate::tool::{Registry, ToolOutput};
 use async_trait::async_trait;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
-include!("agent_tests/run_safety.rs");
+#[path = "agent_tests/run_safety.rs"]
+mod run_safety;
 
 struct DelayedProvider {
     open_delay: Duration,
