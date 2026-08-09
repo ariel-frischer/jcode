@@ -541,7 +541,7 @@ impl Registry {
         result: &Result<ToolOutput>,
         latency_ms: u64,
     ) {
-        if !crate::hooks::hook_configured("post_tool") {
+        if !crate::hooks::hook_configured_for_tool("post_tool", resolved_name) {
             return;
         }
         let mut event = crate::hooks::HookEvent::new("post_tool")
@@ -656,7 +656,7 @@ impl Registry {
 
         // User-configured pre_tool gate: external policy hook that can block
         // this call (exit 2). Skipped entirely when not configured.
-        if crate::hooks::hook_configured("pre_tool") {
+        if crate::hooks::hook_configured_for_tool("pre_tool", resolved_name) {
             let input_json = input.to_string();
             let working_dir = ctx
                 .working_dir

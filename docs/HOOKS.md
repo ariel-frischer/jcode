@@ -15,12 +15,19 @@ session_start = ""                            # observer
 session_end   = ""                            # observer
 pre_tool      = "~/bin/jcode-tool-policy"     # gate
 post_tool     = ""                            # observer
+pre_tool_tools = ["swarm"]                    # optional canonical tool filter
+post_tool_tools = ["swarm"]                   # optional canonical tool filter
 pre_tool_timeout_ms = 5000
 ```
 
 Env overrides (always win; empty value disables a config hook):
 `JCODE_HOOK_TURN_END`, `JCODE_HOOK_SESSION_START`, `JCODE_HOOK_SESSION_END`,
 `JCODE_HOOK_PRE_TOOL`, `JCODE_HOOK_POST_TOOL`, `JCODE_HOOK_PRE_TOOL_TIMEOUT_MS`.
+
+`pre_tool_tools` and `post_tool_tools` optionally restrict the corresponding
+tool hook to a list of canonical resolved tool names. An absent or empty list
+preserves the default of applying to every tool. Tool aliases are resolved
+before matching, so `communicate` matches `swarm`.
 
 ## Common contract
 
@@ -62,13 +69,13 @@ attached), or `resume` (restored by id). `session_end` fires on normal close
 
 ### `post_tool`
 
-Fires after every tool call. Extra fields: `JCODE_HOOK_TOOL_NAME`,
+Fires after every selected tool call. Extra fields: `JCODE_HOOK_TOOL_NAME`,
 `JCODE_HOOK_STATUS`, `JCODE_HOOK_DURATION_MS`, `JCODE_HOOK_OUTPUT_BYTES` (on
 success), `JCODE_HOOK_ERROR` (on failure).
 
 ## Gate hook: `pre_tool`
 
-`pre_tool` runs **synchronously before every tool call** and can block it:
+`pre_tool` runs **synchronously before every selected tool call** and can block it:
 
 - The hook receives `JCODE_HOOK_TOOL_NAME` plus the full tool input JSON on
   **stdin** (and a 16 KB-truncated copy in `JCODE_HOOK_TOOL_INPUT`).

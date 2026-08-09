@@ -237,11 +237,13 @@ fn hooks_config_defaults_and_parses_from_toml() {
     assert_eq!(defaults.session_start, None);
     assert_eq!(defaults.session_end, None);
     assert_eq!(defaults.pre_tool, None);
+    assert!(defaults.pre_tool_tools.is_empty());
     assert_eq!(defaults.post_tool, None);
+    assert!(defaults.post_tool_tools.is_empty());
     assert_eq!(defaults.pre_tool_timeout_ms, 5000);
 
     let cfg: Config = toml::from_str(
-        "[hooks]\nturn_start = \"notify-start\"\nturn_end = \"notify-turn\"\npre_tool = \"~/bin/policy\"\npre_tool_timeout_ms = 1500\n",
+        "[hooks]\nturn_start = \"notify-start\"\nturn_end = \"notify-turn\"\npre_tool = \"~/bin/policy\"\npre_tool_tools = [\"bash\", \"communicate\"]\npost_tool_tools = [\"read\"]\npre_tool_timeout_ms = 1500\n",
     )
     .expect("hooks config should parse");
     assert_eq!(
@@ -257,6 +259,8 @@ fn hooks_config_defaults_and_parses_from_toml() {
         Some("~/bin/policy")
     );
     assert_eq!(cfg.hooks.pre_tool_timeout_ms, 1500);
+    assert_eq!(cfg.hooks.pre_tool_tools, vec!["bash", "communicate"]);
+    assert_eq!(cfg.hooks.post_tool_tools, vec!["read"]);
 
     let cfg: Config = toml::from_str(
         "[hooks]\nturn_end = [\"notify-one --direct\", \"notify-two 'quoted arg'\"]\npre_tool = [\"policy-a\", \"policy-b\"]\n",
@@ -285,6 +289,8 @@ fn hooks_config_defaults_and_parses_from_toml() {
     let round_trip: Config = toml::from_str(&serialized).expect("serialized hooks should parse");
     assert_eq!(round_trip.hooks.turn_end, cfg.hooks.turn_end);
     assert_eq!(round_trip.hooks.pre_tool, cfg.hooks.pre_tool);
+    assert_eq!(round_trip.hooks.pre_tool_tools, cfg.hooks.pre_tool_tools);
+    assert_eq!(round_trip.hooks.post_tool_tools, cfg.hooks.post_tool_tools);
 }
 
 #[test]
