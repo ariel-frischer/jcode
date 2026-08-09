@@ -775,7 +775,18 @@ phases:
         - id: "T063"
           title: "Run repository guardrails and record deterministic evidence"
           status: "Blocked"
-          blocked_reason: Guardrails ran in the feature worktree with JCODE_IN_DEV_CARGO=1. Format, module, lockfile, warning, dependency-boundary, frame-budget, and onboarding gates passed. Blocked by pre-existing cargo check failure in src/cli/commands_tests.rs, pre-existing clippy failure in crates/jcode-render-core/src/markdown.rs, and repository ratchet baselines that report unrelated existing debt plus feature-surface file-size growth; fixing requires out-of-scope refactors or baseline changes.
+          blocked_reason: >-
+            Current dev validation on 2026-08-09 resolved the historical blockers:
+            `JCODE_IN_DEV_CARGO=1 cargo check -p jcode --lib` passed and
+            `JCODE_IN_DEV_CARGO=1 cargo clippy -p jcode-render-core --all-targets
+            --all-features -- -D warnings` passed. `JCODE_IN_DEV_CARGO=1
+            scripts/check_guardrails.sh --skip-slow` still fails only the
+            oversized-file, oversized-test, panic-prone-usage, and
+            swallowed-error ratchets. The size ratchets include intentional
+            profile feature growth and would require broad file splitting or
+            baseline changes; panic/swallowed-error failures also include
+            unrelated later changes. Per the stability constraint, no broad
+            refactor or baseline update was made.
           type: "test"
           parallel: false
           story_id: null
@@ -786,7 +797,7 @@ phases:
             - "Validation records exact commands, results, toolchain, and any unrelated pre-existing failures without changing baselines."
         - id: "T064"
           title: "Perform the narrow manual TUI rendering and raw-input check"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -797,7 +808,7 @@ phases:
             - "The environment, exact steps, expected observations, and result are recorded without using live/costly provider traffic."
         - id: "T065"
           title: "Validate the completed tasks artifact against the Autospec schema"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
