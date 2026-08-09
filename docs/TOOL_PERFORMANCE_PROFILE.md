@@ -308,6 +308,18 @@ from 87,920 to 95,740 KiB, a 7,820 KiB delta, or 396 KiB more in this sample.
 This is bounded process-growth evidence with exact public output parity, not an
 allocator-level attribution of bytes to the inventory cache.
 
+A public cache-capacity stress probe then queried ten distinct repository roots,
+each containing 300 Rust files, through the same `agentgrep find` debug-socket
+path. This deliberately exceeded the implementation's eight-repository resident
+cap while retaining exact output hashes. Historical process `VmHWM` rose from
+88,736 to 96,164 KiB, a 7,428 KiB delta. Optimized `VmHWM` rose from 88,312 to
+96,440 KiB, an 8,128 KiB delta, or 700 KiB more in this workload. All ten first
+call hashes matched between binaries, repeated calls were stable, and public
+create/delete transitions changed and restored the expected result. The sequence
+exercises over-capacity behavior and bounded process growth, but the public
+protocol does not expose resident-cache count, and `/proc` memory still includes
+daemon initialization and allocator effects.
+
 A paired public read probe then expanded the cold-read evidence across five line-shape
 fixtures using the same private debug-socket protocol and historical compatibility-
 patched binary. Every output hash and byte count matched. The first-call and
@@ -327,6 +339,23 @@ small two-sample warm probes and five cold samples are not a host-contention
 confidence interval, and the oversized-line cold result remains a near-neutral
 sample rather than a universal no-regression claim.
 
+To strengthen the cold comparison, each binary then ran five fresh private-daemon
+samples for each of the same five fixtures, for 25 cold samples per binary. The
+output hashes remained identical on every sample. Per-fixture medians were:
+
+| Fixture | Historical median | Optimized median | Median delta |
+|---|---:|---:|---:|
+| Short lines | 4.918 ms | 4.453 ms | 9.5% lower |
+| Approximately 1 KiB lines | 2.915 ms | 3.161 ms | 8.4% higher |
+| Mixed-length lines | 7.619 ms | 6.553 ms | 14.0% lower |
+| CRLF lines | 6.097 ms | 5.072 ms | 16.8% lower |
+| 1.25 MiB line | 1.019 ms | 0.987 ms | 3.1% lower |
+
+The optimized first-call median was lower on four of five fixture shapes, with
+one small long-line regression inside the observed timing range. This materially
+strengthens the no-regression observation, but does not establish a statistical
+gate under host contention or a larger distribution of file sizes.
+
 Finally, the exact current `target/selfdev/tool_profile` ran the production
 `Registry::execute` profiler with configured hooks enabled for two randomized
 rounds, four iterations for normal cases, and one for large cases. All 28 case
@@ -338,7 +367,7 @@ real configured-hook integration path and its output contract, but it is not a
 paired historical hook benchmark and does not close the production-representative
 observer CPU requirement.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a statistically stronger cold no-regression confidence gate across file sizes and host contention, inventory-specific memory attribution, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a statistically stronger cold no-regression confidence gate across file sizes and host contention, allocator-level inventory memory attribution and direct resident-cap observation, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
