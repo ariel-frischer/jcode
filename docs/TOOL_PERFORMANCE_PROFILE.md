@@ -308,7 +308,37 @@ from 87,920 to 95,740 KiB, a 7,820 KiB delta, or 396 KiB more in this sample.
 This is bounded process-growth evidence with exact public output parity, not an
 allocator-level attribution of bytes to the inventory cache.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a cross-fixture paired cold baseline and no-regression confidence gate, inventory-specific memory attribution, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+A paired public read probe then expanded the cold-read evidence across five line-shape
+fixtures using the same private debug-socket protocol and historical compatibility-
+patched binary. Every output hash and byte count matched. The first-call and
+two-call warm samples were:
+
+| Fixture | Historical cold / warm median | Optimized cold / warm median | Observation |
+|---|---:|---:|---|
+| 80,000 short lines | 6.514 / 5.779 ms | 5.667 / 1.119 ms | 13.0% lower cold, 80.6% lower warm |
+| 8,000 approximately 1 KiB lines | 2.560 / 2.210 ms | 2.261 / 0.537 ms | 11.7% lower cold, 75.7% lower warm |
+| 60,000 mixed-length lines | 7.689 / 6.523 ms | 5.243 / 0.417 ms | 31.8% lower cold, 93.6% lower warm |
+| 80,000 CRLF lines | 4.735 / 5.833 ms | 4.308 / 0.363 ms | 9.0% lower cold, 93.8% lower warm |
+| 1.25 MiB line plus 100 short lines | 0.567 / 0.565 ms | 0.581 / 0.522 ms | 2.5% higher cold, 7.7% lower warm |
+
+This closes the specific cross-fixture correctness observation and adds evidence
+of warm benefit across short, long, mixed, CRLF, and oversized-line inputs. The
+small two-sample warm probes and five cold samples are not a host-contention
+confidence interval, and the oversized-line cold result remains a near-neutral
+sample rather than a universal no-regression claim.
+
+Finally, the exact current `target/selfdev/tool_profile` ran the production
+`Registry::execute` profiler with configured hooks enabled for two randomized
+rounds, four iterations for normal cases, and one for large cases. All 28 case
+processes completed with valid tool-profile output. Representative configured-hook
+medians were `read_tiny` 27.151 ms wall / 28.459 ms CPU, `read_large_head`
+30.825 / 33.358 ms, `read_large_tail` 30.105 / 32.794 ms, `agentgrep_find`
+29.293 / 31.113 ms, and `bash_true` 27.938 / 29.705 ms. The run verifies the
+real configured-hook integration path and its output contract, but it is not a
+paired historical hook benchmark and does not close the production-representative
+observer CPU requirement.
+
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a statistically stronger cold no-regression confidence gate across file sizes and host contention, inventory-specific memory attribution, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
