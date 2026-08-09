@@ -45,11 +45,7 @@ fn run_safety_flags_preserve_raw_values() {
         "hello",
     ])
     .expect("run safety flags should parse");
-    let Some(Command::Run {
-        run_safety,
-        ..
-    }) = args.command
-    else {
+    let Some(Command::Run { run_safety, .. }) = args.command else {
         panic!("expected run command");
     };
     assert_eq!(run_safety.max_turns.as_deref(), Some(" 3 "));
