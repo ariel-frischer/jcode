@@ -52,6 +52,12 @@ struct TextReadResult {
     truncated_line_count: usize,
 }
 
+struct RetainedLine<'a> {
+    prefix: &'a [u8],
+    len: usize,
+    last_byte: Option<u8>,
+}
+
 impl NormalizedReadRange {
     fn next_offset(self) -> usize {
         self.offset + self.limit
@@ -299,9 +305,11 @@ fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadRe
                 total_lines,
                 range,
                 end_exclusive,
-                &line_prefix,
-                line_len,
-                line_last_byte,
+                RetainedLine {
+                    prefix: &line_prefix,
+                    len: line_len,
+                    last_byte: line_last_byte,
+                },
                 &mut truncated_line_count,
             )?;
             line_prefix.clear();
@@ -327,9 +335,11 @@ fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadRe
             total_lines,
             range,
             end_exclusive,
-            &line_prefix,
-            line_len,
-            line_last_byte,
+            RetainedLine {
+                prefix: &line_prefix,
+                len: line_len,
+                last_byte: line_last_byte,
+            },
             &mut truncated_line_count,
         )?;
     }
@@ -375,18 +385,16 @@ fn append_text_line(
     line_number: usize,
     range: NormalizedReadRange,
     end_exclusive: usize,
-    line_prefix: &[u8],
-    line_len: usize,
-    line_last_byte: Option<u8>,
+    line: RetainedLine<'_>,
     truncated_line_count: &mut usize,
 ) -> Result<()> {
     if line_number <= range.offset || line_number > end_exclusive {
         return Ok(());
     }
 
-    let logical_len = line_len - usize::from(line_last_byte == Some(b'\r'));
-    let retained_len = logical_len.min(line_prefix.len());
-    let retained_bytes = &line_prefix[..retained_len];
+    let logical_len = line.len - usize::from(line.last_byte == Some(b'\r'));
+    let retained_len = logical_len.min(line.prefix.len());
+    let retained_bytes = &line.prefix[..retained_len];
     let retained = match std::str::from_utf8(retained_bytes) {
         Ok(retained) => retained,
         Err(error) if error.error_len().is_none() => {
