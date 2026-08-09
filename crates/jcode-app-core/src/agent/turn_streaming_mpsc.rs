@@ -245,7 +245,10 @@ impl Agent {
             drop(cache_signature_messages);
             drop(ephemeral_signature_messages);
             let mut keepalive = stream_keepalive_ticker();
-            let mut stream = {
+            let safety_deadline =
+                wait_for_run_safety_deadline(self.run_safety_deadline_remaining());
+            tokio::pin!(safety_deadline);
+            let stream = {
                 let mut complete_future = std::pin::pin!(provider.complete_split(
                     send_messages,
                     &tools,
@@ -264,9 +267,13 @@ impl Agent {
                             );
                             return Ok(());
                         }
+                        _ = &mut safety_deadline => {
+                            self.run_safety_observe_usage();
+                            break None;
+                        }
                         result = &mut complete_future => {
                             match result {
-                                Ok(stream) => break stream,
+                                Ok(stream) => break Some(stream),
                                 Err(e) => {
                                     if self.try_auto_compact_after_context_limit(&e.to_string()) {
                                         context_limit_retries += 1;
@@ -298,6 +305,9 @@ impl Agent {
                         }
                     }
                 }
+            };
+            let Some(mut stream) = stream else {
+                break;
             };
 
             // `complete_split` has consumed the request and returned an owned
@@ -395,6 +405,10 @@ impl Agent {
                         logging::info(
                             "Graceful shutdown/cancel while waiting for API stream event - stopping stream",
                         );
+                        break;
+                    }
+                    _ = &mut safety_deadline => {
+                        self.run_safety_observe_usage();
                         break;
                     }
                     event = next_event => event,
@@ -835,7 +849,8 @@ impl Agent {
                         tool_name,
                         input,
                     } => {
-                        // Execute native tool and send result back to SDK bridge
+                        // Execute native tool and send result back to SDK bridge.
+                        // Check the run-safety budget immediately before Registry work.
                         let ctx = ToolContext {
                             session_id: self.session.id.clone(),
                             message_id: self.session.id.clone(),
@@ -845,17 +860,28 @@ impl Agent {
                             graceful_shutdown_signal: Some(self.graceful_shutdown.clone()),
                             execution_mode: ToolExecutionMode::AgentTurn,
                         };
-                        crate::telemetry::record_tool_call();
-                        let tool_result = self
-                            .registry
-                            .execute(&tool_name, ToolCall::normalize_input_to_object(input), ctx)
-                            .await;
-                        if tool_result.is_err() {
-                            crate::telemetry::record_tool_failure();
-                        }
-                        let native_result = match tool_result {
-                            Ok(output) => NativeToolResult::success(request_id, output.output),
-                            Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                        let native_result = if self.run_safety_before_tool_step() {
+                            crate::telemetry::record_tool_call();
+                            let tool_result = self
+                                .registry
+                                .execute(
+                                    &tool_name,
+                                    ToolCall::normalize_input_to_object(input),
+                                    ctx,
+                                )
+                                .await;
+                            if tool_result.is_err() {
+                                crate::telemetry::record_tool_failure();
+                            }
+                            match tool_result {
+                                Ok(output) => NativeToolResult::success(request_id, output.output),
+                                Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                            }
+                        } else {
+                            NativeToolResult::error(
+                                request_id,
+                                run_safety::RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string(),
+                            )
                         };
                         if let Some(sender) = self.provider.native_result_sender() {
                             let _ = sender.send(native_result).await;
@@ -1251,9 +1277,15 @@ impl Agent {
                 tool_calls.len()
             ));
 
+            let all_tool_calls = tool_calls.clone();
             if self.provider.handles_tools_internally() {
                 tool_calls.retain(|tc| JCODE_NATIVE_TOOLS.contains(&tc.name.as_str()));
                 if tool_calls.is_empty() {
+                    if safety_stopped_after_usage {
+                        if self.emit_run_safety_skipped_tool_results(&event_tx, &all_tool_calls) {
+                            self.session.save()?;
+                        }
+                    }
                     // === INJECTION POINT D: After provider-handled tools, before next API call ===
                     let injected = self.inject_soft_interrupts();
                     if !injected.is_empty() {
@@ -1268,7 +1300,7 @@ impl Agent {
             }
 
             if safety_stopped_after_usage {
-                if self.emit_run_safety_skipped_tool_results(&event_tx, &tool_calls) {
+                if self.emit_run_safety_skipped_tool_results(&event_tx, &all_tool_calls) {
                     self.session.save()?;
                 }
                 break;

@@ -150,11 +150,18 @@ fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
 
 #[test]
 fn schema_mode_rejects_explicit_run_safety_flags_before_bridge_start() {
-    let safety = crate::config::RunSafetyConfig {
+    let mut candidates = crate::agent::run_safety::RunSafetyCandidates::default();
+    candidates.invocation = crate::config::RunSafetyConfig {
         max_turns: Some("1".to_string()),
         ..Default::default()
     };
-    let error = reject_schema(&safety).expect_err("schema must reject bound");
+    let error = reject_schema(&candidates).expect_err("schema must reject bound");
     assert!(error.to_string().contains("unsupported with --schema"));
+    candidates = Default::default();
+    candidates.persisted.max_turns = Some("1".to_string());
+    reject_schema(&candidates).expect_err("persisted bound must reject schema");
+    candidates = Default::default();
+    candidates.environment.max_turns = Some("1".to_string());
+    reject_schema(&candidates).expect_err("environment bound must reject schema");
     reject_schema(&Default::default()).expect("unset safety is allowed");
 }

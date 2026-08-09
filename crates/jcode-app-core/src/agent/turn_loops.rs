@@ -150,17 +150,23 @@ impl Agent {
             let send_messages = stamped.as_deref().unwrap_or(&messages_with_memory);
             let prompt_has_recent_tool_result = Self::messages_end_with_tool_result(send_messages);
             self.last_status_detail = None;
-            let mut stream = match self
-                .provider
-                .complete_split(
+            let safety_deadline =
+                wait_for_run_safety_deadline(self.run_safety_deadline_remaining());
+            tokio::pin!(safety_deadline);
+            let provider_result = tokio::select! {
+                result = self.provider.complete_split(
                     send_messages,
                     &tools,
                     &split_prompt.static_part,
                     &split_prompt.dynamic_part,
                     self.provider_session_id.as_deref(),
-                )
-                .await
-            {
+                ) => result,
+                _ = &mut safety_deadline => {
+                    self.run_safety_observe_usage();
+                    break;
+                }
+            };
+            let mut stream = match provider_result {
                 Ok(stream) => stream,
                 Err(e) => {
                     if self.try_auto_compact_after_context_limit(&e.to_string()) {
@@ -233,7 +239,18 @@ impl Agent {
             let mut openai_native_compaction: Option<(String, usize)> = None;
 
             let mut retry_after_compaction = false;
-            while let Some(event) = stream.next().await {
+            loop {
+                let next_event = std::pin::pin!(stream.next());
+                let event = tokio::select! {
+                    event = next_event => event,
+                    _ = &mut safety_deadline => {
+                        self.run_safety_observe_usage();
+                        break;
+                    }
+                };
+                let Some(event) = event else {
+                    break;
+                };
                 let event = match event {
                     Ok(event) => event,
                     Err(e) => {
@@ -604,17 +621,28 @@ impl Agent {
                             graceful_shutdown_signal: Some(self.graceful_shutdown.clone()),
                             execution_mode: ToolExecutionMode::AgentTurn,
                         };
-                        crate::telemetry::record_tool_call();
-                        let tool_result = self
-                            .registry
-                            .execute(&tool_name, ToolCall::normalize_input_to_object(input), ctx)
-                            .await;
-                        if tool_result.is_err() {
-                            crate::telemetry::record_tool_failure();
-                        }
-                        let native_result = match tool_result {
-                            Ok(output) => NativeToolResult::success(request_id, output.output),
-                            Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                        let native_result = if self.run_safety_before_tool_step() {
+                            crate::telemetry::record_tool_call();
+                            let tool_result = self
+                                .registry
+                                .execute(
+                                    &tool_name,
+                                    ToolCall::normalize_input_to_object(input),
+                                    ctx,
+                                )
+                                .await;
+                            if tool_result.is_err() {
+                                crate::telemetry::record_tool_failure();
+                            }
+                            match tool_result {
+                                Ok(output) => NativeToolResult::success(request_id, output.output),
+                                Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                            }
+                        } else {
+                            NativeToolResult::error(
+                                request_id,
+                                run_safety::RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string(),
+                            )
                         };
                         // Send result back to SDK bridge
                         if let Some(sender) = self.provider.native_result_sender() {

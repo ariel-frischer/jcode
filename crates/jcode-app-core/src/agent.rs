@@ -70,6 +70,13 @@ static WORKING_GIT_STATE_CACHE: LazyLock<StdMutex<HashMap<PathBuf, Option<GitSta
     LazyLock::new(|| StdMutex::new(HashMap::new()));
 const STREAM_KEEPALIVE_PONG_ID: u64 = 0;
 
+pub(crate) async fn wait_for_run_safety_deadline(remaining: Option<Duration>) {
+    match remaining {
+        Some(remaining) => tokio::time::sleep(remaining).await,
+        None => std::future::pending::<()>().await,
+    }
+}
+
 fn stable_hash_str(value: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     value.hash(&mut hasher);
@@ -970,6 +977,12 @@ impl Agent {
             .as_mut()
             .map(|state| state.before_tool_step())
             .unwrap_or(true)
+    }
+
+    pub(crate) fn run_safety_deadline_remaining(&self) -> Option<Duration> {
+        self.run_safety
+            .as_ref()
+            .and_then(|state| state.deadline_remaining())
     }
 
     pub fn run_safety_complete_turn(&mut self) {

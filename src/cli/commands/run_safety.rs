@@ -18,12 +18,33 @@ pub(super) struct RunCommandReport {
     pub(super) safety_bound: Option<crate::agent::run_safety::RunSafetyStopMetadata>,
 }
 
-pub(super) fn reject_schema(safety: &crate::config::RunSafetyConfig) -> Result<()> {
-    if safety.max_turns.is_some()
-        || safety.max_tool_steps.is_some()
-        || safety.token_budget.is_some()
-        || safety.deadline.is_some()
-    {
+pub(super) fn load_candidates(
+    invocation: crate::config::RunSafetyConfig,
+) -> Result<crate::agent::run_safety::RunSafetyCandidates> {
+    let (persisted, environment) = crate::config::Config::run_safety_sources()?;
+    Ok(crate::agent::run_safety::RunSafetyCandidates {
+        invocation,
+        environment,
+        persisted,
+    })
+}
+
+pub(super) fn reject_schema(
+    candidates: &crate::agent::run_safety::RunSafetyCandidates,
+) -> Result<()> {
+    let has_bound = [
+        &candidates.invocation,
+        &candidates.environment,
+        &candidates.persisted,
+    ]
+    .into_iter()
+    .any(|safety| {
+        safety.max_turns.is_some()
+            || safety.max_tool_steps.is_some()
+            || safety.token_budget.is_some()
+            || safety.deadline.is_some()
+    });
+    if has_bound {
         bail!(
             "run safety options are unsupported with --schema; use ordinary --json, --ndjson, or plain output"
         );
@@ -33,15 +54,8 @@ pub(super) fn reject_schema(safety: &crate::config::RunSafetyConfig) -> Result<(
 
 pub(super) fn install(
     agent: &mut crate::agent::Agent,
-    invocation: crate::config::RunSafetyConfig,
+    candidates: crate::agent::run_safety::RunSafetyCandidates,
 ) -> Result<()> {
-    let (persisted, environment) = crate::config::Config::run_safety_sources()?;
-    let candidates = crate::agent::run_safety::RunSafetyCandidates {
-        invocation,
-        environment,
-        persisted,
-    };
-    crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())?;
     let policy =
         crate::agent::run_safety::resolve_run_safety(&candidates, agent.token_usage_totals())?;
     if policy.max_turns.is_some()

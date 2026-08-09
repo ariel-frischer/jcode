@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use jcode_config_types::RunSafetyConfig;
 use serde::Serialize;
 use std::num::NonZeroU64;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::logging;
 use crate::message::{ContentBlock, Role, ToolCall};
@@ -347,6 +347,12 @@ impl RunSafetyController {
         self.observed_usage
     }
 
+    pub fn deadline_remaining(&self) -> Option<Duration> {
+        self.policy
+            .deadline
+            .map(|deadline| deadline.saturating_duration_since(Instant::now()))
+    }
+
     fn select(&mut self, reason: RunStopReason) {
         if self.stop_reason.is_none() {
             self.stop_reason = Some(reason);
@@ -428,7 +434,7 @@ impl RunSafetyController {
     }
 }
 
-const RUN_SAFETY_SKIPPED_TOOL_RESULT: &str = "[Skipped: run safety bound reached]";
+pub(crate) const RUN_SAFETY_SKIPPED_TOOL_RESULT: &str = "[Skipped: run safety bound reached]";
 
 impl crate::agent::Agent {
     pub(super) fn record_run_safety_skipped_tool_result(&mut self, tool_call: &ToolCall) {

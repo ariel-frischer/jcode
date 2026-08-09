@@ -2388,8 +2388,11 @@ pub async fn run_single_message_command(
     schema_path: Option<&str>,
     invocation_safety: crate::config::RunSafetyConfig,
 ) -> Result<()> {
+    let safety_candidates = run_safety::load_candidates(invocation_safety)?;
+    crate::agent::run_safety::resolve_run_safety(&safety_candidates, Default::default())?;
+
     if let Some(schema_path) = schema_path {
-        run_safety::reject_schema(&invocation_safety)?;
+        run_safety::reject_schema(&safety_candidates)?;
         return run_single_message_command_schema(
             choice,
             model,
@@ -2428,7 +2431,7 @@ pub async fn run_single_message_command(
     }
     let mut agent = crate::agent::Agent::new(provider.clone(), registry);
     restore_agent_session_if_requested(&mut agent, resume_session)?;
-    run_safety::install(&mut agent, invocation_safety)?;
+    run_safety::install(&mut agent, safety_candidates)?;
 
     if emit_json {
         let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;

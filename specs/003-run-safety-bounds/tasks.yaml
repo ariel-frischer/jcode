@@ -479,12 +479,12 @@ parallel_execution:
           rationale: "Policy resolver implementation and dispatch plumbing touch separate layers once their preceding tests/flags are ready."
     - phase: 4
       parallel_groups:
-        - tasks: ["T017", "T019"]
-          rationale: "CLI zero-work validation tests and pure controller threshold tests touch separate test modules after parsing is implemented."
+        - tasks: ["T017"]
+          rationale: "CLI zero-work validation tests are independent after parsing is implemented."
     - phase: 5
       parallel_groups:
-        - tasks: ["T024", "T025"]
-          rationale: "Capture-loop integration and streaming-mpsc test authoring use separate source/test surfaces after the Agent API is available."
+        - tasks: ["T019", "T024", "T025"]
+          rationale: "Controller threshold tests and capture/streaming integration surfaces are independent after the shared Agent safety API is available."
     - phase: 7
       parallel_groups:
         - tasks: ["T032", "T033"]
