@@ -7,10 +7,14 @@ use async_trait::async_trait;
 use jcode_terminal_image::{ImageDisplayParams, ImageProtocol, display_image};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::Path;
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 
 const DEFAULT_LIMIT: usize = 5000;
 const MAX_LINE_LEN: usize = 2000;
+const INDEX_MIN_BYTES: u64 = 8 * 1024 * 1024;
+const INDEX_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 pub struct ReadTool;
 
@@ -203,7 +207,7 @@ impl Tool for ReadTool {
         // The synchronous buffered scan runs on the blocking pool so large files
         // cannot stall a Tokio worker or the TUI render/input loop.
         let read_path = path.clone();
-        let text = tokio::task::spawn_blocking(move || read_text_range(&read_path, range))
+        let text = tokio::task::spawn_blocking(move || read_text_range_cached(&read_path, range))
             .await
             .map_err(|err| anyhow::anyhow!("read task failed to join: {err}"))??;
         let mut output = text.output;
@@ -337,6 +341,251 @@ fn read_text_range(path: &Path, range: NormalizedReadRange) -> Result<TextReadRe
     Ok(TextReadResult {
         output,
         total_lines,
+        truncated_line_count,
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FileFreshness {
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+}
+
+#[derive(Clone, Debug)]
+struct LineIndex {
+    path: PathBuf,
+    freshness: FileFreshness,
+    offsets: Vec<u64>,
+    total_lines: usize,
+}
+
+impl LineIndex {
+    fn memory_bytes(&self) -> usize {
+        self.offsets
+            .len()
+            .saturating_mul(std::mem::size_of::<u64>())
+    }
+}
+
+#[derive(Default)]
+struct LineIndexCache {
+    entries: VecDeque<LineIndex>,
+    bytes: usize,
+}
+
+static LINE_INDEX_CACHE: LazyLock<Mutex<LineIndexCache>> =
+    LazyLock::new(|| Mutex::new(LineIndexCache::default()));
+
+fn read_text_range_cached(path: &Path, range: NormalizedReadRange) -> Result<TextReadResult> {
+    let metadata = std::fs::metadata(path)?;
+    if metadata.len() < INDEX_MIN_BYTES {
+        return read_text_range(path, range);
+    }
+    let canonical = std::fs::canonicalize(path)?;
+    let freshness = file_freshness(&metadata);
+    if let Some(index) = cached_index(&canonical, &freshness) {
+        let result = read_indexed_range(path, range, &index)?;
+        if file_freshness(&std::fs::metadata(path)?) == freshness {
+            return Ok(result);
+        }
+        return read_text_range(path, range);
+    }
+
+    let index = build_line_index(path, canonical, freshness)?;
+    let result = read_indexed_range(path, range, &index)?;
+    if file_freshness(&std::fs::metadata(path)?) != index.freshness {
+        return read_text_range(path, range);
+    }
+    insert_index(index);
+    Ok(result)
+}
+
+fn file_freshness(metadata: &std::fs::Metadata) -> FileFreshness {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        return FileFreshness {
+            len: metadata.len(),
+            modified: metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        };
+    }
+    #[cfg(not(unix))]
+    FileFreshness {
+        len: metadata.len(),
+        modified: metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+    }
+}
+
+fn cached_index(path: &Path, freshness: &FileFreshness) -> Option<LineIndex> {
+    let mut cache = LINE_INDEX_CACHE.lock().ok()?;
+    let position = cache
+        .entries
+        .iter()
+        .position(|entry| entry.path == path && entry.freshness == *freshness)?;
+    let entry = cache.entries.remove(position)?;
+    cache.entries.push_front(entry.clone());
+    Some(entry)
+}
+
+fn insert_index(index: LineIndex) {
+    let index_bytes = index.memory_bytes();
+    if index_bytes > INDEX_MAX_BYTES {
+        return;
+    }
+    let Ok(mut cache) = LINE_INDEX_CACHE.lock() else {
+        return;
+    };
+    if let Some(position) = cache
+        .entries
+        .iter()
+        .position(|entry| entry.path == index.path)
+    {
+        if let Some(old) = cache.entries.remove(position) {
+            cache.bytes = cache.bytes.saturating_sub(old.memory_bytes());
+        }
+    }
+    cache.bytes = cache.bytes.saturating_add(index_bytes);
+    cache.entries.push_front(index);
+    while cache.bytes > INDEX_MAX_BYTES {
+        if let Some(old) = cache.entries.pop_back() {
+            cache.bytes = cache.bytes.saturating_sub(old.memory_bytes());
+        } else {
+            break;
+        }
+    }
+}
+
+fn build_line_index(
+    path: &Path,
+    canonical: PathBuf,
+    freshness: FileFreshness,
+) -> Result<LineIndex> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let mut chunk = [0u8; 64 * 1024];
+    let mut carry = Vec::with_capacity(3);
+    let mut offsets = vec![0u64];
+    let mut byte_offset = 0u64;
+    loop {
+        let count = file.read(&mut chunk)?;
+        if count == 0 {
+            break;
+        }
+        validate_utf8_chunk(&mut carry, &chunk[..count])?;
+        for newline in memchr::memchr_iter(b'\n', &chunk[..count]) {
+            let next = byte_offset
+                .checked_add(newline as u64)
+                .and_then(|offset| offset.checked_add(1))
+                .ok_or_else(|| anyhow::anyhow!("file offset exceeds supported range"))?;
+            offsets.push(next);
+        }
+        byte_offset = byte_offset
+            .checked_add(count as u64)
+            .ok_or_else(|| anyhow::anyhow!("file offset exceeds supported range"))?;
+    }
+    if !carry.is_empty() {
+        anyhow::bail!("stream did not contain valid UTF-8");
+    }
+    let total_lines = if byte_offset == 0 {
+        0
+    } else if offsets.last() == Some(&byte_offset) {
+        offsets.len() - 1
+    } else {
+        offsets.len()
+    };
+    Ok(LineIndex {
+        path: canonical,
+        freshness,
+        offsets,
+        total_lines,
+    })
+}
+
+fn read_indexed_range(
+    path: &Path,
+    range: NormalizedReadRange,
+    index: &LineIndex,
+) -> Result<TextReadResult> {
+    use std::io::{Read, Seek, SeekFrom};
+    let end_exclusive = range
+        .offset
+        .checked_add(range.limit)
+        .ok_or_else(|| anyhow::anyhow!("offset + limit exceeds the supported line range"))?;
+    let mut output = String::with_capacity(range.limit.min(2000) * 80);
+    let mut truncated_line_count = 0;
+    if range.offset < index.total_lines {
+        let mut file = std::fs::File::open(path)?;
+        file.seek(SeekFrom::Start(index.offsets[range.offset]))?;
+        let mut chunk = [0u8; 64 * 1024];
+        let mut utf8_carry = Vec::with_capacity(3);
+        let mut line_prefix = Vec::with_capacity(MAX_LINE_LEN + 4);
+        let mut line_len = 0usize;
+        let mut line_last_byte = None;
+        let mut line_number = range.offset;
+        loop {
+            let bytes_read = file.read(&mut chunk)?;
+            if bytes_read == 0 {
+                break;
+            }
+            validate_utf8_chunk(&mut utf8_carry, &chunk[..bytes_read])?;
+            let bytes = &chunk[..bytes_read];
+            let mut segment_start = 0;
+            for newline in memchr::memchr_iter(b'\n', bytes) {
+                retain_line_segment(
+                    &mut line_prefix,
+                    &mut line_len,
+                    &mut line_last_byte,
+                    &bytes[segment_start..newline],
+                );
+                line_number += 1;
+                append_text_line(
+                    &mut output,
+                    line_number,
+                    range,
+                    end_exclusive,
+                    &line_prefix,
+                    line_len,
+                    line_last_byte,
+                    &mut truncated_line_count,
+                )?;
+                line_prefix.clear();
+                line_len = 0;
+                line_last_byte = None;
+                segment_start = newline + 1;
+            }
+            retain_line_segment(
+                &mut line_prefix,
+                &mut line_len,
+                &mut line_last_byte,
+                &bytes[segment_start..],
+            );
+        }
+        if !utf8_carry.is_empty() {
+            anyhow::bail!("stream did not contain valid UTF-8");
+        }
+        if line_len > 0 {
+            line_number += 1;
+            append_text_line(
+                &mut output,
+                line_number,
+                range,
+                end_exclusive,
+                &line_prefix,
+                line_len,
+                line_last_byte,
+                &mut truncated_line_count,
+            )?;
+        }
+    }
+    Ok(TextReadResult {
+        output,
+        total_lines: index.total_lines,
         truncated_line_count,
     })
 }

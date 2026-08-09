@@ -1,0 +1,17 @@
+feature: jcode-yx7 bounded read line index
+bead: jcode-yx7
+status: fallback-after-autospec-cli-incompatibility
+scope:
+  - optional read-specific newline/offset index for repeated large text reads
+  - canonical path and freshness identity, bounded memory, eviction, concurrency-safe lookup
+  - preserve full UTF-8 validation on cold population and exact output metadata
+non_goals:
+  - generic cache service
+  - mmap-only behavior
+  - indexing small or one-off files by default
+acceptance:
+  - cold reads retain current output and memory behavior
+  - warm sequential and near-tail reads materially reduce scan work
+  - mutation, truncation, replacement, invalid UTF-8, CRLF, blank lines, huge lines, and eviction never serve stale or altered output
+  - focused tests and isolated built-binary runtime evidence
+constitution_checks: [PRIN-001, PRIN-002, PRIN-005, PRIN-006, PRIN-007, PRIN-008, PRIN-009, PRIN-010]
