@@ -958,6 +958,7 @@ mod tests {
                         None => crate::env::remove_var(key),
                     }
                 }
+                crate::config::invalidate_config_cache();
             }
         }
         let reset = EnvReset(vec![
@@ -969,9 +970,17 @@ mod tests {
                 "JCODE_HOOK_PRE_TOOL_TIMEOUT_MS",
                 std::env::var_os("JCODE_HOOK_PRE_TOOL_TIMEOUT_MS"),
             ),
+            (
+                "JCODE_HOOK_PRE_TOOL_TOOLS",
+                std::env::var_os("JCODE_HOOK_PRE_TOOL_TOOLS"),
+            ),
         ]);
         crate::env::set_var("JCODE_HOOK_PRE_TOOL", hook);
         crate::env::set_var("JCODE_HOOK_PRE_TOOL_TIMEOUT_MS", timeout_ms.to_string());
+        // An empty env override intentionally replaces any user-configured
+        // filter so these legacy gate tests continue to exercise all tools.
+        crate::env::set_var("JCODE_HOOK_PRE_TOOL_TOOLS", "");
+        crate::config::invalidate_config_cache();
         reset
     }
 

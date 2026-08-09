@@ -346,7 +346,9 @@ async fn registry_execute_pre_tool_hook_blocks_and_allows() {
         .expect("chmod policy");
 
     let prev = std::env::var_os("JCODE_HOOK_PRE_TOOL");
+    let prev_tools = std::env::var_os("JCODE_HOOK_PRE_TOOL_TOOLS");
     crate::env::set_var("JCODE_HOOK_PRE_TOOL", policy.to_string_lossy().to_string());
+    crate::env::set_var("JCODE_HOOK_PRE_TOOL_TOOLS", "");
     // jcode-base is compiled without cfg(test) here, so the config cache only
     // re-checks env every 500ms; force a reload so the hook is visible now.
     crate::config::invalidate_config_cache();
@@ -383,6 +385,10 @@ async fn registry_execute_pre_tool_hook_blocks_and_allows() {
     match prev {
         Some(value) => crate::env::set_var("JCODE_HOOK_PRE_TOOL", value),
         None => crate::env::remove_var("JCODE_HOOK_PRE_TOOL"),
+    }
+    match prev_tools {
+        Some(value) => crate::env::set_var("JCODE_HOOK_PRE_TOOL_TOOLS", value),
+        None => crate::env::remove_var("JCODE_HOOK_PRE_TOOL_TOOLS"),
     }
     crate::config::invalidate_config_cache();
 
