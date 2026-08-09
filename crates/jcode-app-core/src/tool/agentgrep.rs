@@ -4,7 +4,7 @@ use crate::session::Session;
 use crate::storage;
 use crate::{logging, util};
 use ::agentgrep::cli::{FindArgs, FullRegionMode, GrepArgs, OutlineArgs, SmartArgs};
-use ::agentgrep::find::{FindResult, run_find};
+use ::agentgrep::find::FindResult;
 use ::agentgrep::outline::run_outline;
 use ::agentgrep::search::{GrepResult, run_grep};
 use ::agentgrep::smart_dsl::{SmartQuery, parse_smart_query};
@@ -21,6 +21,7 @@ use std::sync::OnceLock;
 
 mod args;
 mod context;
+mod inventory;
 
 #[cfg(test)]
 use self::args::trace_or_smart_terms_owned;
@@ -336,8 +337,10 @@ fn execute_linked_agentgrep(
         "find" => {
             let args = build_find_args(params, ctx)?;
             let root = resolve_search_root(ctx, args.path.as_deref())?;
-            let result =
-                filter_find_result_to_exact_file(run_find(&root, &args), exact_file.as_deref());
+            let result = filter_find_result_to_exact_file(
+                inventory::find(&root, &args),
+                exact_file.as_deref(),
+            );
             Ok(ToolOutput::new(render_find_output(&result, &args)).with_title("agentgrep find"))
         }
         "outline" => {

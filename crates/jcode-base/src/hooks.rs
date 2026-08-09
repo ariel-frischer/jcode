@@ -21,7 +21,14 @@
 //! Hook processes get `JCODE_HOOKS_DISABLED=1` in their environment so a
 //! hook that itself invokes jcode does not recursively trigger hooks.
 
+use std::collections::{BTreeMap, HashMap};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::sync::{
+    Arc, Mutex, OnceLock,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::Duration;
 
 tokio::task_local! {
     /// Terminal identity for the client whose request is currently executing.
@@ -36,6 +43,8 @@ const PAYLOAD_ENV_LIMIT: usize = 16 * 1024;
 const TOOL_INPUT_ENV_LIMIT: usize = 16 * 1024;
 /// Maximum chars of hook stderr used as a block reason.
 const BLOCK_REASON_LIMIT: usize = 2000;
+const PERSISTENT_HOOK_PREFIX: &str = "persistent:";
+const PERSISTENT_BROKER_IDLE_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Decision returned by the `pre_tool` gate hook.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,6 +236,14 @@ pub fn dispatch_observer(event: HookEvent) {
     }
     let event_name = event.event;
     for command_line in command_lines {
+        if let Some(command) = persistent_hook_command(&command_line) {
+            if let Err(error) = dispatch_persistent_observer(command, event.clone()) {
+                crate::logging::warn(&format!(
+                    "Hook '{event_name}' persistent command '{command_line}' failed to queue: {error}"
+                ));
+            }
+            continue;
+        }
         match build_hook_process(&command_line, &event) {
             Ok(mut cmd) => {
                 cmd.stdin(std::process::Stdio::null())
@@ -281,12 +298,340 @@ pub async fn run_pre_tool_gate(
 
     let mut decision = GateDecision::Allow;
     for command_line in command_lines {
-        let current = run_pre_tool_command(&command_line, &event, tool_name, tool_input_json).await;
+        let current = if let Some(command) = persistent_hook_command(&command_line) {
+            run_persistent_pre_tool_command(command, &event, tool_input_json).await
+        } else {
+            run_pre_tool_command(&command_line, &event, tool_name, tool_input_json).await
+        };
         if matches!(current, GateDecision::Block { .. }) && decision == GateDecision::Allow {
             decision = current;
         }
     }
     decision
+}
+
+/// Opt-in protocol for hooks that are already written as long-lived workers.
+///
+/// Ordinary hook commands retain the historical one-process-per-event contract.
+/// A command prefixed with `persistent:` is instead started once and receives
+/// newline-delimited JSON envelopes on stdin. This explicit marker is required
+/// because an arbitrary existing hook cannot safely be kept alive: its event
+/// environment and stdin contract are process-scoped.
+fn persistent_hook_command(command_line: &str) -> Option<&str> {
+    command_line
+        .strip_prefix(PERSISTENT_HOOK_PREFIX)
+        .map(str::trim)
+        .filter(|command| !command.is_empty())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PersistentHookMode {
+    Observer,
+    Gate,
+}
+
+struct PersistentBrokerEntry {
+    tx: std::sync::mpsc::Sender<PersistentBrokerRequest>,
+    alive: Arc<AtomicBool>,
+}
+
+enum PersistentBrokerRequest {
+    Observer {
+        event: HookEvent,
+    },
+    Gate {
+        event: HookEvent,
+        tool_input_json: String,
+        reply: tokio::sync::oneshot::Sender<GateDecision>,
+    },
+}
+
+struct PersistentChild {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+}
+
+static PERSISTENT_BROKERS: OnceLock<Mutex<HashMap<String, PersistentBrokerEntry>>> =
+    OnceLock::new();
+
+fn persistent_brokers() -> &'static Mutex<HashMap<String, PersistentBrokerEntry>> {
+    PERSISTENT_BROKERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn broker_key(command: &str, mode: PersistentHookMode) -> String {
+    let mode = match mode {
+        PersistentHookMode::Observer => "observer",
+        PersistentHookMode::Gate => "gate",
+    };
+    format!("{mode}:{command}")
+}
+
+fn persistent_broker(
+    command: &str,
+    mode: PersistentHookMode,
+) -> std::io::Result<std::sync::mpsc::Sender<PersistentBrokerRequest>> {
+    let key = broker_key(command, mode);
+    let mut brokers = persistent_brokers()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(entry) = brokers.get(&key)
+        && entry.alive.load(Ordering::Acquire)
+    {
+        return Ok(entry.tx.clone());
+    }
+
+    brokers.remove(&key);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let alive = Arc::new(AtomicBool::new(true));
+    let thread_alive = Arc::clone(&alive);
+    let command = command.to_owned();
+    std::thread::Builder::new()
+        .name("jcode-hook-broker".to_string())
+        .spawn(move || persistent_broker_loop(command, mode, rx, thread_alive))?;
+    brokers.insert(
+        key,
+        PersistentBrokerEntry {
+            tx: tx.clone(),
+            alive,
+        },
+    );
+    Ok(tx)
+}
+
+fn dispatch_persistent_observer(command: &str, event: HookEvent) -> std::io::Result<()> {
+    let tx = persistent_broker(command, PersistentHookMode::Observer)?;
+    tx.send(PersistentBrokerRequest::Observer { event })
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "broker stopped"))
+}
+
+async fn run_persistent_pre_tool_command(
+    command: &str,
+    event: &HookEvent,
+    tool_input_json: &str,
+) -> GateDecision {
+    let timeout =
+        std::time::Duration::from_millis(crate::config::config().hooks.pre_tool_timeout_ms.max(1));
+    let (reply, response) = tokio::sync::oneshot::channel();
+    let tx = match persistent_broker(command, PersistentHookMode::Gate) {
+        Ok(tx) => tx,
+        Err(error) => {
+            crate::logging::warn(&format!(
+                "Hook 'pre_tool' persistent command '{command}' failed to start: {error} (allowing tool call)"
+            ));
+            return GateDecision::Allow;
+        }
+    };
+    if tx
+        .send(PersistentBrokerRequest::Gate {
+            event: event.clone(),
+            tool_input_json: tool_input_json.to_owned(),
+            reply,
+        })
+        .is_err()
+    {
+        return GateDecision::Allow;
+    }
+    match tokio::time::timeout(timeout, response).await {
+        Ok(Ok(decision)) => decision,
+        _ => {
+            crate::logging::warn(&format!(
+                "Hook 'pre_tool' persistent command '{command}' timed out after {}ms (allowing tool call)",
+                timeout.as_millis()
+            ));
+            GateDecision::Allow
+        }
+    }
+}
+
+fn persistent_broker_loop(
+    command: String,
+    mode: PersistentHookMode,
+    rx: std::sync::mpsc::Receiver<PersistentBrokerRequest>,
+    alive: Arc<AtomicBool>,
+) {
+    let mut process: Option<PersistentChild> = None;
+    loop {
+        let request = match rx.recv_timeout(PERSISTENT_BROKER_IDLE_TIMEOUT) {
+            Ok(request) => request,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            | Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        match request {
+            PersistentBrokerRequest::Observer { event } => {
+                if let Err(error) = persistent_send_observer(&command, &event, &mut process) {
+                    crate::logging::warn(&format!(
+                        "Persistent observer hook '{command}' failed: {error}"
+                    ));
+                    stop_persistent_child(&mut process);
+                }
+            }
+            PersistentBrokerRequest::Gate {
+                event,
+                tool_input_json,
+                reply,
+            } => {
+                let decision =
+                    persistent_send_gate(&command, &event, &tool_input_json, &mut process);
+                let _ = reply.send(decision);
+            }
+        }
+    }
+    stop_persistent_child(&mut process);
+    alive.store(false, Ordering::Release);
+    let _ = mode;
+}
+
+fn persistent_send_observer(
+    command: &str,
+    event: &HookEvent,
+    process: &mut Option<PersistentChild>,
+) -> std::io::Result<()> {
+    ensure_persistent_child(command, event, false, process)?;
+    let child = process.as_mut().expect("persistent child was started");
+    write_persistent_envelope(&mut child.stdin, event, None)?;
+    let _ = child.child.try_wait()?;
+    Ok(())
+}
+
+fn persistent_send_gate(
+    command: &str,
+    event: &HookEvent,
+    tool_input_json: &str,
+    process: &mut Option<PersistentChild>,
+) -> GateDecision {
+    if let Err(error) = ensure_persistent_child(command, event, true, process) {
+        crate::logging::warn(&format!(
+            "Hook 'pre_tool' persistent command '{command}' failed to start: {error} (allowing tool call)"
+        ));
+        return GateDecision::Allow;
+    }
+    let child = process.as_mut().expect("persistent child was started");
+    if let Err(error) = write_persistent_envelope(&mut child.stdin, event, Some(tool_input_json)) {
+        crate::logging::warn(&format!(
+            "Hook 'pre_tool' persistent command '{command}' failed: {error} (allowing tool call)"
+        ));
+        stop_persistent_child(process);
+        return GateDecision::Allow;
+    }
+
+    let stdout = match child.child.stdout.take() {
+        Some(stdout) => stdout,
+        None => return GateDecision::Allow,
+    };
+    let (response_tx, response_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let result = reader
+            .read_line(&mut line)
+            .map(|_| (line, reader.into_inner()));
+        let _ = response_tx.send(result);
+    });
+    let timeout =
+        std::time::Duration::from_millis(crate::config::config().hooks.pre_tool_timeout_ms.max(1));
+    let response = match response_rx.recv_timeout(timeout) {
+        Ok(Ok((line, stdout))) => {
+            child.child.stdout = Some(stdout);
+            line
+        }
+        _ => {
+            stop_persistent_child(process);
+            return GateDecision::Allow;
+        }
+    };
+    let reply: PersistentGateReply = match serde_json::from_str(response.trim()) {
+        Ok(reply) => reply,
+        Err(error) => {
+            crate::logging::warn(&format!(
+                "Hook 'pre_tool' persistent command '{command}' returned invalid response: {error} (allowing tool call)"
+            ));
+            return GateDecision::Allow;
+        }
+    };
+    match reply.exit {
+        0 => GateDecision::Allow,
+        2 => GateDecision::Block {
+            reason: reply
+                .stderr
+                .filter(|reason| !reason.trim().is_empty())
+                .map(|reason| truncate_bytes(reason.trim(), BLOCK_REASON_LIMIT).to_string())
+                .unwrap_or_else(|| "blocked by pre_tool hook".to_string()),
+        },
+        _ => GateDecision::Allow,
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct PersistentGateReply {
+    exit: i32,
+    #[serde(default)]
+    stderr: Option<String>,
+}
+
+fn ensure_persistent_child(
+    command: &str,
+    event: &HookEvent,
+    gate: bool,
+    process: &mut Option<PersistentChild>,
+) -> std::io::Result<()> {
+    if let Some(child) = process.as_mut()
+        && child.child.try_wait()?.is_none()
+    {
+        return Ok(());
+    }
+    stop_persistent_child(process);
+    let mut cmd = build_hook_process(command, event).map_err(std::io::Error::other)?;
+    cmd.env("JCODE_HOOK_BROKER", "1")
+        .env("JCODE_HOOK_PROTOCOL", "ndjson")
+        .stdin(std::process::Stdio::piped())
+        .stdout(if gate {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
+        .stderr(std::process::Stdio::null());
+    let mut child = crate::platform::spawn_detached(&mut cmd)?;
+    let stdin = child.stdin.take().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::BrokenPipe,
+            "persistent hook stdin unavailable",
+        )
+    })?;
+    *process = Some(PersistentChild { child, stdin });
+    Ok(())
+}
+
+fn stop_persistent_child(process: &mut Option<PersistentChild>) {
+    if let Some(mut process) = process.take() {
+        let _ = process.child.kill();
+        let _ = process.child.wait();
+    }
+}
+
+fn write_persistent_envelope(
+    stdin: &mut std::process::ChildStdin,
+    event: &HookEvent,
+    tool_input_json: Option<&str>,
+) -> std::io::Result<()> {
+    let mut env = BTreeMap::new();
+    env.insert("JCODE_HOOKS_DISABLED", "1".to_string());
+    env.insert("JCODE_HOOK_EVENT", event.event.to_string());
+    if let Some(session_id) = &event.session_id {
+        env.insert("JCODE_HOOK_SESSION_ID", session_id.clone());
+    }
+    if let Some(cwd) = &event.cwd {
+        env.insert("JCODE_HOOK_CWD", cwd.clone());
+    }
+    for (key, value) in &event.fields {
+        env.insert(format!("JCODE_HOOK_{key}"), value.clone());
+    }
+    env.insert("JCODE_HOOK_PAYLOAD", payload_json(event));
+    let envelope = serde_json::json!({
+        "payload": payload_json(event),
+        "tool_input": tool_input_json,
+        "env": env,
+    });
+    writeln!(stdin, "{}", envelope)
 }
 
 async fn run_pre_tool_command(
