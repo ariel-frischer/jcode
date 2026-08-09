@@ -882,6 +882,7 @@ fn gate_ctx(working_dir: &str) -> ToolContext {
 
 #[tokio::test]
 async fn bash_refuses_to_delete_the_home_directory() {
+    let _guard = crate::storage::lock_test_env();
     // The #604 incident, at the real tool boundary.
     let temp = tempfile::tempdir().expect("temp home");
     let home = temp.path().to_string_lossy().to_string();
@@ -917,7 +918,11 @@ async fn bash_refuses_to_delete_the_home_directory() {
 
 #[tokio::test]
 async fn bash_holds_a_risky_delete_until_justified_then_runs_it() {
-    let temp = tempfile::tempdir().expect("temp dir");
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::Builder::new()
+        .prefix("bash-risk-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("temp dir");
     let workdir = temp.path().join("work");
     let target = temp.path().join("outside");
     std::fs::create_dir_all(&workdir).expect("workdir");
@@ -981,6 +986,7 @@ async fn bash_does_not_interfere_with_ordinary_commands() {
 
 #[tokio::test]
 async fn indirect_dispatch_paths_cannot_bypass_the_gate() {
+    let _guard = crate::storage::lock_test_env();
     // batch, and every other caller, dispatch through Tool::execute rather than
     // reimplementing it, so the gate lives at the only chokepoint. Assert that
     // directly: calling execute for a background job (the one path that returns

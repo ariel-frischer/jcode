@@ -53,23 +53,30 @@ impl Drop for TestEnvGuard {
 }
 
 #[cfg(any(test, feature = "test-support"))]
+impl TestEnvGuard {
+    fn from_lock(lock: MutexGuard<'static, ()>) -> Self {
+        let saved_credentials = test_credential_env_keys()
+            .into_iter()
+            .map(|key| {
+                let value = std::env::var_os(&key);
+                crate::env::remove_var(&key);
+                (key, value)
+            })
+            .collect();
+
+        Self {
+            _lock: lock,
+            saved_credentials,
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
 pub fn lock_test_env() -> TestEnvGuard {
     let lock = test_env_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let saved_credentials = test_credential_env_keys()
-        .into_iter()
-        .map(|key| {
-            let value = std::env::var_os(&key);
-            crate::env::remove_var(&key);
-            (key, value)
-        })
-        .collect();
-
-    TestEnvGuard {
-        _lock: lock,
-        saved_credentials,
-    }
+    TestEnvGuard::from_lock(lock)
 }
 
 #[cfg(any(test, feature = "test-support"))]

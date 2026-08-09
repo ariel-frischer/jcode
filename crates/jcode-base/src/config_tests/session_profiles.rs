@@ -249,6 +249,7 @@ fn omitted_profile_fields_default_and_empty_values_are_skipped_on_serialization(
     let profile_section = rendered
         .split("[profiles.empty]")
         .nth(1)
+        .and_then(|section| section.split("\n[").next())
         .expect("serialized profile should have a named table");
 
     assert!(!profile_section.contains("tools"));

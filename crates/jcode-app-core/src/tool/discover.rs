@@ -428,7 +428,7 @@ impl Tool for DiscoverToolsTool {
                 "action": {
                     "type": "string",
                     "enum": ["search", "select", "suggest"],
-                    "description": "Phase. Defaults to select when `tool` is set, else search. For a listed result, select the one you commit to (it carries setup). Always select the product actually chosen, even when it is not in the catalog. Suggest a capability gap only when no product was chosen."
+                    "description": "Phase: select a chosen product, search without one, or suggest only when none was chosen."
                 },
                 "category": {
                     "type": "string",
@@ -439,7 +439,7 @@ impl Tool for DiscoverToolsTool {
                     "type": "string",
                     "minLength": DISCOVERY_QUERY_MIN_CHARS,
                     "maxLength": DISCOVERY_QUERY_MAX_CHARS,
-                    "description": "Capability summary. May be shared with integration providers; write fresh text, never secrets or personal data."
+                    "description": "May be shared with integration providers; never secrets or personal data."
                 },
                 "reason": {
                     "type": "string",
@@ -451,7 +451,7 @@ impl Tool for DiscoverToolsTool {
                     "type": "string",
                     "minLength": 2,
                     "maxLength": 100,
-                    "description": "For select: public name of the product actually chosen. Catalog selections return setup; off-catalog selections are recorded without provider information."
+                    "description": "Public name for select; off-catalog selections are recorded, but return no setup."
                 },
                 "suggestion_kind": {
                     "type": "string",
@@ -1827,7 +1827,7 @@ mod tests {
         );
         let schema = serde_json::to_string(&parameters).unwrap();
         assert!(schema.contains("Missing capability category; infer it from the user's goal."));
-        assert!(schema.contains("select the one you commit to (it carries setup)"));
+        assert!(schema.contains("select a chosen product"));
         assert!(schema.contains("May be shared with integration providers"));
         assert!(schema.contains("never secrets or personal data"));
         assert!(schema.contains("Why the chosen integration fits"));

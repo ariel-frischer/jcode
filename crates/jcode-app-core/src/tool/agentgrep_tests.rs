@@ -34,7 +34,7 @@ fn grep_input(query: &str, max_regions: Option<usize>) -> AgentGrepInput {
         glob: None,
         file_type: None,
         hidden: None,
-        no_ignore: None,
+        no_ignore: Some(true),
         max_files: None,
         max_regions,
         full_region: None,
@@ -622,7 +622,7 @@ async fn execute_runs_linked_grep() {
     let ctx = test_ctx(temp.path());
     let output = tool
         .execute(
-            json!({"mode": "grep", "query": "auth_status", "path": ".", "type": "rs"}),
+            json!({"mode": "grep", "query": "auth_status", "path": ".", "type": "rs", "no_ignore": true}),
             ctx,
         )
         .await
@@ -641,7 +641,10 @@ async fn execute_runs_linked_grep_when_mode_is_omitted() {
     let tool = AgentGrepTool::new();
     let ctx = test_ctx(temp.path());
     let output = tool
-        .execute(json!({"query": "auth_status", "path": "src"}), ctx)
+        .execute(
+            json!({"query": "auth_status", "path": "src", "no_ignore": true}),
+            ctx,
+        )
         .await
         .expect("tool output");
 

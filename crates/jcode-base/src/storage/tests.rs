@@ -2,11 +2,14 @@ use super::*;
 
 #[test]
 fn lock_test_env_removes_and_restores_openai_credentials() {
+    let lock = test_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = std::env::var_os("OPENAI_API_KEY");
     crate::env::set_var("OPENAI_API_KEY", "sk-test-inherited-secret");
 
     {
-        let _guard = lock_test_env();
+        let _guard = TestEnvGuard::from_lock(lock);
         assert!(std::env::var_os("OPENAI_API_KEY").is_none());
     }
 
