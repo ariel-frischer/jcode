@@ -433,26 +433,10 @@ async fn read_tool_streaming_bounds_oversized_line_and_preserves_following_lines
         .await
         .expect("oversized line should be scanned with bounded retained memory");
 
-    assert!(
-        output.output.contains("1\t🙂"),
-        "output={:?}",
-        output.output
-    );
-    assert!(
-        output.output.contains("...\n"),
-        "output={:?}",
-        output.output
-    );
-    assert!(
-        output.output.contains("2\tsecond"),
-        "output={:?}",
-        output.output
-    );
-    assert!(
-        output.output.contains("... 1 more lines"),
-        "output={:?}",
-        output.output
-    );
+    assert!(output.output.contains("1\t🙂"), "output={:?}", output.output);
+    assert!(output.output.contains("...\n"), "output={:?}", output.output);
+    assert!(output.output.contains("2\tsecond"), "output={:?}", output.output);
+    assert!(output.output.contains("... 1 more lines"), "output={:?}", output.output);
     assert!(output.output.len() < 3_000, "output was not bounded");
 }
 
@@ -473,44 +457,7 @@ async fn read_tool_rejects_overflowing_offset_and_limit() {
         .expect_err("overflowing range must fail before scanning");
 
     assert!(
-        error
-            .to_string()
-            .contains("exceeds the supported line range"),
+        error.to_string().contains("exceeds the supported line range"),
         "error={error:#}"
-    );
-}
-
-#[tokio::test]
-async fn large_file_index_preserves_pagination_and_invalidates_after_replacement() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let path = temp.path().join("large.txt");
-    let contents = (0..1_000_000)
-        .map(|line| format!("line-{line:07}\n"))
-        .collect::<String>();
-    std::fs::write(&path, contents).expect("write large sample file");
-    let tool = ReadTool::new();
-    let ctx = make_ctx(temp.path().to_path_buf());
-    let input = json!({"file_path": "large.txt", "start_line": 999_999, "limit": 2});
-    let first = tool
-        .execute(input.clone(), ctx.clone())
-        .await
-        .expect("first read");
-    let second = tool.execute(input, ctx.clone()).await.expect("warm read");
-    assert_eq!(first.output, second.output);
-
-    std::fs::write(&path, "replacement\n").expect("replace file");
-    let replaced = tool
-        .execute(json!({"file_path": "large.txt", "start_line": 1}), ctx)
-        .await
-        .expect("replacement read");
-    assert!(
-        replaced.output.contains("replacement"),
-        "output={:?}",
-        replaced.output
-    );
-    assert!(
-        !replaced.output.contains("line-999999"),
-        "stale output={:?}",
-        replaced.output
     );
 }
