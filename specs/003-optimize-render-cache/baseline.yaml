@@ -1,0 +1,49 @@
+revision: 4bc21f92ecef08eae8a894b66eb16cb290821f56
+captured_at: 2026-08-09T07:11:23Z
+host: linux-x86_64 Ryzen-AI-7-PRO-350 27GiB
+binary: target/selfdev/tui_bench
+command: "tui_bench --json --mode idle --frames 20 --warmup-frames 2 --turns 2 --height 24 --user-len 64 --assistant-len SIZE --width WIDTH"
+samples_per_cell: 5
+method: "Five fresh local processes per size/width cell; warm-frame p50 reported by the existing JSON harness. The first-frame cold path is not mixed into warm controls."
+representative_path: "Ratatui TestBackend through jcode::tui::render_frame"
+metrics:
+  cpu_ns: unavailable
+  wall_ns: available_as_warm_p50_ms
+  allocation_count: unavailable
+  allocated_bytes: unavailable
+  allocator_allocated_bytes: unavailable
+  allocator_active_bytes: unavailable
+  allocator_resident_bytes: unavailable
+  allocator_retained_bytes: unavailable
+  peak_rss_bytes: unavailable
+  cache_classification: unavailable
+  correctness: not_observed_by_existing_harness
+cells:
+  - id: short-width-80
+    fixture_bytes: 1024
+    width: 80
+    samples_warm_p50_ms: [0.292932, 0.274227, 0.251404, 0.242808, 0.347023]
+    median_warm_p50_ms: 0.274227
+  - id: short-width-160
+    fixture_bytes: 1024
+    width: 160
+    samples_warm_p50_ms: [0.383502, 0.397409, 0.380016, 0.392861, 0.394623]
+    median_warm_p50_ms: 0.392861
+  - id: large-width-80
+    fixture_bytes: 65536
+    width: 80
+    samples_warm_p50_ms: [0.613687, 0.589901, 0.630077, 0.802061, 0.564734]
+    median_warm_p50_ms: 0.613687
+  - id: large-width-160
+    fixture_bytes: 65536
+    width: 160
+    samples_warm_p50_ms: [0.772966, 0.807331, 0.802031, 0.899705, 0.883194]
+    median_warm_p50_ms: 0.807331
+required_cells_missing:
+  - explicit cold miss versus warm hit classification
+  - invalidation
+  - display-mode and diagram-mode matrix
+  - bounded eviction
+  - concurrent readers and session isolation
+  - CPU, allocations, allocated volume, allocator memory, retained memory, peak RSS
+result: incomplete_baseline_non_passing
