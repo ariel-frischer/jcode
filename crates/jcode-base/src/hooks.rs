@@ -349,6 +349,7 @@ enum PersistentBrokerRequest {
 struct PersistentChild {
     child: std::process::Child,
     stdin: std::process::ChildStdin,
+    probe_startup: bool,
 }
 
 static PERSISTENT_BROKERS: OnceLock<Mutex<HashMap<String, PersistentBrokerEntry>>> =
@@ -495,6 +496,18 @@ fn persistent_send_observer(
             "worker exited after receiving event ({status})"
         )));
     }
+    if child.probe_startup {
+        child.probe_startup = false;
+        // Only the first event pays this bounded probe. It closes the race where
+        // an invalid worker exits just after accepting its first envelope, while
+        // steady-state events remain a single write plus a nonblocking poll.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        if let Some(status) = child.child.try_wait()? {
+            return Err(std::io::Error::other(format!(
+                "worker exited during startup ({status})"
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -620,7 +633,11 @@ fn ensure_persistent_child(
             "persistent hook stdin unavailable",
         )
     })?;
-    *process = Some(PersistentChild { child, stdin });
+    *process = Some(PersistentChild {
+        child,
+        stdin,
+        probe_startup: true,
+    });
     Ok(())
 }
 
