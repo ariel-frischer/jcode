@@ -3,16 +3,18 @@
 <head><meta charset="utf-8"><title>jcode-5sx agentgrep CPU investigation</title></head>
 <body>
 <h1>jcode-5sx: agentgrep CPU investigation</h1>
-<p><strong>Decision: Terminal B, investigation-only.</strong> No Jcode or agentgrep production candidate was retained.</p>
+<p><strong>Decision: Terminal B, investigation-only after completed paired measurement.</strong> No Jcode or agentgrep production candidate was retained.</p>
 <h2>Evidence</h2>
 <ul>
 <li>Jcode pins agentgrep at upstream revision <code>b01b804008ab0662fa14e6b60b10bff61716e6f1</code> (tag v0.1.6).</li>
 <li>The fork's grep path launches one ripgrep subprocess, then rereads every matched file for structure/grouping. Both native and ripgrep post-processing use <code>available_parallelism()</code>, capped only by matched-file count and a small-file threshold. Concurrent calls can therefore multiply CPU workers across tool invocations.</li>
 <li>Existing profile evidence records targeted grep at 16.410 ms wall and 72.007 ms aggregate CPU, consistent with useful ripgrep plus per-file post-processing rather than a Jcode serialization bug.</li>
-<li>Context expansion is separately bounded to trace/smart/outline calls and builds one session-local JSON file per call. No inventory cache was introduced.</li>
+<li>Completed five randomized rounds over literal, regex, paths-only, type, glob, hidden, no-ignore, and dense fixtures. Candidate output hashes matched baseline for every case.</li>
+<li>Concurrent attribution at 1/2/4/8 calls measured baseline CPU medians of 10.61/21.23/47.43/102.40 ms and candidate medians of 17.44/32.20/62.91/102.28 ms. Candidate wall medians were slower at every level, so the cap was rejected.</li>
+<li>Focused Jcode agentgrep tests ran, but four existing tests failed because the current environment's rg-backed fixture execution returned zero matches. Candidate fork tests also showed environment/CWD-dependent failures. The private daemon was built and session creation succeeded, but the follow-up tool call hit a stale debug socket path and was not accepted as daemon evidence.</li>
 </ul>
 <h2>Why no change landed</h2>
-<p>The approved fork was not modified because no paired randomized single-agent/concurrent matrix was completed, and an adaptive worker policy needs fork-level acceptance before pinning. Autospec native execution failed on an incompatible generated <code>jcode run -c</code> argument. The direct fallback reached its branch-creation step and was stopped before mutation, preserving this canonical worktree and avoiding a duplicate Bead/worktree.</p>
+<p>The exact-revision baseline and candidate were paired, but the only candidate increased wall time and did not materially reduce CPU. The candidate fork remains unpushed and unpinned; the Jcode worktree and dependency lockfile are unchanged.</p>
 <h2>Risk assessment</h2>
 <h3>Low Risk</h3><p>No source, dependency, lockfile, fork, daemon, or shared process was changed.</p>
 <h3>Medium Risk</h3><p>Existing aggregate CPU remains high under concurrent grep calls because each call can use all available cores for post-processing. A future candidate must compare CPU, wall time, memory, worker counts, and exact output.</p>
