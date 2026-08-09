@@ -94,6 +94,31 @@ fn create_session_maps_to_subscribe() {
 }
 
 #[test]
+fn create_session_forwards_optional_session_profile_to_subscribe() {
+    let mut state = BridgeState::default();
+    let profile = json!({
+        "profile_name": "integration",
+        "allowed_tools": [],
+        "disabled_tools": [],
+        "skills_mode": "none",
+        "skill_names": [],
+        "disabled_skills": [],
+        "skill_prompts": [],
+        "instructions": "SESSION_PROFILE_INSTRUCTION_MARKER",
+    });
+    let out = state.api_request_to_legacy(&json!({
+        "req": "create_session",
+        "id": 2,
+        "profile": profile,
+    }));
+    let Outbound::Legacy(value) = &out[0] else {
+        panic!("expected legacy outbound");
+    };
+    assert_eq!(value["type"], "subscribe");
+    assert_eq!(value["profile"], profile);
+}
+
+#[test]
 fn state_event_answers_pending_attach() {
     let mut state = BridgeState::default();
     let out = state.api_request_to_legacy(&json!({"req": "create_session", "id": 5}));

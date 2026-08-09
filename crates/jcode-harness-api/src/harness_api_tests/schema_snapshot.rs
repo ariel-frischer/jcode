@@ -21,6 +21,28 @@ fn client_frame_wire_shape() {
 }
 
 #[test]
+fn create_session_profile_wire_shape_and_legacy_default() {
+    let profile = serde_json::json!({"profile_name": "integration", "allowed_tools": []});
+    let frame = ClientFrame::new(
+        8,
+        ApiRequest::CreateSession {
+            working_dir: Some("/work".into()),
+            profile: Some(profile.clone()),
+        },
+    );
+    let value = serde_json::to_value(frame).unwrap();
+    assert_eq!(value["profile"], profile);
+
+    let legacy: ClientFrame =
+        serde_json::from_str(r#"{"v":1,"id":9,"req":"create_session","working_dir":"/work"}"#)
+            .unwrap();
+    assert!(matches!(
+        legacy.request,
+        ApiRequest::CreateSession { profile: None, .. }
+    ));
+}
+
+#[test]
 fn send_message_no_reply_wire_shape_and_legacy_default() {
     let frame = ClientFrame::new(
         8,
@@ -106,7 +128,10 @@ fn request_roundtrip() {
         ApiRequest::SetRetentionPolicy {
             archive_after_days: Some(30),
         },
-        ApiRequest::CreateSession { working_dir: None },
+        ApiRequest::CreateSession {
+            working_dir: None,
+            profile: None,
+        },
         ApiRequest::AttachSession {
             session_id: "s1".into(),
         },

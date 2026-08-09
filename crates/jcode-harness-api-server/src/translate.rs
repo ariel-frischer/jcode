@@ -304,6 +304,9 @@ impl BridgeState {
                 {
                     subscribe["selfdev"] = json!(true);
                 }
+                if !request["profile"].is_null() {
+                    subscribe["profile"] = request["profile"].clone();
+                }
                 if req == "attach_session"
                     && let Some(target) = request["session_id"].as_str()
                 {

@@ -2657,6 +2657,9 @@ async fn run_single_message_command_schema(
         message,
         schema_path,
     } = options;
+    let profile_startup = profile_run_options
+        .map(|options| serde_json::to_value(options.startup_metadata()))
+        .transpose()?;
     // Read and parse the schema before starting a server or creating a session.
     // The SDK owns schema compilation and validation, but malformed file input
     // is a CLI trust-boundary error and must not reach a model turn.
@@ -2691,6 +2694,7 @@ async fn run_single_message_command_schema(
             &message,
             working_dir,
             daemon_socket,
+            profile_startup,
         )
     })
     .await??;
@@ -2779,6 +2783,7 @@ fn run_structured_sdk_turn(
     message: &str,
     working_dir: PathBuf,
     daemon_socket: PathBuf,
+    profile_startup: Option<serde_json::Value>,
 ) -> Result<StructuredRunCommandReport> {
     let (api_socket, _bridge) = start_schema_api_bridge(&daemon_socket)?;
     let client = jcode_sdk::JcodeClient::connect(jcode_sdk::ConnectOptions {
@@ -2790,7 +2795,16 @@ fn run_structured_sdk_turn(
 
     let session = match resume_session {
         Some(session_id) => client.attach_session(session_id)?,
-        None => client.create_session(Some(working_dir.display().to_string()))?,
+        None => match client
+            .request(jcode_sdk::ApiRequest::CreateSession {
+                working_dir: Some(working_dir.display().to_string()),
+                profile: profile_startup,
+            })?
+            .event
+        {
+            jcode_sdk::ApiEvent::Attached { session } => session,
+            other => anyhow::bail!("expected attached after create_session, got {other:?}"),
+        },
     };
     if let Some(model) = model {
         client.set_model(&session.session_id, model)?;

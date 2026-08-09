@@ -613,7 +613,10 @@ impl JcodeClient {
 
     pub fn create_session(&self, working_dir: Option<String>) -> Result<SessionInfo> {
         match self
-            .request_ok(ApiRequest::CreateSession { working_dir })?
+            .request_ok(ApiRequest::CreateSession {
+                working_dir,
+                profile: None,
+            })?
             .event
         {
             ApiEvent::Attached { session } => Ok(session),
