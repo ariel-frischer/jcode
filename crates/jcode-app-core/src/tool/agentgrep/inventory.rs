@@ -102,7 +102,9 @@ pub fn find(root: &Path, args: &FindArgs) -> FindResult {
         return result;
     }
 
-    let mut state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     state.next_use = state.next_use.wrapping_add(1);
     let used = state.next_use;
     state.snapshots.retain(|snapshot| snapshot.key != key);
@@ -118,7 +120,9 @@ pub fn find(root: &Path, args: &FindArgs) -> FindResult {
 }
 
 fn lookup(key: &QueryKey, display_root: &Path) -> Option<FindResult> {
-    let mut state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut state = STATE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let index = state.snapshots.iter().position(|snapshot| {
         snapshot.key == *key && manifest_is_fresh(&snapshot.key.root, &snapshot.manifest)
     })?;
@@ -182,8 +186,10 @@ fn collect_directories(
         if file_type.is_dir() {
             collect_directories(&path, directories, policy_files)?;
         } else if file_type.is_file()
-            && matches!(path.file_name().and_then(|name| name.to_str()),
-                Some(".gitignore" | ".ignore" | ".rgignore"))
+            && matches!(
+                path.file_name().and_then(|name| name.to_str()),
+                Some(".gitignore" | ".ignore" | ".rgignore")
+            )
         {
             policy_files.push((path.clone(), stamp(&path)?, digest_file(&path)?));
         }
@@ -241,7 +247,12 @@ fn stamp(path: &Path) -> Option<Stamp> {
 fn change_id(metadata: &std::fs::Metadata) -> Option<(u64, u64, i64, i64)> {
     use std::os::unix::fs::MetadataExt;
 
-    Some((metadata.dev(), metadata.ino(), metadata.ctime(), metadata.ctime_nsec()))
+    Some((
+        metadata.dev(),
+        metadata.ino(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
+    ))
 }
 
 #[cfg(not(unix))]
@@ -298,7 +309,11 @@ fn estimate_bytes(key: &QueryKey, result: &FindResult, manifest: &Manifest) -> u
 
 fn evict(state: &mut State) {
     while state.snapshots.len() > MAX_REPOSITORIES
-        || state.snapshots.iter().map(|snapshot| snapshot.bytes).sum::<usize>()
+        || state
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.bytes)
+            .sum::<usize>()
             > MAX_TOTAL_BYTES
     {
         let Some(index) = state
@@ -335,7 +350,11 @@ mod tests {
     }
 
     fn clear() {
-        STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).snapshots.clear();
+        STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .snapshots
+            .clear();
     }
 
     #[test]
@@ -345,9 +364,16 @@ mod tests {
         clear();
         let first = find(directory.path(), &args("visible"));
         let uncached = run_find(directory.path(), &args("visible"));
-        assert_eq!(serde_json::to_value(&first.files).unwrap(), serde_json::to_value(&uncached.files).unwrap());
+        assert_eq!(
+            serde_json::to_value(&first.files).unwrap(),
+            serde_json::to_value(&uncached.files).unwrap()
+        );
 
-        fs::write(directory.path().join("new_visible.rs"), "fn new_visible() {}\n").unwrap();
+        fs::write(
+            directory.path().join("new_visible.rs"),
+            "fn new_visible() {}\n",
+        )
+        .unwrap();
         let created = find(directory.path(), &args("new_visible"));
         assert_eq!(
             serde_json::to_value(&created.files).unwrap(),
@@ -379,10 +405,24 @@ mod tests {
         let mut typed = args("one");
         typed.file_type = Some("rs".into());
         let typed_result = find(directory.path(), &typed);
-        assert!(typed_result.files.iter().all(|file| file.path.ends_with(".rs")));
-        let state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert!(
+            typed_result
+                .files
+                .iter()
+                .all(|file| file.path.ends_with(".rs"))
+        );
+        let state = STATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         assert!(state.snapshots.len() <= MAX_REPOSITORIES);
-        assert!(state.snapshots.iter().map(|snapshot| snapshot.bytes).sum::<usize>() <= MAX_TOTAL_BYTES);
+        assert!(
+            state
+                .snapshots
+                .iter()
+                .map(|snapshot| snapshot.bytes)
+                .sum::<usize>()
+                <= MAX_TOTAL_BYTES
+        );
     }
 
     #[test]

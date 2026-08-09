@@ -115,7 +115,8 @@ impl LineIndexCache {
     }
 
     fn touch(&mut self, key: PathBuf) {
-        self.lru.retain(|candidate| candidate.as_path() != key.as_path());
+        self.lru
+            .retain(|candidate| candidate.as_path() != key.as_path());
         self.lru.push_back(key);
     }
 
@@ -600,7 +601,10 @@ fn build_line_index_and_read(
             )?;
             if indexable {
                 let next = file_offset
-                    .checked_add(u64::try_from(newline).map_err(|_| anyhow::anyhow!("file offset overflow"))?)
+                    .checked_add(
+                        u64::try_from(newline)
+                            .map_err(|_| anyhow::anyhow!("file offset overflow"))?,
+                    )
                     .and_then(|offset| offset.checked_add(1))
                     .ok_or_else(|| anyhow::anyhow!("file offset overflow"))?;
                 if line_starts.len() < MAX_INDEX_ENTRIES.saturating_add(1) {
@@ -622,7 +626,9 @@ fn build_line_index_and_read(
             &bytes[segment_start..],
         );
         file_offset = file_offset
-            .checked_add(u64::try_from(bytes_read).map_err(|_| anyhow::anyhow!("file offset overflow"))?)
+            .checked_add(
+                u64::try_from(bytes_read).map_err(|_| anyhow::anyhow!("file offset overflow"))?,
+            )
             .ok_or_else(|| anyhow::anyhow!("file offset overflow"))?;
     }
 
