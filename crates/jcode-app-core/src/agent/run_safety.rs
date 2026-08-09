@@ -186,7 +186,10 @@ fn parse_positive(
 ) -> Result<NonZeroU64, RunSafetyError> {
     let correction = "use a positive decimal whole number (u64 greater than zero)";
     let trimmed = value.trim();
-    let parsed = trimmed.parse::<u64>().ok().and_then(NonZeroU64::new);
+    let parsed = match trimmed.parse::<u64>() {
+        Ok(value) => NonZeroU64::new(value),
+        Err(_) => None,
+    };
     parsed.ok_or_else(|| RunSafetyError {
         bound,
         source,
@@ -197,7 +200,10 @@ fn parse_positive(
 
 fn parse_deadline(source: RunSafetySource, value: &str) -> Result<Instant, RunSafetyError> {
     let correction = "use a future RFC3339 timestamp with an explicit UTC offset";
-    let parsed = DateTime::parse_from_rfc3339(value.trim()).ok();
+    let parsed = match DateTime::parse_from_rfc3339(value.trim()) {
+        Ok(parsed) => Some(parsed),
+        Err(_) => None,
+    };
     let Some(parsed) = parsed else {
         return Err(RunSafetyError {
             bound: RunSafetyBound::Deadline,
@@ -208,13 +214,16 @@ fn parse_deadline(source: RunSafetySource, value: &str) -> Result<Instant, RunSa
     };
     let parsed = parsed.with_timezone(&Utc);
     let now = Utc::now();
-    let Some(remaining) = (parsed - now).to_std().ok() else {
-        return Err(RunSafetyError {
-            bound: RunSafetyBound::Deadline,
-            source,
-            value: value.to_string(),
-            correction,
-        });
+    let remaining = match (parsed - now).to_std() {
+        Ok(remaining) => remaining,
+        Err(_) => {
+            return Err(RunSafetyError {
+                bound: RunSafetyBound::Deadline,
+                source,
+                value: value.to_string(),
+                correction,
+            });
+        }
     };
     Instant::now()
         .checked_add(remaining)
