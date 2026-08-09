@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>jcode-bef StreamBuffer Investigation</title></head>
+<body>
+<h1>jcode-bef: StreamBuffer cursor investigation</h1>
+<p><strong>Outcome:</strong> Acceptance blocked before baseline. No candidate was implemented and no production files changed.</p>
+<h2>Scope and routing</h2>
+<ul>
+<li>Worktree: <code>agent/jcode-bef-stream-buffer</code>, base <code>4bc21f92e</code>.</li>
+<li>Owned source scope: <code>crates/jcode-tui-core/src/stream_buffer.rs</code> and focused callers/tests only.</li>
+<li>Canonical Bead and comments read first. Project constitution read.</li>
+<li>Effective Autospec profile verified: <code>oauth-cheap</code>, native <code>jcode</code>, <code>openai:gpt-5.6-luna</code>; specify/plan max, implementation xhigh. No Autospec mutation was run because the existing active feature was unrelated and creating artifacts would risk violating the canonical worktree ownership contract.</li>
+</ul>
+<h2>Required evidence status</h2>
+<table border="1"><tr><th>Evidence</th><th>Status</th></tr>
+<tr><td>Baseline/candidate cold and warm benchmarks</td><td>Not run</td></tr>
+<tr><td>CPU, wall, allocations, memory</td><td>Not run</td></tr>
+<tr><td>Behavior, rendering, pacing, Unicode parity</td><td>Not run</td></tr>
+<tr><td>Focused/package tests, built TUI, guardrails</td><td>Not run</td></tr>
+</table>
+<p>The required gate command was run repeatedly. Unrelated Cargo/rustc jobs remained active for the full five-minute wait, including workspace tests and builds in <code>.worktrees/integration</code>. The gate timed out with <code>RUST_BUSY_TIMEOUT</code>. No Rust-heavy command was launched from this worktree.</p>
+<h2>Risk</h2>
+<h3>Low</h3><p><strong>Rationale:</strong> No code or dependency changes were made. <strong>Blast radius:</strong> none. <strong>Rollback:</strong> no rollback required. <strong>Required review action:</strong> none beyond acknowledging the blocked investigation.</p>
+<h3>Medium</h3><p><strong>Rationale:</strong> The investigation has no performance conclusion because the representative baseline was not captured. <strong>Blast radius:</strong> delivery confidence and scheduling only. <strong>Mitigation:</strong> rerun from this unchanged branch after the host is idle. <strong>Rollback:</strong> retain this no-change state. <strong>Required review action:</strong> coordinator should release the Rust slot and restart the evidence plan.</p>
+<h3>High</h3><p><strong>Rationale:</strong> Implementing a cursor/segmented approach without actual Rust-path measurements could regress Unicode, pacing, memory, or allocations. <strong>Blast radius:</strong> the TUI streaming path. <strong>Mitigation:</strong> no implementation was attempted. <strong>Rollback:</strong> unchanged branch. <strong>Required review action:</strong> maintainer approval is required before accepting any candidate, based on representative before/after measurements.</p>
+<h2>Recommendation</h2>
+<p>Do not classify this as a neutral or negative optimization result. It is an infrastructure-blocked investigation. Keep the branch unchanged and rerun the required baseline/candidate experiment once unrelated Rust work is idle.</p>
+</body></html>
