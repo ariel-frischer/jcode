@@ -121,6 +121,25 @@ line behavior, bounded oversized-line handling, long-line truncation, full-file 
 routing, path resolution, lifecycle logging, context-output guards, and file
 touch events. It does not relax any trust-boundary or command security check.
 
+## Follow-up investigation outcomes
+
+Follow-up work retains production changes only when representative, paired
+measurements satisfy the Bead's acceptance gate. Evidence-only branches and
+benchmark harnesses are not merged into `dev`; durable conclusions are recorded
+here instead.
+
+| Bead | Investigated change | Result | Decision |
+|---|---|---|---|
+| `jcode-d5o` | Avoid per-tool observer-hook process startup | `setsid` reduced wall time 17.8% and child CPU 9.2%, below the 80% target | Reverted; a persistent or connection-reusing hook design is required |
+| `jcode-8mj` | Cache repeated `agentgrep find` inventory | Warm p50 improved from 50.745 ms to 40.013 ms, 21.15%, below the 30% gate | Reverted; experimental reusable-inventory seam retained only in the external agentgrep fork |
+| `jcode-yx7` | Cache large-file line offsets for repeated reads | Focused parity tests passed, but no paired built-binary CPU, latency, memory, and daemon-invalidation campaign completed | Reverted; redesign only with integrated evidence |
+| `jcode-ms5` | Remove streaming-delta clones or coalesce fanout | Real Rust baseline confirmed clone ownership by accumulation, parsing, tap, history, and wire consumers; no safe general-purpose candidate was established | Closed investigation-only; production unchanged |
+| `jcode-bef` | Cache remaining character counts in `StreamBuffer` chunks | Directional wall gains ranged from 9.0% to 25.1%, but required paired CPU, allocation, memory, fragmentation, rendering, and guardrail evidence was incomplete | Reverted; retain the idea for a future instrumented campaign |
+
+These negative results are useful constraints rather than failed deliveries:
+they prevent narrow microbenchmark wins from adding runtime state, invalidation
+complexity, or ownership changes without a demonstrated user-visible benefit.
+
 ## Other opportunities
 
 ### 1. Configured post-tool hooks can dominate cheap tools
