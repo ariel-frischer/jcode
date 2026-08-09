@@ -2377,17 +2377,29 @@ Re-run with `--force` if you really want to stop the server.";
     Ok(())
 }
 
-pub async fn run_single_message_command(
+pub(crate) struct RunSingleMessageOptions<'a> {
+    pub(crate) resume_session: Option<&'a str>,
+    pub(crate) message: &'a str,
+    pub(crate) emit_json: bool,
+    pub(crate) emit_ndjson: bool,
+    pub(crate) schema_path: Option<&'a str>,
+    pub(crate) invocation_safety: crate::config::RunSafetyConfig,
+}
+
+pub(crate) async fn run_single_message_command(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
-    resume_session: Option<&str>,
-    message: &str,
-    emit_json: bool,
-    emit_ndjson: bool,
-    schema_path: Option<&str>,
-    invocation_safety: crate::config::RunSafetyConfig,
+    options: RunSingleMessageOptions<'_>,
 ) -> Result<()> {
+    let RunSingleMessageOptions {
+        resume_session,
+        message,
+        emit_json,
+        emit_ndjson,
+        schema_path,
+        invocation_safety,
+    } = options;
     let safety_candidates = run_safety::load_candidates(invocation_safety)?;
 
     if let Some(schema_path) = schema_path {

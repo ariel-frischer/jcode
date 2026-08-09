@@ -230,12 +230,14 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 &args.provider,
                 args.model.as_deref(),
                 args.provider_profile.as_deref(),
-                args.resume.as_deref(),
-                &message,
-                json,
-                ndjson,
-                schema.as_deref(),
-                run_safety.into(),
+                commands::RunSingleMessageOptions {
+                    resume_session: args.resume.as_deref(),
+                    message: &message,
+                    emit_json: json,
+                    emit_ndjson: ndjson,
+                    schema_path: schema.as_deref(),
+                    invocation_safety: run_safety.into(),
+                },
             )
             .await?;
         }

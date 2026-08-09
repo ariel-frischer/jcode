@@ -21,13 +21,22 @@ fn legacy_unset_run_report_omits_bounded_stop_fields() {
 
 #[test]
 fn run_safety_cli_precedence_matches_invocation_environment_persisted() {
-    let mut candidates = crate::agent::run_safety::RunSafetyCandidates::default();
-    candidates.persisted.max_turns = Some("9".to_string());
-    candidates.environment.max_turns = Some("7".to_string());
-    candidates.invocation.max_turns = Some("3".to_string());
-    candidates.persisted.max_tool_steps = Some("8".to_string());
-    candidates.environment.token_budget = Some("100".to_string());
-    candidates.invocation.deadline = Some("2030-01-01T00:00:00Z".to_string());
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation: crate::config::RunSafetyConfig {
+            max_turns: Some("3".to_string()),
+            deadline: Some("2030-01-01T00:00:00Z".to_string()),
+            ..Default::default()
+        },
+        environment: crate::config::RunSafetyConfig {
+            token_budget: Some("100".to_string()),
+            ..Default::default()
+        },
+        persisted: crate::config::RunSafetyConfig {
+            max_turns: Some("9".to_string()),
+            max_tool_steps: Some("8".to_string()),
+            ..Default::default()
+        },
+    };
     let policy = crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())
         .expect("precedence should resolve");
     assert_eq!(policy.max_turns.map(std::num::NonZeroU64::get), Some(3));
@@ -150,9 +159,11 @@ fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
 
 #[test]
 fn schema_mode_rejects_explicit_run_safety_flags_before_bridge_start() {
-    let mut candidates = crate::agent::run_safety::RunSafetyCandidates::default();
-    candidates.invocation = crate::config::RunSafetyConfig {
-        max_turns: Some("1".to_string()),
+    let mut candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation: crate::config::RunSafetyConfig {
+            max_turns: Some("1".to_string()),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let error = reject_schema(&candidates).expect_err("schema must reject bound");
