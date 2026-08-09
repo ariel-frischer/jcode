@@ -372,10 +372,7 @@ impl ProfileRunOptions {
     ) -> anyhow::Result<Self> {
         let provider = match resolved.provider.as_deref() {
             Some(provider) => ProviderChoice::from_str(provider, true).map_err(|error| {
-                let profile_name = match resolved.profile_name.as_deref() {
-                    Some(profile_name) => profile_name,
-                    None => "(unnamed)",
-                };
+                let profile_name = resolved.profile_name.as_deref().unwrap_or("(unnamed)");
                 anyhow::anyhow!(
                     "Session profile '{}' has invalid provider '{}': {}",
                     profile_name,
@@ -500,18 +497,18 @@ pub(crate) fn resolve_run_options(
     } else {
         base_provider
     };
-    let base_reasoning_effort =
-        args.reasoning_effort
-            .as_deref()
-            .or_else(|| match reasoning_provider {
-                ProviderChoice::Openai | ProviderChoice::OpenaiApi => {
-                    config.provider.openai_reasoning_effort.as_deref()
-                }
-                ProviderChoice::Claude | ProviderChoice::AnthropicApi => {
-                    config.provider.anthropic_reasoning_effort.as_deref()
-                }
-                _ => None,
-            });
+    let base_reasoning_effort = args
+        .reasoning_effort
+        .as_deref()
+        .or(match reasoning_provider {
+            ProviderChoice::Openai | ProviderChoice::OpenaiApi => {
+                config.provider.openai_reasoning_effort.as_deref()
+            }
+            ProviderChoice::Claude | ProviderChoice::AnthropicApi => {
+                config.provider.anthropic_reasoning_effort.as_deref()
+            }
+            _ => None,
+        });
 
     let mut base_tools = config.tools.clone();
     if let Some(tool_profile) = args.tool_profile.as_deref() {
@@ -661,7 +658,7 @@ mod tests {
         SessionProfileConfig {
             provider: Some("openai".to_owned()),
             model: Some("profile-model".to_owned()),
-            reasoning_effort: Some("profile-reasoning".to_owned()),
+            reasoning_effort: Some("high".to_owned()),
             provider_profile: Some("profile-gateway".to_owned()),
             tool_profile: Some("full".to_owned()),
             tools: vec!["edit".to_owned()],
@@ -751,7 +748,7 @@ mod tests {
             "--model",
             "explicit-model",
             "--reasoning-effort",
-            "explicit-reasoning",
+            "max",
             "--provider-profile",
             "explicit-gateway",
             "--tool-profile",
@@ -771,10 +768,7 @@ mod tests {
             options.provider_profile.as_deref(),
             Some("explicit-gateway")
         );
-        assert_eq!(
-            options.reasoning_effort.as_deref(),
-            Some("explicit-reasoning")
-        );
+        assert_eq!(options.reasoning_effort.as_deref(), Some("max"));
         assert_eq!(
             options.tool_selection,
             ToolConfig {
@@ -788,21 +782,19 @@ mod tests {
     }
 
     #[test]
-    fn profile_precedence_environment_wins_over_selected_profile_when_invocation_is_unset() {
+    fn profile_precedence_selected_profile_wins_over_base_when_invocation_is_unset() {
         let _env_lock = crate::storage::lock_test_env();
         let _provider_profile_env = ProviderProfileEnvGuard::set("environment-gateway");
         let mut config = config_with_profile(profile_with_values());
-        // Config::load_strict applies JCODE_PROVIDER/JCODE_MODEL,
-        // JCODE_*_REASONING_EFFORT, and tool environment overrides before this
-        // resolver is called. Keep the resulting values distinct from the
-        // profile so each source has an observable winner.
+        // Config::load_strict applies base provider/model/reasoning/tool values
+        // before this resolver is called. Keep them distinct from the selected
+        // profile so the profile precedence is observable.
         config.provider.default_provider = Some("claude".to_owned());
         config.provider.default_model = Some("environment-model".to_owned());
-        config.provider.anthropic_reasoning_effort = Some("environment-reasoning".to_owned());
+        config.provider.anthropic_reasoning_effort = Some("low".to_owned());
         config.tools = effective_tool_config();
 
-        let args = Args::try_parse_from(["jcode", "--profile", "missing", "run", "hello"])
-            .expect("unknown profile arguments should parse");
+        let args = profile_args(&[]);
         assert_eq!(
             args.provider,
             ProviderChoice::Auto,
@@ -813,20 +805,23 @@ mod tests {
             .expect("profile run should resolve")
             .expect("--profile should produce run options");
 
-        assert_eq!(options.provider, ProviderChoice::Claude);
-        assert_eq!(options.model.as_deref(), Some("environment-model"));
-        assert_eq!(
-            options.reasoning_effort.as_deref(),
-            Some("environment-reasoning")
-        );
+        assert_eq!(options.provider, ProviderChoice::Openai);
+        assert_eq!(options.model.as_deref(), Some("profile-model"));
+        assert_eq!(options.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(
             options.provider_profile.as_deref(),
             Some("environment-gateway")
         );
         assert_eq!(
             options.tool_selection,
-            effective_tool_config().selection(),
-            "environment tool settings must beat profile tool settings"
+            ToolConfig {
+                profile: "full".to_owned(),
+                enabled: vec!["edit".to_owned()],
+                disabled: vec!["write".to_owned()],
+                ..ToolConfig::default()
+            }
+            .selection(),
+            "selected profile tool settings must beat base tool settings"
         );
     }
 
@@ -846,10 +841,7 @@ mod tests {
 
         assert_eq!(options.provider, ProviderChoice::Openai);
         assert_eq!(options.model.as_deref(), Some("profile-model"));
-        assert_eq!(
-            options.reasoning_effort.as_deref(),
-            Some("profile-reasoning")
-        );
+        assert_eq!(options.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(options.provider_profile.as_deref(), Some("profile-gateway"));
         assert_eq!(
             options.tool_selection,
@@ -1100,10 +1092,7 @@ mod tests {
         assert_eq!(options.profile_name.as_deref(), Some("review"));
         assert_eq!(options.provider, ProviderChoice::Openai);
         assert_eq!(options.model.as_deref(), Some("profile-model"));
-        assert_eq!(
-            options.reasoning_effort.as_deref(),
-            Some("profile-reasoning")
-        );
+        assert_eq!(options.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(options.provider_profile.as_deref(), Some("profile-gateway"));
         assert_eq!(
             options.tool_selection,

@@ -2544,6 +2544,13 @@ pub(crate) struct RunSingleMessageOptions<'a> {
     pub(crate) invocation_safety: crate::config::RunSafetyConfig,
 }
 
+struct RunSingleMessageSchemaOptions<'a> {
+    profile_run_options: Option<&'a super::profile::ProfileRunOptions>,
+    resume_session: Option<&'a str>,
+    message: &'a str,
+    schema_path: &'a str,
+}
+
 pub(crate) async fn run_single_message_command(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
@@ -2568,11 +2575,12 @@ pub(crate) async fn run_single_message_command(
             choice,
             model,
             provider_profile,
-            reasoning_effort,
-            profile_run_options,
-            resume_session,
-            message,
-            schema_path,
+            RunSingleMessageSchemaOptions {
+                profile_run_options,
+                resume_session,
+                message,
+                schema_path,
+            },
         )
         .await;
     }
@@ -2641,12 +2649,14 @@ async fn run_single_message_command_schema(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
-    _reasoning_effort: Option<&str>,
-    _profile_run_options: Option<&super::profile::ProfileRunOptions>,
-    resume_session: Option<&str>,
-    message: &str,
-    schema_path: &str,
+    options: RunSingleMessageSchemaOptions<'_>,
 ) -> Result<()> {
+    let RunSingleMessageSchemaOptions {
+        profile_run_options,
+        resume_session,
+        message,
+        schema_path,
+    } = options;
     // Read and parse the schema before starting a server or creating a session.
     // The SDK owns schema compilation and validation, but malformed file input
     // is a CLI trust-boundary error and must not reach a model turn.
@@ -2656,7 +2666,7 @@ async fn run_single_message_command_schema(
     // cannot be handed to an already-running daemon by the current protocol,
     // so only reuse the ordinary bootstrap when this invocation has no profile;
     // profile runs reject an existing daemon before it can receive a request.
-    if let Some(options) = _profile_run_options {
+    if let Some(options) = profile_run_options {
         let profile_name = options.profile_name.as_deref().ok_or_else(|| {
             anyhow::anyhow!("structured profile run is missing its selected profile name")
         })?;

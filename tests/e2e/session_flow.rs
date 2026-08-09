@@ -133,7 +133,10 @@ disabled_tools = ["write"]
                 .expect("profile model should be present")
         ]
     );
-    let profile_tools_sent = profile_provider.captured_tools.lock().unwrap();
+    let profile_tools_sent = {
+        let captured_tools = profile_provider.captured_tools.lock().unwrap();
+        captured_tools.clone()
+    };
     assert_eq!(profile_tools_sent.len(), 1);
     assert_eq!(
         profile_tools_sent[0]
@@ -143,8 +146,6 @@ disabled_tools = ["write"]
         vec!["read".to_string()],
         "the profile allow/deny lists should expose only read"
     );
-    drop(profile_tools_sent);
-
     legacy_provider.queue_response(vec![
         StreamEvent::TextDelta("legacy response".to_string()),
         StreamEvent::MessageEnd {

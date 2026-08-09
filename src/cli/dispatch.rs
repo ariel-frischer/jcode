@@ -1312,10 +1312,8 @@ fn ensure_profile_server_bootstrap(
     socket_path: &std::path::Path,
     server_running: bool,
 ) -> Result<()> {
-    if server_running {
-        if let Some(profile_name) = profile_name {
-            return Err(profile_shared_daemon_error(profile_name, socket_path));
-        }
+    if server_running && let Some(profile_name) = profile_name {
+        return Err(profile_shared_daemon_error(profile_name, socket_path));
     }
     Ok(())
 }

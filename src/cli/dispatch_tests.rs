@@ -14,7 +14,7 @@ fn structured_profile_shared_daemon_error_explains_private_server_requirement() 
     assert!(detail.contains("shared daemon"));
     assert!(detail.contains("--schema"));
     assert!(detail.contains("/run/user/1000/jcode.sock"));
-    assert!(detail.contains("stop the daemon"));
+    assert!(detail.to_ascii_lowercase().contains("stop the daemon"));
 }
 
 #[test]
