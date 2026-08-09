@@ -1,22 +1,28 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>jcode-bef StreamBuffer Investigation</title></head><body>
-<h1>jcode-bef: StreamBuffer cached character cursor</h1>
-<p><strong>Outcome:</strong> Terminal A candidate retained. The candidate caches remaining Unicode scalar count per queued chunk, eliminating repeated <code>text.chars().count()</code> scans during partial drains and coalescing. It preserves the existing public API and pacing.</p>
-<h2>Scope and evidence</h2>
-<ul><li>Worktree/branch: <code>agent/jcode-bef-stream-buffer</code>.</li><li>Owned production file: <code>crates/jcode-tui-core/src/stream_buffer.rs</code>; one focused Unicode regression test added.</li><li>Baseline and candidate used the same temporary Rust public-path harness, compiled with <code>cargo run --profile selfdev -p jcode-tui-core --example stream_buffer_bench</code>. Harness was removed after each run.</li><li>Runs used warm-up iterations and wall-clock timing. CPU time, allocator counters, and process RSS/peak memory were unavailable without adding unsupported instrumentation. The public memory profile remained byte-accurate; candidate adds one <code>usize</code> cached count per live queue segment, normally one coalesced segment.</li></ul>
-<h2>Benchmark table</h2>
-<table border="1"><tr><th>Workload</th><th>Rounds/chars</th><th>Baseline ns/op</th><th>Candidate ns/op</th><th>Delta</th></tr>
-<tr><td>large flush (100k ASCII)</td><td>1,000 / 100M</td><td>12,209</td><td>11,112</td><td>-9.0%</td></tr>
-<tr><td>many tiny deltas (2,000 x 3 chars)</td><td>1,000 / 6M</td><td>230,599</td><td>177,289</td><td>-23.1%</td></tr>
-<tr><td>multibyte/combining Unicode flush</td><td>500 / 50M chars</td><td>35,270</td><td>26,414</td><td>-25.1%</td></tr>
-<tr><td>repeated retargeting (1,000 alternating deltas)</td><td>500 / 2.75M</td><td>240,123</td><td>210,432</td><td>-12.4%</td></tr>
-<tr><td>final small flush</td><td>100,000 / 500k</td><td>361</td><td>326</td><td>-9.7%</td></tr></table>
-<p>These are repeatable directional public-path results, with the largest gains on the targeted repeated-count workloads. No candidate-versus-baseline regression was observed in this run.</p>
-<h2>Correctness and runtime validation</h2>
-<ul><li>Focused stream tests: <strong>18 passed</strong>, including pacing, max-step ceiling, final flush, ordering, retargeting markers, whitespace behavior, UTF-8 boundaries, and new coalesced multibyte exact-count parity.</li><li>Complete <code>jcode-tui-core</code> library tests: <strong>63 passed</strong>.</li><li>Public API exercised through <code>jcode_tui_core::StreamBuffer</code> example harness. No built full TUI path was run because this change is confined to the lower public core and the available Rust slot was shared with unrelated workspace checks.</li><li>Observed unrelated baseline infrastructure warnings: profile package specs for <code>cosmic-text</code>, <code>swash</code>, <code>unicode-linebreak</code>, and <code>zeno</code> do not match workspace packages.</li></ul>
+<html lang="en">
+<head><meta charset="utf-8"><title>jcode-bef StreamBuffer Investigation</title></head>
+<body>
+<h1>jcode-bef: StreamBuffer cursor investigation</h1>
+<p><strong>Outcome:</strong> Acceptance blocked before baseline. No candidate was implemented and no production files changed.</p>
+<h2>Scope and routing</h2>
+<ul>
+<li>Worktree: <code>agent/jcode-bef-stream-buffer</code>, base <code>4bc21f92e</code>.</li>
+<li>Owned source scope: <code>crates/jcode-tui-core/src/stream_buffer.rs</code> and focused callers/tests only.</li>
+<li>Canonical Bead and comments read first. Project constitution read.</li>
+<li>Effective Autospec profile verified: <code>oauth-cheap</code>, native <code>jcode</code>, <code>openai:gpt-5.6-luna</code>; specify/plan max, implementation xhigh. No Autospec mutation was run because the existing active feature was unrelated and creating artifacts would risk violating the canonical worktree ownership contract.</li>
+</ul>
+<h2>Required evidence status</h2>
+<table border="1"><tr><th>Evidence</th><th>Status</th></tr>
+<tr><td>Baseline/candidate cold and warm benchmarks</td><td>Not run</td></tr>
+<tr><td>CPU, wall, allocations, memory</td><td>Not run</td></tr>
+<tr><td>Behavior, rendering, pacing, Unicode parity</td><td>Not run</td></tr>
+<tr><td>Focused/package tests, built TUI, guardrails</td><td>Not run</td></tr>
+</table>
+<p>The required gate command was run repeatedly. Unrelated Cargo/rustc jobs remained active for the full five-minute wait, including workspace tests and builds in <code>.worktrees/integration</code>. The gate timed out with <code>RUST_BUSY_TIMEOUT</code>. No Rust-heavy command was launched from this worktree.</p>
 <h2>Risk</h2>
-<h3>Low</h3><p><strong>Rationale:</strong> Safe Rust only, no public signature or dependency changes, and all existing focused tests pass. <strong>Blast radius:</strong> queued stream chunk accounting and partial drain. <strong>Mitigation:</strong> cached count is updated only on append and partial removal; full removal discards the segment. <strong>Rollback:</strong> revert the single source commit. <strong>Required review action:</strong> inspect the invariant that cached count equals <code>text.chars().count()</code>.</p>
-<h3>Medium</h3><p><strong>Rationale:</strong> Queue segments retain an additional <code>usize</code>, increasing per-segment retained state by 8 bytes on this target. <strong>Blast radius:</strong> fragmented streams with many kind/marker boundaries. <strong>Mitigation:</strong> existing same-kind coalescing remains unchanged; memory profile and flush behavior are covered. <strong>Rollback:</strong> revert if fragmentation memory is material in runtime profiling. <strong>Required review action:</strong> maintainer should check queue-fragment memory against real provider traces.</p>
-<h3>High</h3><p><strong>Rationale:</strong> This is a hot streaming path and Unicode count drift could alter pacing or drop/duplicate characters. <strong>Blast radius:</strong> TUI reveal timing and rendered response text. <strong>Mitigation:</strong> 18 focused tests, Unicode exact-count coverage, and public-path benchmark validation. <strong>Rollback:</strong> revert the candidate commit without migration. <strong>Required review action:</strong> Ariel maintainer review is required before merge; do not self-approve or merge.</p>
-<h2>Recommendation</h2><p>Retain and push the candidate for maintainer review. It clears the material-gain gate on representative large, fragmented, Unicode, and retargeting workloads. Mark the Bead needs-user-review. No merge performed.</p>
+<h3>Low</h3><p><strong>Rationale:</strong> No code or dependency changes were made. <strong>Blast radius:</strong> none. <strong>Rollback:</strong> no rollback required. <strong>Required review action:</strong> none beyond acknowledging the blocked investigation.</p>
+<h3>Medium</h3><p><strong>Rationale:</strong> The investigation has no performance conclusion because the representative baseline was not captured. <strong>Blast radius:</strong> delivery confidence and scheduling only. <strong>Mitigation:</strong> rerun from this unchanged branch after the host is idle. <strong>Rollback:</strong> retain this no-change state. <strong>Required review action:</strong> coordinator should release the Rust slot and restart the evidence plan.</p>
+<h3>High</h3><p><strong>Rationale:</strong> Implementing a cursor/segmented approach without actual Rust-path measurements could regress Unicode, pacing, memory, or allocations. <strong>Blast radius:</strong> the TUI streaming path. <strong>Mitigation:</strong> no implementation was attempted. <strong>Rollback:</strong> unchanged branch. <strong>Required review action:</strong> maintainer approval is required before accepting any candidate, based on representative before/after measurements.</p>
+<h2>Recommendation</h2>
+<p>Do not classify this as a neutral or negative optimization result. It is an infrastructure-blocked investigation. Keep the branch unchanged and rerun the required baseline/candidate experiment once unrelated Rust work is idle.</p>
 </body></html>
