@@ -35,6 +35,10 @@ struct Stamp {
     modified: Option<SystemTime>,
     len: u64,
     is_dir: bool,
+    /// Unix ctime changes for writes even when a caller preserves mtime and
+    /// length.  On platforms without an equivalent, freshness falls back to
+    /// the stored content digest below.
+    change_id: Option<(u64, u64, i64, i64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -211,7 +215,11 @@ fn manifest_is_fresh(root: &Path, manifest: &Manifest) -> bool {
 
     manifest.policy_files.iter().all(policy_matches)
         && manifest.files.iter().all(|(path, expected, digest)| {
-            stamp(path).as_ref() == Some(expected) && digest_file(path) == Some(*digest)
+            let Some(actual) = stamp(path) else {
+                return false;
+            };
+            actual == *expected
+                && (expected.change_id.is_some() || digest_file(path) == Some(*digest))
         })
 }
 
@@ -225,7 +233,20 @@ fn stamp(path: &Path) -> Option<Stamp> {
         modified: metadata.modified().ok(),
         len: metadata.len(),
         is_dir: metadata.is_dir(),
+        change_id: change_id(&metadata),
     })
+}
+
+#[cfg(unix)]
+fn change_id(metadata: &std::fs::Metadata) -> Option<(u64, u64, i64, i64)> {
+    use std::os::unix::fs::MetadataExt;
+
+    Some((metadata.dev(), metadata.ino(), metadata.ctime(), metadata.ctime_nsec()))
+}
+
+#[cfg(not(unix))]
+fn change_id(_metadata: &std::fs::Metadata) -> Option<(u64, u64, i64, i64)> {
+    None
 }
 
 fn digest_file(path: &Path) -> Option<u64> {
@@ -362,5 +383,23 @@ mod tests {
         let state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         assert!(state.snapshots.len() <= MAX_REPOSITORIES);
         assert!(state.snapshots.iter().map(|snapshot| snapshot.bytes).sum::<usize>() <= MAX_TOTAL_BYTES);
+    }
+
+    #[test]
+    fn same_length_file_write_invalidates_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("same.rs");
+        fs::write(&path, "fn visible() {}\n").unwrap();
+        clear();
+        let first = find(directory.path(), &args("visible"));
+        assert_eq!(first.files.len(), 1);
+
+        // Keep length stable so mtime/size-only validation cannot accept stale
+        // results.  Unix ctime is the cheap warm-path write detector.
+        fs::write(&path, "fn hiddenx() {}\n").unwrap();
+        let current = find(directory.path(), &args("visible"));
+        let uncached = run_find(directory.path(), &args("visible"));
+        assert_eq!(current.files, uncached.files);
+        assert!(current.files.is_empty());
     }
 }
