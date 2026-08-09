@@ -1,0 +1,36 @@
+{
+  "scenario": "tool-call",
+  "events": [
+    {
+      "kind": "thinking_start"
+    },
+    {
+      "kind": "thinking",
+      "text": "checking"
+    },
+    {
+      "kind": "thinking_end"
+    },
+    {
+      "kind": "tool_start",
+      "id": "tool-1",
+      "name": "read"
+    },
+    {
+      "kind": "tool_input",
+      "delta": "{\"file_path\":"
+    },
+    {
+      "kind": "tool_input",
+      "delta": "\"README.md\"}"
+    },
+    {
+      "kind": "tool_end"
+    },
+    {
+      "kind": "message_end",
+      "stop_reason": "tool_use"
+    }
+  ],
+  "oracle_digest": "da25e4980202cf34e1fcc6af35bc1768330c515518297e021e52f400f50f9b2b"
+}

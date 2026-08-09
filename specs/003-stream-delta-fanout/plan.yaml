@@ -1,0 +1,40 @@
+plan:
+  feature: jcode-ms5
+  status: investigation-only
+  design_owner: crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs
+  approach:
+    - Build a deterministic synthetic stream model outside Rust compilation to define scenarios, event oracle, and measurement schema.
+    - Once Rust host is idle, add or use the narrowest existing mock-provider test harness to execute the real MPSC path.
+    - Capture wall time, process CPU, allocator counters where available, peak/current RSS, event count, and exact event digest.
+    - Repeat each scenario five times in baseline state; record medians and dispersion.
+    - Only prototype a candidate after identifying a concrete ownership-preserving optimization and rerun the same matrix.
+    - Reject candidate on any parity mismatch, semantic-boundary drift, cancellation/retry issue, or less than 15% allocations or 10% CPU general-purpose gain.
+  candidate_hypotheses:
+    - name: move-text-payload
+      status: needs-design
+      reason: TextDelta must remain available for accumulation, inline tap, and wrapped-marker detection before fanout, so direct move is unsafe without restructuring ownership.
+    - name: bounded-coalescing
+      status: needs-design
+      reason: Coalescing can change pacing/redraw and must flush at message/tool/thinking/retry/error/cancel boundaries with a strict byte/event bound.
+  tests:
+    - exact text and multibyte concatenation
+    - thinking done before text/tool
+    - tool input preservation and parse result
+    - retry rollback and interruption marker
+    - stream errors and cancellation
+    - serialized wire event shape unchanged
+  validation:
+    - cargo fmt --all -- --check
+    - focused jcode-app-core agent tests
+    - relevant package build
+    - clippy and scripts/check_guardrails.sh, serialized
+    - isolated built-binary SSE fixture with JSON/NDJSON and Registry round trip
+  blockers:
+    - real Rust MPSC execution requires a dedicated provider fixture and was not fabricated from the Python self-model
+    - built CLI acceptance is not applicable because production code is unchanged
+  outcome_if_no_gain: investigation-only, production unchanged
+  outcome: >-
+    Investigation-only closure. The self-model validates deterministic fixture,
+    digest, parity, and measurement plumbing across all six required scenarios;
+    it is explicitly not a Rust performance claim. No safe material candidate
+    was demonstrated, so production remains unchanged.

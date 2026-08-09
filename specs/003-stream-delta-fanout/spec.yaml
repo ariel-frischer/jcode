@@ -1,0 +1,47 @@
+feature:
+  id: jcode-ms5
+  title: Measure and conditionally optimize streaming delta allocation and fanout
+  status: investigation-only
+  autospec: required
+  owner: jcode-ms5
+  scope:
+    - crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs
+    - crates/jcode-app-core/src/agent_tests.rs (only focused parity/benchmark tests if required)
+    - scripts/bench_stream_delta_fanout.py (deterministic benchmark orchestration)
+    - specs/003-stream-delta-fanout/* (scoped fallback artifacts)
+  non_goals:
+    - per-client queue policy owned by jcode-ub3
+    - provider protocol or wire schema changes
+    - unbounded buffering or weakened cancellation/backpressure
+    - unrelated refactors or new dependencies
+  decision_gate:
+    baseline_first: true
+    material_gain:
+      repeatable_runs: 5
+      minimum_allocation_reduction_percent: 15
+      minimum_cpu_reduction_percent: 10
+      no_meaningful_regression: true
+    neutral_or_negative: leave_production_unchanged
+  invariants:
+    - exact event order and content
+    - UTF-8 and multibyte preservation
+    - thinking, tool, message, retry, interruption, and error boundaries
+    - cancellation and retry rollback behavior
+    - existing pacing, telemetry, JSON/NDJSON, SSE, SDK, and Registry contracts
+  acceptance:
+    - reproducible baseline and candidate CPU, wall, allocations, RSS measurements
+    - scenarios: small-token, long-token, multibyte, tool-call, interruption-error, slow-consumer
+    - focused parity tests compare event sequence and accumulated content
+    - built public CLI isolated SSE fixture acceptance if production changes
+    - maintainer review required; never merge or self-approve
+  outcome:
+    decision: reject-production-candidate
+    reason: >-
+      The deterministic harness and parity oracle are complete, but the Python
+      self-model is intentionally not evidence about Rust MPSC behavior. Static
+      inspection shows text/reasoning/tool deltas are consumed by accumulation,
+      parsing, taps, and SDK/history paths. Removing clones is therefore not
+      ownership-safe without restructuring those consumers, while coalescing
+      would alter pacing/redraw semantics. No Rust candidate was implemented.
+    evidence: [baseline.json, candidate.json]
+  routing_note: Base/default Autospec config was verified as Sol planning and Luna xhigh implementation. Full runner was not rerun after its worktree/Bead ownership violation; these local artifacts are the documented fallback.

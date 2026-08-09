@@ -1,0 +1,24 @@
+{
+  "scenario": "multibyte",
+  "events": [
+    {
+      "kind": "thinking_start"
+    },
+    {
+      "kind": "thinking",
+      "text": "推論🙂 café"
+    },
+    {
+      "kind": "thinking_end"
+    },
+    {
+      "kind": "text",
+      "text": "こんにちは世界 🌍"
+    },
+    {
+      "kind": "message_end",
+      "stop_reason": "end_turn"
+    }
+  ],
+  "oracle_digest": "df690b276af12131086e96de9566cec1783ae7de92392e52a3c9a9fe9e900687"
+}

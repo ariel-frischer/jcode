@@ -1,0 +1,18 @@
+{
+  "scenario": "small-token",
+  "events": [
+    {
+      "kind": "text",
+      "text": "Hello"
+    },
+    {
+      "kind": "text",
+      "text": " world"
+    },
+    {
+      "kind": "message_end",
+      "stop_reason": "end_turn"
+    }
+  ],
+  "oracle_digest": "2c972f2011ce7dbcb5902e13a163a4ac9c7a044f9ba02c52f7700b44b587ac16"
+}

@@ -1,0 +1,40 @@
+tasks:
+  feature: jcode-ms5
+  status: investigation-only
+  tasks:
+    - id: T001
+      title: Design deterministic scenario fixtures and metrics schema
+      status: completed
+      files: [scripts/bench_stream_delta_fanout.py]
+      evidence: Fixture matrix defined for six required scenarios; metrics include wall, CPU, allocations, RSS, event count, digest, and parity status.
+    - id: T002
+      title: Implement benchmark orchestration without production changes
+      status: completed
+      files: [scripts/bench_stream_delta_fanout.py]
+      depends_on: [T001]
+      condition: Host-independent fixture generation completed; real Rust execution was not claimed from the self-model.
+    - id: T003
+      title: Run baseline against real MPSC path
+      status: not-run
+      depends_on: [T002]
+      blocker: No isolated real-provider fixture was available without inventing a Rust performance claim.
+    - id: T004
+      title: Evaluate measured safe candidate
+      status: rejected
+      depends_on: [T003]
+      gate: require 5 repeatable runs and at least 15% allocation or 10% CPU general-purpose improvement with parity.
+    - id: T005
+      title: Add focused parity tests and run validation
+      status: completed
+      depends_on: [T003]
+    - id: T006
+      title: Built CLI SSE JSON/NDJSON Registry acceptance
+      status: not-applicable
+      depends_on: [T005]
+      condition: Not applicable because production code is unchanged.
+    - id: T007
+      title: Investigation-only closure if candidate gate fails
+      status: completed
+      depends_on: [T003]
+      condition: Production code unchanged; record measured evidence and maintainer-review handoff.
+      evidence: [baseline.json, candidate.json]

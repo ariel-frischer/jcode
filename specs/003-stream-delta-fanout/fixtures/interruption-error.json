@@ -1,0 +1,15 @@
+{
+  "scenario": "interruption-error",
+  "events": [
+    {
+      "kind": "text",
+      "text": "partial "
+    },
+    {
+      "kind": "error",
+      "message": "fixture interruption",
+      "retry_after_secs": null
+    }
+  ],
+  "oracle_digest": "ed0d58741d117d579c4ef6b6ad68979ab45a14fa137b2d57e6987504580ef194"
+}
