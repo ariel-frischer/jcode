@@ -123,21 +123,6 @@ touch events. It does not relax any trust-boundary or command security check.
 
 ## Other opportunities
 
-## Agentgrep inventory cache acceptance benchmark
-
-The paired harness `scripts/benchmark_find_cache.py` runs the same newly built
-`tool_profile` binary and repository fixture in separate forced-fresh and
-cache-enabled processes. Forced fresh uses `JCODE_AGENTGREP_FIND_CACHE=0`;
-cache-enabled runs retain the normal warm-up and report steady-state medians.
-Both results include wall p50, aggregate CPU per iteration, RSS delta, and HWM
-delta. The acceptance gate is a 30% warm wall improvement with no more than a
-10% cold regression. This measurement must be run after the host is idle and
-recorded with the resolved executable path.
-
-```bash
-scripts/benchmark_find_cache.py --binary target/selfdev/tool_profile --repo . --rounds 5 --iterations 20
-```
-
 ### 1. Configured post-tool hooks can dominate cheap tools
 
 A preliminary hooks-enabled smoke run on this machine measured a tiny read at

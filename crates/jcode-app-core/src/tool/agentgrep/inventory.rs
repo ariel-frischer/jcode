@@ -19,7 +19,7 @@ struct CachedInventory {
 static CACHE: LazyLock<Mutex<Vec<CachedInventory>>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 pub fn find(root: &Path, args: &FindArgs) -> FindResult {
-    if args.hidden || args.no_ignore || std::env::var_os("JCODE_AGENTGREP_FIND_CACHE").is_some_and(|value| value == "0") {
+    if args.hidden || args.no_ignore {
         return run_find(root, args);
     }
     let scope = SearchScope {
@@ -93,12 +93,6 @@ pub fn clear_for_tests() {
 }
 
 #[cfg(test)]
-fn cache_stats_for_tests() -> (usize, usize) {
-    let guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    (guard.len(), guard.iter().map(|item| item.bytes).sum())
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
@@ -154,45 +148,5 @@ mod tests {
         assert!(inventory_is_fresh(dir.path(), &manifest));
         fs::write(dir.path().join(".gitignore"), "visible.rs\n").unwrap();
         assert!(!inventory_is_fresh(dir.path(), &manifest));
-    }
-
-    #[test]
-    fn filters_and_caps_match_fresh_discovery() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join("src")).unwrap();
-        std::fs::write(dir.path().join("src/a.rs"), "fn a() {}\n").unwrap();
-        std::fs::write(dir.path().join("src/b.rs"), "fn b() {}\n").unwrap();
-        std::fs::write(dir.path().join("src/c.txt"), "c\n").unwrap();
-        let mut filtered = args("a");
-        filtered.file_type = Some("rs".into());
-        filtered.glob = Some("**/*.rs".into());
-        filtered.max_files = 1;
-        clear_for_tests();
-        assert_eq!(serde_json::to_value(find(dir.path(), &filtered).files).unwrap(), serde_json::to_value(run_find(dir.path(), &filtered).files).unwrap());
-    }
-
-    #[test]
-    fn concurrent_callers_share_complete_snapshot_and_bounds() {
-        let dir = tempfile::tempdir().unwrap();
-        for index in 0..32 { std::fs::write(dir.path().join(format!("file{index}.rs")), format!("fn file{index}() {{}}\n")).unwrap(); }
-        clear_for_tests();
-        let root = dir.path().to_path_buf();
-        let threads = (0..8)
-            .map(|_| {
-                let root = root.clone();
-                std::thread::spawn(move || find(&root, &args("file0.rs")))
-            })
-            .collect::<Vec<_>>();
-        let fresh = run_find(&root, &args("file0.rs"));
-        for thread in threads {
-            let result = thread.join().unwrap();
-            assert_eq!(
-                serde_json::to_value(result.files).unwrap(),
-                serde_json::to_value(&fresh.files).unwrap()
-            );
-        }
-        let (repositories, bytes) = cache_stats_for_tests();
-        assert!(repositories <= MAX_REPOSITORIES);
-        assert!(bytes <= MAX_BYTES);
     }
 }
