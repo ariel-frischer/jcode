@@ -46,17 +46,14 @@ fn run_safety_flags_preserve_raw_values() {
     ])
     .expect("run safety flags should parse");
     let Some(Command::Run {
-        max_turns,
-        max_tool_steps,
-        token_budget,
-        deadline,
+        run_safety,
         ..
     }) = args.command
     else {
         panic!("expected run command");
     };
-    assert_eq!(max_turns.as_deref(), Some(" 3 "));
-    assert_eq!(max_tool_steps.as_deref(), Some("7"));
-    assert_eq!(token_budget.as_deref(), Some("1000"));
-    assert_eq!(deadline.as_deref(), Some("2030-01-01T00:00:00Z"));
+    assert_eq!(run_safety.max_turns.as_deref(), Some(" 3 "));
+    assert_eq!(run_safety.max_tool_steps.as_deref(), Some("7"));
+    assert_eq!(run_safety.token_budget.as_deref(), Some("1000"));
+    assert_eq!(run_safety.deadline.as_deref(), Some("2030-01-01T00:00:00Z"));
 }

@@ -2389,7 +2389,6 @@ pub async fn run_single_message_command(
     invocation_safety: crate::config::RunSafetyConfig,
 ) -> Result<()> {
     let safety_candidates = run_safety::load_candidates(invocation_safety)?;
-    crate::agent::run_safety::resolve_run_safety(&safety_candidates, Default::default())?;
 
     if let Some(schema_path) = schema_path {
         run_safety::reject_schema(&safety_candidates)?;
@@ -2441,9 +2440,7 @@ pub async fn run_single_message_command(
         run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
     } else {
         run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
-        if let Some(reason) = agent.run_safety_stop_reason() {
-            println!("Run stopped: {} ({})", reason.label(), reason.code());
-        }
+        run_safety::print_plain_stop(&agent);
     }
 
     Ok(())

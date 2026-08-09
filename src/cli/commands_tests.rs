@@ -40,7 +40,6 @@ impl Drop for SavedEnv {
 
 struct TestProvider;
 
-#[path = "commands_tests/run_safety.rs"]
 mod run_safety;
 
 #[async_trait]

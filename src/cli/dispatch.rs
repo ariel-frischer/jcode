@@ -224,10 +224,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             json,
             ndjson,
             schema,
-            max_turns,
-            max_tool_steps,
-            token_budget,
-            deadline,
+            run_safety,
         }) => {
             commands::run_single_message_command(
                 &args.provider,
@@ -238,12 +235,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 json,
                 ndjson,
                 schema.as_deref(),
-                crate::config::RunSafetyConfig {
-                    max_turns,
-                    max_tool_steps,
-                    token_budget,
-                    deadline,
-                },
+                run_safety.into(),
             )
             .await?;
         }

@@ -22,11 +22,13 @@ pub(super) fn load_candidates(
     invocation: crate::config::RunSafetyConfig,
 ) -> Result<crate::agent::run_safety::RunSafetyCandidates> {
     let (persisted, environment) = crate::config::Config::run_safety_sources()?;
-    Ok(crate::agent::run_safety::RunSafetyCandidates {
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
         invocation,
         environment,
         persisted,
-    })
+    };
+    crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())?;
+    Ok(candidates)
 }
 
 pub(super) fn reject_schema(
@@ -102,6 +104,12 @@ pub(super) fn complete_turn_and_should_stop(
     agent.run_safety_complete_turn();
     *turns_completed += 1;
     agent.run_safety_stop_reason().is_some()
+}
+
+pub(super) fn print_plain_stop(agent: &crate::agent::Agent) {
+    if let Some(reason) = agent.run_safety_stop_reason() {
+        println!("Run stopped: {} ({})", reason.label(), reason.code());
+    }
 }
 
 pub(super) fn annotate_ndjson_done(
