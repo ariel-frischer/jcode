@@ -4,6 +4,15 @@ Status: current-state measurement and implementation retry evidence
 Measured: 2026-08-09
 Bead: `jcode-znm` (portfolio baseline: `jcode-skr`)
 
+> **Inventory-cache rollback (2026-08-09):** The local `agentgrep find`
+> inventory snapshot was removed after a root-repository probe exposed an
+> ignored-tree traversal regression. Its manifest recursively walked and
+> hashed the checkout's `target/` tree, which contained 234,371 files. Current
+> Jcode delegates `find` directly to the upstream `agentgrep::find::run_find`
+> path again. Inventory-cache measurements in this document are historical
+> evidence for the reverted implementation and must not be read as current
+> Jcode latency. The read-offset and hook-observer changes remain separate.
+
 ## Scope
 
 This profile measures common built-in tools through the production
@@ -281,6 +290,8 @@ historical ordinary/persistent wall times of 0.199259/0.020215 s and optimized
 times of 0.198859/0.021193 s. The parent already contained a persistent-hook path,
 so these paired hook numbers validate public compatibility and accounting, not a
 claim that the integrated observer redesign alone produced that difference.
+
+### Historical inventory-cache evidence (rolled back)
 
 The same public protocol was exercised for `agentgrep find` against an
 workspace-scoped eight-Rust-file fixture. Historical first/warm-median wall times
