@@ -218,9 +218,7 @@ impl App {
 
     pub(super) fn accept_command_palette_selection(&mut self) -> Option<CommandPaletteAction> {
         let entries = self.filtered_command_palette_entries();
-        let Some(state) = self.command_palette.as_ref() else {
-            return None;
-        };
+        let state = self.command_palette.as_ref()?;
         let Some(entry) = entries.get(state.selected.min(entries.len().saturating_sub(1))) else {
             self.set_status_notice("No matching commands");
             return None;
