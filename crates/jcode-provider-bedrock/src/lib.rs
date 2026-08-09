@@ -1279,10 +1279,10 @@ impl Provider for BedrockProvider {
                                 }
                             }
                         }
-                        ConverseStreamOutput::ContentBlockStop(_) => {
-                            if current_tool.take().is_some() {
-                                let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
-                            }
+                        ConverseStreamOutput::ContentBlockStop(_)
+                            if current_tool.take().is_some() =>
+                        {
+                            let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
                         }
                         ConverseStreamOutput::MessageStop(stop) => {
                             let reason = Some(format!("{:?}", stop.stop_reason()));
