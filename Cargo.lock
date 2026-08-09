@@ -3422,6 +3422,7 @@ dependencies = [
  "jcode-tool-types",
  "jcode-update-core",
  "libc",
+ "memchr",
  "open",
  "rand 0.9.3",
  "ratatui",

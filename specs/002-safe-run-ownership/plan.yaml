@@ -1,3 +1,41 @@
+plan:
+  branch: "jcode-44d-safe-run"
+  created: "2026-08-06"
+  spec_path: "specs/002-safe-run-ownership/spec.yaml"
+
+summary: |
+  Make private Go SDK runtime ownership explicit and transferable without
+  changing the non-owning contract of Connect or the shared Jcode daemon.
+  Reuse the existing Instance supervision, reconnect policy, observations,
+  harness protocol, and cleanup boundaries. Validate the full ownership
+  lifecycle with focused Go tests, race checks, and private-instance runtime
+  checks against the intended Jcode executable.
+
+technical_context:
+  language: "Go 1.23"
+  framework: "Standard library with the existing Jcode Go SDK packages"
+  primary_dependencies:
+    - name: "github.com/ariel-frischer/jcode-go"
+      version: "local module"
+      purpose: "Owns typed protocol clients, transport, private launch supervision, lifecycle observations, and public SDK contracts."
+    - name: "Jcode harness API"
+      version: "v1 wire contract"
+      purpose: "Remains the server and serialized protocol authority used by Connect and private instances."
+  storage: "SDK-created private instance home and socket state only; Connect does not own shared runtime storage"
+  testing:
+    framework: "Go test, race detector, vet, module verification, and private-instance runtime smoke tests"
+    approach: "Exercise private survival, explicit shutdown, shared non-ownership, finite reconnect observations, cancellation, unsafe instance paths, and cleanup without live provider calls."
+  target_platform: "Linux and macOS for the Go v1 Unix-socket transport"
+  project_type: "sdk"
+  performance_goals: "Reconnect attempts remain finite, Close and Shutdown remain idempotent, and no background supervisor or unbounded retry loop is introduced."
+  constraints:
+    - "Connect remains transport-only and never acquires shared process ownership."
+    - "Launch and Instance own only SDK-created private process, socket, home, and cleanup state."
+    - "The harness API remains the wire-contract owner; the SDK does not parse CLI output or duplicate server definitions."
+    - "Credentials are inherited only through the existing explicit private-launch filesystem contract and are never emitted in logs or protocol frames."
+    - "Shutdown and cleanup are idempotent, bounded, and race-safe."
+  scale_scope: "One explicit Instance owner per private runtime with a finite reconnect attempt budget and constant-size lifecycle state."
+
 feature:
   branch: "jcode-44d-safe-run"
   status: "Draft"
@@ -27,6 +65,40 @@ feature:
     - "go vet ./... from sdk/go"
     - "go mod verify from sdk/go"
     - "Review diff and run relevant runtime tests without live provider calls."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits implementation to sdk/go lifecycle ownership, focused tests, and the public Go SDK contract."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Preserves existing Connect, Launch, Close, Reconnect, wire, and credential behavior when explicit ownership APIs are unused."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Reuses existing launch and reconnect options without introducing a second configuration path or new implicit default."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Keeps process supervision and client lifecycle in sdk/go while the Rust runtime and harness API retain server and wire ownership."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps private survival, explicit shutdown, shared non-ownership, bounded reconnect, cancellation, and race behavior to focused Go tests."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Requires typed startup, shutdown, reconnect, and unsafe-instance errors without credential values or silent retry loops."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Runs Go tests, race checks, vet, module verification, relevant runtime checks, and changed-surface repository validation before delivery."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Uses one explicit Instance owner in sdk/go and avoids a second runtime manager, CLI-output parser, or duplicate protocol definition."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Completion requires the full safe-run lifecycle outcome, while shutdown remains an explicit caller-authorized irreversible action."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Bounds reconnect attempts, runs race checks, and validates private-instance behavior against the intended executable without live provider calls."
 _meta:
   version: "1.0.0"
   generator: "jcode-session"

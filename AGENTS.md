@@ -1,5 +1,17 @@
 # Repository Guidelines
 
+## Project Identity
+
+- This checkout is Ariel Frischer's custom development version of Jcode, not the
+  official upstream Jcode distribution.
+- Keep the custom branch reasonably synchronized with upstream
+  (`1jehuang/jcode`) while preserving Ariel-specific improvements and clearly
+  treating experimental features as intentional local work.
+- When evaluating upstream issues or proposing work, first check whether the
+  issue is already fixed locally, conflicts with an intentional customization,
+  or is especially relevant to Ariel's workflows such as `jcode run` and named
+  session profiles.
+
 ## Development Workflow
 
 - **Stay on your own branch** - Do not take, cherry-pick, merge, or copy code from other
@@ -25,10 +37,13 @@
 
 ## Swarm and Agent Limits
 
-- Run at most **3-5 Jcode threads/instances concurrently**. Keep the total
-  bounded by host capacity rather than opening unbounded sessions.
-- Each Jcode thread may spawn at most **3 direct swarm workers**. Prefer 2 when
-  the task does not clearly benefit from a third independent worker.
+- On this resource-constrained development machine, default to **1 active
+  implementation worker** and never exceed **2 concurrent workers** without
+  Ariel's explicit approval.
+- Serialize Rust builds, tests, Clippy, and guardrail runs across workers. Do not
+  run multiple Cargo-heavy commands in parallel.
+- Each Jcode thread may spawn at most **2 direct swarm workers**, subject to the
+  stricter one-worker default above.
 - **Sub-subagents are forbidden.** Workers must not spawn, assign, or delegate to
   additional agents. Only the root Jcode instance may create swarm workers.
 - Keep swarm work bounded and cancel or stop workers promptly when their task is

@@ -163,6 +163,9 @@ constraints:
   - "PRIN-004 applies: configuration contracts and runtime behavior remain in their existing ownership layers without reversing dependency direction."
   - "PRIN-005 and PRIN-006 apply: focused positive, negative, precedence, fallback, summary, and isolation checks provide executable compliance evidence with actionable trust-boundary validation."
   - "PRIN-007 applies: the specification artifact validator is required at this stage; implementation later requires focused tests, a relevant build, and repository guardrails before delivery."
+  - "PRIN-008 applies: the existing sidecar override and configuration resolver remain the single canonical path, with no duplicate extension mechanism or speculative abstraction."
+  - "PRIN-009 applies: completion is measured by the user's observable configured and effective memory behavior, while the change performs no destructive, irreversible, or externally visible action requiring approval."
+  - "PRIN-010 applies: unset cost and request count remain unchanged, affected request paths receive focused performance-sensitive checks, and runtime claims require validation against the newly built binary."
   - "The existing memory-sidecar explicit reasoning override remains the authoritative runtime precedence mechanism."
 
 out_of_scope:

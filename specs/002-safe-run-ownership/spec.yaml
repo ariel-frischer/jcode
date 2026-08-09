@@ -52,7 +52,10 @@ requirements:
       description: Ownership operations are deterministic and race-safe.
       measurable_target: Focused tests pass under go test -race.
 constraints:
-  - Apply PRIN-001 through PRIN-007 in .autospec/constitution.yaml.
+  - Apply PRIN-001 through PRIN-007 with focused compatibility, ownership, trust-boundary, race, and delivery checks.
+  - Apply PRIN-008 by keeping sdk/go as the canonical lifecycle owner and avoiding a duplicate runtime manager, CLI parser, or speculative abstraction.
+  - Apply PRIN-009 by proving the complete safe-run ownership outcome while requiring explicit calls for shutdown and other irreversible lifecycle actions.
+  - Apply PRIN-010 with bounded reconnect resource use, race validation, private-instance runtime checks, and confirmation that tests exercise the intended executable.
   - Keep ownership in sdk/go and do not make arbitrary clients immortal.
   - Do not change provider routing, credentials, or shared daemon policy.
 out_of_scope:
