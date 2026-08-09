@@ -5,6 +5,7 @@ use super::{
     EnvSnapshot, SessionImproveMode, SessionStatus, StoredCompactionState, StoredMemoryInjection,
     StoredMessage, StoredReplayEvent,
 };
+use crate::config::{ProfileRestoreStatus, ResolvedProfileSnapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(super) struct SessionJournalMeta {
@@ -33,6 +34,12 @@ pub(super) struct SessionJournalMeta {
     pub(super) is_debug: bool,
     pub(super) saved: bool,
     pub(super) save_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) profile_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) profile_snapshot: Option<ResolvedProfileSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) profile_restore_status: Option<ProfileRestoreStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,4 +98,7 @@ pub(super) fn metadata_requires_snapshot(
         || prev.is_debug != current.is_debug
         || prev.saved != current.saved
         || prev.save_label != current.save_label
+        || prev.profile_name != current.profile_name
+        || prev.profile_snapshot != current.profile_snapshot
+        || prev.profile_restore_status != current.profile_restore_status
 }

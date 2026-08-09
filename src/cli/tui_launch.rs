@@ -88,6 +88,7 @@ pub async fn run_tui_client(
     fresh_spawn: bool,
     remote_working_dir: Option<String>,
     onboarding_sim: bool,
+    startup_profile: Option<crate::protocol::SessionProfileStartup>,
 ) -> Result<()> {
     startup_profile::mark("tui_client_enter");
     let (terminal, tui_runtime) = init_tui_runtime()?;
@@ -128,7 +129,11 @@ pub async fn run_tui_client(
     }
     startup_profile::mark("terminal_title");
 
-    let mut app = tui::App::new_for_remote_with_options(resume_session.clone(), fresh_spawn);
+    let mut app = tui::App::new_for_remote_with_profile_options(
+        resume_session.clone(),
+        fresh_spawn,
+        startup_profile.clone(),
+    );
     if should_show_server_spawning(server_spawning).await {
         app.set_server_spawning();
     }
@@ -145,7 +150,9 @@ pub async fn run_tui_client(
     startup_profile::mark("pre_run_remote");
     startup_profile::report_to_log();
 
-    let result = app.run_remote(terminal, remote_working_dir).await;
+    let result = app
+        .run_remote(terminal, remote_working_dir, startup_profile)
+        .await;
 
     // On the error path, `?` returns here while `tui_runtime` is still alive, so
     // its `Drop` guarantees the terminal is restored (issue #214). On the happy

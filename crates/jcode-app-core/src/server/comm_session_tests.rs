@@ -1,5 +1,8 @@
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
+#[path = "comm_session_tests/profile_inheritance.rs"]
+mod profile_inheritance;
+
 use super::{
     CoordinatorSpawnIdentity, ensure_spawn_coordinator_swarm, prepare_visible_spawn_session,
     register_visible_spawned_member, resolve_coordinator_spawn_identity, resolve_spawn_working_dir,
@@ -255,6 +258,9 @@ fn prepare_visible_spawn_session_persists_startup_before_launch() {
         None,
         None,
         false,
+        None,
+        None,
+        None,
         Some(startup),
         |session_id, _cwd: &std::path::Path, _selfdev, provider_key| {
             assert_eq!(provider_key, None);
@@ -302,6 +308,9 @@ fn prepare_visible_spawn_session_cleans_startup_when_launch_not_started() {
         None,
         None,
         false,
+        None,
+        None,
+        None,
         Some("Do the thing."),
         |_session_id, _cwd: &std::path::Path, _selfdev, _provider_key| Ok(false),
     )
@@ -338,6 +347,9 @@ fn prepare_visible_spawn_session_cleans_session_when_launch_errors() {
         None,
         None,
         false,
+        None,
+        None,
+        None,
         Some("Do the thing."),
         |_session_id, _cwd: &std::path::Path, _selfdev, _provider_key| {
             Err(anyhow::anyhow!("launch failed"))
@@ -375,6 +387,9 @@ fn prepare_visible_spawn_session_persists_and_launches_provider_key_for_openrout
         None,
         false,
         None,
+        None,
+        None,
+        None,
         |_session_id, _cwd: &std::path::Path, _selfdev, provider_key| {
             assert_eq!(provider_key, Some("openrouter"));
             Ok(true)
@@ -404,6 +419,9 @@ fn prepare_visible_spawn_session_persists_requested_effort() {
         None,
         Some("low"),
         false,
+        None,
+        None,
+        None,
         None,
         |_session_id, _cwd: &std::path::Path, _selfdev, _provider_key| Ok(true),
     )
@@ -436,6 +454,9 @@ fn prepare_visible_spawn_session_prefers_parent_provider_key_over_model_guess() 
         None,
         false,
         None,
+        None,
+        None,
+        None,
         |_session_id, _cwd: &std::path::Path, _selfdev, provider_key| {
             assert_eq!(provider_key, Some("ollama"));
             Ok(true)
@@ -461,6 +482,9 @@ fn coordinator_identity(
         provider_key: provider_key.map(str::to_string),
         route_api_method: route_api_method.map(str::to_string),
         is_canary: false,
+        profile_name: None,
+        profile_snapshot: None,
+        profile_restore_status: None,
     }
 }
 

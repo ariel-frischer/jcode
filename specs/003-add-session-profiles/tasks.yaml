@@ -1,0 +1,553 @@
+tasks:
+    branch: "agent/jcode-3so-session-profiles"
+    created: "2026-08-08"
+    spec_path: "specs/003-add-session-profiles/spec.yaml"
+    plan_path: "specs/003-add-session-profiles/plan.yaml"
+summary:
+    total_tasks: 38
+    total_phases: 8
+    parallel_opportunities: 15
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Create the focused test seams and fixture locations used by the profile work without changing runtime behavior"
+      tasks:
+        - id: "T001"
+          title: "Create session-profile test module seams and fixture builders"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "The config test module can construct temporary TOML containing [profiles.<name>] tables and can load it through the existing Config test helpers."
+            - "The fixture helpers contain no credentials, full instruction bodies, or live-provider calls."
+    - number: 2
+      title: "Foundational"
+      purpose: "Establish compatibility baselines and module wiring that every user story must preserve"
+      tasks:
+        - id: "T002"
+          title: "Add absent-profile configuration compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "A TOML file without a profiles section loads successfully and produces the same effective Config defaults as the existing path."
+            - "Serializing that Config does not add an empty profiles table or otherwise change the legacy serialized shape."
+        - id: "T003"
+          title: "Add no-profile request and prompt regression fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "The existing mock-provider harness records the legacy provider setup, tool exposure, prompt bytes, and request count for an invocation that omits --profile."
+            - "The fixture is deterministic and does not contact a real provider or shared daemon."
+        - id: "T004"
+          title: "Register the session-profile config tests from the existing config test module"
+          status: "Completed"
+          type: "setup"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "The session-profile config tests are reachable through the existing jcode-base config test declarations without introducing a new crate or dependency."
+            - "The existing jcode-base test target still compiles with the new module present."
+    - number: 3
+      title: "User Story 1 - Define reusable session profiles"
+      purpose: "Persist named profile data, preserve absent/default serialization, and expose a strict selected-profile value for later runtime composition"
+      story_reference: "US-001"
+      independent_test: "Load a complete [profiles.review] TOML table and an absent profiles section, then assert every configured field and legacy defaults without starting a provider request."
+      tasks:
+        - id: "T005"
+          title: "Write SessionProfileConfig TOML round-trip and default tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T002", "T004"]
+          acceptance_criteria:
+            - "Tests cover provider, model, reasoning_effort, provider_profile, tool_profile, tools, disabled_tools, skills, and instructions using the documented TOML field names."
+            - "Optional scalar/list/string defaults deserialize when omitted, empty lists/strings are skipped on serialization as specified, and all supplied values round-trip unchanged."
+        - id: "T006"
+          title: "Implement SessionProfileConfig in the stable config-types crate"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-config-types/src/lib.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "SessionProfileConfig is serde-compatible, uses optional scalar fields and defaulted Vec fields, and preserves the exact profile field names."
+            - "The type crate remains dependency-light and does not depend on CLI, provider runtime, storage, or prompt code."
+        - id: "T007"
+          title: "Add the optional profiles map to Config with compatibility serialization"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/config.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Config exposes a BTreeMap<String, SessionProfileConfig> that defaults to empty when [profiles] is absent."
+            - "An empty map is omitted during serialization, while non-empty maps serialize under [profiles.<name>] without mutating existing config fields."
+        - id: "T008"
+          title: "Add exact-name selected-profile lookup tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "A valid profile name returns all persisted values in an immutable resolver result, and an omitted profile returns the legacy no-profile state."
+            - "Profile keys are matched exactly; whitespace-only or absent names do not silently select another profile."
+        - id: "T009"
+          title: "Implement the immutable profile lookup and overlay data types"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-base/src/config/session_profile.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "The resolver produces an immutable ResolvedSessionProfile/SessionPromptOverlay value containing profile provenance and persisted fields without writing Config or shared registries."
+            - "No-profile resolution performs no profile lookup, extra prompt work, provider initialization, or network I/O."
+    - number: 4
+      title: "User Story 2 - Select a profile for a run"
+      purpose: "Expose global profile selection and apply a valid profile through the existing provider, tool, and run command paths"
+      story_reference: "US-002"
+      independent_test: "Run the mock-provider command with --profile review both before and after run, then assert the outgoing setup uses review while an invocation without --profile remains unchanged."
+      tasks:
+        - id: "T010"
+          title: "Add CLI placement and explicit reasoning parsing tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "src/cli/args/tests.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Parsing accepts --profile review before run and after the run subcommand according to normal global-option rules."
+            - "Parsing retains unrelated command behavior and distinguishes an omitted reasoning override from an explicitly supplied value."
+        - id: "T011"
+          title: "Add global --profile and optional --reasoning-effort arguments"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/args.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "The global CLI stores profile selection and explicit reasoning effort as invocation provenance without turning existing parser defaults into explicit overrides."
+            - "The options are available to jcode run in both supported placements and do not alter unrelated commands."
+        - id: "T012"
+          title: "Write profile-to-run option conversion tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Tests verify a selected profile is converted into effective provider, model, provider_profile, reasoning, ToolSelection, and prompt-overlay run options."
+            - "Conversion is pure and does not save Config, mutate process-global environment, or initialize a provider."
+        - id: "T013"
+          title: "Implement CLI-facing profile resolution and effective run options"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T011", "T012"]
+          acceptance_criteria:
+            - "The CLI adapter carries the resolver's effective values into existing ProviderChoice, model, named provider_profile, reasoning, ToolSelection, and prompt-overlay owners."
+            - "No-profile callers retain the current constructors and receive the current defaults."
+        - id: "T014"
+          title: "Add mock-provider selected-profile setup tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "A complete valid profile produces the expected outgoing provider/model/tool setup and exactly one deterministic mock request."
+            - "The profile run leaves the persisted config bytes and an unrelated no-profile session unchanged."
+        - id: "T015"
+          title: "Resolve profiles before provider contact in dispatch and run command paths"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "jcode run resolves --profile before provider startup or request creation and passes effective values to plain, JSON, NDJSON, and schema command paths."
+            - "The dispatch path never persists the selected profile or applies it through a shared mutable Config."
+        - id: "T016"
+          title: "Thread optional per-run reasoning through provider initialization"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/provider_init.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "An effective reasoning override is applied through the existing provider setter before the first request, while existing callers with None follow the current path."
+            - "Provider/profile/model selection continues to use the canonical provider catalog and named provider_profile behavior."
+        - id: "T017"
+          title: "Construct Agents with effective profile run options"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "All supported run output modes construct the Agent with the effective per-run tool selection and retain current active-skill, memory, and user-message behavior."
+            - "Existing Agent constructors remain usable for callers that do not select a profile."
+    - number: 5
+      title: "User Story 3 - Override profile values per invocation"
+      purpose: "Make explicit invocation and environment precedence deterministic across provider, model, reasoning, provider profile, and tool settings"
+      story_reference: "US-003"
+      independent_test: "Resolve one profile against conflicting explicit flags, environment values, persisted defaults, and built-in defaults, then assert the documented field-by-field winner and inherited unset values."
+      tasks:
+        - id: "T018"
+          title: "Write the complete profile precedence matrix tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Tests cover provider, model, reasoning_effort, provider_profile, tool_profile, tools, and disabled_tools for explicit invocation > environment > selected profile > base config > built-in defaults."
+            - "Tests prove unset invocation fields inherit profile values and parser sentinels such as Auto do not masquerade as explicit overrides."
+        - id: "T019"
+          title: "Implement source-aware scalar precedence merging"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/config/session_profile.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "The resolver applies the documented precedence independently per field and preserves existing environment-over-config behavior."
+            - "Contradictory provider/provider_profile or unsupported model/provider combinations fail before provider contact rather than partially applying."
+        - id: "T020"
+          title: "Write ToolConfig profile, allow-list, and deny-list composition tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Tests verify profile baseline selection, allow-list restriction, deny-list removal, canonical aliases, and * / all behavior using existing ToolConfig semantics."
+            - "Unknown names are rejected in profile resolution and cannot silently grant or remove a tool."
+        - id: "T021"
+          title: "Implement ToolConfig overlay and Registry-backed tool validation"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/config/session_profile.rs"
+          dependencies: ["T019", "T020"]
+          acceptance_criteria:
+            - "Profile tool fields are overlaid only when higher-precedence invocation/environment sources do not win, then resolved through ToolConfig::selection."
+            - "Canonical tool names are validated against the constructed Registry before Agent execution with safe suggestions for invalid names."
+        - id: "T022"
+          title: "Add explicit override outgoing-request tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Mock-provider assertions show explicit model/provider/reasoning/tool choices win over conflicting profile values while unset profile fields still apply."
+            - "The test proves the selected profile is not written back to config and does not affect the next no-profile run."
+    - number: 6
+      title: "User Story 4 - Apply prompt and skill context safely"
+      purpose: "Compose selected skill prompts and additive instructions into one session without changing normal guidance or leaking context across sessions"
+      story_reference: "US-004"
+      independent_test: "Create two fake sessions with different selected skills and instructions, inspect both static prompts, and assert each contains only its own overlay plus the existing project/global guidance."
+      tasks:
+        - id: "T023"
+          title: "Write deterministic prompt-overlay and no-profile byte-compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/prompt_tests.rs"
+          dependencies: ["T022"]
+          acceptance_criteria:
+            - "Selected skill prompts and non-empty profile instructions appear exactly once in deterministic configured order before dynamic user turns."
+            - "AGENTS.md/project guidance, available-skill listing, active slash skills, memory, and the user message remain present, and a no-profile prompt is byte-compatible."
+        - id: "T024"
+          title: "Write working-directory skill validation and rendering tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/skill.rs"
+          dependencies: ["T022"]
+          acceptance_criteria:
+            - "Tests resolve selected skills through the effective working-directory SkillRegistry in requested order without mutating the shared registry."
+            - "Missing skills fail with the profile name and safe available-name guidance; empty skills/instructions add no section."
+        - id: "T025"
+          title: "Implement session-local skill and instruction overlay rendering"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/prompt.rs"
+          dependencies: ["T023", "T024"]
+          acceptance_criteria:
+            - "Prompt assembly accepts an optional SessionPromptOverlay and renders selected Skill::get_prompt content plus additive instructions without replacing existing wrappers or ordering."
+            - "Instruction bodies are never included in errors or diagnostics."
+        - id: "T026"
+          title: "Add profile-aware Agent ownership and constructor"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/agent.rs"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Agent owns the effective ToolSelection and SessionPromptOverlay for one run, while existing constructors remain compatible for no-profile callers."
+        - id: "T027"
+          title: "Pass the session-local overlay through Agent prompting"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/agent/prompting.rs"
+          dependencies: ["T026"]
+          acceptance_criteria:
+            - "Prompt construction receives only the owning Agent's SessionPromptOverlay and preserves active slash-skill, available-skill, memory, and user-message behavior."
+            - "No shared registry or process-global prompt state is mutated while passing the overlay."
+        - id: "T028"
+          title: "Add two-session prompt and tool isolation tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/agent_tests/"
+          dependencies: ["T027"]
+          acceptance_criteria:
+            - "Two sequential or concurrent fake sessions receive distinct profile skills, instructions, and tool policies with no cross-session leakage."
+            - "The shared SkillRegistry, persisted Config, and an unrelated session remain unchanged after both runs."
+        - id: "T029"
+          title: "Handle profile lifecycle safety for structured and shared-daemon runs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T028"]
+          acceptance_criteria:
+            - "A selected profile uses the existing private/new server bootstrap when safe."
+            - "A shared daemon that cannot accept a per-session overlay fails with a clear lifecycle diagnostic before mutating the daemon or making a misleading request."
+    - number: 7
+      title: "User Story 5 - Understand profile failures"
+      purpose: "Reject unknown, malformed, unsupported, and unsafe profile inputs before provider contact with actionable non-secret diagnostics"
+      story_reference: "US-005"
+      independent_test: "Exercise unknown profile, malformed TOML field, unsupported provider/model/reasoning/tool value, missing skill, and secret-bearing instruction cases, and assert each fails before a mock-provider request."
+      tasks:
+        - id: "T030"
+          title: "Write strict profile failure and redaction tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "Tests cover unknown names, empty names, malformed list/instruction types, invalid provider/model/reasoning/tool values, contradictory provider fields, and missing skills."
+            - "Each assertion names the profile and offending key/value or available correction without exposing credentials or full instruction contents."
+        - id: "T031"
+          title: "Write no-request negative-path provider fixture tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "tests/e2e/provider_behavior.rs"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "Invalid selected profiles exit non-success before provider initialization/request recording in the existing deterministic mock harness."
+            - "Diagnostics include profile and corrective context but never API keys, credentials, or complete instruction strings."
+        - id: "T032"
+          title: "Implement strict trust-boundary diagnostics and validation gates"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-base/src/config/session_profile.rs"
+          dependencies: ["T030", "T031"]
+          acceptance_criteria:
+            - "Selected-profile loading is strict while the legacy no-profile Config::load behavior remains forgiving and unchanged."
+            - "All malformed, unknown, unsupported, and unavailable references stop resolution before provider contact with safe actionable errors and no partial overlay."
+        - id: "T033"
+          title: "Verify invalid-profile dispatch has zero provider requests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-005"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T032"]
+          acceptance_criteria:
+            - "Pure CLI resolution tests prove invalid profile results cannot reach provider/tool/Agent construction and preserve no-profile behavior."
+            - "Available profile choices and configuration location are included when the requested profile is unknown."
+    - number: 8
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Document the contract, record the release note, and run the required focused and repository-wide delivery gates"
+      tasks:
+        - id: "T034"
+          title: "Document the complete profile contract in the generated config example"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "The default/example configuration documents [profiles.<name>], every supported field, explicit > environment > profile > base > built-in precedence, unset behavior, session scope, validation, and a complete secret-free example."
+        - id: "T035"
+          title: "Document --profile usage in the README"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "README.md"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "README.md shows a valid jcode --profile <name> run example and points users to the documented precedence and diagnostic behavior."
+        - id: "T036"
+          title: "Update structured-run wrapper guidance for profiles"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "docs/WRAPPERS.md"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "docs/WRAPPERS.md shows profile selection for one-shot runs and explains the shared-daemon lifecycle caveat without claiming unsupported profile management."
+        - id: "T037"
+          title: "Add the named-session-profiles changelog entry"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "changelog/v0.72.0.json"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "The next unreleased v0.72.0 artifact contains a concise named-session-profiles and --profile entry and no released changelog file is modified."
+        - id: "T038"
+          title: "Run focused profile validation, affected builds, and repository guardrails"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T034", "T035", "T036", "T037"]
+          acceptance_criteria:
+            - "The exact profile config, CLI, prompt, Agent, and e2e tests pass before the affected-package cargo check/build/test commands."
+            - "scripts/check_guardrails.sh passes, or any pre-existing unrelated failure is isolated and recorded without changing baselines."
+            - "Validation records preserve the no-profile compatibility, no-request failure, isolation, and secret-redaction evidence required by the constitution."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-002"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-003"]
+          blocks: ["US-005"]
+        - story_id: "US-005"
+          depends_on: ["US-004"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: [8]
+        - phase: 8
+          blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T003", "T004"]
+          rationale: "Compatibility fixtures and module wiring touch separate seams and all depend only on the setup test seam."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T010", "T012"]
+          rationale: "CLI parsing tests and pure profile conversion tests are independent test surfaces before their implementations."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T018", "T020"]
+          rationale: "Precedence matrix tests and ToolConfig composition tests cover separate owners and both depend only on the completed run integration."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T023", "T024"]
+          rationale: "Prompt assembly tests and SkillRegistry validation tests cover separate owners and can be authored independently."
+    - phase: 7
+      parallel_groups:
+        - tasks: ["T030", "T031"]
+          rationale: "Config diagnostic tests and mock-provider no-request tests exercise separate failure boundaries."
+    - phase: 8
+      parallel_groups:
+        - tasks: ["T034", "T035", "T036", "T037"]
+          rationale: "Generated config guidance, README, wrapper guidance, and changelog updates touch separate documentation artifacts."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5]
+        description: "Setup + foundational compatibility + persisted profile contract + jcode run selection + precedence and tool composition"
+        validation: "Run config round-trip/strict lookup tests, CLI placement and precedence matrix tests, and deterministic mock-provider setup tests for a complete profile and an unset invocation."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Focused fixture seams and regression evidence proving absent profiles do not change configuration, prompt, or request behavior."
+        - milestone: "Profile Contract Ready"
+          phases: [1, 2, 3]
+          deliverable: "Named profiles can be persisted, round-tripped, and resolved as immutable values without provider contact."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "jcode run accepts --profile and explicit/environment overrides produce the documented provider, model, reasoning, and tool setup."
+        - milestone: "Session Context Complete"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Selected skills and instructions are composed per session with tool and prompt isolation."
+        - milestone: "Release Ready"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8]
+          deliverable: "Invalid profiles fail before requests, documentation/changelog are updated, and all required validation evidence is recorded."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-08T19:26:32Z"
+    artifact_type: "tasks"

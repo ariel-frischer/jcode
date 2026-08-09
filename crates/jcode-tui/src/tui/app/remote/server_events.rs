@@ -2516,6 +2516,18 @@ pub(in crate::tui::app) fn handle_server_event(
                 _ => None,
             };
 
+            if matches!(
+                &notification_type,
+                crate::protocol::NotificationType::Message {
+                    scope: Some(scope),
+                    ..
+                } if scope == "profile_restore"
+            ) {
+                app.profile_state.restore_warning = Some(message.clone());
+                app.set_status_notice("Profile restore warning");
+                return false;
+            }
+
             if background_task_scope {
                 let presentation = present_swarm_notification(
                     &sender,

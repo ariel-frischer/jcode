@@ -1,0 +1,370 @@
+plan:
+  branch: "agent/jcode-3so-session-profiles"
+  created: "2026-08-08"
+  spec_path: "specs/003-add-session-profiles/spec.yaml"
+
+summary: |
+  Add an optional named-session-profile map to the existing TOML configuration,
+  with the serialized profile data owned by jcode-config-types and the runtime
+  resolver kept at the configuration/CLI boundary. A selected profile will be
+  loaded strictly, validated before provider contact, and converted into an
+  immutable per-run overlay. Resolution will use the documented order of
+  explicit invocation values, environment overrides, selected profile values,
+  unprofiled persisted configuration, and built-in defaults; absent profiles
+  will leave the current Config and request path unchanged.
+
+  Integrate the overlay through the existing ProviderChoice/provider catalog,
+  provider_profile, ToolConfig/ToolSelection, SkillRegistry, and prompt builder
+  owners. The one-shot run path will receive provider/model/reasoning and tool
+  overrides directly, while selected skills and additional instructions will be
+  added to the session's static prompt context. No persisted configuration,
+  shared skill registry, unrelated session, or running daemon will be mutated;
+  structured runs will either use the same profile while starting a private/new
+  server or fail with a lifecycle diagnostic when a shared daemon cannot accept
+  a per-session overlay.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "None"
+  primary_dependencies:
+    - name: "jcode-config-types"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns the serde/TOML data contract for optional named session profiles."
+    - name: "jcode-base"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns Config loading, strict profile validation, ToolConfig semantics, provider catalog access, SkillRegistry, and prompt construction."
+    - name: "clap"
+      version: "4"
+      purpose: "Adds the global --profile option and routes explicit run overrides, including the missing reasoning-effort invocation value."
+    - name: "serde"
+      version: "1"
+      purpose: "Deserializes optional profile fields with defaults and preserves round-trip field names."
+    - name: "toml"
+      version: "0.8"
+      purpose: "Loads strict profile configuration and verifies round-trip serialization."
+    - name: "jcode-provider-core"
+      version: "workspace path dependency"
+      purpose: "Reuses canonical reasoning-effort vocabulary and provider capability validation instead of duplicating provider rules."
+  storage: "Existing ~/.jcode/config.toml (or JCODE_HOME config.toml) plus existing environment overrides; no migration or new store"
+  testing:
+    framework: "Rust built-in test harness with existing jcode-base, CLI, app-core, and e2e mock-provider utilities"
+    approach: "Focused unit tests for TOML/defaults/strict diagnostics, CLI placement and precedence, ToolConfig composition, prompt overlays and session isolation; deterministic mock-provider integration tests for outgoing setup and no-request failures; then affected-package builds and repository guardrails."
+  target_platform: "Jcode-supported Linux, macOS, and Windows CLI/server builds"
+  project_type: "cli"
+  performance_goals: "No profile lookup, prompt section, tool selection, provider initialization, network request, or serialized-config change when --profile is absent; selected profiles add only one strict config read and bounded local skill validation before a run."
+  constraints:
+    - "Profiles are opt-in and the absent profiles section must preserve current defaults, serialized output, provider selection, tool exposure, prompt bytes, and request shape."
+    - "The canonical precedence order is explicit invocation > environment > selected profile > unprofiled persisted config > built-in defaults; parser defaults must not masquerade as explicit overrides."
+    - "Profile values are applied per current jcode run/session through existing owners; selecting a profile never writes config.toml or mutates shared/global skill state."
+    - "Strict selected-profile loading must reject malformed TOML/profile fields, unknown profile names, unsupported provider/model/reasoning/tool/skill references, and contradictory provider/profile combinations before a provider request."
+    - "Tool profile, allow-list, and deny-list composition must reuse ToolConfig selection and canonical tool-name normalization; no parallel tool semantics are introduced."
+    - "Selected skills must resolve through the existing session working-directory-aware SkillRegistry; profile instructions must be additive and must not replace AGENTS.md, project overlays, or the user message."
+    - "Diagnostics may name profiles, keys, safe values, available choices, and lengths, but must never print credentials, API keys, or full instruction contents."
+    - "The profile option is a global CLI input for jcode run; unsupported command/lifecycle combinations fail clearly rather than changing an existing daemon or unrelated command."
+    - "No profile inheritance, aliases, management UI, skill installation, provider credential changes, protocol-wide profile persistence, or unrelated cleanup is included."
+  scale_scope: "A small BTreeMap of user-defined profiles resolved once per selected run, with one immutable overlay attached to one Agent/session."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits the change to the additive profile contract, one CLI/run resolver seam, existing provider/tool/prompt owners, focused tests, documentation, and the required changelog entry; profile management and unrelated refactors remain non-goals."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Uses optional serde-defaulted fields and skips an empty profiles map during serialization, keeps the no-profile path on the current Config/provider/Agent constructors, and adds regression checks for absent-section and unset invocations."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Defines one resolver with invocation > environment > selected profile > base config > built-in precedence, preserves explicit flag provenance, and routes provider, reasoning, tools, skills, and instructions through their existing owners."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Places stable serialized profile data in jcode-config-types, keeps Config/ToolConfig/provider/skills/prompt resolution in jcode-base, and limits app-core/CLI changes to session composition rather than moving stable types into orchestration."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps loading, round-trip, precedence, CLI placement, tool composition, prompt skill/instruction content, session isolation, unknown/invalid diagnostics, no-request behavior, and unset compatibility to focused tests before broad checks."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Uses strict parsing and pre-request profile/skill/tool/provider validation, wraps errors with profile/key context and corrective choices, and keeps secrets and instruction bodies out of diagnostics."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Requires exact artifact validation now and, during implementation, focused Rust tests, affected-package build/check, and scripts/check_guardrails.sh with any pre-existing unrelated failures isolated rather than rebaselined."
+
+research_findings:
+  decisions:
+    - topic: "Persisted profile ownership and serialization"
+      decision: "Add a serde-defaulted SessionProfileConfig type in jcode-config-types and a BTreeMap<String, SessionProfileConfig> profiles field on Config with skip_serializing_if for an empty map."
+      rationale: "The profile is a stable user-authored TOML contract, while the empty map must not change existing serialized defaults or files that omit [profiles]. The type crate already owns dependency-light config records."
+      alternatives_considered:
+        - "Define profiles only in the root CLI crate, which would make Config deserialization and other config consumers depend on the interface layer."
+        - "Serialize an empty [profiles] table by default, which would violate the absent-section compatibility requirement."
+    - topic: "Strict selection and canonical resolution"
+      decision: "Resolve a selected profile through a dedicated Config/session-profile resolver using strict TOML loading and an immutable ResolvedSessionProfile value; keep Config::load's forgiving legacy behavior for the no-profile path."
+      rationale: "Selected profiles are an explicit trust-boundary input and must not silently fall back to defaults, while existing users with malformed config currently retain the established load behavior when no profile is requested."
+      alternatives_considered:
+        - "Use the forgiving global config cache for profile selection, which can silently discard malformed profile data."
+        - "Patch and save the global Config before a run, which risks persistent changes and cross-session leakage."
+    - topic: "Precedence and explicit CLI provenance"
+      decision: "Treat only supplied global flags as invocation overrides, fill unset fields from the selected profile only when the corresponding environment source is absent, and leave the existing Auto provider sentinel as the unselected provider default. Add a global --reasoning-effort option because no current CLI field exposes an explicit reasoning override."
+      rationale: "This makes the specified field-by-field matrix testable without turning parser defaults into user intent, preserves current environment-over-config behavior, and supplies the missing explicit reasoning input required by FR-008."
+      alternatives_considered:
+        - "Let profile values overwrite environment-derived Config values, which reverses the documented environment precedence."
+        - "Convert every existing provider argument to Option<T>, which would broaden parser churn beyond the minimum provenance seam."
+        - "Treat reasoning as profile-only, which would leave explicit invocation precedence untestable for that field."
+    - topic: "Provider/model/profile application"
+      decision: "Convert profile provider strings through the existing provider catalog/ProviderChoice selection, reuse the existing named provider_profile path, pass the effective model into provider initialization, and apply a validated reasoning override through the provider's existing setter before the first request."
+      rationale: "Provider catalog and runtime capability checks already know built-in/custom providers and model routes; using them avoids a second provider vocabulary and lets invalid choices fail before a request."
+      alternatives_considered:
+        - "Create a profile-specific provider registry or model parser, which would drift from current startup and model-picker behavior."
+        - "Write profile values into persistent [provider] defaults, which would violate session scope."
+    - topic: "Tool profile composition and validation"
+      decision: "Clone the effective base ToolConfig, overlay profile tool_profile/tools/disabled_tools only for fields not won by explicit or environment sources, derive ToolSelection with the existing profile/allow/deny rules, and validate canonical names against the constructed Registry before Agent execution."
+      rationale: "ToolConfig already defines baseline, allow-list, deny-list, aliases, and `*`/`all` behavior; Registry is the authoritative source for actual built-in/MCP tool names and can provide no-request validation."
+      alternatives_considered:
+        - "Add separate profile-specific filtering logic, which could expose tools differently from [tools] and CLI flags."
+        - "Ignore unknown names as current normalization does, which would violate the profile diagnostic requirement."
+    - topic: "Session prompt skills and instructions"
+      decision: "Resolve selected skills from the effective working-directory SkillRegistry, preserve configured order after validation, and extend the prompt builder with a static per-session profile overlay section for skill prompts and additional instructions. Keep slash-invoked active skills and available-skill listing on their existing paths."
+      rationale: "This preserves global/project guidance and user-message boundaries, keeps project-local skills session-scoped, and avoids using system_prompt_override, which would replace rather than compose normal prompt sources."
+      alternatives_considered:
+        - "Mutate the shared registry or set one global active skill, which would leak context between sessions."
+        - "Use system_prompt_override, which would drop AGENTS.md, project overlays, and other normal prompt layers."
+    - topic: "Daemon and structured-run lifecycle"
+      decision: "Reuse the existing server bootstrap for a profile when it starts a new/private server; detect an already-running shared daemon for profile-sensitive structured runs and return a clear lifecycle error unless the per-session handoff is available."
+      rationale: "The current schema path uses a shared daemon and has no profile field in the wire contract. Refusing an unsafe global mutation satisfies the isolation requirement without expanding the protocol."
+      alternatives_considered:
+        - "Silently apply profile environment to the client while using an existing daemon, which would not affect the target session and would mislead users."
+        - "Add a durable protocol/session schema immediately, which is outside the requested one-shot profile capability and increases compatibility risk."
+
+data_model:
+  entities:
+    - name: "NamedSessionProfile"
+      description: "A user-authored optional entry under [profiles.<name>] containing session defaults and prompt context."
+      fields:
+        - name: "name"
+          type: "String (BTreeMap key)"
+          description: "Exact profile identifier selected by --profile."
+          constraints: "Must be non-empty after trimming; no inheritance, aliases, or implicit fallback names."
+        - name: "provider"
+          type: "Option<String>"
+          description: "Built-in or configured provider selection string."
+          constraints: "Non-empty when present; validated through existing provider catalog/selection rules."
+        - name: "model"
+          type: "Option<String>"
+          description: "Provider model identifier used when no higher-precedence model is supplied."
+          constraints: "Non-empty when present; validated by existing provider/model route resolution before request."
+        - name: "reasoning_effort"
+          type: "Option<String>"
+          description: "Provider-supported reasoning effort for this run."
+          constraints: "Canonicalized through existing provider vocabulary and rejected when unsupported by the resolved provider/model."
+        - name: "provider_profile"
+          type: "Option<String>"
+          description: "Existing named [providers.<name>] selection."
+          constraints: "Must reference an available built-in or configured named provider profile; contradictory provider combinations fail."
+        - name: "tool_profile"
+          type: "Option<String>"
+          description: "Existing ToolConfig baseline such as full, minimal/lite, acp, or none."
+          constraints: "Uses current ToolConfig profile semantics and diagnostics."
+        - name: "tools"
+          type: "Vec<String>"
+          description: "Explicit allow-list using existing ToolConfig enabled-list semantics."
+          constraints: "Canonical aliases are normalized; `*`/`all` retain unrestricted behavior; unknown names fail with suggestions before request."
+        - name: "disabled_tools"
+          type: "Vec<String>"
+          description: "Deny-list applied after the selected baseline/allow-list."
+          constraints: "Canonical aliases are normalized and unknown names fail before request."
+        - name: "skills"
+          type: "Vec<String>"
+          description: "Installed skill names whose prompts are included in this session."
+          constraints: "Names must resolve in the effective working-directory SkillRegistry; configured order is deterministic and duplicates are handled explicitly."
+        - name: "instructions"
+          type: "Option<String>"
+          description: "Additional additive system guidance for this session."
+          constraints: "String only; empty/whitespace-only values add no section; content is never echoed in diagnostics."
+      relationships:
+        - target: "Config"
+          type: "many-to-one"
+          description: "Profiles are persisted in Config under a named map."
+        - target: "ResolvedSessionProfile"
+          type: "one-to-one"
+          description: "One selected entry becomes one effective per-run overlay after precedence and validation."
+    - name: "ResolvedSessionProfile"
+      description: "Immutable effective provider, model, reasoning, tool, skill, and instruction choices for one run, including source/provenance decisions."
+      fields:
+        - name: "profile_name"
+          type: "Option<String>"
+          description: "Selected profile name, absent for the legacy no-profile path."
+          constraints: "Only present after successful exact-name lookup."
+        - name: "provider_and_model"
+          type: "ProviderChoice + Option<String> + Option<String>"
+          description: "Effective provider choice, model, and named provider_profile passed to existing startup."
+          constraints: "Explicit values beat environment/profile values; provider/profile errors stop before request."
+        - name: "reasoning_effort"
+          type: "Option<String>"
+          description: "Effective explicit effort, if any, applied through the provider setter."
+          constraints: "Environment and invocation precedence is preserved and provider/model support is checked."
+        - name: "tool_selection"
+          type: "ToolSelection"
+          description: "Effective allowed and disabled tool sets for the Agent/session."
+          constraints: "Derived only through ToolConfig selection and validated against the constructed Registry."
+        - name: "prompt_overlay"
+          type: "SessionPromptOverlay"
+          description: "Validated selected skill content and profile instructions for one session."
+          constraints: "Session-local, deterministic ordering, additive to normal guidance, and not persisted as global config."
+      relationships:
+        - target: "NamedSessionProfile"
+          type: "many-to-one"
+          description: "The selected profile supplies only fields not won by invocation or environment."
+        - target: "ToolSelection"
+          type: "one-to-one"
+          description: "The Agent uses this selection instead of reading a profile-specific global Config."
+        - target: "SessionPromptOverlay"
+          type: "one-to-one"
+          description: "The Agent's prompt builder incorporates this overlay for the current session."
+    - name: "SessionPromptOverlay"
+      description: "Prompt-layer data attached to one Agent, containing profile-selected skill prompts and additional instructions."
+      fields:
+        - name: "skill_names"
+          type: "Vec<String>"
+          description: "Validated names retained for deterministic session context."
+          constraints: "Resolved against the current session working directory; no shared registry mutation."
+        - name: "skill_prompts"
+          type: "Vec<String>"
+          description: "Rendered Skill::get_prompt content in configured order."
+          constraints: "Included exactly once in the static profile section."
+        - name: "instructions"
+          type: "Option<String>"
+          description: "Profile-provided additive guidance."
+          constraints: "Placed before dynamic user turns and never replaces normal system/project guidance."
+      relationships:
+        - target: "Agent"
+          type: "one-to-one"
+          description: "Each run Agent owns its overlay for prompt generation and session isolation."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "crates/jcode-base/src/config/default_file.rs"
+      description: "Document the [profiles.<name>] TOML shape, every supported field, precedence, unset behavior, session scope, and a complete secret-free example."
+    - path: "README.md"
+      description: "Add the user-facing jcode --profile run example and point to the profile precedence/diagnostic behavior."
+    - path: "docs/WRAPPERS.md"
+      description: "Update one-shot run examples, including profile selection and the no-shared-daemon caveat for structured runs if required by implementation."
+    - path: "changelog/v<next-release>.json"
+      description: "Add a concise user-facing named-session-profiles and --profile entry to the next unreleased release artifact without changing an already released entry."
+  source_code:
+    - path: "crates/jcode-config-types/src/lib.rs"
+      description: "Serde/TOML SessionProfileConfig record with optional scalar fields and skip-empty list/string serialization."
+    - path: "crates/jcode-base/src/config.rs"
+      description: "Config.profiles map, empty-map serialization compatibility, and module wiring for profile resolution."
+    - path: "crates/jcode-base/src/config/session_profile.rs"
+      description: "Strict selected-profile lookup, profile field validation, environment-aware overlay merging, safe diagnostics, and ToolConfig composition helpers."
+    - path: "crates/jcode-base/src/skill.rs"
+      description: "Reuse existing effective working-directory SkillRegistry APIs; add only a focused validation/render helper if needed."
+    - path: "crates/jcode-base/src/prompt.rs"
+      description: "Add an optional per-session profile prompt overlay to the existing static prompt assembly while retaining legacy wrappers and ordering."
+    - path: "crates/jcode-app-core/src/agent.rs"
+      description: "Preserve current constructors and add a profile-aware constructor/fields for ToolSelection and SessionPromptOverlay."
+    - path: "crates/jcode-app-core/src/agent/prompting.rs"
+      description: "Pass the session-local profile overlay into prompt construction without changing active slash-skill or memory behavior."
+    - path: "src/cli/args.rs"
+      description: "Expose global --profile and the minimal explicit --reasoning-effort override while preserving current defaults and normal global flag placement."
+    - path: "src/cli/profile.rs"
+      description: "CLI-facing conversion from Config resolver output to effective ProviderChoice/model/provider_profile/reasoning/tool/prompt run options."
+    - path: "src/cli/dispatch.rs"
+      description: "Resolve --profile before provider contact, keep existing provider/tool flag application for effective values, and reject unsafe unsupported command/daemon combinations."
+    - path: "src/cli/provider_init.rs"
+      description: "Thread an optional per-run reasoning override through provider initialization/setter paths while retaining unchanged callers."
+    - path: "src/cli/commands.rs"
+      description: "Accept the resolved run options in plain/JSON/NDJSON/schema paths and construct Agents with profile-local tool/prompt state."
+  tests:
+    - path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+      description: "Load/round-trip/absent-section coverage, strict malformed fields, profile names, field validation, precedence helpers, and ToolConfig composition."
+    - path: "crates/jcode-base/src/prompt_tests.rs"
+      description: "Deterministic profile instruction/selected-skill ordering, additive guidance, exactly-once content, and no-profile byte compatibility."
+    - path: "crates/jcode-app-core/src/agent_tests/"
+      description: "Two-session profile overlay and tool-policy isolation tests using existing mock providers/registries."
+    - path: "src/cli/args/tests.rs"
+      description: "Accept --profile before and after run, retain normal parsing for unrelated commands, and cover explicit reasoning override parsing."
+    - path: "src/cli/profile.rs"
+      description: "Pure precedence matrix, provider/profile/model/reasoning diagnostics, unknown profile choices, and no-side-effect resolution tests."
+    - path: "tests/e2e/session_flow.rs"
+      description: "Mock-provider outgoing setup and prompt assertions for a complete profile, explicit overrides, selected skills/instructions, and independent sessions."
+    - path: "tests/e2e/provider_behavior.rs"
+      description: "Negative no-request/provider fixture coverage for invalid provider/model/reasoning/tool/skill profile values where the existing mock harness is appropriate."
+
+implementation_phases:
+  - phase: 1
+    name: "Persisted profile contract and strict resolver"
+    goal: "Represent [profiles.<name>] without changing absent/default serialization and produce a validated immutable overlay before provider startup."
+    deliverables:
+      - "Add SessionProfileConfig and Config.profiles with serde defaults, skip-empty serialization, and complete default-file comments."
+      - "Implement exact-name strict lookup, safe field/type/value diagnostics, provider/profile reference checks, reasoning vocabulary checks, and effective working-directory skill validation."
+      - "Define the source-aware precedence helper and ToolConfig overlay conversion without mutating persisted Config or shared registries."
+      - "Add focused config, serialization, invalid-input, and resolver tests."
+  - phase: 2
+    name: "CLI selection and provider/tool run integration"
+    goal: "Make --profile usable with jcode run in both supported flag placements and apply effective provider, model, reasoning, and tools through existing runtime paths."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Add global --profile parsing and the minimal explicit --reasoning-effort route, preserving current parser defaults and unrelated commands."
+      - "Resolve profile values before provider contact; explicit invocation and environment values win field by field, then feed ProviderChoice, model, provider_profile, and reasoning into existing initialization."
+      - "Pass the resulting ToolSelection into the run Agent and validate allow/deny names against the constructed Registry before the first provider request."
+      - "Cover precedence matrix, both CLI placements, unknown/invalid profile diagnostics, no-request behavior, and absent-profile regressions."
+  - phase: 3
+    name: "Session prompt overlay and lifecycle isolation"
+    goal: "Apply selected skills and additional instructions to only the selected run/session while preserving normal prompt layers and daemon safety."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Extend prompt assembly with deterministic static profile instructions and selected Skill::get_prompt sections, leaving AGENTS.md, project overlays, available-skill listing, active slash skills, memory, and user messages intact."
+      - "Add profile-aware Agent/session construction that owns overlay and tool policy per session and retains existing constructors for no-profile callers."
+      - "Handle structured/schema runs through existing server bootstrap when safe, or fail clearly if a shared daemon cannot accept a per-session profile without mutation."
+      - "Add mock-provider prompt, tool, persistence, reload, and two-session isolation tests."
+  - phase: 4
+    name: "Documentation, changelog, and delivery validation"
+    goal: "Document the supported contract and prove the complete acceptance surface with repository guardrails."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Update the generated config example, README/run reference, structured-run caveat if applicable, and next-release changelog entry with a secret-free complete example."
+      - "Run exact profile/config/CLI/prompt/e2e tests first, then affected-package cargo check/build/test and scripts/check_guardrails.sh."
+      - "Record commands/results and isolate any pre-existing unrelated guardrail failures without rebaselining them."
+
+risks:
+  - id: "RISK-001"
+    risk: "A parser default such as ProviderChoice::Auto could be mistaken for an explicit invocation and prevent a profile provider from applying."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Keep explicit Option fields for newly added values, treat only concrete provider choices as explicit in the resolver, and test omitted versus supplied flags in the precedence matrix."
+  - id: "RISK-002"
+    risk: "Profile settings could be applied through process-global environment/config state and leak into an existing daemon or another session."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Use immutable run/Agent options for tools and prompt context, scope provider/profile handoff to new/private server startup, and fail before request when a shared daemon cannot isolate the overlay."
+  - id: "RISK-003"
+    risk: "Provider/model catalogs or MCP tools may be unavailable during offline validation, making a valid profile appear invalid or allowing an unknown value through."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Reuse existing local provider/profile capability checks, validate built-in/loaded Registry names before the request, distinguish local structural validation from remote catalog availability, and test both known and unavailable fixtures."
+  - id: "RISK-004"
+    risk: "Prompt section ordering or nondeterministic skill iteration could change cache prefixes or duplicate profile context."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Keep profile content in the existing static prompt path, preserve configured skill order (with deterministic duplicate handling), render exactly once, and assert exact ordering/bytes in prompt tests."
+  - id: "RISK-005"
+    risk: "Diagnostics could expose instruction text or provider credentials while explaining an invalid profile."
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Report only profile/key/safe scalar values, available names, correction hints, and lengths; add redaction assertions to negative tests and never include full instructions in errors."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-08T19:14:26Z"
+  artifact_type: "plan"

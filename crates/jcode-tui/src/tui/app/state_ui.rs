@@ -1651,6 +1651,7 @@ fn build_skills_report(app: &App) -> String {
     out.push_str("Loaded skills\n");
     if app.is_remote && !app.remote_skills.is_empty() {
         let mut names = app.remote_skills.clone();
+        names.retain(|name| app.profile_allows_skill_name(name));
         names.sort();
         for name in &names {
             let marker = if active.as_deref() == Some(name.as_str()) {
@@ -1686,7 +1687,11 @@ fn build_skills_report(app: &App) -> String {
     // remote-aware way (the inherent `available_skills()` ignores remote skills).
     let installed: std::collections::HashSet<String> =
         if app.is_remote && !app.remote_skills.is_empty() {
-            app.remote_skills.iter().cloned().collect()
+            app.remote_skills
+                .iter()
+                .filter(|name| app.profile_allows_skill_name(name))
+                .cloned()
+                .collect()
         } else {
             app.current_skills_snapshot()
                 .list()
@@ -1904,6 +1909,73 @@ pub(super) fn handle_info_command(app: &mut App, trimmed: &str) -> bool {
             if app.memory_enabled { "on" } else { "off" },
             if app.swarm_enabled { "on" } else { "off" }
         ));
+        info.push_str(&format!(
+            "Profile: {}\n",
+            app.profile_state.current.as_deref().unwrap_or("none")
+        ));
+        if let Some(pending) = app.profile_state.pending.as_ref() {
+            info.push_str(&format!(
+                "Profile pending: {}\n",
+                pending.as_deref().unwrap_or("none")
+            ));
+        }
+        if let Some(warning) = app.profile_state.restore_warning.as_deref() {
+            info.push_str(&format!("Profile warning: {}\n", warning));
+        }
+        let profile_source = if app.profile_state.restore_warning.is_some() {
+            "restored"
+        } else if app.profile_state.current.is_some() {
+            "profile"
+        } else {
+            "built_in_default"
+        };
+        info.push_str(&format!("Profile source: {profile_source}\n"));
+        if let Some(startup) = app.profile_state.current_startup.as_ref() {
+            let allowed_tools = startup
+                .allowed_tools
+                .as_deref()
+                .map(|tools| tools.join(", "))
+                .unwrap_or_else(|| "all".to_string());
+            let disabled_tools = if startup.disabled_tools.is_empty() {
+                "none".to_string()
+            } else {
+                startup.disabled_tools.join(", ")
+            };
+            let selected_skills = if startup.skill_names.is_empty() {
+                "none".to_string()
+            } else {
+                startup.skill_names.join(", ")
+            };
+            info.push_str(&format!(
+                "Profile tools: allowed={allowed_tools}; disabled={disabled_tools}\n"
+            ));
+            info.push_str(&format!(
+                "Profile skills: selected={selected_skills}; mode={}\n",
+                startup
+                    .skills_mode
+                    .map(|mode| mode.as_str())
+                    .unwrap_or("profile")
+            ));
+            if !startup.disabled_skills.is_empty() {
+                info.push_str(&format!(
+                    "Profile skills disabled: {}\n",
+                    startup.disabled_skills.join(", ")
+                ));
+            }
+            info.push_str(&format!(
+                "Profile instructions: {} ({} chars)\n",
+                if startup.instructions.is_some() {
+                    "present"
+                } else {
+                    "absent"
+                },
+                startup.instructions.as_deref().map_or(0, str::len)
+            ));
+        } else {
+            info.push_str("Profile tools: inherited base policy\n");
+            info.push_str("Profile skills: mode=omitted (legacy no-profile behavior)\n");
+            info.push_str("Profile instructions: absent (0 chars)\n");
+        }
 
         if let Some(ref model) = app.remote_provider_model {
             info.push_str(&format!("Model: {}\n", model));

@@ -16,7 +16,8 @@ use super::App;
 /// concerns (clearing the input line, telemetry) because those differ between
 /// the local and remote entry points.
 pub(super) fn dispatch_local_command(app: &mut App, trimmed: &str) -> bool {
-    super::commands::handle_cancel_command(app, trimmed)
+    handle_profile_command(app, trimmed)
+        || super::commands::handle_cancel_command(app, trimmed)
         || super::commands::handle_help_command(app, trimmed)
         || super::commands::handle_keys_command(app, trimmed)
         || super::commands::handle_ssh_command(app, trimmed)
@@ -39,6 +40,28 @@ pub(super) fn dispatch_local_command(app: &mut App, trimmed: &str) -> bool {
         || super::state_ui::handle_info_command(app, trimmed)
         || super::auth::handle_auth_command(app, trimmed)
         || super::tui_lifecycle_runtime::handle_dev_command(app, trimmed)
+}
+
+fn handle_profile_command(app: &mut App, trimmed: &str) -> bool {
+    let Some(argument) = trimmed.strip_prefix("/profile") else {
+        return false;
+    };
+    if !argument.is_empty() && !argument.chars().next().is_some_and(char::is_whitespace) {
+        return false;
+    }
+
+    let argument = argument.trim();
+    if argument.is_empty() {
+        app.open_profile_picker();
+        return true;
+    }
+    if argument.eq_ignore_ascii_case("none") {
+        app.request_profile_transition(None);
+        return true;
+    }
+
+    app.request_profile_transition(Some(argument.to_owned()));
+    true
 }
 
 #[cfg(test)]

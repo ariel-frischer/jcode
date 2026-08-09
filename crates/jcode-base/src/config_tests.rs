@@ -1308,3 +1308,6 @@ fn config_reload_generation_increments_on_cache_invalidation() {
 
 #[path = "config_tests/memory_reasoning.rs"]
 mod memory_reasoning;
+
+#[path = "config_tests/session_profiles.rs"]
+mod session_profiles;

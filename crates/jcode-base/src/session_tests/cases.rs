@@ -483,6 +483,15 @@ fn load_startup_stub_preserves_metadata_but_skips_heavy_vectors() -> Result<()> 
     session.reasoning_effort = Some("high".to_string());
     session.provider_key = Some("openai".to_string());
     session.route_api_method = Some("openai-api".to_string());
+    session.set_profile_state(
+        Some("review".to_owned()),
+        Some(crate::config::ResolvedProfileSnapshot {
+            profile_name: Some("review".to_owned()),
+            fingerprint: "sha256:startup".to_owned(),
+            ..Default::default()
+        }),
+        crate::config::ProfileRestoreStatus::Matching,
+    );
     session.set_canary("self-dev");
     session.append_stored_message(StoredMessage {
         id: "msg_1".to_string(),
@@ -533,12 +542,122 @@ fn load_startup_stub_preserves_metadata_but_skips_heavy_vectors() -> Result<()> 
     assert_eq!(stub.reasoning_effort.as_deref(), Some("high"));
     assert_eq!(stub.provider_key.as_deref(), Some("openai"));
     assert_eq!(stub.route_api_method.as_deref(), Some("openai-api"));
+    assert_eq!(stub.profile_name.as_deref(), Some("review"));
+    assert_eq!(
+        stub.profile_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.fingerprint.as_str()),
+        Some("sha256:startup")
+    );
     assert!(stub.is_canary);
     assert!(stub.messages.is_empty());
     assert!(stub.env_snapshots.is_empty());
     assert!(stub.memory_injections.is_empty());
     assert!(stub.replay_events.is_empty());
+
+    let remote = Session::load_for_remote_startup(session_id)?;
+    assert_eq!(remote.profile_name.as_deref(), Some("review"));
+    assert_eq!(
+        remote.profile_restore_status,
+        Some(crate::config::ProfileRestoreStatus::Matching)
+    );
     Ok(())
+}
+
+#[test]
+fn profiled_session_round_trips_selected_name_and_secret_free_snapshot() -> Result<()> {
+    let _env_lock = lock_env();
+    let temp = tempfile::tempdir()?;
+    let _home = EnvVarGuard::set("JCODE_HOME", temp.path().as_os_str());
+
+    let mut session = Session::create_with_id("session_profile_snapshot".to_owned(), None, None);
+    let snapshot = crate::config::ResolvedProfileSnapshot {
+        profile_name: Some("review".to_owned()),
+        provider_model_reasoning: crate::config::ProviderModelReasoningSnapshot {
+            provider: Some("openai".to_owned()),
+            model: Some("gpt-test".to_owned()),
+            reasoning_effort: Some("high".to_owned()),
+            provider_profile: Some("team".to_owned()),
+        },
+        tool_policy: crate::config::ToolPolicySnapshot {
+            profile: Some("safe".to_owned()),
+            allowed_tools: Some(vec!["read".to_owned()]),
+            disabled_tools: vec!["shell".to_owned()],
+        },
+        skill_policy: crate::config::SkillPolicy {
+            mode: Some(crate::config::SkillsMode::Allowlist),
+            selected_skills: vec!["rust".to_owned()],
+            disabled_skills: vec!["danger".to_owned()],
+            effective_skills: vec!["rust".to_owned()],
+        },
+        prompt_overlay: crate::config::SessionPromptOverlaySnapshot {
+            skill_names: vec!["rust".to_owned()],
+            instructions_present: true,
+            instructions_chars: 42,
+        },
+        fingerprint: "sha256:test-profile".to_owned(),
+    };
+    session.profile_name = Some("review".to_owned());
+    session.profile_snapshot = Some(snapshot.clone());
+    session.save()?;
+
+    let mut loaded = Session::load("session_profile_snapshot")?;
+    assert_eq!(loaded.profile_name.as_deref(), Some("review"));
+    assert_eq!(loaded.profile_snapshot.take(), Some(snapshot));
+    let encoded = serde_json::to_string(&loaded)?;
+    assert!(!encoded.contains("secret"));
+
+    Ok(())
+}
+
+#[test]
+fn legacy_session_serialization_omits_empty_profile_metadata() {
+    let session = Session::create_with_id("session_legacy_profile".to_owned(), None, None);
+    let encoded = serde_json::to_value(session).expect("legacy session should serialize");
+    assert!(encoded.get("profile_name").is_none());
+    assert!(encoded.get("profile_snapshot").is_none());
+    assert!(encoded.get("profile_restore_status").is_none());
+}
+
+#[test]
+fn restored_profile_status_distinguishes_matching_missing_changed_and_legacy() {
+    let mut session = Session::create_with_id("session_profile_restore".to_owned(), None, None);
+    assert_eq!(
+        session.evaluate_profile_restore(false, None),
+        crate::config::ProfileRestoreStatus::Legacy
+    );
+
+    let snapshot = crate::config::ResolvedProfileSnapshot {
+        profile_name: Some("review".to_owned()),
+        fingerprint: "sha256:review".to_owned(),
+        ..Default::default()
+    };
+    session.set_profile_state(
+        Some("review".to_owned()),
+        Some(snapshot.clone()),
+        crate::config::ProfileRestoreStatus::Matching,
+    );
+    assert_eq!(
+        session.evaluate_profile_restore(true, Some(&snapshot)),
+        crate::config::ProfileRestoreStatus::Matching
+    );
+    assert!(matches!(
+        session.evaluate_profile_restore(false, None),
+        crate::config::ProfileRestoreStatus::Missing { .. }
+    ));
+
+    let changed = crate::config::ResolvedProfileSnapshot {
+        provider_model_reasoning: crate::config::ProviderModelReasoningSnapshot {
+            model: Some("new-model".to_owned()),
+            ..Default::default()
+        },
+        fingerprint: "sha256:changed".to_owned(),
+        ..snapshot
+    };
+    assert!(matches!(
+        session.evaluate_profile_restore(true, Some(&changed)),
+        crate::config::ProfileRestoreStatus::Changed { .. }
+    ));
 }
 
 #[test]

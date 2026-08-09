@@ -52,6 +52,71 @@ fn test_provider_choice_aliases_parse() {
 }
 
 #[test]
+fn run_profile_global_option_parses_before_and_after_subcommand() {
+    let before = Args::try_parse_from(["jcode", "--profile", "review", "run", "hello"])
+        .expect("global --profile should parse before run");
+    assert_eq!(before.profile.as_deref(), Some("review"));
+    assert!(matches!(
+        before.command,
+        Some(Command::Run { message, .. }) if message == "hello"
+    ));
+
+    let after = Args::try_parse_from(["jcode", "run", "--profile", "review", "hello"])
+        .expect("global --profile should parse after run");
+    assert_eq!(after.profile.as_deref(), Some("review"));
+    assert!(matches!(
+        after.command,
+        Some(Command::Run { message, .. }) if message == "hello"
+    ));
+}
+
+#[test]
+fn interactive_profile_global_option_parses_before_and_after_default_command() {
+    let before = Args::try_parse_from(["jcode", "--profile", "review"])
+        .expect("global --profile should parse before the interactive command");
+    assert_eq!(before.profile.as_deref(), Some("review"));
+    assert!(before.command.is_none(), "omitted command starts the TUI");
+
+    let after = Args::try_parse_from(["jcode", "--profile", "review", "connect"])
+        .expect("global --profile should parse for an explicit interactive command");
+    assert_eq!(after.profile.as_deref(), Some("review"));
+    assert!(matches!(after.command, Some(Command::Connect)));
+}
+
+#[test]
+fn interactive_profile_validation_rejects_empty_and_unknown_names_before_startup() {
+    let config: crate::config::Config = toml::from_str("[profiles.review]\n").unwrap();
+
+    for requested in ["", "   ", "missing"] {
+        let args = Args::try_parse_from(["jcode", "--profile", requested])
+            .expect("clap should preserve the requested profile for boundary validation");
+        let error = crate::cli::profile::resolve_interactive_options(&args, &config)
+            .expect_err("invalid profile names must fail before provider/session startup");
+        let message = error.to_string();
+        assert!(
+            message.contains("profile")
+                && (message.contains("available") || message.contains("empty")),
+            "diagnostic should identify the profile and corrective choices: {message}"
+        );
+    }
+}
+
+#[test]
+fn run_reasoning_effort_preserves_explicit_override_provenance() {
+    let omitted = Args::try_parse_from(["jcode", "run", "hello"])
+        .expect("run without reasoning effort should parse");
+    assert!(omitted.reasoning_effort.is_none());
+
+    let before = Args::try_parse_from(["jcode", "--reasoning-effort", "high", "run", "hello"])
+        .expect("global --reasoning-effort should parse before run");
+    assert_eq!(before.reasoning_effort.as_deref(), Some("high"));
+
+    let after = Args::try_parse_from(["jcode", "run", "--reasoning-effort", "high", "hello"])
+        .expect("global --reasoning-effort should parse after run");
+    assert_eq!(after.reasoning_effort.as_deref(), Some("high"));
+}
+
+#[test]
 fn serve_server_name_option_parses() {
     let args =
         Args::try_parse_from(["jcode", "serve", "--server-name", "mount-cloud/fabian"]).unwrap();

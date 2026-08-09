@@ -3,7 +3,7 @@ use crate::message::{ContentBlock, Message, StreamEvent, ToolDefinition};
 use crate::provider::{EventStream, Provider};
 use async_trait::async_trait;
 use futures::stream;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 struct IsolatedRuntimeDir {
@@ -16,6 +16,94 @@ struct IsolatedReloadRecoveryEnv {
     prev_runtime: Option<std::ffi::OsString>,
     _home: tempfile::TempDir,
     _runtime: tempfile::TempDir,
+}
+
+/// Session-local startup metadata used by lifecycle tests before the wire
+/// request grows optional profile fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct InteractiveStartupRequest {
+    pub(super) session_id: String,
+    pub(super) profile_name: Option<String>,
+}
+
+/// Deterministic, daemon-free fixture for interactive profile lifecycle tests.
+///
+/// Each fixture owns distinct temporary roots, session metadata, and a fake
+/// provider counter. It is intentionally independent from the process-global
+/// server so tests can assert pre-provider failures and session isolation.
+pub(super) struct InteractiveSessionFixture {
+    _home: tempfile::TempDir,
+    _runtime: tempfile::TempDir,
+    pub(super) session: crate::session::Session,
+    pub(super) startup_request: InteractiveStartupRequest,
+    provider_requests: Arc<AtomicUsize>,
+}
+
+impl InteractiveSessionFixture {
+    pub(super) fn new(session_id: &str, profile_name: Option<&str>) -> Self {
+        let home = tempfile::TempDir::new().expect("create isolated fixture home");
+        let runtime = tempfile::TempDir::new().expect("create isolated fixture runtime");
+        let mut session = crate::session::Session::create_with_id(
+            session_id.to_owned(),
+            None,
+            Some("interactive profile fixture".to_owned()),
+        );
+        session.working_dir = Some(home.path().to_string_lossy().into_owned());
+
+        Self {
+            _home: home,
+            _runtime: runtime,
+            session,
+            startup_request: InteractiveStartupRequest {
+                session_id: session_id.to_owned(),
+                profile_name: profile_name.map(str::to_owned),
+            },
+            provider_requests: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    pub(super) fn provider(&self) -> Arc<dyn Provider> {
+        Arc::new(CountingProvider {
+            requests: Arc::clone(&self.provider_requests),
+        })
+    }
+
+    pub(super) fn provider_request_count(&self) -> usize {
+        self.provider_requests.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn working_dir(&self) -> Option<&str> {
+        self.session.working_dir.as_deref()
+    }
+}
+
+#[derive(Clone)]
+struct CountingProvider {
+    requests: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Provider for CountingProvider {
+    async fn complete(
+        &self,
+        _messages: &[Message],
+        _tools: &[ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> Result<EventStream> {
+        self.requests.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::pin(stream::iter(vec![Ok(StreamEvent::MessageEnd {
+            stop_reason: Some("fixture".to_owned()),
+        })])))
+    }
+
+    fn name(&self) -> &str {
+        "interactive-fixture"
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(self.clone())
+    }
 }
 
 #[tokio::test]
@@ -803,6 +891,7 @@ fn subscribe_request(working_dir: Option<&str>) -> Request {
         client_has_local_history: false,
         allow_session_takeover: false,
         terminal_env: Vec::new(),
+        profile: None,
     }
 }
 
@@ -824,6 +913,18 @@ fn initial_subscribe_requires_an_absolute_client_working_dir() {
     let error = initial_subscribe_working_dir(&Request::GetState { id: 2 })
         .expect_err("stateful requests must not create an unbound session");
     assert!(error.contains("must Subscribe"));
+}
+
+#[test]
+fn interactive_profile_startup_rejects_empty_names_before_provider_setup() {
+    let profile = crate::protocol::SessionProfileStartup {
+        profile_name: Some("   ".to_owned()),
+        ..Default::default()
+    };
+    let error = validate_initial_profile(Some(&profile))
+        .expect_err("whitespace-only profile names must fail at the lifecycle boundary");
+    assert!(error.contains("cannot be empty"));
+    assert!(validate_initial_profile(None).is_ok());
 }
 
 #[tokio::test]
@@ -1407,4 +1508,27 @@ async fn lightweight_comm_request_skips_full_session_initialization() {
 
 fn decode_request_or_event(line: &str) -> ServerEvent {
     serde_json::from_str(line.trim()).expect("decode server event")
+}
+
+#[tokio::test]
+async fn interactive_session_fixture_isolates_metadata_and_counts_provider_requests() {
+    let first = InteractiveSessionFixture::new("interactive-profile-a", Some("review"));
+    let second = InteractiveSessionFixture::new("interactive-profile-b", None);
+
+    assert_ne!(first.session.id, second.session.id);
+    assert_ne!(first.working_dir(), second.working_dir());
+    assert_eq!(
+        first.startup_request.profile_name.as_deref(),
+        Some("review")
+    );
+    assert_eq!(second.startup_request.profile_name, None);
+    assert_eq!(first.provider_request_count(), 0);
+
+    let provider = first.provider();
+    let _stream = provider
+        .complete(&[], &[], "", None)
+        .await
+        .expect("fixture provider should accept a request");
+    assert_eq!(first.provider_request_count(), 1);
+    assert_eq!(second.provider_request_count(), 0);
 }

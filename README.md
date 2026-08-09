@@ -644,6 +644,9 @@ jcode
 # Run a single command non-interactively
 jcode run "say hello"
 
+# Run with a named session profile from ~/.jcode/config.toml
+jcode --profile review run "review this change"
+
 # Resume a previous session by memorable name
 jcode --resume fox
 
@@ -657,6 +660,47 @@ jcode dictate
 
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
+
+Named session profiles live under `[profiles.<name>]` in `~/.jcode/config.toml` and bundle
+provider, model, reasoning effort, tools, skill policy, and additive instructions for a
+session. This is the interactive follow-on to the completed headless contract in
+`specs/003-add-session-profiles`; no-profile behavior and existing `jcode run` output
+modes remain unchanged.
+
+```bash
+# Start the TUI with a profile (validated before provider/session creation)
+jcode --profile review
+
+# Inside the TUI: open the searchable picker, choose directly, or clear the profile
+/profile
+/profile review
+/profile none
+
+# Inspect profiles without initializing a provider or changing session state
+jcode profile list
+jcode profile show review
+jcode profile current
+jcode profile resolve review
+```
+
+`/profile <name>` takes effect at the next turn boundary; an in-flight turn, child,
+or swarm worker keeps its immutable policy. Selecting `none` restores the normal
+unprofiled resolution for future turns. `profile list` is stable and marks the current
+selection; `show`, `current`, `resolve`, and `/info` report safe values and sources only
+(instruction bodies and credentials are represented by presence/length metadata).
+
+Profiles support `skills_mode = "all"`, `"allowlist"`, or `"none"`, plus `skills` and
+subtractive `disabled_skills`; omitted `skills_mode` preserves legacy no-profile skill
+behavior. Child agents and swarm workers inherit the effective profile, tool policy, and
+skill policy unless an explicit child override is supplied. Session metadata stores the
+selected name and a credential-free resolved snapshot. Restore uses that snapshot and
+warns when the named profile is missing or changed; it never silently falls back.
+
+The generated config template documents the field list and precedence (explicit
+invocation > environment > selected profile > unprofiled persisted config > built-in
+default). Unknown profiles and invalid values fail before a provider request with the
+profile/key and available choices or correction guidance; selecting one never rewrites
+the config or changes another session.
 
 <div align="center">
 

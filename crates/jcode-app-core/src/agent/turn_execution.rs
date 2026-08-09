@@ -600,6 +600,35 @@ impl Agent {
         let restore_start = Instant::now();
         let load_start = Instant::now();
         let mut session = Session::load(session_id)?;
+        if let Some(profile_name) = session.profile_name.clone() {
+            let config = crate::config::config();
+            let current = match config.resolve_session_profile(Some(&profile_name)) {
+                Ok(resolved) => Some({
+                    let mut snapshot = resolved.snapshot(&config.tools);
+                    // Provider/model/reasoning may include invocation/base
+                    // values that are already persisted on Session.
+                    snapshot.provider_model_reasoning.model = session
+                        .model
+                        .clone()
+                        .or(snapshot.provider_model_reasoning.model);
+                    snapshot.provider_model_reasoning.reasoning_effort = session
+                        .reasoning_effort
+                        .clone()
+                        .or(snapshot.provider_model_reasoning.reasoning_effort);
+                    snapshot.with_fingerprint()
+                }),
+                Err(error) => {
+                    crate::logging::warn(&format!(
+                        "Unable to resolve restored session profile '{}': {}",
+                        profile_name, error
+                    ));
+                    None
+                }
+            };
+            session.evaluate_profile_restore(current.is_some(), current.as_ref());
+        } else if session.profile_snapshot.is_some() {
+            session.evaluate_profile_restore(true, None);
+        }
         if let Some(working_dir) = working_dir {
             session.working_dir = Some(working_dir.to_string());
             session.refresh_initial_session_context_message();
@@ -619,6 +648,25 @@ impl Agent {
         // Restore provider_session_id for Claude CLI session resume
         self.provider_session_id = session.provider_session_id.clone();
         self.session = session;
+        self.session_profile_name = self.session.profile_name.clone();
+        self.skill_policy = self
+            .session
+            .profile_snapshot
+            .as_ref()
+            .map(|snapshot| snapshot.skill_policy.clone());
+        if let Some(snapshot) = self.session.profile_snapshot.as_ref() {
+            self.allowed_tools = snapshot
+                .tool_policy
+                .allowed_tools
+                .as_ref()
+                .map(|tools| tools.iter().cloned().collect());
+            self.disabled_tools = snapshot
+                .tool_policy
+                .disabled_tools
+                .iter()
+                .cloned()
+                .collect();
+        }
         crate::tool::clear_session_tool_policy(&previous_session_id);
         crate::tool::set_session_tool_policy(
             &self.session.id,

@@ -7,7 +7,7 @@ use crate::external_auth::{
 };
 use crate::provider_catalog::{self, resolve_login_selection, resolve_openai_compatible_profile};
 use std::collections::HashSet;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use tempfile::TempDir;
 
 static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -18,6 +18,56 @@ fn lock_env() -> std::sync::MutexGuard<'static, ()> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     }
+}
+
+struct ReasoningTestProvider {
+    effort: Arc<Mutex<Option<String>>>,
+}
+
+#[async_trait::async_trait]
+impl provider::Provider for ReasoningTestProvider {
+    async fn complete(
+        &self,
+        _messages: &[crate::message::Message],
+        _tools: &[crate::message::ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> anyhow::Result<provider::EventStream> {
+        anyhow::bail!("reasoning test provider should not receive a request")
+    }
+
+    fn name(&self) -> &str {
+        "reasoning-test"
+    }
+
+    fn set_reasoning_effort(&self, effort: &str) -> anyhow::Result<()> {
+        *self.effort.lock().expect("reasoning effort lock") = Some(effort.to_owned());
+        Ok(())
+    }
+
+    fn reasoning_effort(&self) -> Option<String> {
+        self.effort.lock().expect("reasoning effort lock").clone()
+    }
+
+    fn fork(&self) -> Arc<dyn provider::Provider> {
+        Arc::new(Self {
+            effort: Arc::clone(&self.effort),
+        })
+    }
+}
+
+#[test]
+fn optional_reasoning_override_is_applied_and_none_preserves_provider_state() {
+    let provider = Arc::new(ReasoningTestProvider {
+        effort: Arc::new(Mutex::new(None)),
+    });
+
+    apply_reasoning_effort(provider.as_ref(), None)
+        .expect("unset reasoning should preserve the provider");
+    assert_eq!(provider.reasoning_effort(), None);
+
+    apply_reasoning_effort(provider.as_ref(), Some("high")).expect("reasoning should be set");
+    assert_eq!(provider.reasoning_effort().as_deref(), Some("high"));
 }
 
 #[test]

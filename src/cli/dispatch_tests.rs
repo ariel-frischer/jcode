@@ -1,5 +1,94 @@
 use super::*;
+use crate::config::{Config, SessionProfileConfig, ToolConfig};
 use crate::transport::Listener;
+use clap::Parser;
+use std::path::Path;
+
+#[test]
+fn structured_profile_shared_daemon_error_explains_private_server_requirement() {
+    let error = profile_shared_daemon_error("review", Path::new("/run/user/1000/jcode.sock"));
+    let detail = error.to_string();
+
+    assert!(detail.contains("profile 'review'"));
+    assert!(detail.contains("structured runs"));
+    assert!(detail.contains("shared daemon"));
+    assert!(detail.contains("--schema"));
+    assert!(detail.contains("/run/user/1000/jcode.sock"));
+    assert!(detail.contains("stop the daemon"));
+}
+
+#[test]
+fn structured_profile_bootstrap_allows_a_new_server() {
+    assert!(
+        ensure_profile_server_bootstrap(
+            Some("review"),
+            Path::new("/run/user/1000/jcode.sock"),
+            false,
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn selected_run_profile_resolves_to_immutable_dispatch_options() {
+    let mut config = Config::default();
+    config.profiles.insert(
+        "review".to_owned(),
+        SessionProfileConfig {
+            provider: Some("openai".to_owned()),
+            model: Some("profile-model".to_owned()),
+            reasoning_effort: Some("high".to_owned()),
+            provider_profile: Some("team-gateway".to_owned()),
+            tool_profile: Some("minimal".to_owned()),
+            tools: vec!["read".to_owned()],
+            disabled_tools: vec!["write".to_owned()],
+            skills: Vec::new(),
+            skills_mode: None,
+            disabled_skills: Vec::new(),
+            instructions: None,
+        },
+    );
+    let config_before = toml::to_string(&config).expect("config should serialize");
+    let args = Args::try_parse_from(["jcode", "--profile", "review", "run", "hello"])
+        .expect("profile run arguments should parse");
+
+    let options = profile::resolve_run_options(&args, &config)
+        .expect("the selected profile should resolve")
+        .expect("a selected profile should produce dispatch options");
+
+    assert_eq!(options.provider, ProviderChoice::Openai);
+    assert_eq!(options.model.as_deref(), Some("profile-model"));
+    assert_eq!(options.provider_profile.as_deref(), Some("team-gateway"));
+    assert_eq!(options.reasoning_effort.as_deref(), Some("high"));
+    assert_eq!(
+        options.tool_selection,
+        ToolConfig {
+            profile: "minimal".to_owned(),
+            enabled: vec!["read".to_owned()],
+            disabled: vec!["write".to_owned()],
+            ..ToolConfig::default()
+        }
+        .selection()
+    );
+    assert_eq!(
+        toml::to_string(&config).expect("config should serialize"),
+        config_before,
+        "dispatch must not mutate persisted config"
+    );
+}
+
+#[test]
+fn no_profile_dispatch_keeps_legacy_path_unresolved() {
+    let config = Config::default();
+    let args =
+        Args::try_parse_from(["jcode", "run", "hello"]).expect("legacy run arguments should parse");
+
+    assert!(
+        profile::resolve_run_options(&args, &config)
+            .expect("omitting --profile should remain successful")
+            .is_none()
+    );
+}
 
 #[test]
 fn only_file_controlled_debug_clients_need_parent_lifetime_binding() {
@@ -241,6 +330,23 @@ async fn wait_for_existing_reload_server_returns_false_for_failed_reload() {
     );
 
     assert!(!wait_for_existing_reload_server("test").await);
+}
+
+#[tokio::test]
+async fn profile_server_refuses_existing_daemon_before_spawn() {
+    let _guard = crate::storage::lock_test_env();
+    let env = ReloadTestEnv::new();
+    let listener = Listener::bind(&env.socket_path).expect("bind shared daemon listener");
+
+    let error = spawn_profile_server(&ProviderChoice::Auto, None, None, "review")
+        .await
+        .expect_err("profile runs must not reuse a shared daemon");
+    let detail = error.to_string();
+    assert!(detail.contains("profile 'review'"));
+    assert!(detail.contains("shared daemon"));
+    assert!(detail.contains("jcode server stop"));
+
+    drop(listener);
 }
 
 #[tokio::test]

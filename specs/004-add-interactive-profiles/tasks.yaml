@@ -1,0 +1,902 @@
+tasks:
+    branch: "agent/jcode-3so-session-profiles"
+    created: "2026-08-09"
+    spec_path: "specs/004-add-interactive-profiles/spec.yaml"
+    plan_path: "specs/004-add-interactive-profiles/plan.yaml"
+summary:
+    total_tasks: 65
+    total_phases: 11
+    parallel_opportunities: 12
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Create deterministic fixture and test seams for interactive profile lifecycle work without changing runtime behavior"
+      tasks:
+        - id: "T001"
+          title: "Add interactive profile fixture builders and test-module wiring"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "The existing jcode-base config test module exposes reusable temporary TOML/profile builders for named profiles, policy modes, and safe secret-bearing fixtures."
+            - "Fixture builders never contact a provider and never print credential values or full instruction bodies."
+        - id: "T002"
+          title: "Add deterministic interactive session fixtures for app-core and TUI state tests"
+          status: "Completed"
+          type: "setup"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "The lifecycle test seam can construct isolated sessions, fake providers, and profile-aware startup requests without using the shared daemon."
+            - "The fixture exposes provider-request counts and session metadata for asserting pre-provider failures and two-session isolation."
+        - id: "T003"
+          title: "Add old/new wire and legacy session fixture locations"
+          status: "Completed"
+          type: "setup"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-protocol/src/protocol_tests/"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Protocol tests have named fixture helpers for payloads with and without optional profile fields."
+            - "Session fixtures include a legacy payload with no profile metadata and contain no provider secrets."
+    - number: 2
+      title: "Foundational"
+      purpose: "Extend the prerequisite resolver and stable policy projections before any interactive surface consumes them"
+      tasks:
+        - id: "T004"
+          title: "Write skills-policy configuration compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "TOML accepts skills_mode values all, allowlist, and none plus disabled_skills with deterministic duplicate handling."
+            - "Omitted policy fields preserve the completed specs/003-add-session-profiles no-profile behavior and serialized shape."
+            - "Unsupported modes and invalid skill references produce profile/key diagnostics before any provider work."
+        - id: "T005"
+          title: "Add skills_mode and disabled_skills to the stable profile contract"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-config-types/src/lib.rs"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "SessionProfileConfig exposes serde/TOML-compatible optional skills_mode and disabled_skills fields with exact documented names."
+            - "Absent fields deserialize to the legacy-compatible state and empty values do not create new serialized fields."
+            - "The type crate remains independent of CLI, provider runtime, storage, and TUI crates."
+        - id: "T006"
+          title: "Write canonical policy, source, snapshot, and redaction tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests/session_profiles.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Tests cover field-by-field precedence sources, all/allowlist/none truth-table results, subtractive disabled skills, and deterministic ordering."
+            - "Snapshot tests cover safe provider/model/reasoning/tool/skill values, stable fingerprints, and omission of credentials, API keys, and full instruction bodies."
+            - "Equivalent effective values produce equal fingerprints while changed safe values produce a visible drift difference."
+        - id: "T007"
+          title: "Extend the canonical resolver with SkillPolicy and safe inspection snapshots"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config/session_profile.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "The existing resolver remains the only precedence/resolution path and returns a session-local SkillPolicy plus non-secret inspection/source projection."
+            - "Snapshot creation is immutable, redacted, and sufficient for deterministic restore without reading credentials or mutating Config or SkillRegistry."
+            - "Invalid profile, policy, tool, model, and skill values fail visibly and do not return partial effective state."
+        - id: "T008"
+          title: "Write session-local filtered SkillRegistry tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/skill.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "A filtered view produces identical effective names for all, allowlist, and none modes after disabled_skills subtraction."
+            - "Filtering does not mutate the shared/global registry and isolates project-local overlays between two sessions."
+            - "Blocked and unavailable skill names return actionable safe diagnostics."
+        - id: "T009"
+          title: "Implement the session-local SkillRegistry policy view"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/skill.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "One policy projection is reusable by listing, activation, retrieval/discovery, prompt assembly, and descendants."
+            - "The view is immutable per effective snapshot, applies disabled_skills after mode selection, and leaves the shared registry untouched."
+            - "No-profile callers retain the existing available-skill behavior."
+        - id: "T010"
+          title: "Write prompt policy and no-profile byte-compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/prompt_tests.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Prompt tests prove all/allowlist/none and disabled-skills produce the same allowed skill context as the filtered registry."
+            - "A no-profile prompt remains byte-compatible with the prerequisite path and existing layer ordering."
+            - "Profile instructions and selected skill context contain safe, deterministic content without credentials."
+        - id: "T011"
+          title: "Compose effective skill policy and profile overlay in the prompt owner"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/prompt.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Prompt composition consumes the session-local filtered view and existing additive overlay seam rather than introducing a second resolver."
+            - "Blocked/none policies cannot inject selected skill content, while omitted policy preserves legacy prompt bytes."
+            - "Existing global/project guidance, memory, active skills, and user-message ordering is unchanged."
+    - number: 3
+      title: "User Story 1 - Start an interactive session with a profile"
+      purpose: "Validate --profile before provider/session work and carry equivalent effective setup into a new interactive TUI session"
+      story_reference: "US-001"
+      independent_test: "Start isolated interactive fixtures with valid, unknown, empty, and omitted --profile values and inspect effective session state and provider-request count before a turn."
+      tasks:
+        - id: "T012"
+          title: "Write interactive --profile parsing and validation tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "src/cli/args/tests.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "Tests cover --profile before and after the interactive command, omitted input, whitespace/empty input, and unknown names."
+            - "Existing command parsing and headless --profile behavior remain unchanged."
+        - id: "T013"
+          title: "Preserve and expose interactive --profile arguments"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/args.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "The global argument retains the exact requested profile name as invocation input without writing Config or converting absence into an explicit override."
+            - "Invalid placement or malformed values are rejected through the existing CLI error path."
+        - id: "T014"
+          title: "Write CLI startup profile projection tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "A valid profile projects the same provider, model, reasoning, tool, prompt, and skill-policy values as the headless resolver."
+            - "Unknown, empty, and invalid policy selections fail without provider initialization or configuration mutation."
+        - id: "T015"
+          title: "Implement the interactive profile startup projection"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "The CLI adapter carries the canonical resolver's effective values and selected name into the interactive startup request."
+            - "Diagnostics identify the safe requested name and available choices without exposing secrets."
+            - "No-profile callers continue to use the existing constructors and defaults."
+        - id: "T016"
+          title: "Write profile-aware Subscribe and Agent startup tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Valid startup records profile metadata on exactly one isolated session and uses the resolved policy before the first turn."
+            - "Unknown/invalid startup performs zero provider requests and creates no partial interactive session."
+            - "Two simultaneous sessions can select different profiles without cross-session state changes."
+        - id: "T017"
+          title: "Add optional profile metadata to interactive wire startup"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-protocol/src/wire.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Subscribe/resume profile selection and safe startup snapshot fields are optional, serde-defaulted, and omitted or neutral for no-profile clients."
+            - "Existing request/event constructors and old serialized payloads remain accepted."
+        - id: "T018"
+          title: "Validate profile startup at the owning server lifecycle boundary"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "The server validates the optional selection before Agent/session creation and retains the effective state per session."
+            - "The shared daemon/global Config and other clients are never mutated by one client's selection."
+            - "Legacy Subscribe/resume requests still construct the existing no-profile Agent path."
+        - id: "T019"
+          title: "Write per-session Agent policy and no-profile constructor tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "Tests observe an immutable effective profile/snapshot on the selected Agent and unchanged behavior on the legacy constructor."
+            - "An invalid selection cannot reach provider request creation or partially replace an existing policy."
+        - id: "T020"
+          title: "Own immutable profile state in Agent startup and turn composition"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent.rs"
+          dependencies: ["T019"]
+          acceptance_criteria:
+            - "Agent stores one session-local effective selection/snapshot and uses it for startup and future turn composition."
+            - "Existing no-profile constructors remain source-compatible and do not allocate profile state unnecessarily."
+        - id: "T021"
+          title: "Write interactive dispatch and remote startup integration tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "An isolated mock/debug session started with --profile observes the selected name and equivalent effective values before provider contact."
+            - "The omitted-profile fixture matches the established request, prompt, tools, and startup metadata shape."
+        - id: "T022"
+          title: "Thread validated profile state through src/cli/dispatch.rs and src/cli/tui_launch.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "src/cli/dispatch.rs validates profile input before default provider/session work and src/cli/tui_launch.rs passes optional metadata to the TUI launch path."
+            - "The TUI backend sends the selection through Subscribe/resume without environment or shared-daemon mutation."
+            - "Headless plain, JSON, NDJSON, and schema dispatch paths remain untouched by interactive-only state."
+    - number: 4
+      title: "User Story 2 - Switch profiles for future turns"
+      purpose: "Reuse the existing searchable overlay and slash-command state to queue atomic profile changes at the next turn boundary"
+      story_reference: "US-002"
+      independent_test: "Drive picker, direct selection, none, cancel, invalid-selection, and in-flight-turn events through the TUI state machine and assert the next-turn policy only."
+      tasks:
+        - id: "T023"
+          title: "Write picker, cancellation, no-match, and future-turn state tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+          dependencies: ["T022"]
+          acceptance_criteria:
+            - "Tests cover /profile open, deterministic search/highlight, active profile indication, no profiles, no matches, cancellation, and /profile none."
+            - "A valid selection is pending until the current turn finishes; an in-flight turn retains its immutable policy."
+            - "Failed selections leave the current effective selection and snapshot unchanged."
+        - id: "T024"
+          title: "Store current, pending, and restore-warning profile state in the TUI"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app.rs"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "TUI state keeps a stable profile-name snapshot, explicit none state, pending transition, and safe restore status without mutating an active turn."
+            - "Pending state is committed atomically at the next eligible turn boundary and can be cancelled without side effects."
+        - id: "T025"
+          title: "Implement searchable profile picker using the existing overlay mechanics"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/command_palette.rs"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Filtering uses a stable snapshot of configured names, preserves deterministic ordering/highlighting, and performs no provider/filesystem work per keystroke."
+            - "The picker renders explicit empty/no-match/no-profile states and returns cancellation/selection events to the shared command path."
+            - "A deterministic 500-profile state benchmark completes within 100 ms per query."
+        - id: "T026"
+          title: "Write /profile command dispatch and transition tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Picker selections, /profile <name>, and /profile none all use one atomic transition path."
+            - "Unknown, unavailable, and stale profile selections report corrective diagnostics and preserve the previous policy."
+        - id: "T027"
+          title: "Route /profile, completion, and help through the shared command path"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/commands_dispatch.rs"
+          dependencies: ["T026"]
+          acceptance_criteria:
+            - "The dispatcher recognizes /profile, /profile <exact-name>, and /profile none without changing unrelated slash commands."
+            - "Direct and picker selections validate through the canonical resolver and enqueue the same future-turn transition."
+        - id: "T028"
+          title: "Register profile command completion and input transitions"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
+          dependencies: ["T027"]
+          acceptance_criteria:
+            - "Help/completion exposes profile names and none using the stable configured snapshot."
+            - "Input transitions preserve picker cancellation, pending state, and existing raw-input behavior."
+        - id: "T029"
+          title: "Write local and remote future-turn submission tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+          dependencies: ["T028"]
+          acceptance_criteria:
+            - "The first turn after a committed selection uses the new snapshot and a completed/in-flight turn uses the old snapshot."
+            - "Explicit none removes stale profile restrictions while retaining base configuration."
+            - "Remote input events observe the same pending/commit semantics as local slash commands."
+        - id: "T030"
+          title: "Apply pending profile transitions at the local input turn boundary"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/input.rs"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "A validated pending profile is applied exactly once before the next turn and never retroactively changes an in-flight request."
+            - "Invalid transitions do not partially replace tool, prompt, or skill policy state."
+        - id: "T031"
+          title: "Align remote input dispatch with future-turn profile transitions"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/app/remote/input_dispatch.rs"
+          dependencies: ["T030"]
+          acceptance_criteria:
+            - "Remote slash/profile events use the server-owned session state and never infer profile values from process-global configuration."
+            - "Remote cancellation, failed selection, and next-turn commit semantics match the local TUI state machine."
+    - number: 5
+      title: "User Story 3 - Inspect profile configuration and effective state"
+      purpose: "Expose pure list/show/current/resolve and /info/debug projections with source labels and strict redaction"
+      story_reference: "US-003"
+      independent_test: "Run pure inspection projections against conflicting fixture sources and a no-profile session, then assert effective values, source labels, and absence of secrets without provider initialization."
+      tasks:
+        - id: "T032"
+          title: "Write profile inspection command projection tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "src/cli/profile.rs"
+          dependencies: ["T031"]
+          acceptance_criteria:
+            - "Tests cover deterministic list/show/current/resolve results, no-profile current state, source labels, unknown names, and safe warnings."
+            - "Inspection output never includes credentials, API keys, complete secret values, or complete instruction bodies and performs no provider/network work."
+        - id: "T033"
+          title: "Implement pure profile inspection CLI commands and output modes"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T032"]
+          acceptance_criteria:
+            - "List/show/current/resolve consume the canonical resolver projection and support existing structured/plain command output conventions."
+            - "Commands do not write config, create sessions, initialize providers, or alter global state."
+            - "No-profile inspection explicitly reports no profile and effective base/default sources."
+        - id: "T034"
+          title: "Write debug-socket and TUI /info source-reporting tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/debug_command_exec.rs"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "Debug and /info fixtures report selected/current/effective values, policy, safe source labels, and restore warnings."
+            - "The inspection path is deterministic and provider-free for selected and no-profile sessions."
+        - id: "T035"
+          title: "Add safe profile inspection to the debug-socket seam"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/debug_command_exec.rs"
+          dependencies: ["T034"]
+          acceptance_criteria:
+            - "Debug commands expose the server-owned effective profile/snapshot and warnings with optional fields for old clients."
+            - "Debug output uses the same redacted projection as CLI/TUI inspection and identifies corrective action for blocked policy or drift."
+        - id: "T036"
+          title: "Present effective profile, sources, policy, and warnings in /info"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/state_ui.rs"
+          dependencies: ["T035"]
+          acceptance_criteria:
+            - "/info distinguishes configured, effective, restored, and explicit none state and shows per-field non-secret source labels."
+            - "The presentation does not initialize a provider or print credentials/full instructions."
+            - "Existing /info fields and layout behavior remain compatible when no profile is selected."
+    - number: 6
+      title: "User Story 4 - Restore profile state across sessions"
+      purpose: "Persist optional selected name and redacted snapshot through session, journal, remote, and legacy restore paths"
+      story_reference: "US-004"
+      independent_test: "Round-trip matching, missing, changed, and legacy session fixtures through save/reload/resume and assert snapshot authority, warnings, and no-profile compatibility."
+      tasks:
+        - id: "T037"
+          title: "Write session metadata round-trip and restore drift tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T036"]
+          acceptance_criteria:
+            - "Tests cover matching, missing, changed, explicit none, and legacy sessions with optional selected name, snapshot, fingerprint, and safe warning state."
+            - "No-profile and legacy serialized bytes remain accepted and do not gain empty profile fields."
+            - "Restored snapshots preserve effective safe values without persisting credentials or full instruction text."
+        - id: "T038"
+          title: "Persist selected profile and redacted snapshot on Session"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session.rs"
+          dependencies: ["T037"]
+          acceptance_criteria:
+            - "Session metadata stores optional selected name, safe resolved snapshot, fingerprint, and restore status with serde defaults."
+            - "Save/checkpoint operations are session-local and omit empty no-profile metadata."
+            - "Restore keeps a stored snapshot authoritative and emits one attributable safe warning for missing or changed profiles."
+        - id: "T039"
+          title: "Write journal, startup-stub, and remote snapshot compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T038"]
+          acceptance_criteria:
+            - "Journal diffs, startup stubs, remote startup snapshots, replay, and reload preserve optional profile metadata and legacy fixtures."
+            - "Checkpoint/replay tests prove profile bytes do not alter unrelated session or config bytes."
+        - id: "T040"
+          title: "Carry profile metadata through journal and remote session persistence"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session/journal.rs"
+          dependencies: ["T039"]
+          acceptance_criteria:
+            - "Journal diffs, startup stubs, remote snapshots, save/checkpoint, and replay carry the same optional redacted profile state."
+            - "Missing/changed warnings survive the owning session boundary without becoming global diagnostics or exposing secrets."
+        - id: "T041"
+          title: "Write app-core restore and warning lifecycle tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T040"]
+          acceptance_criteria:
+            - "Server restore tests cover matching silent restore, missing/changed warning, explicit replacement, and legacy no-profile startup."
+            - "Restoring one session does not mutate another session, Config, shared SkillRegistry, or provider state."
+        - id: "T042"
+          title: "Restore profile snapshots in client-session lifecycle"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/client_session.rs"
+          dependencies: ["T041"]
+          acceptance_criteria:
+            - "Client-session restore compares the canonical current projection to the stored fingerprint, preserves the stored snapshot, and surfaces safe drift status."
+            - "An explicit later profile or none selection replaces only future-turn session state and records a new snapshot."
+            - "Legacy sessions follow the established no-profile path."
+        - id: "T043"
+          title: "Write TUI/backend restore-warning state tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+          dependencies: ["T042"]
+          acceptance_criteria:
+            - "TUI state tests distinguish matching, missing, changed, and legacy restore statuses and retain actionable warnings until explicit user action."
+            - "Restored state remains authoritative for the next turn and does not silently fall back to another profile."
+        - id: "T044"
+          title: "Thread restored profile state and warnings through remote TUI startup"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/backend.rs"
+          dependencies: ["T043"]
+          acceptance_criteria:
+            - "Remote startup/resume consumes optional session profile metadata and exposes safe restore warnings to the TUI."
+            - "No-profile and old-server clients remain compatible through omitted optional fields."
+    - number: 7
+      title: "User Story 5 - Apply a consistent skill policy"
+      purpose: "Enforce one session-local policy across listing, slash activation, retrieval/discovery, prompt context, and diagnostics"
+      story_reference: "US-005"
+      independent_test: "Exercise a fixture registry through every skill surface under all/allowlist/none and disabled-skills combinations and compare the effective allowed set."
+      tasks:
+        - id: "T045"
+          title: "Write cross-surface skill-policy truth-table tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T044"]
+          acceptance_criteria:
+            - "Tests cover all, allowlist, none, duplicates, unavailable names, disabled intersections, project overlays, and explicit blocked activation."
+            - "Listing, invocation, retrieval/discovery, prompt context, and descendant policy all expose exactly the same effective skill set."
+            - "None/disabled diagnostics identify policy and corrective action without skill secret content."
+        - id: "T046"
+          title: "Apply filtered skills and profile overlay in Agent prompting"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/agent/prompting.rs"
+          dependencies: ["T045"]
+          acceptance_criteria:
+            - "Agent prompt construction consumes the session-local filtered registry and cannot inject disabled/none skills."
+            - "The existing prompt overlay order and no-profile bytes remain unchanged."
+        - id: "T047"
+          title: "Write direct activation, retrieval, and two-session isolation tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T046"]
+          acceptance_criteria:
+            - "Direct slash activation and retrieval/discovery reject disabled or none skills and never return blocked content."
+            - "Two sessions switching among all, allowlist, and none retain independent registries, prompts, diagnostics, and project-local overlays."
+        - id: "T048"
+          title: "Enforce skill policy at TUI direct activation and remote input boundaries"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/app/input.rs"
+          dependencies: ["T047"]
+          acceptance_criteria:
+            - "Local slash activation uses the server/session policy and reports blocked/unknown skills without bypasses."
+            - "Skill policy remains session-scoped when profiles switch and when explicit none is selected."
+        - id: "T049"
+          title: "Align remote skill activation and retrieval dispatch with policy"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/app/remote/input_dispatch.rs"
+          dependencies: ["T048"]
+          acceptance_criteria:
+            - "Remote listing, activation, and retrieval use the same filtered policy projection as local paths."
+            - "No remote request can re-enable a disabled skill or inject policy-prohibited prompt context."
+    - number: 8
+      title: "User Story 6 - Inherit profile restrictions in child work"
+      purpose: "Propagate effective profile, snapshot, tool policy, and skill restrictions through child and swarm lifecycle boundaries"
+      story_reference: "US-006"
+      independent_test: "Spawn, resume, restart, and replay child/swarm fixtures with and without explicit overrides, then compare descendant metadata/policy and parent state."
+      tasks:
+        - id: "T050"
+          title: "Write child-agent and swarm inheritance tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-006"
+          file_path: "crates/jcode-app-core/src/server/comm_session_tests.rs"
+          dependencies: ["T049"]
+          acceptance_criteria:
+            - "New child and swarm workers inherit profile name, redacted snapshot, tools, skills_mode, selected skills, and disabled skills."
+            - "Resume/restart/replay fixtures compare inherited metadata with the originating parent snapshot and preserve warnings."
+        - id: "T051"
+          title: "Propagate inherited policy through child and swarm creation"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-006"
+          file_path: "crates/jcode-app-core/src/server/comm_session.rs"
+          dependencies: ["T050"]
+          acceptance_criteria:
+            - "Child-agent and swarm spawn identity carries the parent's effective profile/snapshot and tool/skill restrictions through existing lifecycle fields."
+            - "No child re-reads mutable global config when an inherited snapshot is available."
+        - id: "T052"
+          title: "Write explicit child override and parent-isolation tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-006"
+          file_path: "crates/jcode-app-core/src/server/comm_session_tests.rs"
+          dependencies: ["T051"]
+          acceptance_criteria:
+            - "Tests cover profile-only, tool-only, and skill-policy child/worker overrides where existing syntax supports them."
+            - "Only the descendant changes; parent metadata, policy, persisted snapshot, and subsequent turns remain unchanged."
+        - id: "T053"
+          title: "Apply child-local overrides across resume, restart, and replay"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-006"
+          file_path: "crates/jcode-app-core/src/server/comm_session.rs"
+          dependencies: ["T052"]
+          acceptance_criteria:
+            - "Existing explicit override fields replace only the targeted descendant values while all other inherited fields remain intact."
+            - "Persisted worker metadata restores the effective descendant policy and safe drift status without mutating the parent."
+    - number: 9
+      title: "User Story 7 - Preserve protocol and no-profile compatibility"
+      purpose: "Prove optional wire/session metadata and all established headless/debug output contracts remain compatible"
+      story_reference: "US-007"
+      independent_test: "Replay old wire/session fixtures and run no-profile plain, JSON, NDJSON, schema, ACP, and debug-socket fixtures beside profile-aware cases."
+      tasks:
+        - id: "T054"
+          title: "Validate old/new optional wire and protocol fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-007"
+          file_path: "crates/jcode-protocol/src/protocol_tests/"
+          dependencies: ["T053"]
+          acceptance_criteria:
+            - "Old Subscribe/ResumeSession payloads deserialize and no-profile payloads serialize without required profile fields."
+            - "Profile-aware payloads round-trip optional metadata without changing unrelated request/event fields or protocol versions."
+        - id: "T055"
+          title: "Run no-profile headless output regression fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-007"
+          file_path: "tests/e2e/provider_behavior.rs"
+          dependencies: ["T054"]
+          acceptance_criteria:
+            - "Plain, JSON, NDJSON, and schema no-profile commands preserve established request shape, output schema, tools, prompt, and diagnostics."
+            - "Invalid profile/policy values fail before provider contact and do not alter a subsequent no-profile run."
+        - id: "T056"
+          title: "Exercise profile-aware debug-socket compatibility"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-007"
+          file_path: "tests/e2e/profile_debug_socket.rs"
+          dependencies: ["T054"]
+          acceptance_criteria:
+            - "Debug startup/current-state inspection observes selected profile, safe snapshot, warnings, and child/swarm metadata without terminal interaction."
+            - "Legacy debug commands and no-profile state remain accepted and neutral."
+        - id: "T057"
+          title: "Verify legacy session and ACP/no-profile compatibility"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-007"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T054"]
+          acceptance_criteria:
+            - "Legacy session files with no profile fields load and resume with the established behavior."
+            - "ACP/protocol clients and no-profile interactive sessions retain prior output and serialized contracts."
+    - number: 10
+      title: "User Story 8 - Validate and document the interactive contract"
+      purpose: "Provide requirement-to-test traceability and user-facing documentation for every supported lifecycle rule"
+      story_reference: "US-008"
+      independent_test: "Inspect the documented examples and requirement-to-test mapping, then run the focused tests and artifact validators without relying on a live provider."
+      tasks:
+        - id: "T058"
+          title: "Document interactive profile configuration and restore semantics"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-008"
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T057"]
+          acceptance_criteria:
+            - "The default config guidance documents skills_mode, disabled_skills, source precedence, startup/switch/none semantics, and a secret-free profile example."
+            - "The text links to the completed specs/003-add-session-profiles prerequisite and does not duplicate or contradict its headless contract."
+        - id: "T059"
+          title: "Document startup, switching, inspection, policy, and warnings"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-008"
+          file_path: "README.md"
+          dependencies: ["T057"]
+          acceptance_criteria:
+            - "README includes --profile startup, /profile picker/direct/none, list/show/current/resolve, /info sources, restore warnings, skill modes, inheritance, and no-profile compatibility examples."
+            - "Examples contain no credentials or secret values and reference the prerequisite artifact."
+        - id: "T060"
+          title: "Document docs/WRAPPERS.md and changelog/v0.72.0.json impact for interactive profiles"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-008"
+          file_path: "docs/WRAPPERS.md"
+          dependencies: ["T057"]
+          acceptance_criteria:
+            - "Wrapper guidance explains profile inspection/startup expectations while preserving existing headless modes."
+            - "changelog/v0.72.0.json describes interactive selection, switching, inspection, policy, inheritance, restore warnings, and compatibility."
+        - id: "T061"
+          title: "Add the interactive profiles release entry to changelog/v0.72.0.json"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-008"
+          file_path: "changelog/v0.72.0.json"
+          dependencies: ["T057"]
+          acceptance_criteria:
+            - "The next-release entry names interactive startup/switching/none, inspection/source reporting, skill policy, inheritance, restore warnings, and no-profile compatibility."
+            - "The entry contains no credentials or unsupported claims and references the completed prerequisite where the changelog convention permits."
+    - number: 11
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Run final focused validation, guardrails, manual-only terminal checks, and artifact validation"
+      tasks:
+        - id: "T062"
+          title: "Run focused profile lifecycle tests and affected package checks"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T058", "T059", "T060", "T061"]
+          acceptance_criteria:
+            - "Focused jcode-config-types, jcode-base, app-core, protocol, TUI, CLI, debug-socket, and mock-provider tests pass before broader checks."
+            - "Affected-package format, build, test, and clippy checks pass without weakening unrelated baselines."
+        - id: "T063"
+          title: "Run repository guardrails and record deterministic evidence"
+          status: "Blocked"
+          blocked_reason: Guardrails ran in the feature worktree with JCODE_IN_DEV_CARGO=1. Format, module, lockfile, warning, dependency-boundary, frame-budget, and onboarding gates passed. Blocked by pre-existing cargo check failure in src/cli/commands_tests.rs, pre-existing clippy failure in crates/jcode-render-core/src/markdown.rs, and repository ratchet baselines that report unrelated existing debt plus feature-surface file-size growth; fixing requires out-of-scope refactors or baseline changes.
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T062"]
+          acceptance_criteria:
+            - "scripts/check_guardrails.sh completes with no new formatting, warning, dependency-boundary, panic, swallowed-error, lockfile, or test-size failures."
+            - "Validation records exact commands, results, toolchain, and any unrelated pre-existing failures without changing baselines."
+        - id: "T064"
+          title: "Perform the narrow manual TUI rendering and raw-input check"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/app/command_palette.rs"
+          dependencies: ["T063"]
+          acceptance_criteria:
+            - "Manual validation is limited to picker rendering, keyboard/raw-input behavior, and terminal resize/cancellation observations not represented by state tests."
+            - "The environment, exact steps, expected observations, and result are recorded without using live/costly provider traffic."
+        - id: "T065"
+          title: "Validate the completed tasks artifact against the Autospec schema"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/004-add-interactive-profiles/tasks.yaml"
+          dependencies: ["T064"]
+          acceptance_criteria:
+            - "autospec artifact specs/004-add-interactive-profiles/tasks.yaml passes."
+            - "Every task ID is unique and sequential, every dependency exists and points backward, every story has an independent test, and summary counts match the artifact."
+            - "The final task graph maps all plan-owned source/documentation/test seams and all functional requirements to an executable task or validation criterion."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002", "US-003", "US-004", "US-005", "US-006", "US-007"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003", "US-004", "US-005", "US-006", "US-007"]
+        - story_id: "US-003"
+          depends_on: ["US-001", "US-002"]
+          blocks: ["US-004", "US-005", "US-006", "US-007"]
+        - story_id: "US-004"
+          depends_on: ["US-001", "US-002", "US-003"]
+          blocks: ["US-005", "US-006", "US-007"]
+        - story_id: "US-005"
+          depends_on: ["US-001", "US-002", "US-003", "US-004"]
+          blocks: ["US-006", "US-007"]
+        - story_id: "US-006"
+          depends_on: ["US-001", "US-002", "US-003", "US-004", "US-005"]
+          blocks: ["US-007"]
+        - story_id: "US-007"
+          depends_on: ["US-001", "US-002", "US-003", "US-004", "US-005", "US-006"]
+          blocks: ["US-008"]
+        - story_id: "US-008"
+          depends_on: ["US-007"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: [8]
+        - phase: 8
+          blocks: [9]
+        - phase: 9
+          blocks: [10]
+        - phase: 10
+          blocks: [11]
+        - phase: 11
+          blocks: []
+parallel_execution:
+    - phase: 1
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "The app-core and protocol fixture seams are independent after the shared config fixture helper exists."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T012", "T014"]
+          rationale: "CLI argument parsing tests and pure startup projection tests cover different files and both depend only on the foundational resolver."
+    - phase: 9
+      parallel_groups:
+        - tasks: ["T054", "T055", "T056", "T057"]
+          rationale: "Wire, headless, debug-socket, and legacy-session compatibility fixtures are independent evidence surfaces."
+    - phase: 10
+      parallel_groups:
+        - tasks: ["T058", "T059", "T060", "T061"]
+          rationale: "Configuration guidance, README examples, wrapper guidance, and the changelog entry have separate owners and no source dependency."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "Setup, canonical policy/snapshot foundation, initial --profile startup, and future-turn picker/switching"
+        validation: "Run the focused config/resolver, CLI, protocol, app-core lifecycle, mock-provider, and TUI state tests; prove valid/invalid/omitted startup and atomic future-turn switching without live provider traffic."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Canonical policy, source projection, redacted snapshot, filtered skill view, prompt compatibility, and fixture seams are ready for interactive consumers."
+        - milestone: "Interactive Startup Ready"
+          phases: [1, 2, 3]
+          deliverable: "A valid --profile starts an isolated TUI session with headless-parity effective values; invalid and omitted selection paths are covered."
+        - milestone: "Interactive Switching Ready"
+          phases: [1, 2, 3, 4]
+          deliverable: "Users can search/select/clear profiles and apply changes only at future-turn boundaries."
+        - milestone: "Lifecycle Complete"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+          deliverable: "Inspection, restore/drift warnings, skill enforcement, child/swarm inheritance, and no-profile compatibility are implemented and tested."
+        - milestone: "Release Ready"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+          deliverable: "Documentation, changelog, focused evidence, guardrails, manual rendering/input check, and validated tasks artifact are complete."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-09T00:53:18Z"
+    artifact_type: "tasks"

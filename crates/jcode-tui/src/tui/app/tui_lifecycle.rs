@@ -413,6 +413,7 @@ impl App {
             pending_history_anchor: None,
             input: String::new(),
             command_palette: None,
+            profile_state: InteractiveProfileState::from_config(),
             command_candidates_cache: RefCell::new(None),
             command_suggestions_cache: RefCell::new(None),
             command_suggestions_epoch: std::cell::Cell::new(0),
@@ -574,6 +575,7 @@ impl App {
             pending_migration: None,
             remote_client_count: None,
             resume_session_id: None,
+            remote_startup_profile: None,
             requested_exit_code: None,
             memory_enabled: features.memory,
             autoreview_enabled,
@@ -857,6 +859,7 @@ impl App {
             pending_history_anchor: None,
             input: String::new(),
             command_palette: None,
+            profile_state: InteractiveProfileState::from_config(),
             command_candidates_cache: RefCell::new(None),
             command_suggestions_cache: RefCell::new(None),
             command_suggestions_epoch: std::cell::Cell::new(0),
@@ -1018,6 +1021,7 @@ impl App {
             pending_migration: None,
             remote_client_count: None,
             resume_session_id: None,
+            remote_startup_profile: None,
             requested_exit_code: None,
             memory_enabled: features.memory,
             autoreview_enabled,
@@ -1313,6 +1317,14 @@ impl App {
     }
 
     pub fn new_for_remote_with_options(resume_session: Option<String>, fresh_spawn: bool) -> Self {
+        Self::new_for_remote_with_profile_options(resume_session, fresh_spawn, None)
+    }
+
+    pub fn new_for_remote_with_profile_options(
+        resume_session: Option<String>,
+        fresh_spawn: bool,
+        startup_profile: Option<crate::protocol::SessionProfileStartup>,
+    ) -> Self {
         let provider: Arc<dyn Provider> =
             Arc::new(InertRuntimeProvider::new(AppRuntimeMode::RemoteClient));
         let registry = Registry::empty();
@@ -1341,6 +1353,13 @@ impl App {
         }
 
         app.resume_session_id = resume_session;
+        app.profile_state.current = startup_profile
+            .as_ref()
+            .and_then(|profile| profile.profile_name.clone())
+            .or_else(|| app.session.profile_name.clone());
+        app.profile_state.current_startup = startup_profile.clone();
+        app.profile_state.restore_warning = app.session.profile_restore_warning();
+        app.remote_startup_profile = startup_profile;
         app
     }
 

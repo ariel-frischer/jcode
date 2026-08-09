@@ -358,6 +358,7 @@ pub(in crate::tui::app) async fn connect_with_retry(
     state: &mut RemoteRunState,
     session_to_resume: Option<&str>,
     remote_working_dir: Option<&str>,
+    startup_profile: Option<&crate::protocol::SessionProfileStartup>,
 ) -> Result<ConnectOutcome> {
     if let Some(outcome) =
         wait_for_reload_handoff_before_reconnect(app, terminal, event_stream, state).await?
@@ -375,6 +376,7 @@ pub(in crate::tui::app) async fn connect_with_retry(
         client_has_local_history,
         allow_session_takeover,
         remote_working_dir,
+        startup_profile,
     );
     crate::logging::info(&format!(
         "Remote reconnect attempt: resume={:?}, reconnect_attempts={}, client_instance_id={}, local_history={}, allow_takeover={}",

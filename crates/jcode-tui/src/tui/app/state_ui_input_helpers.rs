@@ -149,6 +149,7 @@ const REGISTERED_COMMANDS: &[RegisteredCommand] = &[
     RegisteredCommand::public("/version", "Show current version"),
     RegisteredCommand::public("/changelog", "Show recent changes in this build"),
     RegisteredCommand::public("/info", "Show session info and tokens"),
+    RegisteredCommand::public("/profile", "Select a session profile for future turns"),
     RegisteredCommand::public("/usage", "Show connected provider usage limits"),
     RegisteredCommand::public(
         "/productivity",
@@ -373,7 +374,11 @@ impl App {
         push_skill_commands(&mut commands, &mut seen, &skills);
 
         if self.is_remote && !self.remote_skills.is_empty() {
-            for skill in &self.remote_skills {
+            for skill in self
+                .remote_skills
+                .iter()
+                .filter(|skill| self.profile_allows_skill_name(skill))
+            {
                 let command = format!("/{skill}");
                 if seen.insert(command.clone()) {
                     commands.push((command, "Activate skill"));
@@ -529,6 +534,20 @@ impl App {
             if suggestions.is_empty() {
                 return vec![("/model".into(), "Open model picker")];
             }
+            return self.rank_suggestions(input, suggestions);
+        }
+
+        if prefix.starts_with("/profile ") {
+            let suggestions = self
+                .profile_state
+                .configured_names
+                .iter()
+                .map(|name| (format!("/profile {name}"), "Select session profile"))
+                .chain(std::iter::once((
+                    "/profile none".to_string(),
+                    "Clear session profile",
+                )))
+                .collect::<Vec<_>>();
             return self.rank_suggestions(input, suggestions);
         }
 
@@ -1624,6 +1643,7 @@ impl App {
                 | "/splitview"
                 | "/split-view"
                 | "/model"
+                | "/profile"
                 | "/agents"
                 | "/effort"
                 | "/fast"

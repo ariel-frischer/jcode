@@ -1362,27 +1362,73 @@ pub async fn init_provider(
     choice: &ProviderChoice,
     model: Option<&str>,
 ) -> Result<Arc<dyn provider::Provider>> {
-    init_provider_with_options(choice, model, true, true).await
+    init_provider_with_reasoning(choice, model, None).await
+}
+
+/// Initialize a provider and apply an optional per-run reasoning override.
+///
+/// The override is intentionally kept out of the process environment and is
+/// applied to this provider instance after model selection, before any caller
+/// can issue a request. Existing callers should continue using [`init_provider`]
+/// so their behavior remains unchanged.
+pub async fn init_provider_with_reasoning(
+    choice: &ProviderChoice,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> Result<Arc<dyn provider::Provider>> {
+    init_provider_with_options(choice, model, reasoning_effort, true, true).await
 }
 
 pub async fn init_provider_quiet(
     choice: &ProviderChoice,
     model: Option<&str>,
 ) -> Result<Arc<dyn provider::Provider>> {
-    init_provider_with_options(choice, model, false, true).await
+    init_provider_quiet_with_reasoning(choice, model, None).await
+}
+
+pub async fn init_provider_quiet_with_reasoning(
+    choice: &ProviderChoice,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> Result<Arc<dyn provider::Provider>> {
+    init_provider_with_options(choice, model, reasoning_effort, false, true).await
 }
 
 pub async fn init_provider_for_validation(
     choice: &ProviderChoice,
     model: Option<&str>,
 ) -> Result<Arc<dyn provider::Provider>> {
-    init_provider_with_options(choice, model, false, false).await
+    init_provider_for_validation_with_reasoning(choice, model, None).await
+}
+
+pub async fn init_provider_for_validation_with_reasoning(
+    choice: &ProviderChoice,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> Result<Arc<dyn provider::Provider>> {
+    init_provider_with_options(choice, model, reasoning_effort, false, false).await
+}
+
+fn apply_reasoning_effort(
+    provider: &dyn provider::Provider,
+    reasoning_effort: Option<&str>,
+) -> Result<()> {
+    let Some(reasoning_effort) = reasoning_effort else {
+        return Ok(());
+    };
+
+    provider
+        .set_reasoning_effort(reasoning_effort)
+        .map_err(|error| {
+            anyhow::anyhow!("Failed to set reasoning effort '{reasoning_effort}': {error}")
+        })
 }
 
 #[allow(deprecated)]
 async fn init_provider_with_options(
     choice: &ProviderChoice,
     model: Option<&str>,
+    reasoning_effort: Option<&str>,
     show_init_messages: bool,
     allow_login_bootstrap: bool,
 ) -> Result<Arc<dyn provider::Provider>> {
@@ -1824,6 +1870,8 @@ async fn init_provider_with_options(
         }
     }
 
+    apply_reasoning_effort(provider.as_ref(), reasoning_effort)?;
+
     Ok(provider)
 }
 
@@ -1831,7 +1879,15 @@ pub async fn init_provider_and_registry(
     choice: &ProviderChoice,
     model: Option<&str>,
 ) -> Result<(Arc<dyn provider::Provider>, tool::Registry)> {
-    let provider = init_provider(choice, model).await?;
+    init_provider_and_registry_with_reasoning(choice, model, None).await
+}
+
+pub async fn init_provider_and_registry_with_reasoning(
+    choice: &ProviderChoice,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> Result<(Arc<dyn provider::Provider>, tool::Registry)> {
+    let provider = init_provider_with_reasoning(choice, model, reasoning_effort).await?;
     let registry = tool::Registry::new(provider.clone()).await;
     Ok((provider, registry))
 }
@@ -1840,7 +1896,16 @@ pub async fn init_provider_and_registry_for_validation(
     choice: &ProviderChoice,
     model: Option<&str>,
 ) -> Result<(Arc<dyn provider::Provider>, tool::Registry)> {
-    let provider = init_provider_for_validation(choice, model).await?;
+    init_provider_and_registry_for_validation_with_reasoning(choice, model, None).await
+}
+
+pub async fn init_provider_and_registry_for_validation_with_reasoning(
+    choice: &ProviderChoice,
+    model: Option<&str>,
+    reasoning_effort: Option<&str>,
+) -> Result<(Arc<dyn provider::Provider>, tool::Registry)> {
+    let provider =
+        init_provider_for_validation_with_reasoning(choice, model, reasoning_effort).await?;
     let registry = tool::Registry::new(provider.clone()).await;
     Ok((provider, registry))
 }

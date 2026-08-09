@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::{SessionPromptOverlay, SkillPolicy, SkillsMode};
 
 /// Verify the default system prompt does NOT identify as "Claude Code"
 /// It's fine to say "powered by Claude" but not "Claude Code" (Anthropic's product)
@@ -112,6 +113,219 @@ fn test_split_prompt_does_not_inject_session_context_per_turn() {
     assert!(!split.dynamic_part.contains("# Session Context"));
     assert!(!split.dynamic_part.contains("Time: "));
     assert!(!split.dynamic_part.contains("Timezone: UTC"));
+}
+
+#[test]
+fn profile_prompt_overlay_is_static_ordered_and_exactly_once() {
+    let _guard = crate::storage::lock_test_env();
+    let previous_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("create isolated prompt home");
+    crate::env::set_var("JCODE_HOME", home.path());
+
+    let project = tempfile::TempDir::new().expect("create prompt project");
+    std::fs::write(
+        project.path().join("AGENTS.md"),
+        "PROJECT_GUIDANCE_MARKER: preserve this project instruction",
+    )
+    .expect("write project guidance");
+
+    let overlay = SessionPromptOverlay {
+        skill_names: vec!["rust".to_string(), "review".to_string()],
+        skill_prompts: vec![
+            "# Skill: rust\n\nPROFILE_RUST_SKILL_MARKER".to_string(),
+            "# Skill: review\n\nPROFILE_REVIEW_SKILL_MARKER".to_string(),
+        ],
+        instructions: Some("PROFILE_INSTRUCTIONS_MARKER".to_string()),
+    };
+    let available_skills = [SkillInfo {
+        name: "available".to_string(),
+        description: "AVAILABLE_SKILL_MARKER".to_string(),
+    }];
+
+    let (split, info) = build_system_prompt_split_with_overlay(
+        Some("# Skill: active\n\nACTIVE_SLASH_SKILL_MARKER"),
+        &available_skills,
+        false,
+        Some("MEMORY_MARKER"),
+        Some(project.path()),
+        Some(&overlay),
+    );
+
+    let combined = if split.dynamic_part.is_empty() {
+        split.static_part.clone()
+    } else {
+        format!("{}\n\n{}", split.static_part, split.dynamic_part)
+    };
+    for marker in [
+        "PROFILE_RUST_SKILL_MARKER",
+        "PROFILE_REVIEW_SKILL_MARKER",
+        "PROFILE_INSTRUCTIONS_MARKER",
+    ] {
+        assert_eq!(
+            split.static_part.matches(marker).count(),
+            1,
+            "profile marker should render once in static prompt: {marker}"
+        );
+        assert_eq!(
+            split.dynamic_part.matches(marker).count(),
+            0,
+            "profile marker must not move into dynamic turns: {marker}"
+        );
+    }
+
+    let rust = combined
+        .find("PROFILE_RUST_SKILL_MARKER")
+        .expect("rust profile skill marker");
+    let review = combined
+        .find("PROFILE_REVIEW_SKILL_MARKER")
+        .expect("review profile skill marker");
+    let instructions = combined
+        .find("PROFILE_INSTRUCTIONS_MARKER")
+        .expect("profile instructions marker");
+    let memory = combined.find("MEMORY_MARKER").expect("memory marker");
+    let active = combined
+        .find("ACTIVE_SLASH_SKILL_MARKER")
+        .expect("active slash skill marker");
+    assert!(
+        rust < review,
+        "selected skills must retain configured order"
+    );
+    assert!(review < instructions, "instructions follow selected skills");
+    assert!(
+        instructions < memory,
+        "profile context precedes dynamic memory"
+    );
+    assert!(
+        memory < active,
+        "existing dynamic ordering remains unchanged"
+    );
+
+    assert!(split.static_part.contains("PROJECT_GUIDANCE_MARKER"));
+    assert!(split.static_part.contains("AVAILABLE_SKILL_MARKER"));
+    assert!(split.dynamic_part.contains("ACTIVE_SLASH_SKILL_MARKER"));
+    assert!(split.dynamic_part.contains("MEMORY_MARKER"));
+    assert_eq!(info.total_chars, combined.len());
+
+    if let Some(previous_home) = previous_home {
+        crate::env::set_var("JCODE_HOME", previous_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
+fn skill_policy_filters_available_and_profile_skill_context() {
+    let overlay = SessionPromptOverlay {
+        skill_names: vec!["allowed".to_owned(), "blocked".to_owned()],
+        skill_prompts: vec![
+            "ALLOWED_PROFILE_SKILL_BODY".to_owned(),
+            "BLOCKED_PROFILE_SKILL_BODY".to_owned(),
+        ],
+        instructions: Some("PROFILE_INSTRUCTIONS_REMAIN".to_owned()),
+    };
+    let available = [
+        SkillInfo {
+            name: "allowed".to_owned(),
+            description: "ALLOWED_DESCRIPTION".to_owned(),
+        },
+        SkillInfo {
+            name: "blocked".to_owned(),
+            description: "BLOCKED_DESCRIPTION".to_owned(),
+        },
+    ];
+    let policy = SkillPolicy {
+        mode: Some(SkillsMode::Allowlist),
+        selected_skills: vec!["allowed".to_owned(), "blocked".to_owned()],
+        disabled_skills: vec!["blocked".to_owned()],
+        effective_skills: vec!["allowed".to_owned()],
+    };
+
+    let (split, _) = build_system_prompt_split_with_overlay_and_policy(
+        None,
+        &available,
+        false,
+        None,
+        None,
+        Some(&overlay),
+        Some(&policy),
+    );
+    assert!(split.static_part.contains("ALLOWED_DESCRIPTION"));
+    assert!(!split.static_part.contains("BLOCKED_DESCRIPTION"));
+    assert!(split.static_part.contains("ALLOWED_PROFILE_SKILL_BODY"));
+    assert!(!split.static_part.contains("BLOCKED_PROFILE_SKILL_BODY"));
+    assert!(split.static_part.contains("PROFILE_INSTRUCTIONS_REMAIN"));
+}
+
+#[test]
+fn none_skill_policy_removes_skill_context_but_no_profile_bytes_are_unchanged() {
+    let available = [SkillInfo {
+        name: "blocked".to_owned(),
+        description: "BLOCKED_DESCRIPTION".to_owned(),
+    }];
+    let overlay = SessionPromptOverlay {
+        skill_names: vec!["blocked".to_owned()],
+        skill_prompts: vec!["BLOCKED_PROFILE_SKILL_BODY".to_owned()],
+        instructions: None,
+    };
+    let none = SkillPolicy {
+        mode: Some(SkillsMode::None),
+        selected_skills: vec!["blocked".to_owned()],
+        disabled_skills: Vec::new(),
+        effective_skills: Vec::new(),
+    };
+
+    let (filtered, _) = build_system_prompt_split_with_overlay_and_policy(
+        None,
+        &available,
+        false,
+        None,
+        None,
+        Some(&overlay),
+        Some(&none),
+    );
+    assert!(!filtered.static_part.contains("BLOCKED_DESCRIPTION"));
+    assert!(!filtered.static_part.contains("BLOCKED_PROFILE_SKILL_BODY"));
+}
+
+#[test]
+fn no_profile_prompt_is_byte_compatible_with_legacy_split_builder() {
+    let _guard = crate::storage::lock_test_env();
+    let available_skills = [SkillInfo {
+        name: "available".to_string(),
+        description: "AVAILABLE_SKILL_MARKER".to_string(),
+    }];
+    let legacy = build_system_prompt_split(
+        Some("# Skill: active\n\nACTIVE_SLASH_SKILL_MARKER"),
+        &available_skills,
+        false,
+        Some("MEMORY_MARKER"),
+        None,
+    );
+    let no_profile = build_system_prompt_split_with_overlay(
+        Some("# Skill: active\n\nACTIVE_SLASH_SKILL_MARKER"),
+        &available_skills,
+        false,
+        Some("MEMORY_MARKER"),
+        None,
+        None,
+    );
+
+    assert_eq!(
+        legacy.0.static_part, no_profile.0.static_part,
+        "omitting --profile must preserve static prompt bytes"
+    );
+    assert_eq!(
+        legacy.0.dynamic_part, no_profile.0.dynamic_part,
+        "omitting --profile must preserve dynamic prompt bytes"
+    );
+    assert_eq!(
+        legacy.1.total_chars, no_profile.1.total_chars,
+        "omitting --profile must preserve prompt accounting"
+    );
+    assert_eq!(
+        legacy.1.prompt_overlay_chars, no_profile.1.prompt_overlay_chars,
+        "omitting --profile must preserve existing file-overlay accounting"
+    );
 }
 
 #[test]

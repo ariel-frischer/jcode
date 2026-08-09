@@ -1,4 +1,11 @@
 /target
+target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.prof*
+.env*
 Cargo.lock
 __pycache__/
 ios_simulator_screenshot.png
@@ -24,3 +31,11 @@ captures/
 /*.avif
 /*.mp4
 /*.png
+
+# Universal editor and temporary artifacts.
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

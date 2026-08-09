@@ -259,6 +259,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
         for msg in &messages {
             app.push_display_message(DisplayMessage::user(msg.clone()));
         }
+        app.commit_pending_profile_transition();
         if begin_remote_send(
             app,
             remote,
@@ -296,6 +297,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
             "Sending hidden continuation reminder ({} chars)",
             combined.len()
         ));
+        app.commit_pending_profile_transition();
         if begin_remote_send(
             app,
             remote,

@@ -107,13 +107,16 @@ impl Agent {
             .as_ref()
             .map(std::path::PathBuf::from);
 
-        let (mut split, _context_info) = crate::prompt::build_system_prompt_split(
-            skill_prompt.as_deref(),
-            &available_skills,
-            self.session.is_canary,
-            memory_prompt,
-            working_dir.as_deref(),
-        );
+        let (mut split, _context_info) =
+            crate::prompt::build_system_prompt_split_with_overlay_and_policy(
+                skill_prompt.as_deref(),
+                &available_skills,
+                self.session.is_canary,
+                memory_prompt,
+                working_dir.as_deref(),
+                Some(&self.session_prompt_overlay),
+                self.skill_policy.as_ref(),
+            );
 
         self.append_current_turn_system_reminder(&mut split);
         crate::prompt::append_swarm_effort_directive(
