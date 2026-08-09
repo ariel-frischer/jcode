@@ -98,7 +98,7 @@ fn test_credential_env_keys() -> Vec<String> {
 
     keys.extend(
         crate::provider_catalog::openai_compatible_profiles()
-            .into_iter()
+            .iter()
             .map(|profile| profile.api_key_env.to_string()),
     );
     keys.sort();
