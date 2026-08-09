@@ -289,10 +289,26 @@ were 7.526/0.646 ms; optimized times were 10.029/0.969 ms. Repeated output,
 transitions all returned the expected changed/changed/restored states in both
 binaries. The small fixture is dominated by daemon and ranking overhead, so it
 does not demonstrate a warm latency gain. It does establish public output parity
-and freshness behavior while leaving the larger representative inventory gain
-and cold-regression gate open.
+and freshness behavior, so the larger campaign below was used for the material
+gain and cold-regression check.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a cross-fixture paired cold baseline and no-regression confidence gate, representative inventory warm gain, memory attribution under cache fill, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+The larger inventory campaign then repeated the same public probe three times per
+binary over 2,000 Rust files in 100 directories. Historical first-call medians
+were 0.038456 s and warm medians were 0.004852 s. Optimized medians were 0.039185
+s and 0.002953 s, a 1.9% cold increase and 39.1% warm reduction. Every run had
+identical repeated and filtered output hashes, and every run passed create,
+rename, and delete freshness transitions. This demonstrates a material warm
+inventory gain with no meaningful cold regression on a traversal-dominated public
+fixture. Inventory-specific memory attribution, broader security cases, and
+multi-caller contention remain open.
+
+The same 2,000-file runs also sampled daemon memory. Historical `VmRSS`/`VmHWM`
+rose from 88,972 to 96,396 KiB, a 7,424 KiB process delta. Optimized memory rose
+from 87,920 to 95,740 KiB, a 7,820 KiB delta, or 396 KiB more in this sample.
+This is bounded process-growth evidence with exact public output parity, not an
+allocator-level attribution of bytes to the inventory cache.
+
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a cross-fixture paired cold baseline and no-regression confidence gate, inventory-specific memory attribution, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
