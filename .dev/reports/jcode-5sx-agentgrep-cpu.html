@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>jcode-5sx agentgrep CPU investigation</title></head>
+<body>
+<h1>jcode-5sx: agentgrep CPU investigation</h1>
+<p><strong>Decision: Terminal B, investigation-only.</strong> No Jcode or agentgrep production candidate was retained.</p>
+<h2>Evidence</h2>
+<ul>
+<li>Jcode pins agentgrep at upstream revision <code>b01b804008ab0662fa14e6b60b10bff61716e6f1</code> (tag v0.1.6).</li>
+<li>The fork's grep path launches one ripgrep subprocess, then rereads every matched file for structure/grouping. Both native and ripgrep post-processing use <code>available_parallelism()</code>, capped only by matched-file count and a small-file threshold. Concurrent calls can therefore multiply CPU workers across tool invocations.</li>
+<li>Existing profile evidence records targeted grep at 16.410 ms wall and 72.007 ms aggregate CPU, consistent with useful ripgrep plus per-file post-processing rather than a Jcode serialization bug.</li>
+<li>Context expansion is separately bounded to trace/smart/outline calls and builds one session-local JSON file per call. No inventory cache was introduced.</li>
+</ul>
+<h2>Why no change landed</h2>
+<p>The approved fork was not modified because no paired randomized single-agent/concurrent matrix was completed, and an adaptive worker policy needs fork-level acceptance before pinning. Autospec native execution failed on an incompatible generated <code>jcode run -c</code> argument. The direct fallback reached its branch-creation step and was stopped before mutation, preserving this canonical worktree and avoiding a duplicate Bead/worktree.</p>
+<h2>Risk assessment</h2>
+<h3>Low Risk</h3><p>No source, dependency, lockfile, fork, daemon, or shared process was changed.</p>
+<h3>Medium Risk</h3><p>Existing aggregate CPU remains high under concurrent grep calls because each call can use all available cores for post-processing. A future candidate must compare CPU, wall time, memory, worker counts, and exact output.</p>
+<h3>High Risk</h3><p>Globally serializing searches or blindly reducing workers could regress latency or alter timeout/cancellation behavior. Any fork change must preserve literal/regex matching, ignore/path security, caps, deterministic ordering, and daemon behavior, then be pinned only after paired acceptance.</p>
+<h2>Follow-up</h2>
+<p>Run a dedicated fork campaign at the pinned revision with identical fixtures and repeated randomized single/concurrent samples. Prefer adaptive post-processing concurrency over a global inventory cache or unconditional serialization.</p>
+</body>
+</html>
