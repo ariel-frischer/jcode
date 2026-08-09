@@ -479,3 +479,50 @@ async fn read_tool_rejects_overflowing_offset_and_limit() {
         "error={error:#}"
     );
 }
+
+#[test]
+fn indexed_large_read_matches_uncached_output_and_metadata() {
+    clear_read_index_for_tests();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("large.txt");
+    let mut content = String::new();
+    for line in 0..20_000 {
+        content.push_str(&format!("line-{line}\r\n"));
+    }
+    std::fs::write(&path, content).expect("write large file");
+
+    let range = NormalizedReadRange {
+        offset: 19_997,
+        limit: 2,
+        style: ReadRangeStyle::OffsetLimit,
+    };
+    let cold = read_text_range(&path, range).expect("cold indexed read");
+    let warm = read_text_range(&path, range).expect("warm indexed read");
+    assert_eq!(warm.output, cold.output);
+    assert_eq!(warm.total_lines, 20_000);
+    assert_eq!(warm.truncated_line_count, 0);
+    assert!(warm.output.contains("19998\tline-19997"));
+    assert!(warm.output.contains("19999\tline-19998"));
+}
+
+#[test]
+fn indexed_read_rejects_stale_same_length_content() {
+    clear_read_index_for_tests();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let path = temp.path().join("replace.txt");
+    let original = "a\n".repeat(40_000);
+    std::fs::write(&path, &original).expect("write original");
+    let range = NormalizedReadRange {
+        offset: 39_999,
+        limit: 1,
+        style: ReadRangeStyle::OffsetLimit,
+    };
+    let _ = read_text_range(&path, range).expect("seed index");
+
+    let replacement = "b\n".repeat(40_000);
+    assert_eq!(replacement.len(), original.len());
+    std::fs::write(&path, replacement).expect("same-length replacement");
+    let result = read_text_range(&path, range).expect("fresh read");
+    assert!(result.output.contains("b"), "output={:?}", result.output);
+    assert!(!result.output.contains("a"), "output={:?}", result.output);
+}
