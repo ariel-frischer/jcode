@@ -3402,6 +3402,7 @@ dependencies = [
  "jcode-build-meta",
  "jcode-build-support",
  "jcode-command-risk",
+ "jcode-config-types",
  "jcode-core",
  "jcode-import-core",
  "jcode-message-types",

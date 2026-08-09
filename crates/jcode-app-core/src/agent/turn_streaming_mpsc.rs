@@ -81,6 +81,9 @@ impl Agent {
         event_tx: mpsc::UnboundedSender<ServerEvent>,
     ) -> Result<()> {
         self.set_log_context();
+        if !self.run_safety_before_turn() {
+            return Ok(());
+        }
         // Mark this session as actively streaming for presence UIs (e.g. the
         // macOS menu bar indicator). Cleared automatically on every exit path.
         let _streaming_guard = crate::session::StreamingGuard::new(self.session.id.clone());
@@ -99,6 +102,9 @@ impl Agent {
         let mut fable_guardrail_reconsiderations = 0u32;
 
         loop {
+            if self.run_safety_observe_usage() {
+                break;
+            }
             // Never open a new provider request after a cancel. Several paths
             // `continue` this loop (compaction retry, incomplete/stranded
             // continuation, empty-response recovery, soft-interrupt injection),
@@ -239,7 +245,10 @@ impl Agent {
             drop(cache_signature_messages);
             drop(ephemeral_signature_messages);
             let mut keepalive = stream_keepalive_ticker();
-            let mut stream = {
+            let safety_deadline =
+                wait_for_run_safety_deadline(self.run_safety_deadline_remaining());
+            tokio::pin!(safety_deadline);
+            let stream = {
                 let mut complete_future = std::pin::pin!(provider.complete_split(
                     send_messages,
                     &tools,
@@ -258,9 +267,13 @@ impl Agent {
                             );
                             return Ok(());
                         }
+                        _ = &mut safety_deadline => {
+                            self.run_safety_observe_usage();
+                            break None;
+                        }
                         result = &mut complete_future => {
                             match result {
-                                Ok(stream) => break stream,
+                                Ok(stream) => break Some(stream),
                                 Err(e) => {
                                     if self.try_auto_compact_after_context_limit(&e.to_string()) {
                                         context_limit_retries += 1;
@@ -292,6 +305,9 @@ impl Agent {
                         }
                     }
                 }
+            };
+            let Some(mut stream) = stream else {
+                break;
             };
 
             // `complete_split` has consumed the request and returned an owned
@@ -366,6 +382,9 @@ impl Agent {
             let mut retry_after_compaction = false;
             let mut keepalive = stream_keepalive_ticker();
             loop {
+                if self.run_safety_observe_usage() {
+                    break;
+                }
                 let next_event = std::pin::pin!(stream.next());
                 let event = tokio::select! {
                     _ = keepalive.tick() => {
@@ -386,6 +405,10 @@ impl Agent {
                         logging::info(
                             "Graceful shutdown/cancel while waiting for API stream event - stopping stream",
                         );
+                        break;
+                    }
+                    _ = &mut safety_deadline => {
+                        self.run_safety_observe_usage();
                         break;
                     }
                     event = next_event => event,
@@ -826,7 +849,8 @@ impl Agent {
                         tool_name,
                         input,
                     } => {
-                        // Execute native tool and send result back to SDK bridge
+                        // Execute native tool and send result back to SDK bridge.
+                        // Check the run-safety budget immediately before Registry work.
                         let ctx = ToolContext {
                             session_id: self.session.id.clone(),
                             message_id: self.session.id.clone(),
@@ -836,17 +860,28 @@ impl Agent {
                             graceful_shutdown_signal: Some(self.graceful_shutdown.clone()),
                             execution_mode: ToolExecutionMode::AgentTurn,
                         };
-                        crate::telemetry::record_tool_call();
-                        let tool_result = self
-                            .registry
-                            .execute(&tool_name, ToolCall::normalize_input_to_object(input), ctx)
-                            .await;
-                        if tool_result.is_err() {
-                            crate::telemetry::record_tool_failure();
-                        }
-                        let native_result = match tool_result {
-                            Ok(output) => NativeToolResult::success(request_id, output.output),
-                            Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                        let native_result = if self.run_safety_before_tool_step() {
+                            crate::telemetry::record_tool_call();
+                            let tool_result = self
+                                .registry
+                                .execute(
+                                    &tool_name,
+                                    ToolCall::normalize_input_to_object(input),
+                                    ctx,
+                                )
+                                .await;
+                            if tool_result.is_err() {
+                                crate::telemetry::record_tool_failure();
+                            }
+                            match tool_result {
+                                Ok(output) => NativeToolResult::success(request_id, output.output),
+                                Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                            }
+                        } else {
+                            NativeToolResult::error(
+                                request_id,
+                                run_safety::RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string(),
+                            )
                         };
                         if let Some(sender) = self.provider.native_result_sender() {
                             let _ = sender.send(native_result).await;
@@ -1000,6 +1035,7 @@ impl Agent {
                 cache_read_input_tokens: usage_cache_read,
                 cache_creation_input_tokens: usage_cache_creation,
             };
+            let mut safety_stopped_after_usage = self.run_safety_observe_usage();
 
             // Detect a transparent mid-request model switch (e.g. Anthropic's
             // retired `claude-fable-5` falling back to `claude-opus-4-8`). The
@@ -1128,6 +1164,11 @@ impl Agent {
                 assistant_message_id.as_ref(),
             );
 
+            // The current request's usage is persisted with the assistant
+            // message above. Observe again so a budget reached by this stream
+            // prevents local tool execution in the same response.
+            safety_stopped_after_usage |= self.run_safety_observe_usage();
+
             if tool_calls.is_empty() && !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
                     self.add_message(Role::User, blocks);
@@ -1236,6 +1277,40 @@ impl Agent {
                 tool_calls.len()
             ));
 
+            let all_tool_calls = tool_calls.clone();
+            if safety_stopped_after_usage {
+                let mut unresolved_tool_calls = Vec::with_capacity(all_tool_calls.len());
+                let mut sdk_results_dirty = false;
+                for tool_call in &all_tool_calls {
+                    if let Some((sdk_content, sdk_is_error)) =
+                        sdk_tool_results.remove(&tool_call.id)
+                    {
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: tool_call.id.clone(),
+                                content: cap_sdk_tool_content_for_history(
+                                    &tool_call.name,
+                                    sdk_content,
+                                ),
+                                is_error: if sdk_is_error { Some(true) } else { None },
+                            }],
+                        );
+                        sdk_results_dirty = true;
+                    } else {
+                        unresolved_tool_calls.push(tool_call.clone());
+                    }
+                }
+                // Provider-internal SDK tools do not cross the Registry boundary, so
+                // they are persisted but intentionally do not consume max_tool_steps.
+                if self.emit_run_safety_skipped_tool_results(&event_tx, &unresolved_tool_calls)
+                    || sdk_results_dirty
+                {
+                    self.session.save()?;
+                }
+                break;
+            }
+
             if self.provider.handles_tools_internally() {
                 tool_calls.retain(|tc| JCODE_NATIVE_TOOLS.contains(&tc.name.as_str()));
                 if tool_calls.is_empty() {
@@ -1342,6 +1417,12 @@ impl Agent {
                         continue;
                     }
                     // Fall through to local execution for native tools with SDK errors
+                }
+
+                if !self.run_safety_before_tool_step() {
+                    self.emit_run_safety_skipped_tool_results(&event_tx, &tool_calls[tool_index..]);
+                    tool_results_dirty = true;
+                    break;
                 }
 
                 let ctx = ToolContext {
@@ -1617,114 +1698,5 @@ impl Agent {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn tool_call(name: &str, input: serde_json::Value) -> ToolCall {
-        ToolCall {
-            id: "toolu_test".to_string(),
-            name: name.to_string(),
-            input,
-            intent: None,
-            thought_signature: None,
-        }
-    }
-
-    #[test]
-    fn reload_interrupted_bg_wait_is_non_error_and_resumable() {
-        let tc = tool_call(
-            "bg",
-            json!({"action": "wait", "task_id": "bg-123", "max_wait_seconds": 300}),
-        );
-
-        let (message, is_error) = reload_interrupted_tool_result(&tc, 1.2);
-
-        assert!(!is_error);
-        assert!(message.contains("Resume the wait"));
-        assert!(message.contains("\"task_id\":\"bg-123\""));
-    }
-
-    #[test]
-    fn reload_interrupted_non_wait_tool_remains_error() {
-        let tc = tool_call("bash", json!({"command": "sleep 10"}));
-
-        let (message, is_error) = reload_interrupted_tool_result(&tc, 1.2);
-
-        assert!(is_error);
-        assert!(message.contains("interrupted by server reload"));
-    }
-
-    /// Reference O(n) full scan, preserving the original precedence: the
-    /// `to=functions.` marker is checked before `+#+#`.
-    fn find_wrap_marker_full(text: &str) -> Option<usize> {
-        text.find("to=functions.").or_else(|| text.find("+#+#"))
-    }
-
-    /// Simulate streaming `full` in arbitrary deltas and assert the incremental
-    /// scan finds the first marker position, matching a full rescan each step.
-    fn assert_incremental_matches(full: &str, chunk: usize) {
-        let mut acc = String::new();
-        let mut incremental_hit: Option<usize> = None;
-        let bytes = full.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            let mut end = (i + chunk).min(bytes.len());
-            while end < bytes.len() && !full.is_char_boundary(end) {
-                end += 1;
-            }
-            let delta = &full[i..end];
-            acc.push_str(delta);
-            if incremental_hit.is_none() {
-                incremental_hit = find_wrap_marker_incremental(&acc, delta.len());
-            }
-            i = end;
-        }
-        // The earliest of either marker in the full text.
-        let fn_pos = full.find("to=functions.");
-        let plus_pos = full.find("+#+#");
-        let expected = match (fn_pos, plus_pos) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        };
-        assert_eq!(
-            incremental_hit, expected,
-            "incremental scan mismatch for {full:?} chunk={chunk}"
-        );
-    }
-
-    #[test]
-    fn wrap_marker_incremental_detects_markers_across_chunk_sizes() {
-        let cases = [
-            "plain answer with no marker at all",
-            "answer then to=functions.foo({})",
-            "answer then +#+# wrapped",
-            "prefix +#+# and later to=functions.bar",
-            "unicode 🔄 résumé then to=functions.baz",
-            "",
-            "to=functions.first",
-            "+#+#",
-        ];
-        for case in cases {
-            for chunk in [1usize, 2, 3, 5, 7, 100] {
-                assert_incremental_matches(case, chunk);
-            }
-        }
-    }
-
-    #[test]
-    fn wrap_marker_incremental_finds_marker_straddling_delta_boundary() {
-        // Feed "to=functions." split right in the middle so the marker only
-        // exists once both halves are appended; the overlap window must catch it.
-        let mut acc = String::new();
-        acc.push_str("answer to=fun");
-        assert_eq!(
-            find_wrap_marker_incremental(&acc, "answer to=fun".len()),
-            None
-        );
-        acc.push_str("ctions.tool");
-        let hit = find_wrap_marker_incremental(&acc, "ctions.tool".len());
-        assert_eq!(hit, find_wrap_marker_full(&acc));
-        assert_eq!(hit, Some("answer ".len()));
-    }
-}
+#[path = "turn_streaming_mpsc_tests.rs"]
+mod tests;

@@ -17,6 +17,7 @@ mod menubar;
 mod provider_setup;
 mod report_info;
 mod restart;
+mod run_safety;
 
 pub(crate) use super::auth_test::run_post_login_validation;
 #[cfg(test)]
@@ -1985,15 +1986,6 @@ struct ModelListRouteReport {
 }
 
 #[derive(Debug, Serialize)]
-struct RunCommandReport {
-    session_id: String,
-    provider: String,
-    model: String,
-    text: String,
-    usage: crate::agent::TokenUsage,
-}
-
-#[derive(Debug, Serialize)]
 struct StructuredRunUsage {
     input_tokens: u64,
     output_tokens: u64,
@@ -2394,8 +2386,12 @@ pub async fn run_single_message_command(
     emit_json: bool,
     emit_ndjson: bool,
     schema_path: Option<&str>,
+    invocation_safety: crate::config::RunSafetyConfig,
 ) -> Result<()> {
+    let safety_candidates = run_safety::load_candidates(invocation_safety)?;
+
     if let Some(schema_path) = schema_path {
+        run_safety::reject_schema(&safety_candidates)?;
         return run_single_message_command_schema(
             choice,
             model,
@@ -2434,21 +2430,17 @@ pub async fn run_single_message_command(
     }
     let mut agent = crate::agent::Agent::new(provider.clone(), registry);
     restore_agent_session_if_requested(&mut agent, resume_session)?;
+    run_safety::install(&mut agent, safety_candidates)?;
 
     if emit_json {
         let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;
-        let report = RunCommandReport {
-            session_id: agent.session_id().to_string(),
-            provider: provider.name().to_string(),
-            model: provider.model(),
-            text,
-            usage: agent.last_usage().clone(),
-        };
+        let report = run_safety::report(&agent, &provider, text);
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if emit_ndjson {
         run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
     } else {
         run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
+        run_safety::print_plain_stop(&agent);
     }
 
     Ok(())
@@ -2885,7 +2877,9 @@ async fn run_single_message_command_plain_with_auto_poke(
     let mut gate_digest_delivered = false;
     loop {
         agent.run_once(&next_message).await?;
-        turns_completed += 1;
+        if run_safety::complete_turn_and_should_stop(agent, &mut turns_completed) {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -2967,7 +2961,9 @@ async fn run_single_message_command_capture_with_auto_poke(
     let mut gate_digest_delivered = false;
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
-        turns_completed += 1;
+        if run_safety::complete_turn_and_should_stop(agent, &mut turns_completed) {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3103,7 +3099,9 @@ async fn run_single_message_command_ndjson(
             result = Err(err);
             break;
         }
-        turns_completed += 1;
+        if run_safety::complete_turn_and_should_stop(agent, &mut turns_completed) {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -3196,9 +3194,9 @@ async fn run_single_message_command_ndjson(
 
     match result {
         Ok(()) => {
-            write_json_line(
-                &mut stdout,
-                &serde_json::json!({
+            let done = run_safety::annotate_ndjson_done(
+                agent,
+                serde_json::json!({
                     "type": "done",
                     "session_id": session_id,
                     "provider": provider.name(),
@@ -3211,6 +3209,7 @@ async fn run_single_message_command_ndjson(
                     "status_detail": state.status_detail,
                 }),
             )?;
+            write_json_line(&mut stdout, &done)?;
             Ok(())
         }
         Err(err) => {

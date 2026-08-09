@@ -8,6 +8,7 @@ mod messages;
 mod prompting;
 mod provider;
 mod response_recovery;
+pub mod run_safety;
 mod status;
 mod streaming;
 mod tools;
@@ -68,6 +69,13 @@ static JCODE_REPO_SOURCE_STATE: LazyLock<(Option<String>, Option<bool>)> = LazyL
 static WORKING_GIT_STATE_CACHE: LazyLock<StdMutex<HashMap<PathBuf, Option<GitState>>>> =
     LazyLock::new(|| StdMutex::new(HashMap::new()));
 const STREAM_KEEPALIVE_PONG_ID: u64 = 0;
+
+pub(crate) async fn wait_for_run_safety_deadline(remaining: Option<Duration>) {
+    match remaining {
+        Some(remaining) => tokio::time::sleep(remaining).await,
+        None => std::future::pending::<()>().await,
+    }
+}
 
 fn stable_hash_str(value: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -216,6 +224,9 @@ pub struct Agent {
     cache_tracker: CacheTracker,
     /// Last token usage from API request (for debug socket queries)
     last_usage: TokenUsage,
+    /// Optional per-invocation safety controller. Interactive/server agents
+    /// leave this unset, preserving the legacy execution path.
+    run_safety: Option<run_safety::RunSafetyController>,
     /// Locked tool list: once the first API request is sent, freeze the tool list
     /// to avoid cache invalidation when MCP tools arrive asynchronously.
     /// Cleared on compaction/reset.
@@ -293,6 +304,7 @@ impl Agent {
             graceful_shutdown: InterruptSignal::new(),
             cache_tracker: CacheTracker::new(),
             last_usage: TokenUsage::default(),
+            run_safety: None,
             locked_tools: None,
             mcp_late_register_resolved: false,
             system_prompt_override: None,
@@ -927,6 +939,56 @@ impl Agent {
     /// Get the last token usage from the most recent API request
     pub fn last_usage(&self) -> &TokenUsage {
         &self.last_usage
+    }
+
+    /// Install optional safety state for one unattended invocation.
+    pub fn install_run_safety(&mut self, controller: run_safety::RunSafetyController) {
+        self.run_safety = Some(controller);
+    }
+
+    pub fn run_safety_stop_reason(&self) -> Option<run_safety::RunStopReason> {
+        self.run_safety
+            .as_ref()
+            .and_then(|state| state.stop_reason())
+    }
+
+    pub fn run_safety_controller(&self) -> Option<&run_safety::RunSafetyController> {
+        self.run_safety.as_ref()
+    }
+
+    pub(crate) fn run_safety_before_turn(&mut self) -> bool {
+        let usage = self.token_usage_totals();
+        self.run_safety
+            .as_mut()
+            .map(|state| state.before_turn(usage))
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn run_safety_observe_usage(&mut self) -> bool {
+        let usage = self.token_usage_totals();
+        self.run_safety
+            .as_mut()
+            .map(|state| state.observe(usage))
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn run_safety_before_tool_step(&mut self) -> bool {
+        self.run_safety
+            .as_mut()
+            .map(|state| state.before_tool_step())
+            .unwrap_or(true)
+    }
+
+    pub(crate) fn run_safety_deadline_remaining(&self) -> Option<Duration> {
+        self.run_safety
+            .as_ref()
+            .and_then(|state| state.deadline_remaining())
+    }
+
+    pub fn run_safety_complete_turn(&mut self) {
+        if let Some(state) = self.run_safety.as_mut() {
+            state.complete_turn();
+        }
     }
 
     pub fn token_usage_totals(&self) -> crate::protocol::TokenUsageTotals {

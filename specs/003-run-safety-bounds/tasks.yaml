@@ -1,0 +1,518 @@
+tasks:
+    branch: "agent/jcode-qwi-run-limits"
+    created: "2026-08-08"
+    spec_path: "specs/003-run-safety-bounds/spec.yaml"
+    plan_path: "specs/003-run-safety-bounds/plan.yaml"
+summary:
+    total_tasks: 35
+    total_phases: 7
+    parallel_opportunities: 17
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Capture the legacy contracts that must remain unchanged when all safety bounds are unset."
+      tasks:
+        - id: "T001"
+          title: "Add legacy unset-bound output regression fixtures in src/cli/commands_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Focused tests cover normal completion, ordinary failure, cancellation, and partial-output behavior for plain, JSON, and NDJSON ordinary runs with no safety configuration."
+            - "Assertions prove unset runs have no default limit, no stop_reason, and the pre-feature output shape."
+        - id: "T002"
+          title: "Add legacy config-file compatibility tests in crates/jcode-base/src/config_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "A TOML configuration that has no run-safety section still deserializes and resolves exactly as before."
+            - "The no-file and no-environment case produces an unset policy candidate rather than an implicit limit or migration error."
+    - number: 2
+      title: "Foundational"
+      purpose: "Establish the optional persisted contract and route environment changes through the existing config cache and reload fingerprint."
+      tasks:
+        - id: "T003"
+          title: "Write RunSafetyConfig serde and default-shape tests in crates/jcode-config-types/src/lib.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-config-types/src/lib.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Tests define the exact optional raw fields max_turns, max_tool_steps, token_budget, and deadline and prove absent fields deserialize as None."
+            - "Round-trip coverage preserves the documented TOML field names and does not require new runtime dependencies or alter unrelated defaults."
+        - id: "T004"
+          title: "Add the optional RunSafetyConfig section in crates/jcode-config-types/src/lib.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-config-types/src/lib.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "A serde-defaulted RunSafetyConfig owns four Option<String> raw source fields with documented absent-versus-invalid semantics."
+            - "The parent configuration type exposes the section without changing existing serialized names, defaults, or public compatibility paths."
+        - id: "T005"
+          title: "Add config field, environment mapping, and fingerprint tests in crates/jcode-base/src/config_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests prove each JCODE_RUN_* value is retained as raw input, including empty and whitespace-only values, for later trust-boundary validation."
+            - "Tests prove each new environment key participates in the existing configuration fingerprint and that changing it invalidates cached configuration."
+        - id: "T006"
+          title: "Wire RunSafetyConfig and fingerprint keys into crates/jcode-base/src/config.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Config owns the optional run-safety section and includes JCODE_RUN_MAX_TURNS, JCODE_RUN_MAX_TOOL_STEPS, JCODE_RUN_TOKEN_BUDGET, and JCODE_RUN_DEADLINE in the existing reload fingerprint."
+            - "The implementation preserves file-then-environment loading and records no secret values in diagnostics."
+        - id: "T007"
+          title: "Map JCODE_RUN_* values to raw config fields in crates/jcode-base/src/config/env_overrides.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config/env_overrides.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "The existing environment override path maps all four variables independently into RunSafetyConfig without parsing or silently dropping blank values."
+            - "No direct environment read is added to the CLI or Agent layers, and unrelated overrides remain unchanged."
+    - number: 3
+      title: "User Story 2 - Resolve bounds predictably"
+      purpose: "Make the effective policy deterministic across invocation, environment, persisted configuration, and unset sources."
+      story_reference: "US-002"
+      independent_test: "Provide conflicting values for every bound at all three sources, run the resolver, and verify invocation > environment > persisted > unset independently for each field."
+      tasks:
+        - id: "T008"
+          title: "Add source-precedence and unset matrix tests in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T006", "T007"]
+          acceptance_criteria:
+            - "Table-driven tests cover each bound with invocation, environment, persisted, and absent candidates, including independent mixed-source combinations."
+            - "Tests record the winning source and prove an absent bound remains disabled without inheriting a different bound."
+        - id: "T009"
+          title: "Add raw safety-flag parsing tests in src/cli/args/tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "src/cli/args/tests.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Tests accept the four ordinary-run options as raw strings so malformed values reach the source-aware resolver with their original spelling."
+            - "Tests prove flags are optional and do not alter interactive arguments or the separate schema bridge defaults."
+        - id: "T010"
+          title: "Add ordinary-run safety flags in src/cli/args.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/args.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "The ordinary run command exposes --max-turns, --max-tool-steps, --token-budget, and --deadline as optional raw invocation candidates."
+            - "The flags are not persisted, do not create built-in defaults, and remain distinct from schema-mode arguments."
+        - id: "T011"
+          title: "Implement independent source-aware policy resolution in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "A single resolver consumes raw invocation, environment, and persisted candidates per bound and returns typed policy values plus winning source metadata."
+            - "Valid candidates resolve invocation > environment > persisted > unset without cross-bound inheritance, while invalid-source diagnostics remain available for the validation phase."
+            - "The resolver captures the session token-usage baseline without adding persistence, provider pricing, or network work."
+        - id: "T012"
+          title: "Pass invocation candidates through src/cli/dispatch.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Normal run dispatch forwards the four raw invocation values to the run command without reading environment variables a second time."
+            - "The dispatch layer preserves a distinct schema-mode branch so ordinary-run policy is never silently claimed by the SDK bridge."
+        - id: "T013"
+          title: "Resolve and install the effective policy in src/cli/commands.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T011", "T012"]
+          acceptance_criteria:
+            - "The ordinary run command combines loaded Config values with invocation candidates through the one resolver before creating unattended Agent work."
+            - "The resolved policy is per invocation, keeps source metadata for diagnostics/results, and leaves interactive callers unchanged."
+        - id: "T014"
+          title: "Verify end-to-end source precedence in src/cli/commands_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Conflicting invocation, environment, and persisted values resolve to invocation for every bound; removing invocation falls back to environment, then persisted."
+            - "All-unset cases retain legacy execution and output, and every assertion names the effective source without exposing unrelated sensitive values."
+    - number: 4
+      title: "User Story 4 - Reject unsafe bound configuration"
+      purpose: "Reject invalid, ambiguous, and expired values before any unattended provider or tool work starts."
+      story_reference: "US-004"
+      independent_test: "Supply malformed, empty, zero, negative, overflowing, and past-deadline values from each source and verify a source-specific correction diagnostic with zero started work."
+      tasks:
+        - id: "T015"
+          title: "Add invalid-bound and diagnostic matrix tests in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Tests cover empty and whitespace-only values, malformed and overflowing decimals, zero and negative counters, malformed deadlines, missing offsets, and past deadlines."
+            - "Each error assertion identifies the bound, source, supplied non-secret value, and corrective action, and proves an invalid higher-precedence value never silently falls through."
+        - id: "T016"
+          title: "Implement trust-boundary parsing and diagnostics in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Counters parse as positive NonZeroU64 values and reject zero, negative, malformed, and overflowing inputs; deadlines require an absolute RFC3339 timestamp with an explicit offset and a future instant."
+            - "Validation returns actionable bound/source/value/correction diagnostics before policy installation, without logging prompts, credentials, provider secrets, or unrelated usage."
+        - id: "T017"
+          title: "Add preflight rejection and zero-work tests in src/cli/commands_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T016", "T013"]
+          acceptance_criteria:
+            - "A fake provider/session proves invalid safety configuration fails before the first provider request, tool execution, or unattended turn starts."
+            - "Empty-value behavior follows the documented rule and cannot weaken a valid lower-precedence bound."
+        - id: "T018"
+          title: "Enforce policy validation before session startup in src/cli/commands.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "The ordinary run path resolves and validates all bounds before opening provider/session work and returns the resolver diagnostic unchanged enough to identify source and correction."
+            - "Validation errors remain distinct from ordinary run failures and cancellations, and schema mode is not accidentally started by this path."
+    - number: 5
+      title: "User Story 1 - Configure unattended run bounds"
+      purpose: "Enforce effective turn, tool-step, native-usage, and wall-clock bounds at the earliest controllable Agent boundaries."
+      story_reference: "US-001"
+      independent_test: "Run fake-provider capture and streaming scenarios with each bound independently enabled and verify the threshold is reached without starting the next prohibited operation."
+      tasks:
+        - id: "T019"
+          title: "Add controller threshold and usage-arithmetic tests in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Pure tests cover max turns, max tool steps, exact token-budget reach, over-budget prevention, deadline boundaries, saturating usage deltas, and resumed-session baseline exclusion."
+            - "A simultaneous-trigger table proves the deterministic priority deadline_exceeded, token_budget_exceeded, max_tool_steps_exceeded, max_turns_exceeded."
+        - id: "T020"
+          title: "Implement RunSafetyController and RunStopReason in crates/jcode-app-core/src/agent/run_safety.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+          dependencies: ["T019"]
+          acceptance_criteria:
+            - "The opt-in controller owns per-run counters, usage baseline/delta, monotonic deadline observation, deterministic reason selection, and accessors for the selected reason and non-secret observed counters."
+            - "Checks deny the next provider request or Registry execution once a bound is reached and remain constant-time when bounds are unset."
+        - id: "T021"
+          title: "Add opt-in Agent safety-state tests in crates/jcode-app-core/src/agent_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "Tests prove an Agent without an installed controller behaves exactly as before and an Agent with one exposes bounded stop state without changing the server wire contract."
+            - "Tests cover setter/accessor ownership and per-invocation reset of counters."
+        - id: "T022"
+          title: "Wire optional safety state and accessors in crates/jcode-app-core/src/agent.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Agent stores an optional non-persisted RunSafetyController with explicit installation and stop-state accessors."
+            - "Existing constructors and interactive Agent callers remain source- and behavior-compatible when no controller is installed."
+        - id: "T023"
+          title: "Add capture-loop threshold tests in crates/jcode-app-core/src/agent_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T022"]
+          acceptance_criteria:
+            - "Fake-provider tests prove capture/plain execution checks deadline and token budget before provider requests and checks max tool steps immediately before Registry execution."
+            - "A reached threshold preserves valid history/tool-result state and starts no subsequent controllable operation."
+        - id: "T024"
+          title: "Integrate capture-loop safety observations in crates/jcode-app-core/src/agent/turn_loops.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/turn_loops.rs"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "Capture/plain loops check the controller before provider work, after reported usage, between stream events, before Registry calls, and after active tools at safe observation points."
+            - "With no controller installed, the existing loop ordering, provider requests, and tool behavior are unchanged."
+        - id: "T025"
+          title: "Add streaming-mpsc threshold tests in crates/jcode-app-core/src/agent_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "Fake-provider streaming tests cover deadline, token, and tool-step stops during partial output and assert the stream remains consumable and well-formed."
+            - "Unset-bound streaming remains compatible with the existing interactive and unattended behavior."
+        - id: "T026"
+          title: "Integrate streaming-mpsc safety observations in crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Streaming-mpsc checks use the same controller and reason priority as capture/plain execution before provider/tool work and between stream events."
+            - "Partial assistant/tool output is finalized without malformed events when a bounded stop is selected."
+        - id: "T027"
+          title: "Install the controller and count top-level turns in src/cli/commands.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T018", "T024", "T026"]
+          acceptance_criteria:
+            - "The ordinary run path captures the session usage baseline before the first turn, installs the controller, increments completed turns only after return, and checks max turns before auto-poke follow-ups."
+            - "Each bound independently stops at or before its configured threshold and interactive/server paths remain controller-free."
+    - number: 6
+      title: "User Story 3 - Understand bounded stops"
+      purpose: "Expose one canonical bounded-stop reason consistently in plain, JSON, and NDJSON output while preserving ordinary results."
+      story_reference: "US-003"
+      independent_test: "Trigger each bound in every supported ordinary output mode, compare canonical codes/labels and outcome fields, and verify simultaneous triggers select one deterministic reason."
+      tasks:
+        - id: "T028"
+          title: "Add bounded-result and simultaneous-trigger output tests in src/cli/commands_tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T027"]
+          acceptance_criteria:
+            - "Tests cover max_turns_exceeded, max_tool_steps_exceeded, token_budget_exceeded, and deadline_exceeded in plain, JSON, and NDJSON ordinary runs."
+            - "Plain output contains the stable bounded label; JSON/NDJSON contain one canonical stop_reason and bounded outcome metadata only for bounded results."
+            - "Simultaneous triggers produce the documented priority reason and valid final output, while errors and cancellations remain distinct."
+        - id: "T029"
+          title: "Add schema-mode safety-flag rejection tests in src/cli/args/tests.rs"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "src/cli/args/tests.rs"
+          dependencies: ["T012", "T027"]
+          acceptance_criteria:
+            - "Each explicit safety flag supplied with --schema is rejected with an actionable unsupported-mode diagnostic before bridge startup."
+            - "Schema runs with no explicit safety flags retain their existing argument and bridge behavior."
+        - id: "T030"
+          title: "Project bounded stop state into CLI results in src/cli/commands.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T028"]
+          acceptance_criteria:
+            - "One canonical RunStopReason mapping supplies stable machine codes and human labels, and plain output emits the label only when a bounded stop occurred."
+            - "Final JSON and NDJSON results add stop_reason and bounded outcome/observed non-secret metadata only when present, preserving the legacy unset shape."
+        - id: "T031"
+          title: "Reject explicit safety options before the schema bridge in src/cli/dispatch.rs"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T029", "T030"]
+          acceptance_criteria:
+            - "Schema dispatch checks explicit safety options before server/SDK bridge startup and returns a clear unsupported-mode error."
+            - "Persisted or environment bounds are not silently advertised as enforced by schema mode, and ordinary run dispatch is unaffected."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Document the operator contract and run focused validation, builds, and repository delivery gates."
+      tasks:
+        - id: "T032"
+          title: "Document run safety bounds in docs/RUN_SAFETY_BOUNDS.md"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "docs/RUN_SAFETY_BOUNDS.md"
+          dependencies: ["T030", "T031"]
+          acceptance_criteria:
+            - "Documentation lists all invocation flags, persisted fields, JCODE_RUN_* variables, accepted forms, invocation > environment > persisted > unset precedence, and empty/invalid behavior."
+            - "Documentation explains token/tool accounting, deadline semantics, schema-mode rejection, canonical priority, and plain/JSON/NDJSON interpretation without secrets."
+        - id: "T033"
+          title: "Update commented default config guidance in crates/jcode-base/src/config/default_file.rs"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T030"]
+          acceptance_criteria:
+            - "The generated ~/.jcode/config.toml guidance shows the optional run-safety section, raw value forms, unset behavior, and source precedence."
+            - "Comments describe positive counters, RFC3339 deadlines with offsets, and stable stop-reason codes without changing unrelated defaults."
+        - id: "T034"
+          title: "Run focused safety tests and affected-package checks from Cargo.toml"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "Cargo.toml"
+          dependencies: ["T032", "T033"]
+          acceptance_criteria:
+            - "Exact config, resolver, Agent capture/streaming, CLI parsing, preflight, output, schema rejection, and unset-compatibility tests pass before broader validation."
+            - "cargo fmt --check and affected jcode-config-types, jcode-base, jcode-app-core, and root CLI check/build commands pass on the current stable toolchain, or unrelated baseline failures are isolated and recorded."
+        - id: "T035"
+          title: "Run repository guardrails and scoped diff review with scripts/check_guardrails.sh"
+          status: "Pending"
+          notes: "Deferred after the 2026-08-08 run: scripts/check_guardrails.sh --skip-slow reproduced four unchanged baseline ratchet failures in both the qwi and untouched dev worktrees (oversized file/test, panic-prone usage, and swallowed-error usage). No baseline was changed; rerun after the CodeRabbit fix pass."
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T034"]
+          acceptance_criteria:
+            - "scripts/check_guardrails.sh completes without new formatting, clippy, warning, lockfile, dependency-boundary, panic, swallowed-error, code-size, test-size, wildcard-reexport, or unused-dependency violations."
+            - "The final diff is limited to the planned config, resolver/controller, CLI output, docs, and focused tests; unrelated working-tree changes remain untouched and no GitHub or remote state is mutated."
+dependencies:
+    user_story_order:
+        - story_id: "US-002"
+          depends_on: []
+          blocks: ["US-004", "US-001"]
+        - story_id: "US-004"
+          depends_on: ["US-002"]
+          blocks: ["US-001"]
+        - story_id: "US-001"
+          depends_on: ["US-002", "US-004"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-001"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: []
+parallel_execution:
+    - phase: 1
+      parallel_groups:
+        - tasks: ["T001", "T002"]
+          rationale: "Legacy output and legacy config tests touch different files and have no dependency."
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T006", "T007"]
+          rationale: "Config field/fingerprint wiring and environment mapping modify separate config modules after the shared tests."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T008", "T009"]
+          rationale: "Pure source matrix tests and CLI flag parsing tests use separate modules."
+        - tasks: ["T011", "T012"]
+          rationale: "Policy resolver implementation and dispatch plumbing touch separate layers once their preceding tests/flags are ready."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T017"]
+          rationale: "CLI zero-work validation tests are independent after parsing is implemented."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T019", "T024", "T025"]
+          rationale: "Controller threshold tests and capture/streaming integration surfaces are independent after the shared Agent safety API is available."
+    - phase: 7
+      parallel_groups:
+        - tasks: ["T032", "T033"]
+          rationale: "Operator documentation and the generated default-file comments are independent documentation surfaces."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5, 6]
+        description: "Backward-compatible optional configuration, deterministic validation and precedence, all four runtime bounds, and stable plain/JSON/NDJSON bounded-stop results."
+        validation: "Run the focused resolver, invalid-input, fake-provider Agent, CLI output, schema rejection, and unset-compatibility tests, then run affected-package checks/builds."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Legacy behavior is protected and the optional persisted/environment configuration contract is wired through the existing reload path."
+        - milestone: "Policy Resolution Ready"
+          phases: [1, 2, 3, 4]
+          deliverable: "Invocation, environment, and persisted bounds resolve independently with actionable validation before unattended work starts."
+        - milestone: "Bounded Runtime Ready"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Capture and streaming Agent paths stop before exceeding turn, tool-step, native-usage, or deadline bounds."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Operators and automation can classify bounded stops consistently across plain, JSON, and NDJSON ordinary runs while legacy unset output remains unchanged."
+        - milestone: "Delivery Complete"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "Documentation, focused validation, affected builds, and repository guardrails are complete with a scoped diff."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-08T19:11:48Z"
+    artifact_type: "tasks"

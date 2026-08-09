@@ -604,6 +604,7 @@ fn run_schema_subcommand_parses_and_conflicts_with_streaming() {
             ndjson,
             schema,
             message,
+            ..
         }) => {
             assert!(!json);
             assert!(!ndjson);
@@ -632,6 +633,9 @@ fn run_schema_subcommand_parses_and_conflicts_with_streaming() {
     ])
     .expect_err("--schema and --ndjson must not combine");
 }
+
+#[path = "tests/run_safety.rs"]
+mod run_safety;
 
 #[test]
 fn version_subcommand_parses() {

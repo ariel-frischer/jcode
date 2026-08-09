@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 
 use super::provider_init::ProviderChoice;
 
@@ -24,6 +24,36 @@ pub(crate) enum ProviderAuthArg {
     ApiKey,
     /// Do not send authentication, useful for localhost model servers
     None,
+}
+
+#[derive(ClapArgs, Debug, Default)]
+pub(crate) struct RunSafetyArgs {
+    /// Maximum completed turns for this unattended run.
+    #[arg(long)]
+    max_turns: Option<String>,
+
+    /// Maximum jcode Registry tool executions for this run.
+    #[arg(long)]
+    max_tool_steps: Option<String>,
+
+    /// Maximum native token-usage delta for this run.
+    #[arg(long)]
+    token_budget: Option<String>,
+
+    /// Absolute RFC3339 deadline with an explicit offset.
+    #[arg(long)]
+    deadline: Option<String>,
+}
+
+impl From<RunSafetyArgs> for crate::config::RunSafetyConfig {
+    fn from(args: RunSafetyArgs) -> Self {
+        Self {
+            max_turns: args.max_turns,
+            max_tool_steps: args.max_tool_steps,
+            token_budget: args.token_budget,
+            deadline: args.deadline,
+        }
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -167,6 +197,9 @@ pub(crate) enum Command {
         /// Validate the response as JSON against a JSON Schema file
         #[arg(long, value_name = "FILE", conflicts_with_all = ["json", "ndjson"])]
         schema: Option<String>,
+
+        #[command(flatten)]
+        run_safety: RunSafetyArgs,
 
         /// The message to send
         message: String,

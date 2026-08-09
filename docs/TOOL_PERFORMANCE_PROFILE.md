@@ -1,7 +1,7 @@
 # Common Tool CPU and Memory Profile
 
-Status: current-state measurement and implemented optimization  
-Measured: 2026-08-08  
+Status: current-state measurement and implemented optimization
+Measured: 2026-08-08
 Bead: `jcode-skr`
 
 ## Scope

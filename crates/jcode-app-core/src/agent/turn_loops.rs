@@ -30,6 +30,9 @@ impl Agent {
 
     pub(super) async fn run_turn(&mut self, print_output: bool) -> Result<String> {
         self.set_log_context();
+        if !self.run_safety_before_turn() {
+            return Ok(String::new());
+        }
         crate::session_metrics::record_turn(&self.session.id);
         // Mark this session as actively streaming for presence UIs (e.g. the
         // macOS menu bar indicator). Cleared automatically on every exit path.
@@ -50,6 +53,9 @@ impl Agent {
         let mut batch_nudge_pending = false;
 
         loop {
+            if self.run_safety_observe_usage() {
+                break;
+            }
             // Do not start another provider request once a cancel has been
             // observed; the loop is re-entered by several recovery paths
             // (issue #732, regression of #428).
@@ -144,17 +150,23 @@ impl Agent {
             let send_messages = stamped.as_deref().unwrap_or(&messages_with_memory);
             let prompt_has_recent_tool_result = Self::messages_end_with_tool_result(send_messages);
             self.last_status_detail = None;
-            let mut stream = match self
-                .provider
-                .complete_split(
+            let safety_deadline =
+                wait_for_run_safety_deadline(self.run_safety_deadline_remaining());
+            tokio::pin!(safety_deadline);
+            let provider_result = tokio::select! {
+                result = self.provider.complete_split(
                     send_messages,
                     &tools,
                     &split_prompt.static_part,
                     &split_prompt.dynamic_part,
                     self.provider_session_id.as_deref(),
-                )
-                .await
-            {
+                ) => result,
+                _ = &mut safety_deadline => {
+                    self.run_safety_observe_usage();
+                    break;
+                }
+            };
+            let mut stream = match provider_result {
                 Ok(stream) => stream,
                 Err(e) => {
                     if self.try_auto_compact_after_context_limit(&e.to_string()) {
@@ -227,7 +239,18 @@ impl Agent {
             let mut openai_native_compaction: Option<(String, usize)> = None;
 
             let mut retry_after_compaction = false;
-            while let Some(event) = stream.next().await {
+            loop {
+                let next_event = std::pin::pin!(stream.next());
+                let event = tokio::select! {
+                    event = next_event => event,
+                    _ = &mut safety_deadline => {
+                        self.run_safety_observe_usage();
+                        break;
+                    }
+                };
+                let Some(event) = event else {
+                    break;
+                };
                 let event = match event {
                     Ok(event) => event,
                     Err(e) => {
@@ -598,17 +621,28 @@ impl Agent {
                             graceful_shutdown_signal: Some(self.graceful_shutdown.clone()),
                             execution_mode: ToolExecutionMode::AgentTurn,
                         };
-                        crate::telemetry::record_tool_call();
-                        let tool_result = self
-                            .registry
-                            .execute(&tool_name, ToolCall::normalize_input_to_object(input), ctx)
-                            .await;
-                        if tool_result.is_err() {
-                            crate::telemetry::record_tool_failure();
-                        }
-                        let native_result = match tool_result {
-                            Ok(output) => NativeToolResult::success(request_id, output.output),
-                            Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                        let native_result = if self.run_safety_before_tool_step() {
+                            crate::telemetry::record_tool_call();
+                            let tool_result = self
+                                .registry
+                                .execute(
+                                    &tool_name,
+                                    ToolCall::normalize_input_to_object(input),
+                                    ctx,
+                                )
+                                .await;
+                            if tool_result.is_err() {
+                                crate::telemetry::record_tool_failure();
+                            }
+                            match tool_result {
+                                Ok(output) => NativeToolResult::success(request_id, output.output),
+                                Err(e) => NativeToolResult::error(request_id, e.to_string()),
+                            }
+                        } else {
+                            NativeToolResult::error(
+                                request_id,
+                                run_safety::RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string(),
+                            )
                         };
                         // Send result back to SDK bridge
                         if let Some(sender) = self.provider.native_result_sender() {
@@ -816,6 +850,34 @@ impl Agent {
                 assistant_message_id.as_ref(),
             );
 
+            if self.run_safety_observe_usage() {
+                let mut unresolved_tool_calls = Vec::with_capacity(tool_calls.len());
+                let mut sdk_results_dirty = false;
+                for tool_call in &tool_calls {
+                    if let Some((sdk_content, sdk_is_error)) =
+                        sdk_tool_results.remove(&tool_call.id)
+                    {
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: tool_call.id.clone(),
+                                content: sdk_content,
+                                is_error: if sdk_is_error { Some(true) } else { None },
+                            }],
+                        );
+                        sdk_results_dirty = true;
+                    } else {
+                        unresolved_tool_calls.push(tool_call.clone());
+                    }
+                }
+                // Provider-internal SDK tools do not cross the Registry boundary, so
+                // they are persisted but intentionally do not consume max_tool_steps.
+                if self.run_safety_skip_tool_calls(&unresolved_tool_calls) || sdk_results_dirty {
+                    self.session.save()?;
+                }
+                break;
+            }
+
             if tool_calls.is_empty() && !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
                     self.add_message(Role::User, blocks);
@@ -913,7 +975,8 @@ impl Agent {
 
             // Execute tools and add results
             let mut tool_results_dirty = false;
-            for tc in tool_calls {
+            for tool_index in 0..tool_calls.len() {
+                let tc = tool_calls[tool_index].clone();
                 let message_id = assistant_message_id
                     .clone()
                     .unwrap_or_else(|| self.session.id.clone());
@@ -1001,6 +1064,12 @@ impl Agent {
                         tool_results_dirty = true;
                         continue;
                     }
+                }
+
+                if !self.run_safety_before_tool_step() {
+                    self.record_run_safety_skipped_tool_results(&tool_calls[tool_index..]);
+                    tool_results_dirty = true;
+                    break;
                 }
 
                 // SDK didn't execute this tool, run it locally
@@ -1128,6 +1197,10 @@ impl Agent {
                 self.session.save()?;
             }
 
+            if self.run_safety_observe_usage() {
+                break;
+            }
+
             if !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
                     self.add_message(Role::User, blocks);
@@ -1175,86 +1248,5 @@ impl Agent {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn user_text(text: &str) -> Message {
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::Text {
-                text: text.to_string(),
-                cache_control: None,
-            }],
-            timestamp: None,
-            tool_duration_ms: None,
-        }
-    }
-
-    fn tool_result(id: &str, content: &str) -> Message {
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::ToolResult {
-                tool_use_id: id.to_string(),
-                content: content.to_string(),
-                is_error: None,
-            }],
-            timestamp: None,
-            tool_duration_ms: Some(1),
-        }
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_detects_tool_continuation_context() {
-        let messages = vec![
-            user_text("tell me about the desktop application"),
-            tool_result("functions.read:0", "desktop architecture docs"),
-            tool_result("functions.agentgrep:4", "desktop source summary"),
-        ];
-
-        assert!(Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_allows_memory_after_tool_results() {
-        let messages = vec![
-            user_text("tell me about the desktop application"),
-            tool_result("functions.read:0", "desktop architecture docs"),
-            user_text("<system-reminder>Relevant memory</system-reminder>"),
-        ];
-
-        assert!(Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_ignores_plain_user_prompt() {
-        let messages = vec![user_text("hello")];
-
-        assert!(!Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn sequential_tool_rounds_trigger_after_three_single_calls() {
-        let mut rounds = 0;
-        for _ in 0..3 {
-            rounds = Agent::update_sequential_tool_rounds(rounds, 1, false);
-        }
-
-        assert_eq!(rounds, Agent::SEQUENTIAL_TOOL_ROUNDS_BEFORE_BATCH_NUDGE);
-    }
-
-    #[test]
-    fn parallel_or_batch_calls_reset_sequential_tool_rounds() {
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 2, false), 0);
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 1, true), 0);
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 0, false), 0);
-    }
-
-    #[test]
-    fn pending_nudge_is_injected_only_when_batch_is_available() {
-        assert!(Agent::should_inject_batch_nudge(true, true));
-        assert!(!Agent::should_inject_batch_nudge(false, true));
-        assert!(!Agent::should_inject_batch_nudge(true, false));
-        assert!(Agent::BATCH_NUDGE.contains("use the batch tool"));
-        assert!(Agent::BATCH_NUDGE.contains("result is required"));
-    }
-}
+#[path = "turn_loops_tests.rs"]
+mod tests;

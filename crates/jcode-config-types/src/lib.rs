@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 mod display;
 pub use display::DisplayConfig;
 pub mod keybindings;
+mod run_safety;
+pub use run_safety::RunSafetyConfig;
 mod serde_lenient;
 pub use keybindings::{
     KEYBINDING_DEFAULTS, KeybindingDefault, KeybindingIssue, KeybindingIssueKind,

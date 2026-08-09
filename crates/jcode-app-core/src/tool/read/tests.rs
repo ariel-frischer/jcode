@@ -433,10 +433,26 @@ async fn read_tool_streaming_bounds_oversized_line_and_preserves_following_lines
         .await
         .expect("oversized line should be scanned with bounded retained memory");
 
-    assert!(output.output.contains("1\t🙂"), "output={:?}", output.output);
-    assert!(output.output.contains("...\n"), "output={:?}", output.output);
-    assert!(output.output.contains("2\tsecond"), "output={:?}", output.output);
-    assert!(output.output.contains("... 1 more lines"), "output={:?}", output.output);
+    assert!(
+        output.output.contains("1\t🙂"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        output.output.contains("...\n"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        output.output.contains("2\tsecond"),
+        "output={:?}",
+        output.output
+    );
+    assert!(
+        output.output.contains("... 1 more lines"),
+        "output={:?}",
+        output.output
+    );
     assert!(output.output.len() < 3_000, "output was not bounded");
 }
 
@@ -457,7 +473,9 @@ async fn read_tool_rejects_overflowing_offset_and_limit() {
         .expect_err("overflowing range must fail before scanning");
 
     assert!(
-        error.to_string().contains("exceeds the supported line range"),
+        error
+            .to_string()
+            .contains("exceeds the supported line range"),
         "error={error:#}"
     );
 }

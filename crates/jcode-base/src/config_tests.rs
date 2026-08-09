@@ -1,7 +1,7 @@
 use super::{
     AmbientConfig, Config, DiffDisplayMode, DisplayConfig, HookCommands, LatexRenderingMode,
-    ProviderConfig, SessionPickerResumeAction, SwarmSpawnMode, ToolConfig, config_env_fingerprint,
-    populate_context_limits_from_config_ref,
+    ProviderConfig, RunSafetyConfig, SessionPickerResumeAction, SwarmSpawnMode, ToolConfig,
+    config_env_fingerprint, populate_context_limits_from_config_ref,
 };
 use std::ffi::OsString;
 use std::path::Path;
@@ -34,6 +34,9 @@ fn test_openai_fast_mode_defaults_to_priority() {
 fn preserve_reasoning_context_defaults_to_enabled() {
     assert!(ProviderConfig::default().preserve_reasoning_context);
 }
+
+#[path = "config_tests/run_safety.rs"]
+mod run_safety;
 
 #[test]
 fn swarm_spawn_mode_defaults_to_inline() {
