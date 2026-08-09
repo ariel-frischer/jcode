@@ -76,7 +76,11 @@ pub enum StreamOp {
 /// One queued backlog entry.
 #[derive(Debug)]
 enum QueuedOp {
-    Chunk { kind: StreamKind, text: String },
+    Chunk {
+        kind: StreamKind,
+        text: String,
+        chars: usize,
+    },
     CloseReasoning,
 }
 
@@ -239,15 +243,18 @@ impl StreamBuffer {
         if let Some(QueuedOp::Chunk {
             kind: last_kind,
             text: last_text,
+            chars: last_chars,
         }) = self.queue.back_mut()
             && *last_kind == kind
         {
             last_text.push_str(text);
+            *last_chars += text.chars().count();
             return;
         }
         self.queue.push_back(QueuedOp::Chunk {
             kind,
             text: text.to_string(),
+            chars: text.chars().count(),
         });
     }
 
@@ -309,7 +316,7 @@ impl StreamBuffer {
                     self.queue.pop_front();
                     ops.push(StreamOp::CloseReasoning);
                 }
-                Some(QueuedOp::Chunk { kind, text }) => {
+                Some(QueuedOp::Chunk { kind, text, chars }) => {
                     if char_count == 0 {
                         if drain_all_markers {
                             // flush() always passes the full backlog as budget,
@@ -319,7 +326,7 @@ impl StreamBuffer {
                         break;
                     }
                     let kind = *kind;
-                    let available = text.chars().count();
+                    let available = *chars;
                     let take = char_count.min(available);
                     let chunk = if take == available {
                         let QueuedOp::Chunk { text, .. } = self.queue.pop_front().expect("front")
@@ -335,6 +342,7 @@ impl StreamBuffer {
                             .unwrap_or(text.len());
                         let chunk = text[..end].to_string();
                         text.replace_range(..end, "");
+                        *chars -= take;
                         chunk
                     };
                     char_count -= take;
@@ -882,6 +890,18 @@ mod tests {
 
         let sizes = drain_frames(&mut buf, start, Duration::from_millis(16));
         assert_eq!(sizes.iter().sum::<usize>(), 40);
+    }
+
+    #[test]
+    fn coalesced_multibyte_chunk_preserves_exact_character_count() {
+        let mut buf = StreamBuffer::new();
+        buf.push_chunk(StreamKind::Text, "é界");
+        buf.push_chunk(StreamKind::Text, "🦀e\u{301}");
+
+        let ops = buf.flush();
+        assert_eq!(op_chars(&ops), 5);
+        assert_eq!(ops, vec![StreamOp::Text("é界🦀e\u{301}".to_string())]);
+        assert_eq!(buf.debug_memory_profile().buffered_text_bytes, 0);
     }
 
     #[test]
