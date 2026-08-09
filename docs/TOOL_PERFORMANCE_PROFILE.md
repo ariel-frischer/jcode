@@ -135,6 +135,7 @@ here instead.
 | `jcode-yx7` | Cache large-file line offsets for repeated reads | Focused parity tests passed, but no paired built-binary CPU, latency, memory, and daemon-invalidation campaign completed | Reverted; redesign only with integrated evidence |
 | `jcode-ms5` | Remove streaming-delta clones or coalesce fanout | Real Rust baseline confirmed clone ownership by accumulation, parsing, tap, history, and wire consumers; no safe general-purpose candidate was established | Closed investigation-only; production unchanged |
 | `jcode-bef` | Cache remaining character counts in `StreamBuffer` chunks | Directional wall gains ranged from 9.0% to 25.1%, but required paired CPU, allocation, memory, fragmentation, rendering, and guardrail evidence was incomplete | Reverted; retain the idea for a future instrumented campaign |
+| `jcode-g25` | Return a shared immutable render-cache view instead of cloning `Vec<Line>` | TestBackend warm-frame p50 ranged from 0.274 ms for 1 KiB at width 80 to 0.807 ms for 64 KiB at width 160, but direct consumers require owned lines for alignment, mapping, truncation, and preparation | Rejected; a shared view would recreate materialization at the adapter or require an out-of-scope renderer ownership redesign |
 
 These negative results are useful constraints rather than failed deliveries:
 they prevent narrow microbenchmark wins from adding runtime state, invalidation
