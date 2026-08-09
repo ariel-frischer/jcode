@@ -2,27 +2,26 @@
 <html lang="en">
 <head><meta charset="utf-8"><title>jcode-bef StreamBuffer Investigation</title></head>
 <body>
-<h1>jcode-bef: StreamBuffer cursor investigation</h1>
-<p><strong>Outcome:</strong> Acceptance blocked before baseline. No candidate was implemented and no production files changed.</p>
-<h2>Scope and routing</h2>
-<ul>
-<li>Worktree: <code>agent/jcode-bef-stream-buffer</code>, base <code>4bc21f92e</code>.</li>
-<li>Owned source scope: <code>crates/jcode-tui-core/src/stream_buffer.rs</code> and focused callers/tests only.</li>
-<li>Canonical Bead and comments read first. Project constitution read.</li>
-<li>Effective Autospec profile verified: <code>oauth-cheap</code>, native <code>jcode</code>, <code>openai:gpt-5.6-luna</code>; specify/plan max, implementation xhigh. No Autospec mutation was run because the existing active feature was unrelated and creating artifacts would risk violating the canonical worktree ownership contract.</li>
-</ul>
-<h2>Required evidence status</h2>
-<table border="1"><tr><th>Evidence</th><th>Status</th></tr>
-<tr><td>Baseline/candidate cold and warm benchmarks</td><td>Not run</td></tr>
-<tr><td>CPU, wall, allocations, memory</td><td>Not run</td></tr>
-<tr><td>Behavior, rendering, pacing, Unicode parity</td><td>Not run</td></tr>
-<tr><td>Focused/package tests, built TUI, guardrails</td><td>Not run</td></tr>
+<h1>jcode-bef: StreamBuffer cached character count</h1>
+<p><strong>Outcome:</strong> Acceptance-incomplete investigation closed and production candidate reverted. Candidate <code>ad640ff66</code> cached remaining Unicode scalar counts per queued chunk. Required paired CPU, allocation, RSS/peak/retained-memory, and full guardrail evidence was not completed, so wall-clock results alone were not accepted.</p>
+<h2>Exact commits</h2>
+<ul><li>Baseline/source-equivalent: <code>4bc21f92e</code> (also validation parent <code>7fe9d1934</code>).</li><li>Candidate: <code>ad640ff66</code>, previously pushed to <code>github/agent/jcode-bef-stream-buffer</code>.</li><li>Revert: <code>038a5f853</code>, current branch tip. Candidate production and report changes are removed from the working tree by this revert, with this report restored as the durable negative/blocked evidence artifact.</li></ul>
+<h2>Evidence status</h2>
+<table border="1"><tr><th>Requirement</th><th>Result</th></tr>
+<tr><td>Cold/warm large, many tiny, multibyte/combining, retargeting, final flush</td><td>Wall-only directional measurements existed in the candidate report: -9.0%, -23.1%, -25.1%, -12.4%, -9.7%. These were not acceptance-complete.</td></tr>
+<tr><td>At least five comparable samples per workload</td><td>Not evidenced in the retained artifact.</td></tr>
+<tr><td>Process CPU</td><td>Unavailable/not measured.</td></tr>
+<tr><td>Allocation count and bytes</td><td>Unavailable/not measured.</td></tr>
+<tr><td>Peak and retained RSS/memory</td><td>Unavailable/not measured. Existing process-memory/jemalloc APIs were identified, but no paired harness run was completed.</td></tr>
+<tr><td>Extra usize per segment</td><td>Static estimate only: one additional <code>usize</code> per live queue chunk, 8 bytes on this target. Realistic and worst bounded fragmentation measurements were not completed.</td></tr>
+<tr><td>Correctness and focused tests</td><td>Candidate focused stream tests: 18/18 passed, including Unicode, combining, pacing, max-step, empty, flush, ordering, retargeting, and markers. Candidate complete <code>jcode-tui-core</code> library tests: 63/63 passed.</td></tr>
+<tr><td>Representative built full TUI/public rendering path</td><td>Package check for <code>jcode-tui</code> passed after candidate validation, but no representative built full-TUI/TestBackend rendering execution was evidenced.</td></tr>
+<tr><td>Formatting and Clippy</td><td>Focused candidate Clippy and <code>cargo check --profile selfdev -p jcode-tui</code> passed. Repository-wide fmt check failed on pre-existing unrelated formatting in <code>crates/jcode-app-core/src/server/provider_control_tests.rs</code> and other files. Full guardrails were not acceptance-complete.</td></tr>
 </table>
-<p>The required gate command was run repeatedly. Unrelated Cargo/rustc jobs remained active for the full five-minute wait, including workspace tests and builds in <code>.worktrees/integration</code>. The gate timed out with <code>RUST_BUSY_TIMEOUT</code>. No Rust-heavy command was launched from this worktree.</p>
 <h2>Risk</h2>
-<h3>Low</h3><p><strong>Rationale:</strong> No code or dependency changes were made. <strong>Blast radius:</strong> none. <strong>Rollback:</strong> no rollback required. <strong>Required review action:</strong> none beyond acknowledging the blocked investigation.</p>
-<h3>Medium</h3><p><strong>Rationale:</strong> The investigation has no performance conclusion because the representative baseline was not captured. <strong>Blast radius:</strong> delivery confidence and scheduling only. <strong>Mitigation:</strong> rerun from this unchanged branch after the host is idle. <strong>Rollback:</strong> retain this no-change state. <strong>Required review action:</strong> coordinator should release the Rust slot and restart the evidence plan.</p>
-<h3>High</h3><p><strong>Rationale:</strong> Implementing a cursor/segmented approach without actual Rust-path measurements could regress Unicode, pacing, memory, or allocations. <strong>Blast radius:</strong> the TUI streaming path. <strong>Mitigation:</strong> no implementation was attempted. <strong>Rollback:</strong> unchanged branch. <strong>Required review action:</strong> maintainer approval is required before accepting any candidate, based on representative before/after measurements.</p>
+<h3>Low</h3><p><strong>Rationale:</strong> Current branch contains the reverted baseline behavior and no production candidate. <strong>Blast radius:</strong> none from the candidate. <strong>Rollback:</strong> no action required beyond retaining <code>038a5f853</code>. <strong>Required review action:</strong> none for production retention.</p>
+<h3>Medium</h3><p><strong>Rationale:</strong> The candidate's static memory cost was bounded per segment, but realistic and worst-case fragmentation memory was not measured. <strong>Blast radius:</strong> highly fragmented provider streams. <strong>Mitigation:</strong> candidate reverted. <strong>Rollback:</strong> already applied. <strong>Required review action:</strong> redesign or rerun only with allocator and RSS evidence.</p>
+<h3>High</h3><p><strong>Rationale:</strong> This is a hot streaming path and the required paired resource evidence and full public rendering validation are absent. <strong>Blast radius:</strong> CPU, allocations, memory retention, pacing, and rendered response behavior. <strong>Mitigation:</strong> do not retain or merge the candidate. <strong>Rollback:</strong> revert commit <code>038a5f853</code>. <strong>Required review action:</strong> maintainer decides whether to reopen with an acceptance-grade harness.</p>
 <h2>Recommendation</h2>
-<p>Do not classify this as a neutral or negative optimization result. It is an infrastructure-blocked investigation. Keep the branch unchanged and rerun the required baseline/candidate experiment once unrelated Rust work is idle.</p>
+<p>Revert/retain baseline and close this attempt as investigation-only / needs-redesign. Do not label the candidate a passing optimization and do not merge or self-approve. A future attempt must produce paired baseline/candidate wall, process CPU, allocation count/bytes, peak/retained memory, fragmentation cost, correctness, representative rendering, and full guardrail evidence under identical builds and fixtures.</p>
 </body></html>
