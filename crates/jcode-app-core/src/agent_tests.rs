@@ -8,6 +8,235 @@ use async_trait::async_trait;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+/// Test-only provider used by the stream fanout baseline. This intentionally
+/// lives beside the existing unit seam rather than in production code: the
+/// benchmark must exercise `Agent::run_turn_streaming_mpsc` while keeping the
+/// provider deterministic and offline.
+struct StreamFanoutBaselineProvider {
+    events: Vec<StreamEvent>,
+    delay: Duration,
+    error: bool,
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[async_trait]
+impl Provider for StreamFanoutBaselineProvider {
+    async fn complete(
+        &self,
+        _messages: &[Message],
+        _tools: &[ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> Result<EventStream> {
+        let events = if self
+            .calls
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            > 0
+        {
+            vec![StreamEvent::MessageEnd {
+                stop_reason: Some("end_turn".into()),
+            }]
+        } else {
+            self.events.clone()
+        };
+        let delay = self.delay;
+        let error = self.error;
+        let (tx, rx) = tokio_mpsc::channel::<Result<StreamEvent>>(32);
+        tokio::spawn(async move {
+            for event in events {
+                if !delay.is_zero() {
+                    tokio::time::sleep(delay).await;
+                }
+                if tx.send(Ok(event)).await.is_err() {
+                    break;
+                }
+            }
+            if error {
+                let _ = tx
+                    .send(Err(anyhow::anyhow!("stream fanout baseline error")))
+                    .await;
+            }
+        });
+        Ok(Box::pin(ReceiverStream::new(rx)))
+    }
+
+    fn name(&self) -> &str {
+        "stream-fanout-baseline"
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(Self {
+            events: self.events.clone(),
+            delay: self.delay,
+            error: self.error,
+            calls: Arc::clone(&self.calls),
+        })
+    }
+}
+
+/// Real-path baseline harness. Run explicitly with:
+/// `cargo test -p jcode-app-core stream_delta_fanout_rust_baseline -- --ignored
+/// --nocapture`.
+///
+/// It intentionally reports measurements rather than asserting thresholds. The
+/// output is an investigation artifact, not a production benchmark gate.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "manual baseline measurement; serialize Cargo-heavy commands"]
+async fn stream_delta_fanout_rust_baseline() {
+    let scenarios = vec![
+        (
+            "small-token",
+            vec![
+                StreamEvent::TextDelta("Hello".into()),
+                StreamEvent::TextDelta(" world".into()),
+                StreamEvent::MessageEnd {
+                    stop_reason: Some("end_turn".into()),
+                },
+            ],
+            Duration::ZERO,
+            false,
+        ),
+        (
+            "long-token",
+            (0..10_000)
+                .map(|i| StreamEvent::TextDelta(format!("token-{i:05} ")))
+                .chain(std::iter::once(StreamEvent::MessageEnd {
+                    stop_reason: Some("end_turn".into()),
+                }))
+                .collect(),
+            Duration::ZERO,
+            false,
+        ),
+        (
+            "multibyte",
+            vec![
+                StreamEvent::ThinkingStart,
+                StreamEvent::ThinkingDelta("推論🙂 café".into()),
+                StreamEvent::ThinkingEnd,
+                StreamEvent::TextDelta("こんにちは世界 🌍".into()),
+                StreamEvent::MessageEnd {
+                    stop_reason: Some("end_turn".into()),
+                },
+            ],
+            Duration::ZERO,
+            false,
+        ),
+        (
+            "tool-call",
+            vec![
+                StreamEvent::ThinkingStart,
+                StreamEvent::ThinkingDelta("checking".into()),
+                StreamEvent::ThinkingEnd,
+                StreamEvent::ToolUseStart {
+                    id: "tool-1".into(),
+                    name: "read".into(),
+                },
+                StreamEvent::ToolInputDelta("{\"file_path\":".into()),
+                StreamEvent::ToolInputDelta("\"README.md\"}".into()),
+                StreamEvent::ToolUseEnd,
+                StreamEvent::MessageEnd {
+                    stop_reason: Some("tool_use".into()),
+                },
+            ],
+            Duration::ZERO,
+            false,
+        ),
+        (
+            "interruption-error",
+            vec![
+                StreamEvent::TextDelta("partial ".into()),
+                StreamEvent::Error {
+                    message: "fixture interruption".into(),
+                    retry_after_secs: None,
+                },
+            ],
+            Duration::ZERO,
+            false,
+        ),
+        (
+            "slow-consumer",
+            (0..2_000)
+                .map(|i| StreamEvent::TextDelta(format!("chunk-{i:04}")))
+                .chain(std::iter::once(StreamEvent::MessageEnd {
+                    stop_reason: Some("end_turn".into()),
+                }))
+                .collect(),
+            Duration::ZERO,
+            true,
+        ),
+    ];
+
+    println!("{{\"schema\":1,\"measurement\":\"real-rust-turn-streaming-mpsc\",\"scenarios\":[");
+    for (index, (name, events, delay, slow_consumer)) in scenarios.into_iter().enumerate() {
+        let _guard = crate::storage::lock_test_env();
+        let provider: Arc<dyn Provider> = Arc::new(StreamFanoutBaselineProvider {
+            events,
+            delay,
+            error: false,
+            calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        });
+        let registry = Registry::new(provider.clone()).await;
+        let mut agent = Agent::new(provider, registry);
+        agent.add_message(
+            Role::User,
+            vec![ContentBlock::Text {
+                text: "stream baseline".into(),
+                cache_control: None,
+            }],
+        );
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let usage_before = unsafe {
+            let mut usage = std::mem::MaybeUninit::uninit();
+            libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr());
+            usage.assume_init()
+        };
+        let started = std::time::Instant::now();
+        let result = agent.run_turn_streaming_mpsc(tx).await;
+        let wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let usage_after = unsafe {
+            let mut usage = std::mem::MaybeUninit::uninit();
+            libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr());
+            usage.assume_init()
+        };
+        let cpu_ms = (usage_after.ru_utime.tv_sec - usage_before.ru_utime.tv_sec) as f64 * 1000.0
+            + (usage_after.ru_utime.tv_usec - usage_before.ru_utime.tv_usec) as f64 / 1000.0
+            + (usage_after.ru_stime.tv_sec - usage_before.ru_stime.tv_sec) as f64 * 1000.0
+            + (usage_after.ru_stime.tv_usec - usage_before.ru_stime.tv_usec) as f64 / 1000.0;
+        let peak_rss_kb = usage_after.ru_maxrss.saturating_sub(usage_before.ru_maxrss);
+        let mut output = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            output.push(event);
+            if slow_consumer {
+                tokio::time::sleep(Duration::from_micros(100)).await;
+            }
+        }
+        let serialized: Vec<String> = output
+            .iter()
+            .filter_map(|event| serde_json::to_string(event).ok())
+            .collect();
+        let digest = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            for line in &serialized {
+                hasher.update(line.as_bytes());
+                hasher.update(b"\n");
+            }
+            format!("{:x}", hasher.finalize())
+        };
+        let result_json = match &result {
+            Ok(()) => "\"ok\"".to_string(),
+            Err(error) => format!("\"error: {}\"", error.to_string().replace('"', "\\\"")),
+        };
+        let comma = if index == 0 { "" } else { "," };
+        println!(
+            "{comma}{{\"scenario\":{name:?},\"input_events\":{},\"output_events\":{},\"wall_ms\":{wall_ms:.3},\"cpu_ms\":{cpu_ms:.3},\"allocation_peak_bytes\":null,\"memory_peak_kb\":{peak_rss_kb},\"output_digest\":{digest:?},\"result\":{result_json}}}",
+            serialized.len(),
+            output.len(),
+        );
+    }
+    println!("]}}");
+}
+
 struct DelayedProvider {
     open_delay: Duration,
     first_event_delay: Duration,

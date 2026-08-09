@@ -1,0 +1,14 @@
+
+running 1 test
+{"schema":1,"measurement":"real-rust-turn-streaming-mpsc","scenarios":[
+{"scenario":"small-token","input_events":4,"output_events":4,"wall_ms":16.162,"cpu_ms":22.601,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"cbe53ebc756229aafef1aab4e553bae4ca903df13cf238a538d59e0e70f75f77","result":"ok"}
+,{"scenario":"long-token","input_events":10002,"output_events":10002,"wall_ms":68.157,"cpu_ms":111.902,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"b1d2c85663d3839be6d29534501e22e9ac8809bb3e47a82c07e5c0c449131bd0","result":"ok"}
+,{"scenario":"multibyte","input_events":6,"output_events":6,"wall_ms":9.324,"cpu_ms":14.116,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"3393df0065f7ef805bc1fb48acde93684eff8c618f0e3c6f06231470254b66ff","result":"ok"}
+,{"scenario":"tool-call","input_events":23,"output_events":23,"wall_ms":96.087,"cpu_ms":57.742,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"5ae824874dd91b0b2a78eae9768702dbf4ae954080c9d0af35a7fa19f2b5c0a0","result":"ok"}
+,{"scenario":"interruption-error","input_events":2,"output_events":2,"wall_ms":9.122,"cpu_ms":12.843,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"8188514e6b2d6960ad33b3705c2a667f705c3f6ac690fa65db3bdb8cfb32e702","result":"error: fixture interruption"}
+,{"scenario":"slow-consumer","input_events":2002,"output_events":2002,"wall_ms":17.488,"cpu_ms":28.452,"allocation_peak_bytes":null,"memory_peak_kb":0,"output_digest":"07f0aab9a5cc44201006d8e9e5494c29d4cd50f783578630b2632d7bc171b379","result":"ok"}
+]}
+test agent::tests::stream_delta_fanout_rust_baseline ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1153 filtered out; finished in 6.65s
+

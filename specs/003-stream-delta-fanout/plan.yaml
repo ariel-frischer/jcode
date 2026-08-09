@@ -30,11 +30,21 @@ plan:
     - clippy and scripts/check_guardrails.sh, serialized
     - isolated built-binary SSE fixture with JSON/NDJSON and Registry round trip
   blockers:
-    - real Rust MPSC execution requires a dedicated provider fixture and was not fabricated from the Python self-model
-    - built CLI acceptance is not applicable because production code is unchanged
+    - allocation peak is intentionally null because this run used the existing system allocator and no production allocator instrumentation; RSS deltas were zero at scenario granularity under getrusage
+    - built public CLI acceptance is not applicable because production code is unchanged
   outcome_if_no_gain: investigation-only, production unchanged
+  rust_baseline:
+    harness: crates/jcode-app-core/src/agent_tests.rs::stream_delta_fanout_rust_baseline
+    artifact: specs/003-stream-delta-fanout/rust-baseline.json
+    command: cargo test -p jcode-app-core stream_delta_fanout_rust_baseline --no-default-features -- --ignored --nocapture
+    path: real Agent::run_turn_streaming_mpsc with deterministic offline Provider fixture and unbounded ServerEvent fanout
+    scenarios: [small-token, long-token, multibyte, tool-call, interruption-error, slow-consumer]
+    evidence: wall_ms, self CPU ms, peak RSS delta kb, output count, SHA-256 event digest, terminal result
   outcome: >-
-    Investigation-only closure. The self-model validates deterministic fixture,
-    digest, parity, and measurement plumbing across all six required scenarios;
-    it is explicitly not a Rust performance claim. No safe material candidate
-    was demonstrated, so production remains unchanged.
+    Acceptance-complete investigation-only closure. The real Rust MPSC path was
+    executed for every required scenario and emits repeatable event-count and
+    digest evidence. The harness does not instrument allocations, so no
+    allocation claim is made. Static ownership review plus the baseline show no
+    safe general-purpose candidate: moving text requires ownership restructuring
+    across accumulation, marker detection, inline tap, and fanout; coalescing
+    risks pacing and boundary semantics. No production optimization is retained.
