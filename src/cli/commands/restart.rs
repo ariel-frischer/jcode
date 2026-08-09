@@ -118,6 +118,10 @@ pub fn run_restart_clear_command() -> Result<()> {
     Ok(())
 }
 
+fn is_debug_control_disabled(message: &str) -> bool {
+    message.starts_with("Debug control is disabled.")
+}
+
 pub fn run_restart_restore_command() -> Result<()> {
     let exe = current_restart_restore_exe()?;
     let result = match crate::restart_snapshot::restore_snapshot(&exe) {
@@ -195,6 +199,9 @@ async fn capture_connected_restart_snapshot()
         match client.read_event().await? {
             crate::protocol::ServerEvent::DebugResponse { id, ok, output } if id == request_id => {
                 if !ok {
+                    if is_debug_control_disabled(&output) {
+                        return Ok(None);
+                    }
                     anyhow::bail!(output);
                 }
                 break output;
@@ -202,6 +209,9 @@ async fn capture_connected_restart_snapshot()
             crate::protocol::ServerEvent::Ack { id } if id == request_id => {}
             crate::protocol::ServerEvent::Done { id } if id == request_id => {}
             crate::protocol::ServerEvent::Error { id, message, .. } if id == request_id => {
+                if is_debug_control_disabled(&message) {
+                    return Ok(None);
+                }
                 anyhow::bail!(message);
             }
             _ => {}
