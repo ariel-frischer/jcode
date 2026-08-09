@@ -320,6 +320,14 @@ exercises over-capacity behavior and bounded process growth, but the public
 protocol does not expose resident-cache count, and `/proc` memory still includes
 daemon initialization and allocator effects.
 
+A paired guardrail probe then exercised ten concurrent public `agentgrep find`
+callers against ten repository roots. Historical and optimized daemons both
+matched their serial output hashes byte-for-byte. The same calls excluded the
+sensitive `.env` path and its content, excluded `.gitignore` and `ignored.rs`
+under normal policy, and respected `max_files=1`. This expands the public
+concurrency and sensitive-path evidence, but it remains a finite fixture matrix,
+not a complete security review or contention stress limit.
+
 A paired public read probe then expanded the cold-read evidence across five line-shape
 fixtures using the same private debug-socket protocol and historical compatibility-
 patched binary. Every output hash and byte count matched. The first-call and
