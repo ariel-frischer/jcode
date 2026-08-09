@@ -265,6 +265,14 @@ compatibility-patched historical baseline rather than a byte-for-byte rebuild.
 | Eight concurrent callers | Passed | Passed | Byte-for-byte parity with serial baselines |
 | Process VmRSS/VmHWM before to after fill | 88,308 to 90,300 KiB | 88,428 to 97,876 KiB | 1,992 versus 9,448 KiB process delta; allocator/runtime attribution remains open |
 
+To reduce the uncertainty of the single cold sample, three fresh-daemon runs
+then read the same 500,000-line fixture near its tail. Historical samples were
+0.030371, 0.028627, and 0.029750 s, for a 0.029750 s median. Optimized samples
+were 0.029054, 0.025902, and 0.027950 s, for a 0.027950 s median, or 6.0%
+lower wall time. All six output hashes matched and all returned 1,676 bytes.
+This is evidence of no cold regression on this fixture, but not a full workload
+confidence interval across file sizes and host contention.
+
 Both binaries also delivered 100 valid persistent-hook envelopes without drops or
 duplicates. The historical and optimized hook batches measured 0.091123 s and
 0.086211 s wall time, with `/proc` worker CPU deltas of 0.400 s and 0.410 s
@@ -284,7 +292,7 @@ does not demonstrate a warm latency gain. It does establish public output parity
 and freshness behavior while leaving the larger representative inventory gain
 and cold-regression gate open.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a repeated paired cold baseline and no-regression confidence gate, representative inventory warm gain, memory attribution under cache fill, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a cross-fixture paired cold baseline and no-regression confidence gate, representative inventory warm gain, memory attribution under cache fill, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
