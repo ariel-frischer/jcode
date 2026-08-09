@@ -94,19 +94,32 @@ func TestTypedSessionAndEventSurface(t *testing.T) {
 	if err := session.Send(ctx, "hello", SendOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	var event TypedEvent
-	for {
+	var text *TextDelta
+	var turnDone *TurnDone
+	var sawUnknown bool
+	for turnDone == nil {
+		var event TypedEvent
 		event, err = stream.Next(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := event.(UnknownEvent); !ok {
-			break
+		switch value := event.(type) {
+		case UnknownEvent:
+			sawUnknown = true
+		case *TextDelta:
+			text = value
+		case *TurnDone:
+			turnDone = value
 		}
 	}
-	text, ok := event.(*TextDelta)
-	if !ok || text.Text != "hello" || text.SessionID != session.ID {
-		t.Fatalf("event=%T %+v", event, event)
+	if text == nil || text.Text != "hello" || text.SessionID != session.ID {
+		t.Fatalf("text=%+v, want hello for session %q", text, session.ID)
+	}
+	if !sawUnknown {
+		t.Fatal("stream did not preserve and skip the unknown message_accepted event")
+	}
+	if turnDone.SessionID != session.ID {
+		t.Fatalf("turn_done=%+v, want session %q", turnDone, session.ID)
 	}
 	if err := <-serverDone; err != nil {
 		t.Fatal(err)
