@@ -851,7 +851,28 @@ impl Agent {
             );
 
             if self.run_safety_observe_usage() {
-                if self.run_safety_skip_tool_calls(&tool_calls) {
+                let mut unresolved_tool_calls = Vec::with_capacity(tool_calls.len());
+                let mut sdk_results_dirty = false;
+                for tool_call in &tool_calls {
+                    if let Some((sdk_content, sdk_is_error)) =
+                        sdk_tool_results.remove(&tool_call.id)
+                    {
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: tool_call.id.clone(),
+                                content: sdk_content,
+                                is_error: if sdk_is_error { Some(true) } else { None },
+                            }],
+                        );
+                        sdk_results_dirty = true;
+                    } else {
+                        unresolved_tool_calls.push(tool_call.clone());
+                    }
+                }
+                // Provider-internal SDK tools do not cross the Registry boundary, so
+                // they are persisted but intentionally do not consume max_tool_steps.
+                if self.run_safety_skip_tool_calls(&unresolved_tool_calls) || sdk_results_dirty {
                     self.session.save()?;
                 }
                 break;

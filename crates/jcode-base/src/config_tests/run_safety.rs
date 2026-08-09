@@ -1,5 +1,42 @@
 use super::*;
 
+struct RunSafetyEnvGuard {
+    saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl RunSafetyEnvGuard {
+    fn new() -> Self {
+        const KEYS: &[&str] = &[
+            "JCODE_HOME",
+            "JCODE_RUN_MAX_TURNS",
+            "JCODE_RUN_MAX_TOOL_STEPS",
+            "JCODE_RUN_TOKEN_BUDGET",
+            "JCODE_RUN_DEADLINE",
+        ];
+        let saved = KEYS
+            .iter()
+            .map(|&key| {
+                let value = std::env::var_os(key);
+                crate::env::remove_var(key);
+                (key, value)
+            })
+            .collect();
+        Self { saved }
+    }
+}
+
+impl Drop for RunSafetyEnvGuard {
+    fn drop(&mut self) {
+        for (key, value) in self.saved.drain(..) {
+            if let Some(value) = value {
+                crate::env::set_var(key, value);
+            } else {
+                crate::env::remove_var(key);
+            }
+        }
+    }
+}
+
 #[test]
 fn legacy_config_without_run_safety_section_remains_unset() {
     let cfg: Config =
@@ -11,16 +48,7 @@ fn legacy_config_without_run_safety_section_remains_unset() {
 #[test]
 fn run_safety_environment_values_are_retained_raw() {
     let _guard = crate::storage::lock_test_env();
-    let keys = [
-        "JCODE_RUN_MAX_TURNS",
-        "JCODE_RUN_MAX_TOOL_STEPS",
-        "JCODE_RUN_TOKEN_BUDGET",
-        "JCODE_RUN_DEADLINE",
-    ];
-    let previous: Vec<_> = keys
-        .iter()
-        .map(|key| (*key, std::env::var_os(key)))
-        .collect();
+    let _env_guard = RunSafetyEnvGuard::new();
     crate::env::set_var("JCODE_RUN_MAX_TURNS", "  ");
     crate::env::set_var("JCODE_RUN_MAX_TOOL_STEPS", "0");
     crate::env::set_var("JCODE_RUN_TOKEN_BUDGET", "100");
@@ -35,16 +63,13 @@ fn run_safety_environment_values_are_retained_raw() {
         cfg.run_safety.deadline.as_deref(),
         Some("2030-01-01T00:00:00Z")
     );
-    for (key, value) in previous {
-        restore_env_var(key, value);
-    }
 }
 
 #[test]
 fn run_safety_sources_returns_persisted_config_errors() {
     let _guard = crate::storage::lock_test_env();
     let temp_home = tempfile::tempdir().expect("temporary JCODE_HOME");
-    let previous_home = std::env::var_os("JCODE_HOME");
+    let _env_guard = RunSafetyEnvGuard::new();
     crate::env::set_var("JCODE_HOME", temp_home.path());
     std::fs::write(temp_home.path().join("config.toml"), "[run_safety\n")
         .expect("write malformed config");
@@ -61,5 +86,4 @@ fn run_safety_sources_returns_persisted_config_errors() {
             .to_string()
             .contains("Failed to parse config file")
     );
-    restore_env_var("JCODE_HOME", previous_home);
 }

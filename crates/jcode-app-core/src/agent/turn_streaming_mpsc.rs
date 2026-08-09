@@ -1278,14 +1278,42 @@ impl Agent {
             ));
 
             let all_tool_calls = tool_calls.clone();
+            if safety_stopped_after_usage {
+                let mut unresolved_tool_calls = Vec::with_capacity(all_tool_calls.len());
+                let mut sdk_results_dirty = false;
+                for tool_call in &all_tool_calls {
+                    if let Some((sdk_content, sdk_is_error)) =
+                        sdk_tool_results.remove(&tool_call.id)
+                    {
+                        self.add_message(
+                            Role::User,
+                            vec![ContentBlock::ToolResult {
+                                tool_use_id: tool_call.id.clone(),
+                                content: cap_sdk_tool_content_for_history(
+                                    &tool_call.name,
+                                    sdk_content,
+                                ),
+                                is_error: if sdk_is_error { Some(true) } else { None },
+                            }],
+                        );
+                        sdk_results_dirty = true;
+                    } else {
+                        unresolved_tool_calls.push(tool_call.clone());
+                    }
+                }
+                // Provider-internal SDK tools do not cross the Registry boundary, so
+                // they are persisted but intentionally do not consume max_tool_steps.
+                if self.emit_run_safety_skipped_tool_results(&event_tx, &unresolved_tool_calls)
+                    || sdk_results_dirty
+                {
+                    self.session.save()?;
+                }
+                break;
+            }
+
             if self.provider.handles_tools_internally() {
                 tool_calls.retain(|tc| JCODE_NATIVE_TOOLS.contains(&tc.name.as_str()));
                 if tool_calls.is_empty() {
-                    if safety_stopped_after_usage {
-                        if self.emit_run_safety_skipped_tool_results(&event_tx, &all_tool_calls) {
-                            self.session.save()?;
-                        }
-                    }
                     // === INJECTION POINT D: After provider-handled tools, before next API call ===
                     let injected = self.inject_soft_interrupts();
                     if !injected.is_empty() {
@@ -1297,13 +1325,6 @@ impl Agent {
                     }
                     break;
                 }
-            }
-
-            if safety_stopped_after_usage {
-                if self.emit_run_safety_skipped_tool_results(&event_tx, &all_tool_calls) {
-                    self.session.save()?;
-                }
-                break;
             }
 
             // Execute tools and add results
