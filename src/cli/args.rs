@@ -27,7 +27,7 @@ pub(crate) enum ProviderAuthArg {
 }
 
 #[derive(ClapArgs, Debug, Default)]
-struct RunSafetyArgs {
+pub(crate) struct RunSafetyArgs {
     /// Maximum completed turns for this unattended run.
     #[arg(long)]
     max_turns: Option<String>,
