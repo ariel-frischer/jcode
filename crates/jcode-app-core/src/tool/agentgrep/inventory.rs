@@ -387,19 +387,27 @@ mod tests {
 
     #[test]
     fn same_length_file_write_invalidates_snapshot() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("same.rs");
+        let directory = tempfile::Builder::new()
+            .prefix("jcode-inventory-test-")
+            .tempdir_in(std::env::current_dir().unwrap())
+            .unwrap();
+        let root = directory.path().to_path_buf();
+        let path = root.join("same.rs");
         fs::write(&path, "fn visible() {}\n").unwrap();
         clear();
-        let first = find(directory.path(), &args("visible"));
+        let first = find(&root, &args("same"));
         assert_eq!(first.files.len(), 1);
 
         // Keep length stable so mtime/size-only validation cannot accept stale
         // results.  Unix ctime is the cheap warm-path write detector.
         fs::write(&path, "fn hiddenx() {}\n").unwrap();
-        let current = find(directory.path(), &args("visible"));
-        let uncached = run_find(directory.path(), &args("visible"));
-        assert_eq!(current.files, uncached.files);
-        assert!(current.files.is_empty());
+        let current = find(&root, &args("same"));
+        let uncached = run_find(&root, &args("same"));
+        assert_eq!(
+            serde_json::to_value(&current.files).unwrap(),
+            serde_json::to_value(&uncached.files).unwrap()
+        );
+        assert_eq!(current.files.len(), 1);
+        assert_eq!(current.files[0].structure.items[0].label, "hiddenx");
     }
 }
