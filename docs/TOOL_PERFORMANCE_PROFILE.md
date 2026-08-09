@@ -222,11 +222,21 @@ The private built-daemon path also passed representative behavior checks:
   returned 1, 1, and 0 matching files respectively, proving cache invalidation
   across those transitions.
 
-The original Beads remain open pending the still-required cold/random benchmark
-matrix, complete built-binary CPU attribution for persistent workers, and full
-security/guardrail review. These results validate the implementation and public
-smoke path without overstating acceptance. Rollback is the integration merge
-commit or the three scoped feature commit ranges for read, inventory, and hooks.
+A fresh-root acceptance pass then ran the complete 15-case profiler matrix for three randomized rounds with seed `20260809`, using 10 iterations per normal case and two per large-file case. The measurements used the landed `faa9860a1` build and included no-hook, ordinary-hook, and opt-in persistent-hook configurations. The new steady-state medians were:
+
+| Case | No hooks wall/CPU | Ordinary hook wall/CPU | Persistent hook wall/CPU |
+|---|---:|---:|---:|
+| `read_tiny` | 0.138/0.114 ms | 0.694/0.458 ms | 0.117/0.193 ms |
+| `read_large_head` | 0.367/0.341 ms | 1.073/0.635 ms | 0.558/0.539 ms |
+| `read_large_tail` | 0.497/0.378 ms | 1.048/0.509 ms | 0.336/0.266 ms |
+| `agentgrep_find` | 0.984/0.969 ms | 1.758/1.522 ms | 1.117/1.520 ms |
+| `bash_true` | 0.747/0.899 ms | 1.464/1.345 ms | 1.007/1.608 ms |
+
+The optimized indexed reads were 99.4% lower wall time and 99.5% lower reported CPU than the legacy head read in the no-hook steady-state comparison. Near-tail reads were 99.3% lower wall time and 99.4% lower reported CPU. These are warm measurements because the profiler performs one unmeasured warm-up per process. The persistent-worker CPU limitation remains: parent `RUSAGE_CHILDREN` does not include CPU consumed by the still-live broker worker.
+
+A fresh private daemon using the same root binary also passed the public-path checks. Read output was stable across repeated near-tail calls, a same-length mutation was observed immediately, and inventory output remained stable across repeated calls. Inventory create, rename, delete, `max_files`, glob filtering, and four concurrent callers all returned the expected results. A persistent-hook daemon produced exactly five valid `post_tool` records for five reads with matching session IDs, tool names, statuses, and payloads.
+
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open only for their broader campaign criteria: explicit cold-first timing, persistent-worker CPU attribution outside parent `RUSAGE_CHILDREN`, and the remaining full security/edge matrix such as `.gitignore` and sensitive-path inventory checks, read truncation/replacement/eviction, and broader concurrency coverage. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
