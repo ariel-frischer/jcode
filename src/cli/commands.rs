@@ -2047,6 +2047,162 @@ pub async fn run_usage_command(emit_json: bool) -> Result<()> {
     report_info::run_usage_command(emit_json).await
 }
 
+/// Run a pure, provider-free session-profile inspection command.
+pub(crate) fn run_profile_command(
+    action: super::args::ProfileCommand,
+    current: Option<&str>,
+) -> Result<()> {
+    let config = crate::config::Config::load_strict()?;
+    match action {
+        super::args::ProfileCommand::List { json } => {
+            let report = super::profile::profile_list(&config, current);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "Current profile: {}",
+                    report.current.as_deref().unwrap_or("none")
+                );
+                if report.profiles.is_empty() {
+                    println!("Profiles: (none)");
+                } else {
+                    println!("Profiles:");
+                    for entry in report.profiles {
+                        let marker = if entry.active { " *" } else { "" };
+                        println!("  {}{}", entry.name, marker);
+                    }
+                }
+            }
+        }
+        super::args::ProfileCommand::Show { name, json } => {
+            let report = super::profile::profile_show(&config, &name)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("Profile: {}", report.name);
+                print_profile_field("provider", report.provider.as_deref());
+                print_profile_field("model", report.model.as_deref());
+                print_profile_field("reasoning_effort", report.reasoning_effort.as_deref());
+                print_profile_field("provider_profile", report.provider_profile.as_deref());
+                print_profile_field("tool_profile", report.tool_profile.as_deref());
+                println!("tools: {}", display_values(&report.tools));
+                println!("disabled_tools: {}", display_values(&report.disabled_tools));
+                println!(
+                    "skills_mode: {}",
+                    report.skills_mode.as_deref().unwrap_or("omitted")
+                );
+                println!("skills: {}", display_values(&report.skills));
+                println!(
+                    "disabled_skills: {}",
+                    display_values(&report.disabled_skills)
+                );
+                println!(
+                    "instructions: {} ({} chars)",
+                    if report.instructions_present {
+                        "present"
+                    } else {
+                        "absent"
+                    },
+                    report.instructions_chars
+                );
+            }
+        }
+        super::args::ProfileCommand::Current { json } => {
+            let report = super::profile::profile_inspection(&config, current)?;
+            print_profile_inspection(report, json)?;
+        }
+        super::args::ProfileCommand::Resolve { name, json } => {
+            let selected = name.as_deref().or(current);
+            let report = super::profile::profile_inspection(&config, selected)?;
+            print_profile_inspection(report, json)?;
+        }
+    }
+    Ok(())
+}
+
+fn print_profile_inspection(
+    report: crate::config::ProfileInspectionResult,
+    json: bool,
+) -> Result<()> {
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+
+    println!(
+        "Profile: {}",
+        report.profile_name.as_deref().unwrap_or("none")
+    );
+    let provider = &report.effective.provider_model_reasoning;
+    print_profile_field("provider", provider.provider.as_deref());
+    print_profile_field("model", provider.model.as_deref());
+    print_profile_field("reasoning_effort", provider.reasoning_effort.as_deref());
+    print_profile_field("provider_profile", provider.provider_profile.as_deref());
+    let tools = &report.effective.tool_policy;
+    print_profile_field("tool_profile", tools.profile.as_deref());
+    println!(
+        "allowed_tools: {}",
+        tools
+            .allowed_tools
+            .as_deref()
+            .map(display_values)
+            .unwrap_or_else(|| "all".to_owned())
+    );
+    println!("disabled_tools: {}", display_values(&tools.disabled_tools));
+    let skills = &report.effective.skill_policy;
+    println!(
+        "skills_mode: {}",
+        skills
+            .mode
+            .map(crate::config::SkillsMode::as_str)
+            .unwrap_or("omitted")
+    );
+    println!(
+        "selected_skills: {}",
+        display_values(&skills.selected_skills)
+    );
+    println!(
+        "effective_skills: {}",
+        display_values(&skills.effective_skills)
+    );
+    println!(
+        "disabled_skills: {}",
+        display_values(&skills.disabled_skills)
+    );
+    let prompt = &report.effective.prompt_overlay;
+    println!(
+        "instructions: {} ({} chars)",
+        if prompt.instructions_present {
+            "present"
+        } else {
+            "absent"
+        },
+        prompt.instructions_chars
+    );
+    if !report.sources.is_empty() {
+        println!("Sources:");
+        for (field, source) in report.sources {
+            println!("  {field}: {source:?}");
+        }
+    }
+    for warning in report.warnings {
+        println!("Warning: {warning}");
+    }
+    Ok(())
+}
+
+fn print_profile_field(name: &str, value: Option<&str>) {
+    println!("{name}: {}", value.unwrap_or("(unset)"));
+}
+
+fn display_values(values: &[String]) -> String {
+    if values.is_empty() {
+        "(none)".to_owned()
+    } else {
+        values.join(", ")
+    }
+}
+
 /// Gracefully reload the running background server onto the newest binary.
 ///
 /// This is the preferred upgrade path (issue #291): instead of killing the
@@ -2378,6 +2534,8 @@ Re-run with `--force` if you really want to stop the server.";
 }
 
 pub(crate) struct RunSingleMessageOptions<'a> {
+    pub(crate) reasoning_effort: Option<&'a str>,
+    pub(crate) profile_run_options: Option<&'a super::profile::ProfileRunOptions>,
     pub(crate) resume_session: Option<&'a str>,
     pub(crate) message: &'a str,
     pub(crate) emit_json: bool,
@@ -2393,6 +2551,8 @@ pub(crate) async fn run_single_message_command(
     options: RunSingleMessageOptions<'_>,
 ) -> Result<()> {
     let RunSingleMessageOptions {
+        reasoning_effort,
+        profile_run_options,
         resume_session,
         message,
         emit_json,
@@ -2408,6 +2568,8 @@ pub(crate) async fn run_single_message_command(
             choice,
             model,
             provider_profile,
+            reasoning_effort,
+            profile_run_options,
             resume_session,
             message,
             schema_path,
@@ -2416,9 +2578,15 @@ pub(crate) async fn run_single_message_command(
     }
 
     let provider = if emit_json || emit_ndjson {
-        super::provider_init::init_provider_quiet(choice, model).await?
+        super::provider_init::init_provider_quiet_with_reasoning(choice, model, reasoning_effort)
+            .await?
     } else {
-        super::provider_init::init_provider_for_validation(choice, model).await?
+        super::provider_init::init_provider_for_validation_with_reasoning(
+            choice,
+            model,
+            reasoning_effort,
+        )
+        .await?
     };
     let registry = crate::tool::Registry::new(provider.clone()).await;
     // Load MCP servers from ~/.jcode/mcp.json so headless `jcode run` has the
@@ -2440,7 +2608,18 @@ pub(crate) async fn run_single_message_command(
         // the agent runs. Warm runs skip this entirely and stay instant. (#390)
         wait_for_cold_cache_mcp_tools(&registry).await;
     }
-    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
+    if let Some(options) = profile_run_options {
+        options.validate_tool_names(registry.tool_names().await)?;
+    }
+    let mut agent = match profile_run_options {
+        Some(options) => crate::agent::Agent::new_with_tool_selection_and_prompt_overlay(
+            provider.clone(),
+            registry,
+            options.tool_selection.clone(),
+            options.prompt_overlay.clone(),
+        ),
+        None => crate::agent::Agent::new(provider.clone(), registry),
+    };
     restore_agent_session_if_requested(&mut agent, resume_session)?;
     run_safety::install(&mut agent, safety_candidates)?;
 
@@ -2462,6 +2641,8 @@ async fn run_single_message_command_schema(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
+    _reasoning_effort: Option<&str>,
+    _profile_run_options: Option<&super::profile::ProfileRunOptions>,
     resume_session: Option<&str>,
     message: &str,
     schema_path: &str,
@@ -2471,11 +2652,19 @@ async fn run_single_message_command_schema(
     // is a CLI trust-boundary error and must not reach a model turn.
     let schema = load_structured_schema(schema_path)?;
 
-    // Structured mode goes through the SDK's API boundary. Start the same
-    // daemon selected by ordinary `jcode run` first, then use a private,
-    // per-command bridge socket so an unrelated bridge cannot capture this
-    // command's custom --socket or session traffic.
-    super::dispatch::spawn_server(choice, model, provider_profile).await?;
+    // Structured mode goes through the SDK's API boundary. A profile overlay
+    // cannot be handed to an already-running daemon by the current protocol,
+    // so only reuse the ordinary bootstrap when this invocation has no profile;
+    // profile runs reject an existing daemon before it can receive a request.
+    if let Some(options) = _profile_run_options {
+        let profile_name = options.profile_name.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("structured profile run is missing its selected profile name")
+        })?;
+        super::dispatch::spawn_profile_server(choice, model, provider_profile, profile_name)
+            .await?;
+    } else {
+        super::dispatch::spawn_server(choice, model, provider_profile).await?;
+    }
 
     let model = model.map(str::to_string);
     let resume_session = resume_session.map(str::to_string);
@@ -2623,6 +2812,8 @@ async fn run_single_message_command_schema(
     _choice: &super::provider_init::ProviderChoice,
     _model: Option<&str>,
     _provider_profile: Option<&str>,
+    _reasoning_effort: Option<&str>,
+    _profile_run_options: Option<&super::profile::ProfileRunOptions>,
     _resume_session: Option<&str>,
     _message: &str,
     _schema_path: &str,

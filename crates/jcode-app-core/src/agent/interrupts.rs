@@ -231,6 +231,15 @@ impl Agent {
 
     /// Get comprehensive debug info about agent internal state
     pub fn debug_info(&self) -> serde_json::Value {
+        let mut allowed_tools = self
+            .allowed_tools
+            .as_ref()
+            .map(|tools| tools.iter().cloned().collect::<Vec<_>>());
+        if let Some(tools) = allowed_tools.as_mut() {
+            tools.sort_unstable();
+        }
+        let mut disabled_tools = self.disabled_tools.iter().cloned().collect::<Vec<_>>();
+        disabled_tools.sort_unstable();
         serde_json::json!({
             "provider": self.provider.name(),
             "model": self.provider.model(),
@@ -240,6 +249,27 @@ impl Agent {
             "active_skill": self.active_skill,
             "allowed_tools": self.allowed_tools,
             "disabled_tools": self.disabled_tools,
+            "profile": {
+                "name": self.session_profile_name,
+                "snapshot": self.session.profile_snapshot,
+                "restore_status": self.session.profile_restore_status,
+                "warning": self.profile_restore_warning(),
+                "sources": {
+                    "provider": if self.session_profile_name.is_some() { "profile" } else { "base_config" },
+                    "model": if self.session_profile_name.is_some() { "profile" } else { "base_config" },
+                    "tool_policy": if self.session_profile_name.is_some() { "profile" } else { "base_config" },
+                    "skill_policy": if self.session_profile_name.is_some() { "profile" } else { "built_in_default" },
+                },
+                "tool_policy": {
+                    "allowed_tools": allowed_tools,
+                    "disabled_tools": disabled_tools,
+                },
+                "skill_policy": {
+                    "selected_skills": self.session_prompt_overlay.skill_names,
+                    "instructions_present": self.session_prompt_overlay.instructions.is_some(),
+                    "instructions_chars": self.session_prompt_overlay.instructions.as_deref().map_or(0, str::len),
+                },
+            },
             "session": {
                 "id": self.session.id,
                 "is_canary": self.session.is_canary,

@@ -52,6 +52,9 @@ pub(super) async fn create_headless_session(
     effort_override: Option<String>,
     mcp_pool: Option<Arc<crate::mcp::SharedMcpPool>>,
     report_back_to_session_id: Option<String>,
+    profile_name: Option<String>,
+    profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+    profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
     memory_scope: HeadlessMemoryScope,
 ) -> Result<String> {
     let memory_enabled = crate::config::config().features.memory;
@@ -91,10 +94,13 @@ pub(super) async fn create_headless_session(
     let working_dir_string = working_dir
         .as_ref()
         .map(|dir| dir.to_string_lossy().into_owned());
-    let mut new_agent = Agent::new_with_initial_working_dir(
+    let mut new_agent = Agent::new_with_initial_working_dir_and_inherited_profile(
         Arc::clone(&provider),
         registry,
         working_dir_string.as_deref(),
+        profile_name,
+        profile_snapshot,
+        profile_restore_status,
     );
     new_agent.set_memory_enabled(memory_enabled);
     // Inline swarm mode renders a live gallery of worker viewports in the

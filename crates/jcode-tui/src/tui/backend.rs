@@ -303,7 +303,7 @@ pub(crate) struct ReplayRemoteState {
 impl RemoteConnection {
     /// Connect to the server
     pub async fn connect() -> Result<Self> {
-        Self::connect_with_session(None, None, false, false, None).await
+        Self::connect_with_session(None, None, false, false, None, None).await
     }
 
     /// Connect to the server and optionally resume a specific session.
@@ -316,6 +316,7 @@ impl RemoteConnection {
         client_has_local_history: bool,
         allow_session_takeover: bool,
         remote_working_dir: Option<&str>,
+        startup_profile: Option<&crate::protocol::SessionProfileStartup>,
     ) -> Result<Self> {
         let connect_start = Instant::now();
         let socket_connect_start = Instant::now();
@@ -354,6 +355,7 @@ impl RemoteConnection {
             client_has_local_history,
             allow_session_takeover,
             terminal_env: crate::terminal_launch::snapshot_client_terminal_env(),
+            profile: startup_profile.cloned(),
         })
         .await?;
         let subscribe_ms = subscribe_start.elapsed().as_millis();
@@ -626,6 +628,7 @@ impl RemoteConnection {
             client_instance_id: self.client_instance_id.clone(),
             client_has_local_history: false,
             allow_session_takeover: false,
+            profile: None,
         };
         self.next_request_id += 1;
         self.send_request(request).await?;

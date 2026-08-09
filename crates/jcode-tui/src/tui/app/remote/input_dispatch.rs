@@ -113,6 +113,8 @@ pub(in crate::tui::app) async fn submit_prepared_remote_input(
         return Ok(());
     }
 
+    app.commit_pending_profile_transition();
+
     if let Some(command) = input::extract_input_shell_command(&prepared.expanded) {
         submit_remote_input_shell(app, remote, prepared.raw_input, command.to_string()).await?;
         return Ok(());
@@ -152,6 +154,17 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
 ) -> Result<()> {
     let raw_input = prepared.raw_input.clone();
 
+    // Profile controls are client-owned state transitions. Handle them before
+    // the skill/remote-turn routing so a remote client never sends `/profile`
+    // to the provider as ordinary user text.
+    let trimmed = raw_input.trim();
+    if trimmed == "/profile" || trimmed.starts_with("/profile ") {
+        app.input = raw_input;
+        app.cursor_pos = app.input.len();
+        app.submit_input();
+        return Ok(());
+    }
+
     // Text that merely starts with `/` is not necessarily a command. A terminal
     // file drop (`/tmp/shot.png`) or a bare path (`/home/me/notes`) is ordinary
     // user input. Routing those through `App::submit_input` stages a *local*
@@ -164,6 +177,18 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
     // existing single-token command handling.
     let snapshot = app.current_skills_snapshot();
     let trimmed = raw_input.trim();
+    if let Some(invocation) = crate::skill::SkillRegistry::parse_invocation(trimmed)
+        && !app.profile_allows_skill_name(invocation.name)
+    {
+        // Keep policy failures client-local so a blocked skill cannot be
+        // reinterpreted as an ordinary remote provider turn.
+        app.push_display_message(jcode_tui_messages::DisplayMessage::error(format!(
+            "Skill /{} is blocked by the active profile policy; choose a profile that allows it or use /profile none.",
+            invocation.name
+        )));
+        app.set_status_notice("Skill blocked by profile policy");
+        return Ok(());
+    }
     let is_command_shaped = trimmed == "/?"
         || (input::parse_dropped_paths(&raw_input).is_none()
             && snapshot.resolve_invocation(&raw_input).is_some());

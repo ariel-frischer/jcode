@@ -319,6 +319,53 @@ profile = "full"
 # Disable all built-in tools unless enabled is set.
 disable_base_tools = false
 
+# Named session profiles (optional). Select one for a new interactive session:
+#   jcode --profile review
+# or for a headless invocation:
+#   jcode --profile review run "Review this change"
+# The TUI also supports `/profile` (searchable picker), `/profile <name>`
+# (queue a profile for the next turn), and `/profile none` (clear it). Profile
+# changes are session-local and never rewrite this file or another session.
+# A restored session keeps its saved, credential-free snapshot; a missing or
+# changed named profile produces a warning until the user explicitly selects
+# a replacement. Resolution order is explicit invocation > environment >
+# selected profile > unprofiled persisted config > built-in default.
+# Unknown profiles and invalid field values fail before a provider request,
+# with the profile/key and a corrective choice in the diagnostic. Profile
+# values must not contain credentials or API keys.
+# Provider-free inspection is available with `jcode profile list`, `show`,
+# `current`, and `resolve`; `/info` reports the effective policy and safe
+# sources. This extends the completed headless contract in
+# `specs/003-add-session-profiles` without changing no-profile behavior.
+#
+# Supported fields:
+#   provider          provider id (for example, "openai")
+#   model             model id (for example, "gpt-5.4")
+#   reasoning_effort  none|minimal|low|medium|high|xhigh|max
+#   provider_profile  an existing [providers.<name>] entry
+#   tool_profile      full|acp|minimal|lite|none
+#   tools             explicit allow-list; "*" or "all" keeps all tools
+#   disabled_tools    names removed after the profile/allow-list is applied
+#   skills_mode       all|allowlist|none; omitted preserves no-profile behavior
+#   skills            selected installed skill names (the allowlist input)
+#   disabled_skills   names always removed after mode/allowlist resolution
+#   instructions      additive guidance; empty text contributes no section
+#
+# Complete, secret-free example (add names of skills installed for this project):
+# [profiles.review]
+# provider = "openai"
+# model = "gpt-5.4"
+# reasoning_effort = "medium"
+# tool_profile = "minimal"
+# tools = ["read", "grep", "ls"]
+# disabled_tools = ["browser"]
+# skills_mode = "allowlist"
+# skills = ["rust", "testing"]
+# disabled_skills = ["unsafe"]
+# instructions = "Prioritize regressions, compatibility, and focused tests."
+# provider_profile may also be set when an existing [providers.<name>] entry
+# should be selected; it is omitted above so the example works without one.
+
 [acp]
 # Agent Client Protocol adapter compatibility profile: standard, extended, or full.
 # standard emits only spec-compatible ACP messages.

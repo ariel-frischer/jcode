@@ -16,8 +16,8 @@ use crate::{
 };
 
 use super::{
-    account, acp, commands, debug, hot_exec, login, output, provider_init, selfdev, terminal,
-    tui_launch,
+    account, acp, commands, debug, hot_exec, login, output, profile, provider_init, selfdev,
+    terminal, tui_launch,
 };
 use provider_init::ProviderChoice;
 
@@ -74,20 +74,20 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     arm_debug_client_parent_death_signal();
     resolve_resume_arg(&mut args)?;
 
-    // One-time config migration: users whose config.toml still carries the old
-    // baked-in `swarm_spawn_mode = "visible"` default get flipped to the
-    // current `inline` default. Cheap (single file read, marker-gated), and it
-    // must run before the config cache is first populated.
+    // Migrate legacy config defaults before the config cache is populated.
     crate::config::Config::migrate_legacy_swarm_spawn_mode_once();
-    // One-time config migration: force idle_animation off for all existing
-    // users; anyone re-enabling it afterwards keeps their choice.
+    // Preserve explicit user re-enablement while fixing the old default.
     crate::config::Config::migrate_idle_animation_off_once();
+    let explicit_provider_profile = args.provider_profile.is_some();
+    let profile_run_options = profile::apply_run_options(&mut args)?;
+    let interactive_profile_options = profile::apply_interactive_options(&mut args)?;
 
     if let Some(profile_name) = args
         .provider_profile
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        && (explicit_provider_profile || interactive_profile_options.is_none())
     {
         provider_catalog::apply_named_provider_profile_env(profile_name)?;
         crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", profile_name);
@@ -231,6 +231,8 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 args.model.as_deref(),
                 args.provider_profile.as_deref(),
                 commands::RunSingleMessageOptions {
+                    reasoning_effort: args.reasoning_effort.as_deref(),
+                    profile_run_options: profile_run_options.as_ref(),
                     resume_session: args.resume.as_deref(),
                     message: &message,
                     emit_json: json,
@@ -376,6 +378,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 })?;
             }
         },
+        Some(Command::Profile(subcmd)) => {
+            commands::run_profile_command(subcmd, args.profile.as_deref())?;
+        }
         Some(Command::Memory(subcmd)) => {
             commands::run_memory_command(map_memory_subcommand(subcmd))?;
         }
@@ -570,7 +575,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         Some(Command::Menubar { once, json }) => {
             commands::run_menubar_command(once, json)?;
         }
-        None => run_default_command(args).await?,
+        None => run_default_command(args, interactive_profile_options).await?,
     }
 
     Ok(())
@@ -846,7 +851,10 @@ fn map_transcript_mode(mode: TranscriptModeArg) -> crate::protocol::TranscriptMo
     }
 }
 
-async fn run_default_command(args: Args) -> Result<()> {
+async fn run_default_command(
+    args: Args,
+    interactive_profile_options: Option<profile::ProfileRunOptions>,
+) -> Result<()> {
     startup_profile::mark("run_main_none_branch");
 
     let explicit_provider_or_model = args.provider != ProviderChoice::Auto
@@ -1007,6 +1015,7 @@ async fn run_default_command(args: Args) -> Result<()> {
         args.fresh_spawn,
         args.remote_working_dir,
         args.onboarding_sim,
+        interactive_profile_options.map(|options| options.startup_metadata()),
     )
     .await?;
 
@@ -1272,13 +1281,62 @@ pub(crate) async fn spawn_server(
     model: Option<&str>,
     provider_profile: Option<&str>,
 ) -> Result<()> {
+    spawn_server_inner(provider_choice, model, provider_profile, None).await
+}
+
+/// Start a server for a structured run that owns a session-profile overlay.
+///
+/// The existing daemon protocol has no per-session profile handoff. Reusing a
+/// live daemon would therefore either ignore the selected profile or mutate the
+/// daemon-wide defaults. A profile run may start a new server, but must reject
+/// reuse of a server that was already running before this invocation.
+pub(crate) async fn spawn_profile_server(
+    provider_choice: &ProviderChoice,
+    model: Option<&str>,
+    provider_profile: Option<&str>,
+    profile_name: &str,
+) -> Result<()> {
+    spawn_server_inner(provider_choice, model, provider_profile, Some(profile_name)).await
+}
+
+fn profile_shared_daemon_error(profile_name: &str, socket_path: &std::path::Path) -> anyhow::Error {
+    anyhow::anyhow!(
+        "Cannot use session profile '{}' for `jcode run --schema` structured runs while a shared daemon is already running at {}. The daemon cannot accept a per-session profile overlay without changing other sessions. Stop the daemon (`jcode server stop`) or select a private/new server socket, then retry.",
+        profile_name,
+        socket_path.display(),
+    )
+}
+
+fn ensure_profile_server_bootstrap(
+    profile_name: Option<&str>,
+    socket_path: &std::path::Path,
+    server_running: bool,
+) -> Result<()> {
+    if server_running {
+        if let Some(profile_name) = profile_name {
+            return Err(profile_shared_daemon_error(profile_name, socket_path));
+        }
+    }
+    Ok(())
+}
+
+async fn spawn_server_inner(
+    provider_choice: &ProviderChoice,
+    model: Option<&str>,
+    provider_profile: Option<&str>,
+    profile_name: Option<&str>,
+) -> Result<()> {
     let socket_path = server::socket_path();
-    if server_is_running_at(&socket_path).await {
+    let server_running = server_is_running_at(&socket_path).await;
+    ensure_profile_server_bootstrap(profile_name, &socket_path, server_running)?;
+    if server_running {
         startup_profile::mark("server_ready");
         return Ok(());
     }
 
-    if wait_for_existing_reload_server("server spawn").await {
+    let reloading = wait_for_existing_reload_server("server spawn").await;
+    ensure_profile_server_bootstrap(profile_name, &socket_path, reloading)?;
+    if reloading {
         startup_profile::mark("server_ready");
         return Ok(());
     }
@@ -1286,12 +1344,16 @@ pub(crate) async fn spawn_server(
     #[cfg(unix)]
     let _spawn_lock = acquire_spawn_lock_or_wait(&socket_path).await?;
 
-    if server_is_running_at(&socket_path).await {
+    let server_running = server_is_running_at(&socket_path).await;
+    ensure_profile_server_bootstrap(profile_name, &socket_path, server_running)?;
+    if server_running {
         startup_profile::mark("server_ready");
         return Ok(());
     }
 
-    if wait_for_existing_reload_server("server spawn after lock").await {
+    let reloading = wait_for_existing_reload_server("server spawn after lock").await;
+    ensure_profile_server_bootstrap(profile_name, &socket_path, reloading)?;
+    if reloading {
         startup_profile::mark("server_ready");
         return Ok(());
     }

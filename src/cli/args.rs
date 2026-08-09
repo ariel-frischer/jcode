@@ -123,6 +123,14 @@ pub(crate) struct Args {
     #[arg(short, long, global = true)]
     pub(crate) model: Option<String>,
 
+    /// Named session profile from [profiles.<name>] in config.toml.
+    #[arg(long, global = true, value_name = "NAME")]
+    pub(crate) profile: Option<String>,
+
+    /// Explicit provider reasoning effort override for this invocation.
+    #[arg(long, global = true, value_name = "EFFORT")]
+    pub(crate) reasoning_effort: Option<String>,
+
     /// Named provider profile from [providers.<name>] in config.toml.
     /// Implies --provider openai-compatible for OpenAI-compatible profiles.
     #[arg(long, global = true)]
@@ -329,6 +337,10 @@ pub(crate) enum Command {
     /// Provider discovery and selection helpers
     #[command(subcommand)]
     Provider(ProviderCommand),
+
+    /// Inspect configured and effective interactive session profiles
+    #[command(subcommand)]
+    Profile(ProfileCommand),
 
     /// Memory management commands
     #[command(subcommand)]
@@ -1004,6 +1016,43 @@ pub(crate) enum ProviderCommand {
         model_catalog: bool,
 
         /// Emit JSON instead of human-readable setup output
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ProfileCommand {
+    /// List configured profile names in stable order
+    List {
+        /// Emit JSON instead of plain text
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show safe configured fields for one profile
+    Show {
+        /// Exact configured profile name
+        name: String,
+
+        /// Emit JSON instead of plain text
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the effective current profile, or explicit no-profile state
+    Current {
+        /// Emit JSON instead of plain text
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Resolve a named profile (or the current --profile selection)
+    Resolve {
+        /// Exact configured profile name; omitted uses --profile or no-profile
+        name: Option<String>,
+
+        /// Emit JSON instead of plain text
         #[arg(long)]
         json: bool,
     },

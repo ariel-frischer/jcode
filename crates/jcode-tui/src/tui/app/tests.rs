@@ -169,6 +169,252 @@ fn command_palette_models_command_opens_model_picker() {
 }
 
 #[test]
+fn profile_picker_filters_and_marks_active_profile() {
+    let mut app = create_test_app();
+    app.set_profile_names_for_test(["release", "review", "research"]);
+    app.set_current_profile_for_test(Some("review"));
+
+    app.set_input_for_test("/profile");
+    app.submit_input();
+
+    assert!(app.profile_picker_is_open());
+    let view = app.command_palette_view().expect("profile picker view");
+    assert_eq!(view.entries.len(), 4, "three profiles plus explicit none");
+    assert!(
+        view.entries
+            .iter()
+            .any(|entry| entry.command == "review" && entry.description.contains("active"))
+    );
+
+    for c in "research".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    let filtered = app.command_palette_view().expect("filtered profile picker");
+    assert_eq!(filtered.entries.len(), 1);
+    assert_eq!(filtered.entries[0].command, "research");
+}
+
+#[test]
+fn profile_picker_no_match_and_cancel_leave_selection_unchanged() {
+    let mut app = create_test_app();
+    app.set_profile_names_for_test(["review"]);
+    app.set_current_profile_for_test(Some("review"));
+    app.set_input_for_test("/profile");
+    app.submit_input();
+
+    for c in "missing".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    assert!(
+        app.command_palette_view()
+            .expect("profile picker view")
+            .entries
+            .is_empty()
+    );
+
+    app.handle_key(
+        crossterm::event::KeyCode::Esc,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    assert!(!app.profile_picker_is_open());
+    assert_eq!(app.current_profile_for_test(), Some("review".to_string()));
+    assert!(app.pending_profile_for_test().is_none());
+}
+
+#[test]
+fn profile_picker_without_profiles_has_explicit_empty_state() {
+    let mut app = create_test_app();
+    app.set_profile_names_for_test(std::iter::empty::<&str>());
+    app.set_input_for_test("/profile");
+    app.submit_input();
+
+    let view = app.command_palette_view().expect("empty profile picker");
+    assert_eq!(view.entries.len(), 1, "explicit none remains available");
+    assert_eq!(view.entries[0].command, "none");
+    assert!(
+        view.entries[0]
+            .description
+            .contains("No configured profiles")
+    );
+}
+
+#[test]
+fn pending_profile_transition_commits_once_at_turn_boundary() {
+    let mut app = create_test_app();
+    app.set_current_profile_for_test(Some("old"));
+    app.profile_state.pending = Some(Some("new".to_string()));
+    app.profile_state.pending_startup = Some(Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("new".to_string()),
+        model: Some("new-model".to_string()),
+        ..Default::default()
+    }));
+    app.is_processing = true;
+
+    assert_eq!(app.current_profile_for_test(), Some("old".to_string()));
+    assert!(app.commit_pending_profile_transition());
+    assert_eq!(app.current_profile_for_test(), Some("new".to_string()));
+    assert_eq!(
+        app.profile_state
+            .current_startup
+            .as_ref()
+            .and_then(|profile| profile.model.as_deref()),
+        Some("new-model")
+    );
+    assert!(!app.commit_pending_profile_transition());
+}
+
+#[test]
+fn profile_picker_filters_500_names_without_runtime_work() {
+    let mut app = create_test_app();
+    app.set_profile_names_for_test((0..500).map(|index| format!("profile-{index:03}")));
+    app.open_profile_picker();
+
+    let start = std::time::Instant::now();
+    for query in ["profile-1", "profile-12", "profile-123", "profile-499"] {
+        app.command_palette.as_mut().expect("picker open").query = query.to_string();
+        let _ = app.command_palette_view().expect("picker view");
+    }
+    assert!(
+        start.elapsed() < std::time::Duration::from_millis(100),
+        "profile picker filtering should stay local and responsive"
+    );
+}
+
+#[test]
+fn profile_command_dispatches_none_and_rejects_failed_selection_atomically() {
+    let mut app = create_test_app();
+    app.set_current_profile_for_test(Some("review"));
+    app.set_input_for_test("/profile none");
+    app.submit_input();
+    assert_eq!(app.current_profile_for_test(), Some("review".to_string()));
+    assert_eq!(app.pending_profile_for_test(), Some(None));
+
+    app.set_input_for_test("/profile missing");
+    app.submit_input();
+    assert_eq!(app.current_profile_for_test(), Some("review".to_string()));
+    assert_eq!(app.pending_profile_for_test(), Some(None));
+}
+
+#[test]
+fn profile_completion_uses_stable_names_and_none() {
+    let mut app = create_test_app();
+    app.set_profile_names_for_test(["release", "review"]);
+    app.set_input_for_test("/profile r");
+
+    let suggestions = app.command_suggestions();
+    assert!(
+        suggestions
+            .iter()
+            .any(|(command, _)| command == "/profile release")
+    );
+    assert!(
+        suggestions
+            .iter()
+            .any(|(command, _)| command == "/profile review")
+    );
+    app.set_input_for_test("/profile ");
+    assert!(
+        app.command_suggestions()
+            .iter()
+            .any(|(command, _)| command == "/profile none")
+    );
+}
+
+#[test]
+fn profile_transition_waits_for_in_flight_turn_before_commit() {
+    let mut app = create_test_app();
+    app.set_current_profile_for_test(Some("old"));
+    app.profile_state.pending = Some(Some("new".to_string()));
+    app.profile_state.pending_startup = Some(Some(Default::default()));
+    app.is_processing = true;
+    app.set_input_for_test("queued prompt");
+    app.submit_input();
+
+    assert_eq!(app.current_profile_for_test(), Some("old".to_string()));
+    assert_eq!(
+        app.pending_profile_for_test(),
+        Some(Some("new".to_string()))
+    );
+}
+
+#[test]
+fn info_reports_profile_policy_sources_without_instruction_contents() {
+    let mut app = create_test_app();
+    app.profile_state.current = Some("review".to_owned());
+    app.profile_state.current_startup = Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("review".to_owned()),
+        allowed_tools: Some(vec!["read".to_owned()]),
+        disabled_tools: vec!["write".to_owned()],
+        skill_names: vec!["rust".to_owned()],
+        instructions: Some("secret instruction body".to_owned()),
+        ..Default::default()
+    });
+
+    assert!(super::state_ui::handle_info_command(&mut app, "/info"));
+    let content = app
+        .display_messages
+        .last()
+        .expect("/info should add a system message")
+        .content
+        .clone();
+    assert!(content.contains("Profile source: profile"));
+    assert!(content.contains("Profile tools: allowed=read; disabled=write"));
+    assert!(content.contains("Profile skills: selected=rust; mode=profile"));
+    assert!(content.contains("Profile instructions: present (23 chars)"));
+    assert!(!content.contains("secret instruction body"));
+}
+
+#[test]
+fn remote_startup_restores_profile_name_and_safe_warning_from_session_stub() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("temp home");
+    let previous_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp.path());
+
+    let session_id = "session_tui_profile_restore".to_owned();
+    let mut session = crate::session::Session::create_with_id(session_id.clone(), None, None);
+    session.set_profile_state(
+        Some("missing-review".to_owned()),
+        Some(crate::config::ResolvedProfileSnapshot {
+            profile_name: Some("missing-review".to_owned()),
+            fingerprint: "sha256:stored".to_owned(),
+            ..Default::default()
+        }),
+        crate::config::ProfileRestoreStatus::Missing {
+            profile_name: "missing-review".to_owned(),
+        },
+    );
+    session.save().expect("persist profile state");
+
+    let app = App::new_for_remote(Some(session_id));
+    assert_eq!(
+        app.current_profile_for_test(),
+        Some("missing-review".to_owned())
+    );
+    assert!(
+        app.profile_state
+            .restore_warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("missing-review"))
+    );
+
+    if let Some(previous_home) = previous_home {
+        crate::env::set_var("JCODE_HOME", previous_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
 fn kv_cache_signature_prefix_match_allows_appended_messages() {
     let baseline_messages = vec![
         crate::message::Message::user("first prompt"),
@@ -1029,6 +1275,41 @@ fn skills_command_marks_active_skill_in_remote_mode() {
     );
 }
 
+#[test]
+fn remote_skill_listing_and_palette_respect_profile_policy() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.remote_skills = vec!["allowed-remote".to_owned(), "blocked-remote".to_owned()];
+    app.profile_state.current = Some("restricted".to_owned());
+    app.profile_state.current_startup = Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("restricted".to_owned()),
+        skills_mode: Some(crate::config::SkillsMode::All),
+        disabled_skills: vec!["blocked-remote".to_owned()],
+        ..Default::default()
+    });
+
+    assert!(super::state_ui::handle_info_command(&mut app, "/skills"));
+    let content = app.display_messages().last().unwrap().content.clone();
+    assert!(content.contains("/allowed-remote"), "{content}");
+    assert!(!content.contains("/blocked-remote"), "{content}");
+
+    app.open_command_palette();
+    let entries = app
+        .command_palette_view()
+        .expect("command palette view")
+        .entries;
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.command == "/allowed-remote")
+    );
+    assert!(
+        !entries
+            .iter()
+            .any(|entry| entry.command == "/blocked-remote")
+    );
+}
+
 /// Regression for issue #431 (and #457): skills added on disk after startup
 /// must show up in `/skills` and the skills snapshot without a session
 /// restart. With the session-scoped project overlay, project-local skills are
@@ -1161,6 +1442,58 @@ fn unknown_skill_invocation_surfaces_error_and_sends_nothing() {
     let last = app.display_messages().last().expect("error message");
     assert_eq!(last.role, "error");
     assert_eq!(last.content, "Unknown skill: /definitely-not-a-real-skill");
+}
+
+#[test]
+fn profile_policy_blocks_local_skill_activation_without_mutating_other_session() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let skill_dir = temp.path().join(".jcode/skills/blocked-skill");
+    std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: blocked-skill\ndescription: Blocked policy skill\n---\nUse it.\n",
+    )
+    .expect("write SKILL.md");
+
+    let mut restricted = create_test_app();
+    restricted.session.working_dir = Some(temp.path().to_string_lossy().to_string());
+    restricted.profile_state.current = Some("restricted".to_owned());
+    restricted.profile_state.current_startup = Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("restricted".to_owned()),
+        skills_mode: Some(crate::config::SkillsMode::All),
+        disabled_skills: vec!["blocked-skill".to_owned()],
+        skill_names: vec!["blocked-skill".to_owned()],
+        ..Default::default()
+    });
+    assert!(
+        restricted
+            .current_skills_snapshot()
+            .get("blocked-skill")
+            .is_none()
+    );
+    restricted.input = "/blocked-skill".to_owned();
+    restricted.cursor_pos = restricted.input.len();
+    restricted.submit_input();
+
+    assert!(!restricted.is_processing);
+    assert!(restricted.active_skill.is_none());
+    let restricted_error = restricted
+        .display_messages()
+        .last()
+        .expect("blocked diagnostic");
+    assert_eq!(restricted_error.role, "error");
+    assert!(restricted_error.content.contains("blocked-skill"));
+    assert!(restricted_error.content.contains("profile policy"));
+
+    let mut unrestricted = create_test_app();
+    unrestricted.session.working_dir = Some(temp.path().to_string_lossy().to_string());
+    assert!(
+        unrestricted
+            .current_skills_snapshot()
+            .get("blocked-skill")
+            .is_some(),
+        "a policy in one session must not mutate another session's registry"
+    );
 }
 
 #[test]

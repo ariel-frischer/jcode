@@ -389,13 +389,57 @@ pub fn build_system_prompt_full(
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
 ) -> (String, ContextInfo) {
-    build_system_prompt_full_with_capabilities(
+    build_system_prompt_full_with_overlay(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        None,
+    )
+}
+
+/// Build the full system prompt with an optional session-local profile overlay.
+pub fn build_system_prompt_full_with_overlay(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+) -> (String, ContextInfo) {
+    build_system_prompt_full_with_overlay_and_capabilities(
         skill_prompt,
         available_skills,
         is_selfdev,
         memory_prompt,
         working_dir,
         PromptCapabilities::current(),
+        profile_overlay,
+        None,
+    )
+}
+
+/// Build a full prompt using a session-local skill policy. The policy filters
+/// both the available-skill catalogue and profile-selected skill context.
+pub fn build_system_prompt_full_with_overlay_and_policy(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
+) -> (String, ContextInfo) {
+    build_system_prompt_full_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        PromptCapabilities::current(),
+        profile_overlay,
+        skill_policy,
     )
 }
 
@@ -406,6 +450,28 @@ pub fn build_system_prompt_full_with_capabilities(
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
     capabilities: PromptCapabilities,
+) -> (String, ContextInfo) {
+    build_system_prompt_full_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        capabilities,
+        None,
+        None,
+    )
+}
+
+fn build_system_prompt_full_with_overlay_and_capabilities(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    capabilities: PromptCapabilities,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
 ) -> (String, ContextInfo) {
     let mut parts = base_system_prompt_parts(capabilities, working_dir);
     let mut info = ContextInfo {
@@ -452,10 +518,11 @@ pub fn build_system_prompt_full_with_capabilities(
         parts.push(memory.to_string());
     }
 
-    // Add available skills list
+    // Add the session-local filtered available skills list.
+    let available_skills = filter_skill_infos(available_skills, skill_policy);
     if !available_skills.is_empty() {
         let mut skills_section = "# Available Skills\n\nYou have access to the following skills that the user can invoke with `/skillname`:\n".to_string();
-        for skill in available_skills {
+        for skill in &available_skills {
             skills_section.push_str(&format!("\n- `/{} ` - {}", skill.name, skill.description));
         }
         skills_section.push_str(
@@ -464,6 +531,8 @@ pub fn build_system_prompt_full_with_capabilities(
         info.skills_chars = skills_section.len();
         parts.push(skills_section);
     }
+
+    append_profile_prompt_overlay(&mut parts, &mut info, profile_overlay, skill_policy);
 
     // Add active skill prompt
     if let Some(skill) = skill_prompt {
@@ -485,13 +554,58 @@ pub fn build_system_prompt_split(
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
 ) -> (SplitSystemPrompt, ContextInfo) {
-    build_system_prompt_split_with_capabilities(
+    build_system_prompt_split_with_overlay(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        None,
+    )
+}
+
+/// Build a split system prompt with an optional session-local profile overlay.
+/// Profile content is static so it remains scoped to the Agent/session while
+/// preserving the existing dynamic memory and active-skill sections.
+pub fn build_system_prompt_split_with_overlay(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+) -> (SplitSystemPrompt, ContextInfo) {
+    build_system_prompt_split_with_overlay_and_capabilities(
         skill_prompt,
         available_skills,
         is_selfdev,
         memory_prompt,
         working_dir,
         PromptCapabilities::current(),
+        profile_overlay,
+        None,
+    )
+}
+
+/// Build a split prompt using a session-local skill policy.
+pub fn build_system_prompt_split_with_overlay_and_policy(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
+) -> (SplitSystemPrompt, ContextInfo) {
+    build_system_prompt_split_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        PromptCapabilities::current(),
+        profile_overlay,
+        skill_policy,
     )
 }
 
@@ -502,6 +616,28 @@ pub fn build_system_prompt_split_with_capabilities(
     memory_prompt: Option<&str>,
     working_dir: Option<&Path>,
     capabilities: PromptCapabilities,
+) -> (SplitSystemPrompt, ContextInfo) {
+    build_system_prompt_split_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        capabilities,
+        None,
+        None,
+    )
+}
+
+fn build_system_prompt_split_with_overlay_and_capabilities(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    capabilities: PromptCapabilities,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
 ) -> (SplitSystemPrompt, ContextInfo) {
     let mut static_parts = base_system_prompt_parts(capabilities, working_dir);
     let mut dynamic_parts = Vec::new();
@@ -545,10 +681,11 @@ pub fn build_system_prompt_split_with_capabilities(
         static_parts.push(content);
     }
 
-    // Add available skills list (fairly static)
+    // Add the session-local filtered available skills list (fairly static).
+    let available_skills = filter_skill_infos(available_skills, skill_policy);
     if !available_skills.is_empty() {
         let mut skills_section = "# Available Skills\n\nYou have access to the following skills that the user can invoke with `/skillname`:\n".to_string();
-        for skill in available_skills {
+        for skill in &available_skills {
             skills_section.push_str(&format!("\n- `/{} ` - {}", skill.name, skill.description));
         }
         skills_section.push_str(
@@ -557,6 +694,8 @@ pub fn build_system_prompt_split_with_capabilities(
         info.skills_chars = skills_section.len();
         static_parts.push(skills_section);
     }
+
+    append_profile_prompt_overlay(&mut static_parts, &mut info, profile_overlay, skill_policy);
 
     // === TURN CONTEXT (not cached) ===
 
@@ -573,7 +712,13 @@ pub fn build_system_prompt_split_with_capabilities(
 
     let static_part = static_parts.join("\n\n");
     let dynamic_part = dynamic_parts.join("\n\n");
-    info.total_chars = static_part.len() + dynamic_part.len();
+    info.total_chars = static_part.len()
+        + dynamic_part.len()
+        + if profile_overlay.is_some() && !static_part.is_empty() && !dynamic_part.is_empty() {
+            2
+        } else {
+            0
+        };
 
     (
         SplitSystemPrompt {
@@ -582,6 +727,97 @@ pub fn build_system_prompt_split_with_capabilities(
         },
         info,
     )
+}
+
+fn append_profile_prompt_overlay(
+    parts: &mut Vec<String>,
+    info: &mut ContextInfo,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
+) {
+    let Some(profile_overlay) = profile_overlay else {
+        return;
+    };
+
+    let skill_prompts = profile_overlay
+        .skill_prompts
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| {
+            let Some(policy) = skill_policy else {
+                return true;
+            };
+            let Some(name) = profile_overlay.skill_names.get(*index) else {
+                return true;
+            };
+            policy_allows_skill(policy, name)
+        })
+        .map(|(_, prompt)| prompt.as_str())
+        .map(str::trim)
+        .filter(|prompt| !prompt.is_empty())
+        .collect::<Vec<_>>();
+    let instructions = profile_overlay
+        .instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|instructions| !instructions.is_empty());
+
+    if skill_prompts.is_empty() && instructions.is_none() {
+        return;
+    }
+
+    let mut section = String::from("# Session Profile");
+    for prompt in skill_prompts {
+        section.push_str("\n\n");
+        section.push_str(prompt);
+    }
+    if let Some(instructions) = instructions {
+        section.push_str("\n\n# Profile Instructions\n\n");
+        section.push_str(instructions);
+    }
+
+    info.prompt_overlay_chars += section.len();
+    parts.push(section);
+}
+
+fn filter_skill_infos<'a>(
+    available_skills: &'a [SkillInfo],
+    skill_policy: Option<&crate::config::SkillPolicy>,
+) -> Vec<&'a SkillInfo> {
+    available_skills
+        .iter()
+        .filter(|skill| {
+            skill_policy
+                .map(|policy| policy_allows_skill(policy, &skill.name))
+                .unwrap_or(true)
+        })
+        .collect()
+}
+
+fn policy_allows_skill(policy: &crate::config::SkillPolicy, name: &str) -> bool {
+    if policy
+        .disabled_skills
+        .iter()
+        .any(|disabled| disabled == name)
+    {
+        return false;
+    }
+    match policy.mode {
+        Some(crate::config::SkillsMode::None) => false,
+        Some(crate::config::SkillsMode::All | crate::config::SkillsMode::Allowlist) => policy
+            .effective_skills
+            .iter()
+            .any(|allowed| allowed == name),
+        // An omitted mode is the legacy all-skills behavior. A populated
+        // effective list still reflects disabled-skills subtraction.
+        None => {
+            policy.effective_skills.is_empty()
+                || policy
+                    .effective_skills
+                    .iter()
+                    .any(|allowed| allowed == name)
+        }
+    }
 }
 
 /// Build self-dev tools prompt section (static version without dynamic socket path)

@@ -402,6 +402,77 @@ impl Default for CompactionConfig {
     }
 }
 
+/// A named bundle of optional per-session configuration values.
+///
+/// Profiles are persisted under `[profiles.<name>]` by the owning `Config`
+/// type. Keeping this contract in the dependency-light config-types crate
+/// allows configuration loading to share it without depending on runtime,
+/// provider, or prompt code.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct SessionProfileConfig {
+    /// Provider identifier or route selected for the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Model identifier selected for the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Provider reasoning effort selected for the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    /// Existing named provider-profile selection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_profile: Option<String>,
+    /// Baseline tool profile for the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_profile: Option<String>,
+    /// Explicit tool allow-list.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<String>,
+    /// Explicit tool deny-list.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
+    /// Skill names to resolve for the session prompt.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
+    /// How the session exposes available skills. An omitted value retains the
+    /// legacy no-profile behavior.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skills_mode: Option<SkillsMode>,
+    /// Skill names excluded after the selected mode is applied.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled_skills: Vec<String>,
+    /// Additional instructions for the session prompt.
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub instructions: Option<String>,
+}
+
+/// Scope of skills available to one named session profile.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum SkillsMode {
+    /// Expose every available skill except disabled names.
+    All,
+    /// Expose only the profile's selected `skills` names.
+    Allowlist,
+    /// Expose no skills, including direct invocation and prompt context.
+    None,
+}
+
+impl SkillsMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Allowlist => "allowlist",
+            Self::None => "none",
+        }
+    }
+}
+
+fn option_string_is_empty(value: &Option<String>) -> bool {
+    value.as_deref().is_none_or(str::is_empty)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum NamedProviderType {

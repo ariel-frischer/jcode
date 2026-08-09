@@ -2,7 +2,7 @@ use super::*;
 use crate::tui::{TuiState, detect_kv_cache_problem, ui};
 
 impl App {
-    pub(super) fn current_skills_snapshot(&self) -> std::sync::Arc<crate::skill::SkillRegistry> {
+    fn unfiltered_skills_snapshot(&self) -> std::sync::Arc<crate::skill::SkillRegistry> {
         // Global skills from the shared registry plus this session's
         // project-local overlay, resolved fresh from the session working dir
         // (issue #457). The overlay never enters the shared registry.
@@ -21,6 +21,59 @@ impl App {
             &global,
             working_dir,
         ))
+    }
+
+    pub(super) fn current_skills_snapshot(&self) -> std::sync::Arc<crate::skill::SkillRegistry> {
+        let skills = self.unfiltered_skills_snapshot();
+        let Some(startup) = self.profile_state.current_startup.as_ref() else {
+            return skills;
+        };
+        let profile_name = startup.profile_name.as_deref().unwrap_or("(profile)");
+        let policy = crate::config::SkillPolicy::for_available(
+            profile_name,
+            startup.skills_mode,
+            &startup.skill_names,
+            &startup.disabled_skills,
+            skills.available_names(),
+        )
+        .unwrap_or_else(|_| crate::config::SkillPolicy {
+            // Fail closed if a restored/remote startup payload references a
+            // skill that is no longer available locally.
+            mode: Some(crate::config::SkillsMode::None),
+            selected_skills: Vec::new(),
+            disabled_skills: Vec::new(),
+            effective_skills: Vec::new(),
+        });
+        std::sync::Arc::new(skills.filtered_for_policy(&policy))
+    }
+
+    /// Whether a loaded skill is intentionally hidden by the active profile.
+    /// This lets slash input report a policy diagnostic instead of the generic
+    /// unknown-skill or remote-turn fallback.
+    pub(in crate::tui::app) fn skill_policy_blocks(&self, name: &str) -> bool {
+        self.profile_state.current_startup.is_some()
+            && self.unfiltered_skills_snapshot().contains(name)
+            && !self.current_skills_snapshot().contains(name)
+    }
+
+    pub(in crate::tui::app) fn profile_allows_skill_name(&self, name: &str) -> bool {
+        let Some(startup) = self.profile_state.current_startup.as_ref() else {
+            return true;
+        };
+        if startup
+            .disabled_skills
+            .iter()
+            .any(|disabled| disabled == name)
+        {
+            return false;
+        }
+        match startup.skills_mode {
+            Some(crate::config::SkillsMode::None) => false,
+            Some(crate::config::SkillsMode::Allowlist) => {
+                startup.skill_names.iter().any(|allowed| allowed == name)
+            }
+            Some(crate::config::SkillsMode::All) | None => true,
+        }
     }
 
     /// Re-read skills from disk for the active session working directory and

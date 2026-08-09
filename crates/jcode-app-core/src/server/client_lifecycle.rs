@@ -106,6 +106,65 @@ fn initial_subscribe_terminal_env(request: &Request) -> Vec<(String, String)> {
     }
 }
 
+fn initial_subscribe_profile(request: &Request) -> Option<crate::protocol::SessionProfileStartup> {
+    match request {
+        Request::Subscribe { profile, .. } => profile.clone(),
+        _ => None,
+    }
+}
+
+fn validate_initial_profile(
+    profile: Option<&crate::protocol::SessionProfileStartup>,
+) -> std::result::Result<(), String> {
+    let Some(profile) = profile else {
+        return Ok(());
+    };
+    let profile_name = profile
+        .profile_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "Interactive profile name cannot be empty".to_string())?;
+    crate::config::config()
+        .resolve_session_profile(Some(profile_name))
+        .map_err(|error| format!("Invalid interactive profile '{}': {}", profile_name, error))?;
+    for (field, names) in [
+        (
+            "allowed_tools",
+            profile.allowed_tools.as_deref().unwrap_or(&[]),
+        ),
+        ("disabled_tools", profile.disabled_tools.as_slice()),
+        ("skill_names", profile.skill_names.as_slice()),
+        ("disabled_skills", profile.disabled_skills.as_slice()),
+    ] {
+        if names.iter().any(|name| name.trim().is_empty()) {
+            return Err(format!(
+                "Interactive profile '{}' contains an empty {} entry",
+                profile_name, field
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn validate_initial_profile_tools(
+    profile: Option<&crate::protocol::SessionProfileStartup>,
+    registry: &Registry,
+) -> std::result::Result<(), String> {
+    let Some(profile) = profile else {
+        return Ok(());
+    };
+    let Some(profile_name) = profile.profile_name.as_deref() else {
+        return Ok(());
+    };
+    let resolved = crate::config::config()
+        .resolve_session_profile(Some(profile_name))
+        .map_err(|error| format!("Invalid interactive profile '{}': {}", profile_name, error))?;
+    resolved
+        .validate_tool_names(registry.tool_names().await)
+        .map_err(|error| format!("Invalid interactive profile '{}': {}", profile_name, error))
+}
+
 struct ProcessingMessage {
     id: u64,
     content: String,
@@ -476,6 +535,19 @@ pub(super) async fn handle_client(
         }
     };
     let mut active_terminal_env = initial_subscribe_terminal_env(&initial_request);
+    let initial_profile = initial_subscribe_profile(&initial_request);
+    if let Err(message) = validate_initial_profile(initial_profile.as_ref()) {
+        write_direct_event(
+            &writer,
+            &ServerEvent::Error {
+                id: initial_request.id(),
+                message,
+                retry_after_secs: None,
+            },
+        )
+        .await?;
+        return Ok(());
+    }
 
     // Per-client state
     let mut client_is_processing = false;
@@ -493,6 +565,19 @@ pub(super) async fn handle_client(
     let provider = provider_template.fork_for_new_session();
     let t0 = std::time::Instant::now();
     let registry = Registry::new(provider.clone()).await;
+    if let Err(message) = validate_initial_profile_tools(initial_profile.as_ref(), &registry).await
+    {
+        write_direct_event(
+            &writer,
+            &ServerEvent::Error {
+                id: initial_request.id(),
+                message,
+                retry_after_secs: None,
+            },
+        )
+        .await?;
+        return Ok(());
+    }
     let registry_ms = t0.elapsed().as_millis();
 
     let mut swarm_enabled = crate::config::config().features.swarm;
@@ -503,13 +588,14 @@ pub(super) async fn handle_client(
     let t0 = std::time::Instant::now();
     let mut new_agent =
         crate::hooks::with_client_terminal_env(active_terminal_env.clone(), async {
-            Agent::new_with_initial_working_dir(
+            Agent::new_with_initial_working_dir_and_profile(
                 Arc::clone(&provider),
                 registry.clone(),
                 Some(&initial_working_dir),
+                initial_profile.as_ref(),
             )
         })
-        .await;
+        .await?;
     let agent_new_ms = t0.elapsed().as_millis();
 
     new_agent.set_memory_enabled(crate::config::config().features.memory);
@@ -1409,6 +1495,7 @@ pub(super) async fn handle_client(
                 client_has_local_history,
                 allow_session_takeover,
                 terminal_env,
+                profile: _profile,
             } => {
                 if let Err(message) =
                     required_subscribe_working_dir(subscribe_working_dir.as_deref())
@@ -1664,6 +1751,7 @@ pub(super) async fn handle_client(
                 client_instance_id,
                 client_has_local_history,
                 allow_session_takeover,
+                profile: _profile,
             } => {
                 let resume_working_dir = {
                     let agent_guard = agent.lock().await;

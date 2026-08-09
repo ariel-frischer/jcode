@@ -43,6 +43,40 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+/// Optional, credential-free startup overlay for one interactive session.
+///
+/// The CLI resolves the named profile before provider/session work and sends
+/// the effective values needed by the server-owned Agent. Instruction text is
+/// runtime prompt input, not diagnostic output; credentials and provider
+/// secrets are intentionally not represented by this wire type.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SessionProfileStartup {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skill_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skills_mode: Option<jcode_config_types::SkillsMode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_skills: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skill_prompts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+}
+
 /// Client request to server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -144,6 +178,9 @@ pub enum Request {
         /// to the client's terminal instead of its own stale startup env (#405).
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         terminal_env: Vec<(String, String)>,
+        /// Optional session-local profile overlay. Absent for legacy/no-profile clients.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<SessionProfileStartup>,
     },
 
     /// Get full conversation history (for TUI sync on connect)
@@ -186,6 +223,9 @@ pub enum Request {
         client_has_local_history: bool,
         #[serde(default)]
         allow_session_takeover: bool,
+        /// Optional profile selection for a new/resumed interactive session.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        profile: Option<SessionProfileStartup>,
     },
 
     /// Resume/continue every live session that was interrupted and would
