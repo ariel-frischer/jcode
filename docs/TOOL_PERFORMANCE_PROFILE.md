@@ -143,6 +143,32 @@ These negative results are useful constraints rather than failed deliveries:
 they prevent narrow microbenchmark wins from adding runtime state, invalidation
 complexity, or ownership changes without a demonstrated user-visible benefit.
 
+### Follow-up acceptance matrix
+
+Each investigation ran in its own worktree. Rust-heavy commands were serialized,
+and no candidate could land without a material general-purpose gain, focused
+compatibility checks, and public-path acceptance. The table maps those shared
+requirements to the evidence actually obtained; an incomplete public-path row is
+a rejection condition, not an implied pass.
+
+| Bead | Baseline and material-gain check | Safety, compatibility, and edge checks | Public/integration and packaging check | Observed acceptance result |
+|---|---|---|---|---|
+| `jcode-d5o` | 200-run paired process benchmark; 17.8% wall and 9.2% child-CPU reduction missed the 80% gate | 10,000-event stress produced 10,000 valid records; focused hook and detached-session tests passed after revert | Selfdev build passed; full guardrails exposed seven unrelated baseline failures | Rejected and reverted; public behavior remains unchanged, and a persistent/connection-reusing design is required |
+| `jcode-8mj` | Paired fresh/warm find p50 was 50.745/40.013 ms, a 21.15% gain below the 30% gate | Focused freshness, replacement, policy, and output-parity tests passed; the required concurrency, eviction, and complete security matrix remained incomplete | `jcode-app-core` check, selfdev build, and private-socket runtime smoke passed; Jcode did not pin the experimental fork | Rejected and reverted; the external seam remains experimental and is not part of the packaged Jcode path |
+| `jcode-yx7` | The bounded index candidate was not credited with a material gain because paired built-binary CPU, latency, and memory measurements did not complete | 19 focused read tests passed, including warm parity and file-replacement invalidation | Full build, Clippy, guardrails, and isolated-daemon pagination/invalidation acceptance did not complete | Rejected and reverted; the existing streamed-read implementation remains the public path |
+| `jcode-5sx` | Five randomized rounds at 1/2/4/8 concurrent calls showed the candidate slower at every level and no material CPU reduction | Exact hashes matched for literal, regex, paths-only, type, glob, hidden, no-ignore, and dense-result cases; 27/31 focused Jcode tests passed, with four environment-dependent fixture failures | Canonical selfdev build and private-daemon session creation passed; the final tool call was not claimed because the debug CLI rewrote the explicit socket path | Rejected and reverted; no agentgrep fork revision or lockfile change was packaged |
+| `jcode-ms5` | Six-scenario real Rust baseline covered wall, CPU, allocation peak, and RSS; no safe candidate established a gain | Exact oracle digests matched while ownership analysis covered accumulation, parsing, tap, history, and wire consumers | The ignored real-Rust baseline test passed; no runtime candidate existed to exercise through a public client | Closed investigation-only; production and public streaming semantics are unchanged |
+| `jcode-bef` | Directional wall gains of 9.0% to 25.1% were observed, but paired CPU, allocation, RSS, retained-memory, and fragmentation evidence was absent | 18 focused StreamBuffer tests and all 63 `jcode-tui-core` library tests passed; focused Clippy and `jcode-tui` check passed | Representative rendering and full guardrails were incomplete, so the candidate was reverted before packaging | Rejected and reverted; no count cache is present in the public TUI path |
+| `jcode-g25` | Five TestBackend baseline samples covered 1 KiB/64 KiB inputs at widths 80/160; no ownership-safe candidate demonstrated a gain | Nine focused `jcode-tui-messages` tests passed; direct-consumer analysis covered alignment, mapping, truncation, and preparation | The selfdev `tui_bench` dev binary built and ran; guardrails reported unrelated pre-existing formatting and ratchet drift | Closed investigation-only; no render-cache API or packaged runtime behavior changed |
+| `jcode-ub3` | No final-hop candidate was benchmarked because three unbounded hops would merely shift retained memory upstream | Lifecycle attachment ordering, cancellation, stale/newer cancellation, and reload-recovery tests passed | No protocol-compatible overflow/resync contract or representative multi-client public acceptance existed | Closed investigation-only; queue behavior remains unchanged pending an end-to-end bounded ownership design |
+
+Repository delivery was checked separately: the portfolio commits on `dev` modify
+only this Markdown file, the public GitHub raw-file endpoint serves all eight
+outcomes, and the Beads workflow records `jcode-d5o`, `jcode-8mj`, and
+`jcode-yx7` as blocked `needs-redesign` while the other five are closed
+`investigation-only`. Thus no rejected or acceptance-incomplete runtime candidate
+crossed the repository, package, daemon, or client integration boundary.
+
 ## Other opportunities
 
 ### 1. Configured post-tool hooks can dominate cheap tools
