@@ -137,6 +137,35 @@ pub fn hook_configured(event: &str) -> bool {
     !hook_commands(event).is_empty()
 }
 
+/// Whether a tool-scoped hook applies to `tool_name`.
+///
+/// Filters are normalized through the same resolver used by the registry, so
+/// aliases such as `communicate` match their canonical `swarm` tool. An absent
+/// or empty filter deliberately means all tools for compatibility.
+pub fn hook_applies_to_tool(event: &str, tool_name: &str) -> bool {
+    let hooks = &crate::config::config().hooks;
+    let filters = match event {
+        "pre_tool" => &hooks.pre_tool_tools,
+        "post_tool" => &hooks.post_tool_tools,
+        _ => return true,
+    };
+    let filters = filters
+        .iter()
+        .map(|name| jcode_tool_types::resolve_tool_name(name.trim()))
+        .filter(|name| !name.is_empty())
+        .collect::<Vec<_>>();
+    if filters.is_empty() {
+        return true;
+    }
+    let canonical_name = jcode_tool_types::resolve_tool_name(tool_name.trim());
+    filters.into_iter().any(|name| name == canonical_name)
+}
+
+/// Whether a configured hook should run for a specific canonical tool.
+pub fn hook_configured_for_tool(event: &str, tool_name: &str) -> bool {
+    hook_configured(event) && hook_applies_to_tool(event, tool_name)
+}
+
 /// True when running inside a hook process (recursion guard).
 fn hooks_suppressed() -> bool {
     std::env::var_os("JCODE_HOOKS_DISABLED").is_some()
@@ -230,6 +259,15 @@ fn build_hook_process(
 /// Detached and fire-and-forget: failures are logged, never propagated, and
 /// the hook process cannot block the agent.
 pub fn dispatch_observer(event: HookEvent) {
+    if event.event == "post_tool"
+        && let Some(tool_name) = event
+            .fields
+            .iter()
+            .find_map(|(key, value)| (*key == "TOOL_NAME").then_some(value.as_str()))
+        && !hook_applies_to_tool("post_tool", tool_name)
+    {
+        return;
+    }
     let command_lines = hook_commands(event.event);
     if command_lines.is_empty() {
         return;
@@ -280,6 +318,9 @@ pub async fn run_pre_tool_gate(
     tool_name: &str,
     tool_input_json: &str,
 ) -> GateDecision {
+    if !hook_applies_to_tool("pre_tool", tool_name) {
+        return GateDecision::Allow;
+    }
     let command_lines = hook_commands("pre_tool");
     if command_lines.is_empty() {
         return GateDecision::Allow;
@@ -784,6 +825,116 @@ mod tests {
         assert!(truncated.len() <= 3);
         assert!(text.starts_with(truncated));
         assert_eq!(truncate_bytes("short", 100), "short");
+    }
+
+    #[cfg(unix)]
+    fn tool_filter_test_config(hook: &str, pre_tools: &str, post_tools: &str) -> impl Drop + use<> {
+        struct EnvReset(Vec<(&'static str, Option<std::ffi::OsString>)>);
+        impl Drop for EnvReset {
+            fn drop(&mut self) {
+                for (key, previous) in self.0.drain(..) {
+                    match previous {
+                        Some(value) => crate::env::set_var(key, value),
+                        None => crate::env::remove_var(key),
+                    }
+                }
+                crate::config::invalidate_config_cache();
+            }
+        }
+        let keys = [
+            "JCODE_HOOK_PRE_TOOL",
+            "JCODE_HOOK_PRE_TOOL_TOOLS",
+            "JCODE_HOOK_POST_TOOL",
+            "JCODE_HOOK_POST_TOOL_TOOLS",
+        ];
+        let reset = EnvReset(
+            keys.into_iter()
+                .map(|key| (key, std::env::var_os(key)))
+                .collect(),
+        );
+        crate::env::set_var("JCODE_HOOK_PRE_TOOL", hook);
+        crate::env::set_var("JCODE_HOOK_POST_TOOL", hook);
+        crate::env::set_var("JCODE_HOOK_PRE_TOOL_TOOLS", pre_tools);
+        crate::env::set_var("JCODE_HOOK_POST_TOOL_TOOLS", post_tools);
+        crate::config::invalidate_config_cache();
+        reset
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tool_hook_filters_default_to_all_tools() {
+        let _guard = crate::storage::lock_test_env();
+        let _env = tool_filter_test_config("true", "", "");
+        assert!(hook_configured_for_tool("pre_tool", "bash"));
+        assert!(hook_configured_for_tool("post_tool", "read"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tool_hook_filters_select_only_configured_tools() {
+        let _guard = crate::storage::lock_test_env();
+        let _env = tool_filter_test_config("true", "bash, read", "read");
+        assert!(hook_configured_for_tool("pre_tool", "bash"));
+        assert!(hook_configured_for_tool("post_tool", "read"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tool_hook_filters_exclude_unselected_tools() {
+        let _guard = crate::storage::lock_test_env();
+        let _env = tool_filter_test_config("true", "bash", "read");
+        assert!(!hook_configured_for_tool("pre_tool", "write"));
+        assert!(!hook_configured_for_tool("post_tool", "bash"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tool_hook_filters_match_canonical_aliases() {
+        let _guard = crate::storage::lock_test_env();
+        let _env = tool_filter_test_config("true", "swarm", "swarm");
+        assert!(hook_configured_for_tool("pre_tool", "communicate"));
+        assert!(hook_configured_for_tool("post_tool", "communicate"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn post_tool_filter_dispatches_selected_tool_only() {
+        let _guard = crate::storage::lock_test_env();
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let record = temp.path().join("post-tool.txt");
+        let script = write_executable_script(
+            temp.path(),
+            "post-tool.sh",
+            &format!(
+                "#!/bin/sh\nprintf '%s' \"$JCODE_HOOK_TOOL_NAME\" > {}\n",
+                crate::terminal_launch::sh_escape(&record.to_string_lossy())
+            ),
+        );
+        let _env = tool_filter_test_config(&script.to_string_lossy(), "", "swarm");
+
+        dispatch_observer(
+            HookEvent::new("post_tool")
+                .session_id("ses_post_filter")
+                .field("TOOL_NAME", "read"),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(!record.exists(), "excluded post_tool must not launch");
+
+        dispatch_observer(
+            HookEvent::new("post_tool")
+                .session_id("ses_post_filter")
+                .field("TOOL_NAME", "communicate"),
+        );
+        for _ in 0..100 {
+            if record.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(
+            std::fs::read_to_string(record).expect("selected post_tool should launch"),
+            "communicate"
+        );
     }
 
     #[cfg(unix)]

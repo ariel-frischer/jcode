@@ -615,6 +615,9 @@ swarm_max_concurrent_agents = 32
 # the call; exit 2 blocks it and stderr is shown to the model as the error;
 # any other outcome (other exits, timeout, missing binary) fails open.
 # pre_tool = "~/bin/jcode-tool-policy"
+# Optional canonical tool names for pre_tool. Absent or empty applies to all
+# tools. Aliases such as "communicate" are matched as "swarm".
+# pre_tool_tools = ["swarm"]
 #
 # Max milliseconds to wait for pre_tool before failing open (default: 5000).
 # pre_tool_timeout_ms = 5000
@@ -623,6 +626,9 @@ swarm_max_concurrent_agents = 32
 # JCODE_HOOK_STATUS, JCODE_HOOK_DURATION_MS, JCODE_HOOK_OUTPUT_BYTES,
 # JCODE_HOOK_ERROR.
 # post_tool = ""
+# Optional canonical tool names for post_tool. Absent or empty applies to all
+# tools. Aliases such as "communicate" are matched as "swarm".
+# post_tool_tools = ["swarm"]
 
 [ambient]
 # Ambient mode: background agent that maintains your codebase

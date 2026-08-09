@@ -974,10 +974,18 @@ pub struct HooksConfig {
     /// blocks (stderr is fed back to the model), anything else fails open.
     /// Env override: JCODE_HOOK_PRE_TOOL.
     pub pre_tool: Option<HookCommands>,
+    /// Optional canonical tool names for which `pre_tool` applies. When absent
+    /// or empty, the hook applies to every tool. Env override:
+    /// JCODE_HOOK_PRE_TOOL_TOOLS.
+    pub pre_tool_tools: Vec<String>,
     /// Runs after each tool call completes.
     /// Fields: TOOL_NAME, STATUS ("ok"/"error"), DURATION_MS, OUTPUT_BYTES.
     /// Env override: JCODE_HOOK_POST_TOOL.
     pub post_tool: Option<HookCommands>,
+    /// Optional canonical tool names for which `post_tool` applies. When absent
+    /// or empty, the hook applies to every tool. Env override:
+    /// JCODE_HOOK_POST_TOOL_TOOLS.
+    pub post_tool_tools: Vec<String>,
     /// Max milliseconds to wait for the pre_tool gate before failing open
     /// (default: 5000). Env override: JCODE_HOOK_PRE_TOOL_TIMEOUT_MS.
     pub pre_tool_timeout_ms: u64,
@@ -991,7 +999,9 @@ impl Default for HooksConfig {
             session_start: None,
             session_end: None,
             pre_tool: None,
+            pre_tool_tools: Vec::new(),
             post_tool: None,
+            post_tool_tools: Vec::new(),
             pre_tool_timeout_ms: 5000,
         }
     }
