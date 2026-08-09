@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>jcode-yx7 acceptance report</title></head>
+<body>
+<h1>jcode-yx7 acceptance report</h1>
+<p><strong>Outcome:</strong> Investigation-only. The bounded line-index optimization was reverted because the required integrated material-gain gate was not satisfied.</p>
+<h2>Identity</h2>
+<ul>
+<li>Branch: <code>agent/jcode-yx7-line-index</code></li>
+<li>Feature revision evaluated: <code>dd49d41ec</code></li>
+<li>Revert commit: <code>b2fae7ed5</code></li>
+<li>Baseline parent: <code>4bc21f92e</code></li>
+</ul>
+<h2>Benchmark evidence</h2>
+<p>The prior worker reported a synthetic in-process indexed comparison, not the required paired built-binary Rust read-path measurement: baseline 113 MB scan 51.6 ms wall / 37.6 ms CPU, and indexed comparison 0.14 ms for five near-tail reads with approximately 9 MB offsets. This does not establish cold first-read, warm sequential pagination, random near-tail ranges, peak/retained memory, or CLI-to-daemon behavior on identical feature and baseline binaries. No Python or self-model timing is used as proof.</p>
+<table border="1"><thead><tr><th>Acceptance area</th><th>Status</th><th>Evidence</th></tr></thead><tbody>
+<tr><td>Cold, warm sequential, random near-tail paired built-binary benchmark</td><td>Not established</td><td>No identical built-binary pair completed.</td></tr>
+<tr><td>Safety and compatibility matrix</td><td>Partial, then reverted</td><td>Prior focused suite reported 19 tests, including UTF-8, CRLF, totals, bounds, parity, and replacement. Mutation, truncation, concurrency, eviction, routing, and file-touch were not all covered.</td></tr>
+<tr><td>Build, scoped Clippy, full guardrails</td><td>Incomplete</td><td>Prior scoped Clippy attempt hit unrelated pre-existing jcode-provider-bedrock warning; full validation was not completed.</td></tr>
+<tr><td>Private-socket CLI/daemon runtime acceptance</td><td>Not established</td><td>No executable-identity and socket-cleanup proof.</td></tr>
+</tbody></table>
+<h2>Risk</h2>
+<p><strong>High.</strong> The optimization changed a central file-read path and its invalidation behavior was not validated through the real daemon boundary. Reverting removes that production blast radius. Any redesign must add integrated benchmark and runtime evidence before reintroducing it.</p>
+<h2>Recommendation</h2>
+<p>Do not merge the reverted optimization. Keep jcode-yx7 as investigation-only or needs-redesign. Reopen implementation only with a reproducible Rust benchmark harness and complete acceptance matrix.</p>
+</body></html>
