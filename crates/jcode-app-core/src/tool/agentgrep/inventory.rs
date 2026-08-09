@@ -100,13 +100,14 @@ pub fn find(root: &Path, args: &FindArgs) -> FindResult {
 
     let mut state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     state.next_use = state.next_use.wrapping_add(1);
+    let used = state.next_use;
     state.snapshots.retain(|snapshot| snapshot.key != key);
     state.snapshots.push(Snapshot {
         key,
         result: Arc::new(result.clone()),
         manifest,
         bytes,
-        used: state.next_use,
+        used,
     });
     evict(&mut state);
     result
@@ -118,8 +119,9 @@ fn lookup(key: &QueryKey, display_root: &Path) -> Option<FindResult> {
         snapshot.key == *key && manifest_is_fresh(&snapshot.key.root, &snapshot.manifest)
     })?;
     state.next_use = state.next_use.wrapping_add(1);
+    let used = state.next_use;
     let snapshot = &mut state.snapshots[index];
-    snapshot.used = state.next_use;
+    snapshot.used = used;
     let mut result = (*snapshot.result).clone();
     // Canonicalization is an internal key detail. Preserve the caller-visible
     // root spelling used by an uncached invocation.
@@ -127,7 +129,7 @@ fn lookup(key: &QueryKey, display_root: &Path) -> Option<FindResult> {
     Some(result)
 }
 
-fn build_manifest(root: &Path, result: &FindResult) -> Option<Manifest> {
+fn build_manifest(root: &Path, _result: &FindResult) -> Option<Manifest> {
     let mut directories = Vec::new();
     let mut policy_files = Vec::new();
     collect_directories(root, &mut directories, &mut policy_files)?;
@@ -326,15 +328,24 @@ mod tests {
 
         fs::write(directory.path().join("new_visible.rs"), "fn new_visible() {}\n").unwrap();
         let created = find(directory.path(), &args("new_visible"));
-        assert_eq!(created.files, run_find(directory.path(), &args("new_visible")).files);
+        assert_eq!(
+            serde_json::to_value(&created.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("new_visible")).files).unwrap()
+        );
 
         fs::remove_file(directory.path().join("visible.rs")).unwrap();
         let deleted = find(directory.path(), &args("visible"));
-        assert_eq!(deleted.files, run_find(directory.path(), &args("visible")).files);
+        assert_eq!(
+            serde_json::to_value(&deleted.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("visible")).files).unwrap()
+        );
 
         fs::write(directory.path().join(".gitignore"), "new_visible.rs\n").unwrap();
         let ignored = find(directory.path(), &args("new_visible"));
-        assert_eq!(ignored.files, run_find(directory.path(), &args("new_visible")).files);
+        assert_eq!(
+            serde_json::to_value(&ignored.files).unwrap(),
+            serde_json::to_value(&run_find(directory.path(), &args("new_visible")).files).unwrap()
+        );
     }
 
     #[test]

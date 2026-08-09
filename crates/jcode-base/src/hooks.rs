@@ -613,19 +613,19 @@ fn write_persistent_envelope(
     event: &HookEvent,
     tool_input_json: Option<&str>,
 ) -> std::io::Result<()> {
-    let mut env = BTreeMap::new();
-    env.insert("JCODE_HOOKS_DISABLED", "1".to_string());
-    env.insert("JCODE_HOOK_EVENT", event.event.to_string());
+    let mut env = BTreeMap::<String, String>::new();
+    env.insert("JCODE_HOOKS_DISABLED".to_string(), "1".to_string());
+    env.insert("JCODE_HOOK_EVENT".to_string(), event.event.to_string());
     if let Some(session_id) = &event.session_id {
-        env.insert("JCODE_HOOK_SESSION_ID", session_id.clone());
+        env.insert("JCODE_HOOK_SESSION_ID".to_string(), session_id.clone());
     }
     if let Some(cwd) = &event.cwd {
-        env.insert("JCODE_HOOK_CWD", cwd.clone());
+        env.insert("JCODE_HOOK_CWD".to_string(), cwd.clone());
     }
     for (key, value) in &event.fields {
         env.insert(format!("JCODE_HOOK_{key}"), value.clone());
     }
-    env.insert("JCODE_HOOK_PAYLOAD", payload_json(event));
+    env.insert("JCODE_HOOK_PAYLOAD".to_string(), payload_json(event));
     let envelope = serde_json::json!({
         "payload": payload_json(event),
         "tool_input": tool_input_json,
