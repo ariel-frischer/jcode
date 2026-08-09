@@ -10,6 +10,10 @@ use serde::Serialize;
 use std::num::NonZeroU64;
 use std::time::Instant;
 
+use crate::logging;
+use crate::message::{ContentBlock, Role, ToolCall};
+use crate::protocol::ServerEvent;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunSafetyBound {
@@ -421,6 +425,54 @@ impl RunSafetyController {
             self.select(RunStopReason::MaxTurnsExceeded);
         }
         self.stop_reason.is_none()
+    }
+}
+
+const RUN_SAFETY_SKIPPED_TOOL_RESULT: &str = "[Skipped: run safety bound reached]";
+
+impl crate::agent::Agent {
+    pub(super) fn record_run_safety_skipped_tool_result(&mut self, tool_call: &ToolCall) {
+        self.add_message(
+            Role::User,
+            vec![ContentBlock::ToolResult {
+                tool_use_id: tool_call.id.clone(),
+                content: RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string(),
+                is_error: Some(true),
+            }],
+        );
+    }
+
+    pub(super) fn record_run_safety_skipped_tool_results(&mut self, tool_calls: &[ToolCall]) {
+        for tool_call in tool_calls {
+            self.record_run_safety_skipped_tool_result(tool_call);
+        }
+    }
+
+    pub(super) fn run_safety_skip_tool_calls(&mut self, tool_calls: &[ToolCall]) -> bool {
+        self.record_run_safety_skipped_tool_results(tool_calls);
+        !tool_calls.is_empty()
+    }
+
+    pub(super) fn emit_run_safety_skipped_tool_results(
+        &mut self,
+        event_tx: &tokio::sync::mpsc::UnboundedSender<ServerEvent>,
+        tool_calls: &[ToolCall],
+    ) -> bool {
+        for tool_call in tool_calls {
+            let content = RUN_SAFETY_SKIPPED_TOOL_RESULT.to_string();
+            if let Err(error) = event_tx.send(ServerEvent::ToolDone {
+                id: tool_call.id.clone(),
+                name: tool_call.name.clone(),
+                output: content.clone(),
+                error: Some(content),
+            }) {
+                logging::warn(&format!(
+                    "run-safety ToolDone notification dropped: {error:?}"
+                ));
+            }
+            self.record_run_safety_skipped_tool_result(tool_call);
+        }
+        !tool_calls.is_empty()
     }
 }
 

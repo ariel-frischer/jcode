@@ -1,3 +1,6 @@
+use crate::cli::args::{Args, Command};
+use clap::Parser;
+
 #[test]
 fn schema_mode_safety_flags_are_explicit_and_conflicting() {
     for (flag, value) in [
@@ -57,4 +60,3 @@ fn run_safety_flags_preserve_raw_values() {
     assert_eq!(token_budget.as_deref(), Some("1000"));
     assert_eq!(deadline.as_deref(), Some("2030-01-01T00:00:00Z"));
 }
-

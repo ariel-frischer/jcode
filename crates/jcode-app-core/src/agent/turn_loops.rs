@@ -823,20 +823,7 @@ impl Agent {
             );
 
             if self.run_safety_observe_usage() {
-                // The assistant response is already persisted above. Close every
-                // remaining provider tool call with a synthetic result so the
-                // saved history cannot leave the next run with dangling calls.
-                for skipped_tc in &tool_calls {
-                    self.add_message(
-                        Role::User,
-                        vec![ContentBlock::ToolResult {
-                            tool_use_id: skipped_tc.id.clone(),
-                            content: "[Skipped: run safety bound reached]".to_string(),
-                            is_error: Some(true),
-                        }],
-                    );
-                }
-                if !tool_calls.is_empty() {
+                if self.run_safety_skip_tool_calls(&tool_calls) {
                     self.session.save()?;
                 }
                 break;
@@ -1031,18 +1018,7 @@ impl Agent {
                 }
 
                 if !self.run_safety_before_tool_step() {
-                    // This is the last gate before Registry execution. Every
-                    // denied call receives a result and the loop saves below.
-                    for skipped_tc in &tool_calls[tool_index..] {
-                        self.add_message(
-                            Role::User,
-                            vec![ContentBlock::ToolResult {
-                                tool_use_id: skipped_tc.id.clone(),
-                                content: "[Skipped: run safety bound reached]".to_string(),
-                                is_error: Some(true),
-                            }],
-                        );
-                    }
+                    self.record_run_safety_skipped_tool_results(&tool_calls[tool_index..]);
                     tool_results_dirty = true;
                     break;
                 }
@@ -1223,86 +1199,5 @@ impl Agent {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn user_text(text: &str) -> Message {
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::Text {
-                text: text.to_string(),
-                cache_control: None,
-            }],
-            timestamp: None,
-            tool_duration_ms: None,
-        }
-    }
-
-    fn tool_result(id: &str, content: &str) -> Message {
-        Message {
-            role: Role::User,
-            content: vec![ContentBlock::ToolResult {
-                tool_use_id: id.to_string(),
-                content: content.to_string(),
-                is_error: None,
-            }],
-            timestamp: None,
-            tool_duration_ms: Some(1),
-        }
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_detects_tool_continuation_context() {
-        let messages = vec![
-            user_text("tell me about the desktop application"),
-            tool_result("functions.read:0", "desktop architecture docs"),
-            tool_result("functions.agentgrep:4", "desktop source summary"),
-        ];
-
-        assert!(Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_allows_memory_after_tool_results() {
-        let messages = vec![
-            user_text("tell me about the desktop application"),
-            tool_result("functions.read:0", "desktop architecture docs"),
-            user_text("<system-reminder>Relevant memory</system-reminder>"),
-        ];
-
-        assert!(Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn messages_end_with_tool_result_ignores_plain_user_prompt() {
-        let messages = vec![user_text("hello")];
-
-        assert!(!Agent::messages_end_with_tool_result(&messages));
-    }
-
-    #[test]
-    fn sequential_tool_rounds_trigger_after_three_single_calls() {
-        let mut rounds = 0;
-        for _ in 0..3 {
-            rounds = Agent::update_sequential_tool_rounds(rounds, 1, false);
-        }
-
-        assert_eq!(rounds, Agent::SEQUENTIAL_TOOL_ROUNDS_BEFORE_BATCH_NUDGE);
-    }
-
-    #[test]
-    fn parallel_or_batch_calls_reset_sequential_tool_rounds() {
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 2, false), 0);
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 1, true), 0);
-        assert_eq!(Agent::update_sequential_tool_rounds(2, 0, false), 0);
-    }
-
-    #[test]
-    fn pending_nudge_is_injected_only_when_batch_is_available() {
-        assert!(Agent::should_inject_batch_nudge(true, true));
-        assert!(!Agent::should_inject_batch_nudge(false, true));
-        assert!(!Agent::should_inject_batch_nudge(true, false));
-        assert!(Agent::BATCH_NUDGE.contains("use the batch tool"));
-        assert!(Agent::BATCH_NUDGE.contains("result is required"));
-    }
-}
+#[path = "turn_loops_tests.rs"]
+mod tests;

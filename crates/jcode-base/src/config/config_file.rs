@@ -6,16 +6,14 @@ impl Config {
     /// Return the raw persisted and environment run-safety candidates without
     /// applying precedence. This keeps source attribution in the CLI resolver
     /// while reusing the normal config-file path and environment contract.
-    pub fn run_safety_sources(
-        &self,
-    ) -> anyhow::Result<(
+    pub fn run_safety_sources() -> anyhow::Result<(
         jcode_config_types::RunSafetyConfig,
         jcode_config_types::RunSafetyConfig,
     )> {
-        let _ = self;
-        let persisted = Self::load_from_file_strict()?
-            .map(|config| config.run_safety)
-            .unwrap_or_default();
+        let persisted = match Self::load_from_file_strict()? {
+            Some(config) => config.run_safety,
+            None => Default::default(),
+        };
         let mut environment = jcode_config_types::RunSafetyConfig::default();
         if let Ok(value) = std::env::var("JCODE_RUN_MAX_TURNS") {
             environment.max_turns = Some(value);

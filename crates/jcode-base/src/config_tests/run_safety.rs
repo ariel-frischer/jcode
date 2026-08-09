@@ -47,7 +47,7 @@ fn run_safety_sources_returns_persisted_config_errors() {
     std::fs::write(temp_home.path().join("config.toml"), "[run_safety\n")
         .expect("write malformed config");
 
-    let result = Config::default().run_safety_sources();
+    let result = Config::run_safety_sources();
 
     assert!(
         result.is_err(),
@@ -61,4 +61,3 @@ fn run_safety_sources_returns_persisted_config_errors() {
     );
     restore_env_var("JCODE_HOME", previous_home);
 }
-

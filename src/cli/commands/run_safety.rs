@@ -1,159 +1,119 @@
-#[test]
-fn legacy_unset_run_report_omits_bounded_stop_fields() {
-    let report = super::RunCommandReport {
-        session_id: "session".to_string(),
-        provider: "test".to_string(),
-        model: "model".to_string(),
-        text: "ok".to_string(),
-        usage: crate::agent::TokenUsage::default(),
-        stop_reason: None,
-        outcome: None,
-        observed_usage: None,
-        safety_bound: None,
-    };
-    let encoded = serde_json::to_value(report).expect("report should serialize");
-    assert!(encoded.get("stop_reason").is_none());
-    assert!(encoded.get("outcome").is_none());
-    assert!(encoded.get("observed_usage").is_none());
+use anyhow::{Result, bail};
+use serde::Serialize;
+
+#[derive(Debug, Serialize)]
+pub(super) struct RunCommandReport {
+    pub(super) session_id: String,
+    pub(super) provider: String,
+    pub(super) model: String,
+    pub(super) text: String,
+    pub(super) usage: crate::agent::TokenUsage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) stop_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) outcome: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) observed_usage: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) safety_bound: Option<crate::agent::run_safety::RunSafetyStopMetadata>,
 }
 
-#[test]
-fn run_safety_cli_precedence_matches_invocation_environment_persisted() {
-    let mut candidates = crate::agent::run_safety::RunSafetyCandidates::default();
-    candidates.persisted.max_turns = Some("9".to_string());
-    candidates.environment.max_turns = Some("7".to_string());
-    candidates.invocation.max_turns = Some("3".to_string());
-    candidates.persisted.max_tool_steps = Some("8".to_string());
-    candidates.environment.token_budget = Some("100".to_string());
-    candidates.invocation.deadline = Some("2030-01-01T00:00:00Z".to_string());
-    let policy = crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())
-        .expect("precedence should resolve");
-    assert_eq!(policy.max_turns.map(std::num::NonZeroU64::get), Some(3));
-    assert_eq!(
-        policy.sources.max_turns,
-        crate::agent::run_safety::RunSafetySource::Invocation
-    );
-    assert_eq!(
-        policy.max_tool_steps.map(std::num::NonZeroU64::get),
-        Some(8)
-    );
-    assert_eq!(
-        policy.sources.max_tool_steps,
-        crate::agent::run_safety::RunSafetySource::Persisted
-    );
-    assert_eq!(
-        policy.token_budget.map(std::num::NonZeroU64::get),
-        Some(100)
-    );
-    assert_eq!(
-        policy.sources.token_budget,
-        crate::agent::run_safety::RunSafetySource::Environment
-    );
-    assert!(policy.deadline.is_some());
-    assert_eq!(
-        policy.sources.deadline,
-        crate::agent::run_safety::RunSafetySource::Invocation
-    );
-}
-
-#[test]
-fn invalid_run_safety_preflight_rejects_before_agent_start() {
-    let mut candidates = crate::agent::run_safety::RunSafetyCandidates::default();
-    candidates.invocation.token_budget = Some("0".to_string());
-
-    let error = crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())
-        .expect_err("invalid safety input must fail during preflight");
-    assert_eq!(
-        error.bound,
-        crate::agent::run_safety::RunSafetyBound::TokenBudget
-    );
-    assert_eq!(
-        error.source,
-        crate::agent::run_safety::RunSafetySource::Invocation
-    );
-    assert!(error.to_string().contains("positive decimal whole number"));
-}
-
-#[test]
-fn bounded_json_report_includes_canonical_reason_and_effective_source() {
-    let metadata = crate::agent::run_safety::RunSafetyStopMetadata {
-        bound: crate::agent::run_safety::RunSafetyBound::TokenBudget,
-        source: crate::agent::run_safety::RunSafetySource::Environment,
-    };
-    let report = super::RunCommandReport {
-        session_id: "session".to_string(),
-        provider: "test".to_string(),
-        model: "model".to_string(),
-        text: "partial".to_string(),
-        usage: crate::agent::TokenUsage::default(),
-        stop_reason: Some("token_budget_exceeded".to_string()),
-        outcome: Some("bounded_stop".to_string()),
-        observed_usage: Some(100),
-        safety_bound: Some(metadata),
-    };
-    let encoded = serde_json::to_value(report).expect("report should serialize");
-    assert_eq!(encoded["stop_reason"], "token_budget_exceeded");
-    assert_eq!(encoded["outcome"], "bounded_stop");
-    assert_eq!(encoded["observed_usage"], 100);
-    assert_eq!(encoded["safety_bound"]["bound"], "token_budget");
-    assert_eq!(encoded["safety_bound"]["source"], "environment");
-}
-
-#[test]
-fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
-    let cases = [
-        (
-            crate::agent::run_safety::RunStopReason::MaxTurnsExceeded,
-            "max_turns_exceeded",
-            "maximum turns exceeded",
-            "max_turns",
-        ),
-        (
-            crate::agent::run_safety::RunStopReason::MaxToolStepsExceeded,
-            "max_tool_steps_exceeded",
-            "maximum tool steps exceeded",
-            "max_tool_steps",
-        ),
-        (
-            crate::agent::run_safety::RunStopReason::TokenBudgetExceeded,
-            "token_budget_exceeded",
-            "token budget exceeded",
-            "token_budget",
-        ),
-        (
-            crate::agent::run_safety::RunStopReason::DeadlineExceeded,
-            "deadline_exceeded",
-            "deadline exceeded",
-            "deadline",
-        ),
-    ];
-
-    for (reason, code, label, bound) in cases {
-        assert_eq!(reason.code(), code);
-        assert_eq!(reason.label(), label);
-        assert_eq!(reason.bound().name(), bound);
-        let metadata = crate::agent::run_safety::RunSafetyStopMetadata {
-            bound: reason.bound(),
-            source: crate::agent::run_safety::RunSafetySource::Invocation,
-        };
-        let encoded = serde_json::to_value(metadata).expect("metadata should serialize");
-        assert_eq!(encoded["bound"], bound);
-        assert_eq!(
-            encoded["source"],
-            serde_json::Value::String("invocation".to_string())
+pub(super) fn reject_schema(safety: &crate::config::RunSafetyConfig) -> Result<()> {
+    if safety.max_turns.is_some()
+        || safety.max_tool_steps.is_some()
+        || safety.token_budget.is_some()
+        || safety.deadline.is_some()
+    {
+        bail!(
+            "run safety options are unsupported with --schema; use ordinary --json, --ndjson, or plain output"
         );
-        assert!(format!("Run stopped: {label} ({code})").contains(label));
+    }
+    Ok(())
+}
+
+pub(super) fn install(
+    agent: &mut crate::agent::Agent,
+    invocation: crate::config::RunSafetyConfig,
+) -> Result<()> {
+    let (persisted, environment) = crate::config::Config::run_safety_sources()?;
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation,
+        environment,
+        persisted,
+    };
+    crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())?;
+    let policy =
+        crate::agent::run_safety::resolve_run_safety(&candidates, agent.token_usage_totals())?;
+    if policy.max_turns.is_some()
+        || policy.max_tool_steps.is_some()
+        || policy.token_budget.is_some()
+        || policy.deadline.is_some()
+    {
+        agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(policy));
+    }
+    Ok(())
+}
+
+pub(super) fn report(
+    agent: &crate::agent::Agent,
+    provider: &std::sync::Arc<dyn crate::provider::Provider>,
+    text: String,
+) -> RunCommandReport {
+    RunCommandReport {
+        session_id: agent.session_id().to_string(),
+        provider: provider.name().to_string(),
+        model: provider.model(),
+        text,
+        usage: agent.last_usage().clone(),
+        stop_reason: agent
+            .run_safety_stop_reason()
+            .map(|reason| reason.code().to_string()),
+        outcome: agent
+            .run_safety_stop_reason()
+            .map(|_| "bounded_stop".to_string()),
+        observed_usage: agent
+            .run_safety_stop_reason()
+            .and_then(|_| agent.run_safety_controller())
+            .map(|controller| controller.observed_usage()),
+        safety_bound: agent
+            .run_safety_controller()
+            .and_then(|controller| controller.stop_metadata()),
     }
 }
 
-#[test]
-fn schema_mode_rejects_explicit_run_safety_flags_before_bridge_start() {
-    let safety = crate::config::RunSafetyConfig {
-        max_turns: Some("1".to_string()),
-        ..Default::default()
-    };
-    let error = super::reject_schema_run_safety(&safety).expect_err("schema must reject bound");
-    assert!(error.to_string().contains("unsupported with --schema"));
-    super::reject_schema_run_safety(&Default::default()).expect("unset safety is allowed");
+pub(super) fn complete_turn_and_should_stop(
+    agent: &mut crate::agent::Agent,
+    turns_completed: &mut usize,
+) -> bool {
+    agent.run_safety_complete_turn();
+    *turns_completed += 1;
+    agent.run_safety_stop_reason().is_some()
 }
 
+pub(super) fn annotate_ndjson_done(
+    agent: &crate::agent::Agent,
+    mut done: serde_json::Value,
+) -> Result<serde_json::Value> {
+    if let Some(reason) = agent.run_safety_stop_reason()
+        && let Some(object) = done.as_object_mut()
+    {
+        object.insert(
+            "stop_reason".to_string(),
+            serde_json::Value::String(reason.code().to_string()),
+        );
+        object.insert(
+            "outcome".to_string(),
+            serde_json::Value::String("bounded_stop".to_string()),
+        );
+        if let Some(usage) = agent.run_safety_controller() {
+            object.insert(
+                "observed_usage".to_string(),
+                serde_json::Value::from(usage.observed_usage()),
+            );
+            if let Some(metadata) = usage.stop_metadata() {
+                object.insert("safety_bound".to_string(), serde_json::to_value(metadata)?);
+            }
+        }
+    }
+    Ok(done)
+}

@@ -40,7 +40,8 @@ impl Drop for SavedEnv {
 
 struct TestProvider;
 
-include!("commands/run_safety.rs");
+#[path = "commands_tests/run_safety.rs"]
+mod run_safety;
 
 #[async_trait]
 impl Provider for TestProvider {
