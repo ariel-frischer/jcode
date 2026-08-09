@@ -1,5 +1,81 @@
 use crate::test_support::*;
 
+#[tokio::test]
+async fn invalid_selected_profile_fails_before_mock_provider_request() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("test config path should be available");
+    std::fs::create_dir_all(config_path.parent().expect("config parent should exist"))?;
+    std::fs::write(
+        &config_path,
+        r#"[profiles.review]
+provider = "not-a-provider"
+instructions = "do not echo this secret instruction"
+"#,
+    )?;
+    jcode::config::Config::invalidate_cache();
+
+    let provider = MockProvider::new();
+    let error = jcode::config::Config::load_strict()?
+        .resolve_session_profile(Some("review"))
+        .expect_err("invalid profile must fail before provider setup");
+    let message = error.to_string();
+
+    assert!(
+        message.contains("review"),
+        "diagnostic should name profile: {message}"
+    );
+    assert!(
+        message.contains("provider"),
+        "diagnostic should name offending field: {message}"
+    );
+    assert!(
+        !message.contains("do not echo this secret instruction"),
+        "diagnostic must redact instruction contents: {message}"
+    );
+    assert_eq!(
+        provider
+            .request_count
+            .load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "invalid selection must not contact a provider"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_selected_profile_fails_strict_load_before_mock_provider_request() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("test config path should be available");
+    std::fs::create_dir_all(config_path.parent().expect("config parent should exist"))?;
+    std::fs::write(
+        &config_path,
+        r#"[profiles.review]
+skills = "not-a-list"
+"#,
+    )?;
+    jcode::config::Config::invalidate_cache();
+
+    let provider = MockProvider::new();
+    let error = jcode::config::Config::load_strict()
+        .expect_err("malformed profile data must fail before provider setup");
+    let message = error.to_string();
+
+    assert!(
+        message.contains("skills"),
+        "diagnostic should name malformed key: {message}"
+    );
+    assert_eq!(
+        provider
+            .request_count
+            .load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "malformed selection must not contact a provider"
+    );
+
+    Ok(())
+}
+
 /// Test that multi-turn conversation works with session resume
 #[tokio::test]
 async fn test_multi_turn_conversation() -> Result<()> {

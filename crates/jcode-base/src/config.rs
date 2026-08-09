@@ -11,8 +11,8 @@ pub use jcode_config_types::{
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
     NamedProviderType, NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode,
     PowerConfig, ProviderConfig, ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction,
-    SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
-    UpdateChannel, WebSearchConfig, WebSearchEngine,
+    SessionProfileConfig, SkillsMode, SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode,
+    SwarmStripLayout, TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -499,6 +499,13 @@ pub struct Config {
     /// api_key_env = "MY_GATEWAY_API_KEY"
     pub providers: BTreeMap<String, NamedProviderConfig>,
 
+    /// Named session profiles, keyed by exact profile name.
+    ///
+    /// The map is omitted when empty so configurations that do not use
+    /// profiles retain their existing serialized shape.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<String, SessionProfileConfig>,
+
     /// Agent-specific model defaults
     pub agents: AgentsConfig,
 
@@ -724,6 +731,14 @@ mod config_file;
 mod default_file;
 mod display_summary;
 mod env_overrides;
+pub mod session_profile;
+
+pub use session_profile::{
+    FieldSource, ProfileInspectionResult, ProfileRestoreStatus, ProviderModelReasoningSnapshot,
+    ResolvedProfileSnapshot, ResolvedSessionProfile, SessionPromptOverlay,
+    SessionPromptOverlaySnapshot, SkillPolicy, ToolPolicySnapshot,
+    active_environment_provider_profile,
+};
 
 #[cfg(test)]
 #[path = "config_tests.rs"]

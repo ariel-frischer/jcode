@@ -688,7 +688,11 @@ impl crate::tui::TuiState for App {
 
     fn available_skills(&self) -> Vec<String> {
         if self.is_remote && !self.remote_skills.is_empty() {
-            self.remote_skills.clone()
+            self.remote_skills
+                .iter()
+                .filter(|skill| self.profile_allows_skill_name(skill))
+                .cloned()
+                .collect()
         } else {
             self.current_skills_snapshot()
                 .list()

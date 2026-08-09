@@ -755,6 +755,7 @@ impl App {
         mut self,
         mut terminal: DefaultTerminal,
         remote_working_dir: Option<String>,
+        startup_profile: Option<crate::protocol::SessionProfileStartup>,
     ) -> Result<RunResult> {
         super::terminal_liveness::capture_initial_tty();
         let mut event_stream = EventStream::new();
@@ -814,6 +815,7 @@ impl App {
                 &mut remote_state,
                 session_to_resume.as_deref(),
                 remote_working_dir.as_deref(),
+                startup_profile.as_ref(),
             )
             .await?
             {

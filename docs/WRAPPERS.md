@@ -52,6 +52,46 @@ jcode --quiet model list --verbose
 jcode --quiet run --json "Reply with exactly OK"
 ```
 
+## Run with a named session profile
+
+Profiles are defined under `[profiles.<name>]` in `~/.jcode/config.toml` and
+selected per invocation. They apply provider/model/reasoning, tool, skill, and
+additional-instruction defaults without editing the config or affecting another
+session:
+
+```bash
+jcode --quiet --profile review run "Review this change"
+```
+
+`--profile` is global, so `jcode --quiet run --profile review "Review this
+change"` is equivalent. Explicit flags and environment overrides retain their
+normal precedence. Unknown profiles and invalid fields fail before a provider
+request with a corrective diagnostic. Existing `run --json`, `run --ndjson`, and
+`run --schema` modes keep their established headless behavior; an omitted profile
+continues to use the no-profile path.
+
+Wrappers can inspect profile state without starting a provider or mutating a session:
+
+```bash
+jcode --quiet profile list --json
+jcode --quiet profile show review --json
+jcode --quiet profile current --json
+jcode --quiet profile resolve review --json
+```
+
+`profile show` exposes configured non-secret fields and instruction presence/length;
+`current` and `resolve` include effective tool/skill policy and field sources. For a
+human TUI session, `jcode --profile review` starts with the selected profile; `/profile`
+opens the picker, `/profile <name>` queues a future-turn switch, and `/profile none`
+clears it. Restored sessions retain their saved snapshot and report missing/changed
+profiles rather than silently adopting a different one. Child agents and swarm workers
+inherit the effective restrictions unless explicitly overridden.
+
+Structured `--schema` runs use the SDK bridge and cannot hand a per-session
+profile to an already-running shared daemon. A profiled structured run therefore
+fails before the request if that daemon is already active; stop it with
+`jcode server stop` or select a private/new server socket before retrying.
+
 ## Run one prompt with schema-validated JSON
 
 Pass a UTF-8 JSON Schema file to make the Rust SDK parse and validate the final

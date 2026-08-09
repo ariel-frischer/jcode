@@ -89,6 +89,9 @@ pub(super) async fn maybe_handle_session_admin_command(
             None,
             mcp_pool,
             None,
+            None,
+            None,
+            None,
             super::headless::HeadlessMemoryScope::IsolatedTest,
         )
         .await?;

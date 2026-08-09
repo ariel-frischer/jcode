@@ -233,6 +233,15 @@ pub struct Agent {
     mcp_late_register_resolved: bool,
     /// Override system prompt (used by ambient mode to inject a custom prompt)
     system_prompt_override: Option<String>,
+    /// Immutable prompt context selected for this session profile.
+    #[allow(dead_code)] // Consumed by the profile-aware prompting seam.
+    session_prompt_overlay: crate::config::SessionPromptOverlay,
+    /// Optional named profile selected when this session was created.
+    session_profile_name: Option<String>,
+    /// Session-local skill policy. `None` preserves the legacy no-profile
+    /// registry view; a populated policy filters every prompt/activation view
+    /// without mutating the shared registry.
+    skill_policy: Option<crate::config::SkillPolicy>,
     /// Whether memory features are enabled for this session
     memory_enabled: bool,
     /// One-step undo snapshot captured before the most recent rewind.
@@ -269,7 +278,26 @@ impl Agent {
         allowed_tools: Option<HashSet<String>>,
         disabled_tools: HashSet<String>,
     ) -> Self {
+        Self::build_base_with_prompt_overlay(
+            provider,
+            registry,
+            session,
+            allowed_tools,
+            disabled_tools,
+            crate::config::SessionPromptOverlay::default(),
+        )
+    }
+
+    fn build_base_with_prompt_overlay(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        session: Session,
+        allowed_tools: Option<HashSet<String>>,
+        disabled_tools: HashSet<String>,
+        session_prompt_overlay: crate::config::SessionPromptOverlay,
+    ) -> Self {
         let skills = SkillRegistry::shared_snapshot();
+        let session_profile_name = session.profile_name.clone();
         let initial_provider_model = provider.model();
         let agent = Self {
             provider,
@@ -296,6 +324,9 @@ impl Agent {
             locked_tools: None,
             mcp_late_register_resolved: false,
             system_prompt_override: None,
+            session_prompt_overlay,
+            session_profile_name,
+            skill_policy: None,
             memory_enabled: crate::config::config().features.memory,
             rewind_undo_snapshot: None,
             stdin_request_tx: None,
@@ -327,10 +358,17 @@ impl Agent {
             .working_dir
             .as_deref()
             .map(std::path::Path::new);
-        Arc::new(SkillRegistry::effective_for_working_dir(
-            &global,
-            working_dir,
-        ))
+        let effective = SkillRegistry::effective_for_working_dir(&global, working_dir);
+        let Some(policy) = self.skill_policy.as_ref() else {
+            return Arc::new(effective);
+        };
+
+        // The policy is an immutable session snapshot. Filtering this fresh
+        // registry view by its stored effective names keeps restores
+        // deterministic and prevents a changed/missing profile from widening
+        // access merely because the registry changed after the session was
+        // saved.
+        Arc::new(effective.filtered_for_policy(policy))
     }
 
     pub fn available_skill_names(&self) -> Vec<String> {
@@ -345,22 +383,260 @@ impl Agent {
         Self::new_with_initial_working_dir(provider, registry, None)
     }
 
+    /// Construct an agent with an immutable per-session tool policy.
+    ///
+    /// The ordinary [`Agent::new`] constructor continues to read the current
+    /// config selection. Headless per-run callers can use this constructor to
+    /// apply a resolved profile without mutating persisted config or process
+    /// global tool settings.
+    pub fn new_with_tool_selection(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        tool_selection: crate::config::ToolSelection,
+    ) -> Self {
+        Self::new_with_tool_selection_and_prompt_overlay(
+            provider,
+            registry,
+            tool_selection,
+            crate::config::SessionPromptOverlay::default(),
+        )
+    }
+
+    /// Construct an agent with immutable per-session tool and prompt policy.
+    pub fn new_with_tool_selection_and_prompt_overlay(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        tool_selection: crate::config::ToolSelection,
+        session_prompt_overlay: crate::config::SessionPromptOverlay,
+    ) -> Self {
+        Self::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+            provider,
+            registry,
+            None,
+            tool_selection,
+            session_prompt_overlay,
+        )
+    }
+
     pub(crate) fn new_with_initial_working_dir(
         provider: Arc<dyn Provider>,
         registry: Registry,
         working_dir: Option<&str>,
     ) -> Self {
-        let tool_selection = crate::config::config().tools.selection();
+        Self::new_with_initial_working_dir_and_tool_selection(
+            provider,
+            registry,
+            working_dir,
+            crate::config::config().tools.selection(),
+        )
+    }
+
+    fn new_with_initial_working_dir_and_tool_selection(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        working_dir: Option<&str>,
+        tool_selection: crate::config::ToolSelection,
+    ) -> Self {
+        Self::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+            provider,
+            registry,
+            working_dir,
+            tool_selection,
+            crate::config::SessionPromptOverlay::default(),
+        )
+    }
+
+    /// Construct a new interactive session from the CLI's validated,
+    /// credential-free profile handoff. The profile policy is copied into this
+    /// Agent only; no process-global config or registry state is changed.
+    pub(crate) fn new_with_initial_working_dir_and_profile(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        working_dir: Option<&str>,
+        profile: Option<&crate::protocol::SessionProfileStartup>,
+    ) -> Result<Self> {
+        let Some(profile) = profile else {
+            return Ok(Self::new_with_initial_working_dir(
+                provider,
+                registry,
+                working_dir,
+            ));
+        };
+
+        let tool_selection = crate::config::ToolSelection {
+            allowed_tools: profile
+                .allowed_tools
+                .as_ref()
+                .map(|tools| tools.iter().cloned().collect()),
+            disabled_tools: profile.disabled_tools.iter().cloned().collect(),
+        };
+        let session_prompt_overlay = crate::config::SessionPromptOverlay {
+            skill_names: profile.skill_names.clone(),
+            skill_prompts: profile.skill_prompts.clone(),
+            instructions: profile.instructions.clone(),
+        };
+
+        let mut agent = Self::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+            provider,
+            registry,
+            working_dir,
+            tool_selection,
+            session_prompt_overlay,
+        );
+        let available_names = agent.current_skills_snapshot().available_names();
+        let skill_policy = crate::config::SkillPolicy::for_available(
+            profile.profile_name.as_deref().unwrap_or("(profile)"),
+            profile.skills_mode,
+            &profile.skill_names,
+            &profile.disabled_skills,
+            available_names,
+        )?;
+        agent.skill_policy = Some(skill_policy.clone());
+
+        if let Some(model) = profile.model.as_deref() {
+            crate::provider::set_model_with_auth_refresh(agent.provider.as_ref(), model)?;
+        }
+        if let Some(reasoning_effort) = profile.reasoning_effort.as_deref() {
+            agent.provider.set_reasoning_effort(reasoning_effort)?;
+        }
+        agent.session.model = Some(agent.provider.model());
+        agent.session_profile_name = profile.profile_name.clone();
+        let snapshot = crate::config::ResolvedProfileSnapshot {
+            profile_name: profile.profile_name.clone(),
+            provider_model_reasoning: crate::config::ProviderModelReasoningSnapshot {
+                provider: profile.provider.clone(),
+                model: profile.model.clone(),
+                reasoning_effort: profile.reasoning_effort.clone(),
+                provider_profile: profile.provider_profile.clone(),
+            },
+            tool_policy: crate::config::ToolPolicySnapshot {
+                profile: None,
+                allowed_tools: profile.allowed_tools.clone(),
+                disabled_tools: profile.disabled_tools.clone(),
+            },
+            skill_policy,
+            prompt_overlay: crate::config::SessionPromptOverlaySnapshot {
+                skill_names: profile.skill_names.clone(),
+                instructions_present: profile.instructions.is_some(),
+                instructions_chars: profile.instructions.as_deref().map_or(0, str::len),
+            },
+            fingerprint: String::new(),
+        }
+        .with_fingerprint();
+        agent.session.set_profile_state(
+            profile.profile_name.clone(),
+            Some(snapshot),
+            crate::config::ProfileRestoreStatus::Matching,
+        );
+        Ok(agent)
+    }
+
+    /// Construct a child session from a credential-free profile snapshot.
+    ///
+    /// The snapshot is already resolved and validated by the parent session;
+    /// this constructor deliberately does not consult mutable global profile
+    /// or tool configuration. That keeps delegated work on the same effective
+    /// policy even when the config changes while the parent is running.
+    pub(crate) fn new_with_initial_working_dir_and_inherited_profile(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        working_dir: Option<&str>,
+        profile_name: Option<String>,
+        snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+        restore_status: Option<crate::config::ProfileRestoreStatus>,
+    ) -> Self {
+        let Some(snapshot) = snapshot else {
+            return Self::new_with_initial_working_dir(provider, registry, working_dir);
+        };
+
+        let tool_selection = crate::config::ToolSelection {
+            allowed_tools: snapshot
+                .tool_policy
+                .allowed_tools
+                .as_ref()
+                .map(|tools| tools.iter().cloned().collect()),
+            disabled_tools: snapshot
+                .tool_policy
+                .disabled_tools
+                .iter()
+                .cloned()
+                .collect(),
+        };
+        let prompt_overlay = crate::config::SessionPromptOverlay {
+            skill_names: snapshot.prompt_overlay.skill_names.clone(),
+            skill_prompts: Vec::new(),
+            instructions: None,
+        };
+        let mut agent = Self::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+            provider,
+            registry,
+            working_dir,
+            tool_selection,
+            prompt_overlay,
+        );
+        agent.session_profile_name = profile_name.clone();
+        agent.session.profile_name = profile_name;
+        agent.session.profile_snapshot = Some(snapshot.clone());
+        agent.session.profile_restore_status = restore_status;
+        agent.skill_policy = Some(snapshot.skill_policy);
+        if agent.session.model.is_none() {
+            agent.session.model = snapshot.provider_model_reasoning.model.clone();
+        }
+        if let Some(effort) = snapshot
+            .provider_model_reasoning
+            .reasoning_effort
+            .as_deref()
+        {
+            agent.session.reasoning_effort = Some(effort.to_owned());
+            if let Err(error) = agent.provider.set_reasoning_effort(effort) {
+                crate::logging::warn(&format!(
+                    "Failed to apply inherited reasoning effort '{}': {}",
+                    effort, error
+                ));
+            }
+        }
+        agent
+    }
+
+    #[allow(dead_code)] // Consumed by restore/inspection phases.
+    pub(crate) fn session_profile_name(&self) -> Option<&str> {
+        self.session_profile_name.as_deref()
+    }
+
+    pub(crate) fn session_profile_snapshot(
+        &self,
+    ) -> Option<crate::config::ResolvedProfileSnapshot> {
+        self.session.profile_snapshot.clone()
+    }
+
+    pub(crate) fn session_profile_restore_status(
+        &self,
+    ) -> Option<crate::config::ProfileRestoreStatus> {
+        self.session.profile_restore_status.clone()
+    }
+
+    pub(crate) fn profile_restore_warning(&self) -> Option<String> {
+        self.session.profile_restore_warning()
+    }
+
+    fn new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        working_dir: Option<&str>,
+        tool_selection: crate::config::ToolSelection,
+        session_prompt_overlay: crate::config::SessionPromptOverlay,
+    ) -> Self {
         let mut session = Session::create(None, None);
         if let Some(working_dir) = working_dir {
             session.working_dir = Some(working_dir.to_string());
         }
-        let mut agent = Self::build_base(
+        let mut agent = Self::build_base_with_prompt_overlay(
             provider,
             registry,
             session,
             tool_selection.allowed_tools,
             tool_selection.disabled_tools,
+            session_prompt_overlay,
         );
         agent.session.mark_active();
         agent.session.model = Some(agent.provider.model());
@@ -382,13 +658,56 @@ impl Agent {
     pub fn new_with_session(
         provider: Arc<dyn Provider>,
         registry: Registry,
-        session: Session,
+        mut session: Session,
         allowed_tools: Option<HashSet<String>>,
     ) -> Self {
+        let inherited_snapshot = session.profile_snapshot.clone();
+        if let Some(snapshot) = inherited_snapshot.as_ref() {
+            if session.model.is_none() {
+                session.model = snapshot.provider_model_reasoning.model.clone();
+            }
+            if session.reasoning_effort.is_none() {
+                session.reasoning_effort =
+                    snapshot.provider_model_reasoning.reasoning_effort.clone();
+            }
+        }
         let tool_selection = if let Some(allowed_tools) = allowed_tools {
             crate::config::ToolSelection {
-                allowed_tools: Some(allowed_tools),
-                disabled_tools: HashSet::new(),
+                allowed_tools: inherited_snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.tool_policy.allowed_tools.as_ref())
+                    .map(|parent_allowed| {
+                        allowed_tools
+                            .intersection(&parent_allowed.iter().cloned().collect())
+                            .cloned()
+                            .collect()
+                    })
+                    .or(Some(allowed_tools)),
+                disabled_tools: inherited_snapshot
+                    .as_ref()
+                    .map(|snapshot| {
+                        snapshot
+                            .tool_policy
+                            .disabled_tools
+                            .iter()
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_else(HashSet::new),
+            }
+        } else if let Some(snapshot) = inherited_snapshot.as_ref() {
+            crate::config::ToolSelection {
+                allowed_tools: snapshot
+                    .tool_policy
+                    .allowed_tools
+                    .as_ref()
+                    .map(|tools| tools.iter().cloned().collect()),
+                disabled_tools: snapshot
+                    .tool_policy
+                    .disabled_tools
+                    .iter()
+                    .cloned()
+                    .collect(),
             }
         } else {
             crate::config::config().tools.selection()
@@ -400,6 +719,11 @@ impl Agent {
             tool_selection.allowed_tools,
             tool_selection.disabled_tools,
         );
+        if let Some(snapshot) = inherited_snapshot {
+            agent.session_profile_name = agent.session.profile_name.clone();
+            agent.skill_policy = Some(snapshot.skill_policy.clone());
+            agent.session_prompt_overlay.skill_names = snapshot.prompt_overlay.skill_names;
+        }
         agent.session.mark_active();
         if agent.session.provider_key.is_none() {
             agent.session.provider_key =

@@ -71,6 +71,9 @@ fn create_visible_spawn_session(
     route_api_method_override: Option<&str>,
     effort_override: Option<&str>,
     selfdev_requested: bool,
+    profile_name: Option<String>,
+    profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+    profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
 ) -> anyhow::Result<(String, PathBuf)> {
     let cwd = working_dir
         .map(PathBuf::from)
@@ -99,6 +102,9 @@ fn create_visible_spawn_session(
     if selfdev_requested {
         session.set_canary("self-dev");
     }
+    session.profile_name = profile_name;
+    session.profile_snapshot = profile_snapshot;
+    session.profile_restore_status = profile_restore_status;
     session.save()?;
 
     Ok((session.id.clone(), cwd))
@@ -212,6 +218,9 @@ pub(super) struct CoordinatorSpawnIdentity {
     pub provider_key: Option<String>,
     pub route_api_method: Option<String>,
     pub is_canary: bool,
+    pub profile_name: Option<String>,
+    pub profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+    pub profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
 }
 
 /// The resolved model + auth route a spawned swarm agent should be created
@@ -244,6 +253,9 @@ async fn resolve_coordinator_spawn_identity(
             provider_key: agent_guard.session_provider_key(),
             route_api_method: agent_guard.session_route_api_method(),
             is_canary: agent_guard.is_canary(),
+            profile_name: agent_guard.session_profile_name().map(str::to_owned),
+            profile_snapshot: agent_guard.session_profile_snapshot(),
+            profile_restore_status: agent_guard.session_profile_restore_status(),
         };
     }
 
@@ -256,6 +268,9 @@ async fn resolve_coordinator_spawn_identity(
                 provider_key: session.provider_key.clone(),
                 route_api_method: session.route_api_method.clone(),
                 is_canary: session.is_canary,
+                profile_name: session.profile_name.clone(),
+                profile_snapshot: session.profile_snapshot.clone(),
+                profile_restore_status: session.profile_restore_status.clone(),
             };
             crate::logging::info(&format!(
                 "Swarm spawn: coordinator {} agent busy/unavailable, inheriting identity from persisted session (model={:?} provider_key={:?} route={:?} canary={})",
@@ -275,6 +290,29 @@ async fn resolve_coordinator_spawn_identity(
             CoordinatorSpawnIdentity::default()
         }
     }
+}
+
+/// Copy the parent's credential-free snapshot for a child, replacing only the
+/// explicit model/reasoning overrides requested for that descendant.
+pub(super) fn resolve_spawn_profile_snapshot(
+    parent: &CoordinatorSpawnIdentity,
+    model_override: Option<&str>,
+    effort_override: Option<&str>,
+) -> Option<crate::config::ResolvedProfileSnapshot> {
+    let mut snapshot = parent.profile_snapshot.clone()?;
+    if let Some(model) = model_override
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+    {
+        snapshot.provider_model_reasoning.model = Some(model.to_owned());
+    }
+    if let Some(effort) = effort_override
+        .map(str::trim)
+        .filter(|effort| !effort.is_empty())
+    {
+        snapshot.provider_model_reasoning.reasoning_effort = Some(effort.to_owned());
+    }
+    Some(snapshot.with_fingerprint())
 }
 
 /// Split a configured swarm model that carries an explicit auth-route prefix
@@ -433,6 +471,9 @@ fn prepare_visible_spawn_session<F>(
     route_api_method_override: Option<&str>,
     effort_override: Option<&str>,
     selfdev_requested: bool,
+    profile_name: Option<String>,
+    profile_snapshot: Option<crate::config::ResolvedProfileSnapshot>,
+    profile_restore_status: Option<crate::config::ProfileRestoreStatus>,
     startup_message: Option<&str>,
     launch_visible: F,
 ) -> anyhow::Result<(String, bool)>
@@ -447,6 +488,9 @@ where
         route_api_method_override,
         effort_override,
         selfdev_requested,
+        profile_name,
+        profile_snapshot,
+        profile_restore_status,
     )?;
 
     if let Some(message) = startup_message {
@@ -602,6 +646,11 @@ pub(super) async fn spawn_swarm_agent(
         .map(str::trim)
         .filter(|effort| !effort.is_empty())
         .map(str::to_string);
+    let inherited_profile_snapshot = resolve_spawn_profile_snapshot(
+        &coordinator,
+        spawn_model.as_deref(),
+        spawn_effort.as_deref(),
+    );
     crate::logging::info(&format!(
         "Swarm spawn model resolution: requested_model={:?} requested_effort={:?} configured_swarm_model={:?} coordinator_model={:?} coordinator_provider_key={:?} coordinator_route={:?} -> spawn_model={:?} spawn_provider_key={:?} spawn_route={:?}",
         requested_model,
@@ -632,6 +681,9 @@ pub(super) async fn spawn_swarm_agent(
             spawn_route_api_method.as_deref(),
             spawn_effort.as_deref(),
             coordinator_is_canary,
+            coordinator.profile_name.clone(),
+            inherited_profile_snapshot.clone(),
+            coordinator.profile_restore_status.clone(),
             startup_message.as_deref(),
             |session_id, cwd, selfdev_requested, provider_key| {
                 // Tag the headed window as a swarm-agent spawn so spawn hooks
@@ -676,6 +728,9 @@ pub(super) async fn spawn_swarm_agent(
                 spawn_effort.clone(),
                 Some(Arc::clone(mcp_pool)),
                 Some(req_session_id.to_string()),
+                coordinator.profile_name.clone(),
+                inherited_profile_snapshot,
+                coordinator.profile_restore_status.clone(),
                 super::headless::HeadlessMemoryScope::RealProject,
             )
             .await

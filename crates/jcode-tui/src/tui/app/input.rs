@@ -3650,6 +3650,13 @@ impl App {
             return;
         }
 
+        // Profile changes are session-local and become effective only when a
+        // real turn is about to be submitted. Slash commands above can queue
+        // the transition while a turn is still in flight.
+        if !self.is_processing {
+            self.commit_pending_profile_transition();
+        }
+
         if let Some(command) = extract_input_shell_command(&input) {
             self.push_display_message(DisplayMessage::user(raw_input));
 
@@ -3721,6 +3728,20 @@ impl App {
                     return;
                 }
             } else {
+                if self.skill_policy_blocks(&skill_name) {
+                    self.push_display_message(DisplayMessage {
+                        role: "error".to_string(),
+                        content: format!(
+                            "Skill /{} is blocked by the active profile policy; choose a profile that allows it or use /profile none.",
+                            skill_name
+                        ),
+                        tool_calls: vec![],
+                        duration_secs: None,
+                        title: None,
+                        tool_data: None,
+                    });
+                    return;
+                }
                 // Distinguish an endorsed-but-not-installed skill from a
                 // typo: the skill list advertises endorsed skills, so a bare
                 // "Unknown skill" for them reads like a bug (issue #445).
@@ -3855,6 +3876,7 @@ impl App {
         event_stream: &mut EventStream,
     ) {
         while !self.queued_messages.is_empty() || !self.hidden_queued_system_messages.is_empty() {
+            self.commit_pending_profile_transition();
             // Combine all currently queued messages into one, treating [SYSTEM: ...]
             // startup continuations as system reminders rather than user turns.
             let queued_messages = std::mem::take(&mut self.queued_messages);

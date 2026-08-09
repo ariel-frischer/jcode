@@ -369,6 +369,7 @@ impl WsTestClient {
             client_has_local_history: false,
             allow_session_takeover: false,
             terminal_env: Vec::new(),
+            profile: None,
         })
         .await
     }
@@ -401,6 +402,7 @@ impl WsTestClient {
             client_instance_id: None,
             client_has_local_history: false,
             allow_session_takeover: false,
+            profile: None,
         })
         .await
     }

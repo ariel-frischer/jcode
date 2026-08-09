@@ -1,3 +1,4 @@
+use crate::config::{ProfileRestoreStatus, ResolvedProfileSnapshot};
 use crate::id::{extract_session_name, new_id, new_memorable_session_id_avoiding};
 use crate::message::{ContentBlock, Message, Role};
 pub use crate::storage::{
@@ -174,6 +175,16 @@ pub struct Session {
     /// Optional user-provided label for saved sessions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub save_label: Option<String>,
+    /// Optional named profile selected for this session. Empty/no-profile
+    /// sessions omit this field to preserve the legacy serialized shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_name: Option<String>,
+    /// Credential-free effective profile values used for deterministic restore.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_snapshot: Option<ResolvedProfileSnapshot>,
+    /// Safe restore state for a persisted profile snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_restore_status: Option<ProfileRestoreStatus>,
     /// Environment snapshots for post-mortem debugging
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_snapshots: Vec<EnvSnapshot>,
@@ -250,6 +261,12 @@ struct SessionStartupStub {
     saved: bool,
     #[serde(default)]
     save_label: Option<String>,
+    #[serde(default)]
+    profile_name: Option<String>,
+    #[serde(default)]
+    profile_snapshot: Option<ResolvedProfileSnapshot>,
+    #[serde(default)]
+    profile_restore_status: Option<ProfileRestoreStatus>,
 }
 
 const MAX_SESSION_JOURNAL_BYTES: u64 = 512 * 1024;
@@ -367,6 +384,9 @@ impl Session {
         session.is_debug = stub.is_debug;
         session.saved = stub.saved;
         session.save_label = stub.save_label;
+        session.profile_name = stub.profile_name;
+        session.profile_snapshot = stub.profile_snapshot;
+        session.profile_restore_status = stub.profile_restore_status;
         session.messages.clear();
         session.env_snapshots.clear();
         session.memory_injections.clear();
@@ -402,6 +422,9 @@ impl Session {
         session.is_debug = snapshot.is_debug;
         session.saved = snapshot.saved;
         session.save_label = snapshot.save_label;
+        session.profile_name = snapshot.profile_name;
+        session.profile_snapshot = snapshot.profile_snapshot;
+        session.profile_restore_status = snapshot.profile_restore_status;
         session.replay_events.clear();
         session.env_snapshots.clear();
         session.memory_injections.clear();
@@ -539,6 +562,9 @@ impl Session {
             is_debug: self.is_debug,
             saved: self.saved,
             save_label: self.save_label.clone(),
+            profile_name: self.profile_name.clone(),
+            profile_snapshot: self.profile_snapshot.clone(),
+            profile_restore_status: self.profile_restore_status.clone(),
         }
     }
 
@@ -740,6 +766,9 @@ impl Session {
         self.is_debug = meta.is_debug;
         self.saved = meta.saved;
         self.save_label = meta.save_label;
+        self.profile_name = meta.profile_name;
+        self.profile_snapshot = meta.profile_snapshot;
+        self.profile_restore_status = meta.profile_restore_status;
         self.mark_memory_profile_dirty();
     }
 
@@ -780,6 +809,9 @@ impl Session {
             is_debug,
             saved: false,
             save_label: None,
+            profile_name: None,
+            profile_snapshot: None,
+            profile_restore_status: None,
             env_snapshots: Vec::new(),
             memory_injections: Vec::new(),
             replay_events: Vec::new(),
@@ -834,6 +866,9 @@ impl Session {
             is_debug,
             saved: false,
             save_label: None,
+            profile_name: None,
+            profile_snapshot: None,
+            profile_restore_status: None,
             env_snapshots: Vec::new(),
             memory_injections: Vec::new(),
             replay_events: Vec::new(),
@@ -1045,6 +1080,60 @@ request in this new forked session, using the inherited conversation only as con
     /// Set the session status
     pub fn set_status(&mut self, status: SessionStatus) {
         self.status = status;
+    }
+
+    /// Record the immutable, credential-free profile state used by this
+    /// session. The next save/checkpoint persists the change through the
+    /// session-owned metadata boundary.
+    pub fn set_profile_state(
+        &mut self,
+        profile_name: Option<String>,
+        snapshot: Option<ResolvedProfileSnapshot>,
+        status: ProfileRestoreStatus,
+    ) {
+        self.profile_name = profile_name;
+        self.profile_snapshot = snapshot;
+        self.profile_restore_status = Some(status);
+    }
+
+    /// Compare the restored snapshot with the current canonical projection.
+    /// The stored snapshot remains authoritative; this method only records a
+    /// safe status/warning for the owning session.
+    pub fn evaluate_profile_restore(
+        &mut self,
+        profile_exists: bool,
+        current: Option<&ResolvedProfileSnapshot>,
+    ) -> ProfileRestoreStatus {
+        let status = match (&self.profile_name, &self.profile_snapshot) {
+            (None, None) => ProfileRestoreStatus::Legacy,
+            (None, Some(_)) => ProfileRestoreStatus::ExplicitNone,
+            (Some(profile_name), Some(saved)) if !profile_exists => ProfileRestoreStatus::Missing {
+                profile_name: profile_name.clone(),
+            },
+            (Some(profile_name), Some(saved)) => match current {
+                Some(current) if saved.fingerprint == current.fingerprint => {
+                    ProfileRestoreStatus::Matching
+                }
+                Some(current) => ProfileRestoreStatus::Changed {
+                    profile_name: profile_name.clone(),
+                    changed_fields: saved.changed_fields(current),
+                },
+                None => ProfileRestoreStatus::Missing {
+                    profile_name: profile_name.clone(),
+                },
+            },
+            (Some(profile_name), None) => ProfileRestoreStatus::Missing {
+                profile_name: profile_name.clone(),
+            },
+        };
+        self.profile_restore_status = Some(status.clone());
+        status
+    }
+
+    pub fn profile_restore_warning(&self) -> Option<String> {
+        self.profile_restore_status
+            .as_ref()
+            .and_then(ProfileRestoreStatus::warning)
     }
 
     /// Mark session as closed normally
@@ -1650,6 +1739,12 @@ struct RemoteStartupSessionSnapshot {
     saved: bool,
     #[serde(default)]
     save_label: Option<String>,
+    #[serde(default)]
+    profile_name: Option<String>,
+    #[serde(default)]
+    profile_snapshot: Option<ResolvedProfileSnapshot>,
+    #[serde(default)]
+    profile_restore_status: Option<ProfileRestoreStatus>,
 }
 
 #[cfg(test)]

@@ -146,6 +146,36 @@ struct PendingSplitPrompt {
     images: Vec<(String, String)>,
 }
 
+/// Session-local profile selection state owned by the TUI client.
+///
+/// The configured-name snapshot is intentionally stable while the picker is
+/// open. A pending transition is committed at the next turn boundary so an
+/// in-flight request keeps the policy it started with.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct InteractiveProfileState {
+    pub configured_names: Vec<String>,
+    pub current: Option<String>,
+    pub current_startup: Option<crate::protocol::SessionProfileStartup>,
+    pub pending: Option<Option<String>>,
+    pub pending_startup: Option<Option<crate::protocol::SessionProfileStartup>>,
+    pub restore_warning: Option<String>,
+}
+
+impl InteractiveProfileState {
+    pub fn from_config() -> Self {
+        let mut configured_names = crate::config::config()
+            .profiles
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        configured_names.sort_unstable();
+        Self {
+            configured_names,
+            ..Self::default()
+        }
+    }
+}
+
 struct PendingLocalTransfer {
     receiver: mpsc::Receiver<anyhow::Result<PreparedTransferSession>>,
 }
@@ -848,6 +878,8 @@ pub struct App {
     /// Transient Ctrl+P command palette state. The composer draft remains in
     /// `input` while the palette owns its own query and selection.
     command_palette: Option<command_palette::CommandPaletteState>,
+    /// Session-scoped profile selection and future-turn transition.
+    profile_state: InteractiveProfileState,
     command_candidates_cache: RefCell<Option<CommandCandidatesCache>>,
     /// Per-input memo for `command_suggestions()`; see
     /// [`CommandSuggestionsCache`].
@@ -1257,6 +1289,8 @@ pub struct App {
     pending_migration: Option<String>,
     // Session to resume on connect (remote mode)
     resume_session_id: Option<String>,
+    // Validated profile overlay for a newly created remote session.
+    remote_startup_profile: Option<crate::protocol::SessionProfileStartup>,
     // Exit code to use when quitting (for canary wrapper communication)
     requested_exit_code: Option<i32>,
     // Memory feature toggle for this session

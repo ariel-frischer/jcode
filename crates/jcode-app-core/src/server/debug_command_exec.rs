@@ -378,6 +378,16 @@ pub(super) async fn execute_debug_command(
         return Ok(serde_json::to_string_pretty(&info).unwrap_or_else(|_| "{}".to_string()));
     }
 
+    if trimmed == "profile" || trimmed == "profile:info" {
+        let agent = agent.lock().await;
+        let info = agent.debug_info();
+        let profile = info
+            .get("profile")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        return Ok(serde_json::to_string_pretty(&profile).unwrap_or_else(|_| "{}".to_string()));
+    }
+
     if trimmed == "agent:memory" {
         let agent = agent.lock().await;
         let info = agent.debug_memory_profile();
@@ -516,7 +526,7 @@ pub(super) async fn execute_debug_command(
 
     if trimmed == "help" {
         return Ok(
-            "debug commands: state, usage, history, tools, tools:full, mcp:servers, mcp:tools, mcp:connect:<server> <json>, mcp:disconnect:<server>, mcp:reload, mcp:call:<server>:<tool> <json>, last_response, message:<text>, message_async:<text>, swarm_message:<text>, swarm_message_async:<text>, tool:<name> <json>, queue_interrupt:<content>, queue_interrupt_urgent:<content>, agent:info, agent:memory, allocator, allocator:profile:on, allocator:profile:off, allocator:profile:prefix:<prefix>, allocator:profile:dump [path], jobs, job_status:<id>, job_wait:<id>, sessions, create_session, create_session:<path>, create_session:selfdev:<path>, set_model:<model>, set_provider:<name>, trigger_extraction, available_models, reload, help".to_string()
+                "debug commands: state, usage, history, tools, tools:full, mcp:servers, mcp:tools, mcp:connect:<server> <json>, mcp:disconnect:<server>, mcp:reload, mcp:call:<server>:<tool> <json>, last_response, message:<text>, message_async:<text>, swarm_message:<text>, swarm_message_async:<text>, tool:<name> <json>, queue_interrupt:<content>, queue_interrupt_urgent:<content>, agent:info, profile:info, agent:memory, allocator, allocator:profile:on, allocator:profile:off, allocator:profile:prefix:<prefix>, allocator:profile:dump [path], jobs, job_status:<id>, job_wait:<id>, sessions, create_session, create_session:<path>, create_session:selfdev:<path>, set_model:<model>, set_provider:<name>, trigger_extraction, available_models, reload, help".to_string()
         );
     }
 

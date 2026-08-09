@@ -1,5 +1,6 @@
 use super::App;
 use crossterm::event::{KeyCode, KeyModifiers};
+use jcode_tui_messages::DisplayMessage;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,6 +16,7 @@ pub(super) enum ShortcutAction {
 pub(super) enum CommandPaletteAction {
     SlashCommand(String),
     Shortcut(ShortcutAction),
+    ProfileSelect(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,13 +31,150 @@ pub(super) struct CommandPaletteEntry {
 pub(super) struct CommandPaletteState {
     pub query: String,
     pub selected: usize,
+    pub mode: CommandPaletteMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CommandPaletteMode {
+    Commands,
+    Profiles,
 }
 
 impl App {
+    fn profile_startup_metadata(
+        name: &str,
+    ) -> anyhow::Result<crate::protocol::SessionProfileStartup> {
+        let config = crate::config::config();
+        let resolved = config.resolve_session_profile(Some(name))?;
+        let selection = resolved.tool_selection(&config.tools);
+        let mut allowed_tools = selection.allowed_tools.map(|tools| {
+            let mut tools = tools.into_iter().collect::<Vec<_>>();
+            tools.sort_unstable();
+            tools
+        });
+        let mut disabled_tools = selection.disabled_tools.into_iter().collect::<Vec<_>>();
+        disabled_tools.sort_unstable();
+        Ok(crate::protocol::SessionProfileStartup {
+            profile_name: Some(name.to_owned()),
+            provider: resolved.provider,
+            model: resolved.model,
+            provider_profile: resolved.provider_profile,
+            reasoning_effort: resolved.reasoning_effort,
+            allowed_tools: allowed_tools.take(),
+            disabled_tools,
+            skill_names: resolved.skill_policy.selected_skills,
+            skills_mode: resolved.skill_policy.mode,
+            disabled_skills: resolved.skill_policy.disabled_skills,
+            skill_prompts: resolved.prompt_overlay.skill_prompts,
+            instructions: resolved.prompt_overlay.instructions,
+        })
+    }
+
+    pub(super) fn request_profile_transition(&mut self, profile: Option<String>) -> bool {
+        let startup = match profile.as_deref() {
+            Some(name) => match Self::profile_startup_metadata(name) {
+                Ok(startup) => Some(startup),
+                Err(error) => {
+                    self.push_display_message(DisplayMessage::error(format!(
+                        "Profile selection failed: {error}"
+                    )));
+                    self.set_status_notice("Profile selection failed");
+                    return false;
+                }
+            },
+            None => None,
+        };
+
+        if let Some(name) = profile.as_deref()
+            && !self
+                .profile_state
+                .configured_names
+                .iter()
+                .any(|configured| configured == name)
+        {
+            self.push_display_message(DisplayMessage::error(format!(
+                "Unknown session profile '{}'; available profiles: {}",
+                name,
+                if self.profile_state.configured_names.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    self.profile_state.configured_names.join(", ")
+                }
+            )));
+            self.set_status_notice("Unknown session profile");
+            return false;
+        }
+
+        self.profile_state.pending = Some(profile.clone());
+        self.profile_state.pending_startup = Some(startup);
+        self.set_status_notice(match profile.as_deref() {
+            Some(name) => format!("Profile '{}' queued for next turn", name),
+            None => "No profile queued for next turn".to_string(),
+        });
+        true
+    }
+
+    pub(super) fn commit_pending_profile_transition(&mut self) -> bool {
+        let Some(profile) = self.profile_state.pending.take() else {
+            return false;
+        };
+        let startup = self.profile_state.pending_startup.take().flatten();
+        self.profile_state.current = profile.clone();
+        self.profile_state.current_startup = startup;
+        self.context_revision = self.context_revision.wrapping_add(1);
+        self.invalidate_command_candidates_cache();
+        self.set_status_notice(match profile.as_deref() {
+            Some(name) => format!("Profile '{}' active", name),
+            None => "No profile active".to_string(),
+        });
+        true
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_profile_names_for_test<I, S>(&mut self, names: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.profile_state.configured_names = names
+            .into_iter()
+            .map(|name| name.as_ref().to_owned())
+            .collect();
+        self.profile_state.configured_names.sort_unstable();
+        self.invalidate_command_candidates_cache();
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_current_profile_for_test(&mut self, profile: Option<&str>) {
+        self.profile_state.current = profile.map(str::to_owned);
+        self.profile_state.current_startup =
+            profile.and_then(|name| Self::profile_startup_metadata(name).ok());
+    }
+
+    #[cfg(test)]
+    pub(super) fn current_profile_for_test(&self) -> Option<String> {
+        self.profile_state.current.clone()
+    }
+
+    #[cfg(test)]
+    pub(super) fn pending_profile_for_test(&self) -> Option<Option<String>> {
+        self.profile_state.pending.clone()
+    }
+
     pub(super) fn open_command_palette(&mut self) -> bool {
         self.command_palette = Some(CommandPaletteState {
             query: String::new(),
             selected: 0,
+            mode: CommandPaletteMode::Commands,
+        });
+        true
+    }
+
+    pub(super) fn open_profile_picker(&mut self) -> bool {
+        self.command_palette = Some(CommandPaletteState {
+            query: String::new(),
+            selected: 0,
+            mode: CommandPaletteMode::Profiles,
         });
         true
     }
@@ -45,13 +184,26 @@ impl App {
     }
 
     fn command_palette_entries(&self) -> Vec<CommandPaletteEntry> {
+        if self
+            .command_palette
+            .as_ref()
+            .is_some_and(|state| state.mode == CommandPaletteMode::Profiles)
+        {
+            return self.profile_picker_entries();
+        }
+
         let skills = self.current_skills_snapshot();
         let mut skill_names: HashSet<String> = skills
             .list()
             .into_iter()
             .map(|skill| format!("/{}", skill.name))
             .collect();
-        skill_names.extend(self.remote_skills.iter().map(|name| format!("/{name}")));
+        skill_names.extend(
+            self.remote_skills
+                .iter()
+                .filter(|name| self.profile_allows_skill_name(name))
+                .map(|name| format!("/{name}")),
+        );
 
         let mut entries = self
             .command_candidates()
@@ -98,6 +250,43 @@ impl App {
                 ShortcutAction::ClearView,
             ),
         ]);
+        entries
+    }
+
+    fn profile_picker_entries(&self) -> Vec<CommandPaletteEntry> {
+        let mut entries = self
+            .profile_state
+            .configured_names
+            .iter()
+            .cloned()
+            .map(|name| {
+                let active = self.profile_state.current.as_deref() == Some(name.as_str());
+                CommandPaletteEntry {
+                    kind: "Profile",
+                    command: name.clone(),
+                    description: if active {
+                        "Select profile (active)".to_string()
+                    } else {
+                        "Select profile".to_string()
+                    },
+                    action: CommandPaletteAction::ProfileSelect(Some(name)),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let no_profiles = entries.is_empty();
+        entries.push(CommandPaletteEntry {
+            kind: "Profile",
+            command: "none".to_string(),
+            description: if no_profiles {
+                "No configured profiles; use none for an unprofiled session".to_string()
+            } else if self.profile_state.current.is_none() {
+                "Clear profile (active)".to_string()
+            } else {
+                "Clear profile".to_string()
+            },
+            action: CommandPaletteAction::ProfileSelect(None),
+        });
         entries
     }
 
@@ -246,6 +435,9 @@ impl App {
                 self.sync_model_picker_preview_from_input();
                 super::input::handle_enter(self);
             }
+            CommandPaletteAction::ProfileSelect(profile) => {
+                self.request_profile_transition(profile);
+            }
             CommandPaletteAction::Shortcut(action) => match action {
                 ShortcutAction::ToggleAutoPoke => {
                     super::commands::toggle_auto_poke_hotkey_local(self)
@@ -268,6 +460,13 @@ impl App {
     #[cfg(test)]
     pub(super) fn command_palette_is_open(&self) -> bool {
         self.command_palette.is_some()
+    }
+
+    #[cfg(test)]
+    pub(super) fn profile_picker_is_open(&self) -> bool {
+        self.command_palette
+            .as_ref()
+            .is_some_and(|state| state.mode == CommandPaletteMode::Profiles)
     }
 
     #[cfg(test)]

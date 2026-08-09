@@ -1,5 +1,6 @@
 use super::*;
 use crate::agent::environment::EnvSnapshotDetail;
+use crate::config::{SessionPromptOverlay, ToolSelection};
 use crate::message::{Message, StreamEvent, ToolDefinition};
 use crate::provider::{EventStream, Provider};
 use crate::tool::Registry;
@@ -189,6 +190,462 @@ fn tool_output_to_content_blocks_preserves_labeled_images() {
         }
         other => panic!("expected trailing label text, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn profile_aware_agent_constructor_owns_run_selection_and_prompt_overlay() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let tool_selection = ToolSelection {
+        allowed_tools: Some(["read".to_string()].into_iter().collect()),
+        disabled_tools: ["write".to_string()].into_iter().collect(),
+    };
+    let prompt_overlay = SessionPromptOverlay {
+        skill_names: vec!["review".to_string()],
+        skill_prompts: vec!["Review the change carefully.".to_string()],
+        instructions: Some("Keep the response concise.".to_string()),
+    };
+
+    let agent = Agent::new_with_tool_selection_and_prompt_overlay(
+        provider,
+        registry,
+        tool_selection.clone(),
+        prompt_overlay.clone(),
+    );
+
+    assert_eq!(agent.allowed_tools, tool_selection.allowed_tools);
+    assert_eq!(agent.disabled_tools, tool_selection.disabled_tools);
+    assert_eq!(agent.session_prompt_overlay, prompt_overlay);
+}
+
+#[tokio::test]
+async fn interactive_profile_startup_constructor_keeps_policy_on_one_agent() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let startup = crate::protocol::SessionProfileStartup {
+        profile_name: Some("review".to_owned()),
+        provider: Some("openai".to_owned()),
+        model: None,
+        provider_profile: None,
+        reasoning_effort: None,
+        allowed_tools: Some(vec!["read".to_owned()]),
+        disabled_tools: vec!["write".to_owned()],
+        // Keep this constructor fixture independent of the host's installed
+        // skill set; profile-selected names are validated at this boundary.
+        skill_names: Vec::new(),
+        skills_mode: Some(crate::config::SkillsMode::Allowlist),
+        disabled_skills: Vec::new(),
+        instructions: Some("Keep the response concise.".to_owned()),
+        skill_prompts: vec!["Review the change carefully.".to_owned()],
+    };
+
+    let agent = Agent::new_with_initial_working_dir_and_profile(
+        provider,
+        registry,
+        Some("/tmp/profile-startup"),
+        Some(&startup),
+    )
+    .expect("validated startup metadata should construct an agent");
+
+    assert_eq!(
+        agent.session.working_dir.as_deref(),
+        Some("/tmp/profile-startup")
+    );
+    assert_eq!(agent.session_profile_name(), Some("review"));
+    assert_eq!(agent.session.profile_name.as_deref(), Some("review"));
+    assert_eq!(
+        agent
+            .session
+            .profile_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.skill_policy.mode),
+        Some(crate::config::SkillsMode::Allowlist)
+    );
+    assert_eq!(
+        agent.allowed_tools,
+        Some(["read".to_owned()].into_iter().collect())
+    );
+    assert_eq!(
+        agent.disabled_tools,
+        ["write".to_owned()].into_iter().collect()
+    );
+    assert_eq!(
+        agent.session_prompt_overlay.instructions.as_deref(),
+        Some("Keep the response concise.")
+    );
+    assert_eq!(
+        agent.session_prompt_overlay.skill_prompts,
+        vec!["Review the change carefully."]
+    );
+    let profile_info = agent
+        .debug_info()
+        .get("profile")
+        .cloned()
+        .expect("debug info should expose a profile projection");
+    assert_eq!(
+        profile_info.get("name").and_then(|value| value.as_str()),
+        Some("review")
+    );
+    assert_eq!(
+        profile_info
+            .get("tool_policy")
+            .and_then(|value| value.get("allowed_tools"))
+            .and_then(|value| value.get(0))
+            .and_then(|value| value.as_str()),
+        Some("read")
+    );
+    assert_eq!(
+        profile_info
+            .get("skill_policy")
+            .and_then(|value| value.get("instructions_chars"))
+            .and_then(|value| value.as_u64()),
+        Some("Keep the response concise.".len() as u64)
+    );
+    let encoded = serde_json::to_string(&profile_info).expect("profile debug projection is JSON");
+    assert!(!encoded.contains("Keep the response concise."));
+}
+
+#[tokio::test]
+async fn agent_prompting_includes_owned_profile_overlay_with_memory_context() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let prompt_overlay = SessionPromptOverlay {
+        skill_names: vec!["review".to_string()],
+        skill_prompts: vec!["Profile skill prompt marker".to_string()],
+        instructions: Some("Profile instruction marker".to_string()),
+    };
+
+    let agent = Agent::new_with_tool_selection_and_prompt_overlay(
+        provider,
+        registry,
+        ToolSelection::default(),
+        prompt_overlay,
+    );
+
+    let split = agent.build_system_prompt_split(Some("Memory prompt marker"));
+    let prompt = format!("{}\n{}", split.static_part, split.dynamic_part);
+
+    assert!(prompt.contains("Profile skill prompt marker"));
+    assert!(prompt.contains("Profile instruction marker"));
+    assert!(prompt.contains("Memory prompt marker"));
+}
+
+async fn shared_skill_fingerprint(registry: &Registry) -> Vec<(String, String, String)> {
+    let skills = registry.skills();
+    skills
+        .read()
+        .await
+        .list()
+        .into_iter()
+        .map(|skill| {
+            (
+                skill.name.clone(),
+                skill.description.clone(),
+                skill.get_prompt(),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn profile_sessions_keep_prompt_tools_and_shared_state_isolated() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+
+    let alpha_dir = tempfile::tempdir().expect("create alpha workspace");
+    let alpha_skill_dir = alpha_dir.path().join(".jcode/skills/alpha");
+    std::fs::create_dir_all(&alpha_skill_dir).expect("create alpha skill directory");
+    std::fs::write(
+        alpha_skill_dir.join("SKILL.md"),
+        "---\nname: alpha\ndescription: Alpha profile skill\n---\n\nAlpha profile skill body.\n",
+    )
+    .expect("write alpha skill");
+
+    let beta_dir = tempfile::tempdir().expect("create beta workspace");
+    let beta_skill_dir = beta_dir.path().join(".jcode/skills/beta");
+    std::fs::create_dir_all(&beta_skill_dir).expect("create beta skill directory");
+    std::fs::write(
+        beta_skill_dir.join("SKILL.md"),
+        "---\nname: beta\ndescription: Beta profile skill\n---\n\nBeta profile skill body.\n",
+    )
+    .expect("write beta skill");
+
+    let shared_before = shared_skill_fingerprint(&registry).await;
+    let config_before =
+        serde_json::to_string(crate::config::config()).expect("persisted config should serialize");
+
+    // Capture an unrelated session before profile runs. It must retain the same
+    // prompt and tool view after both profile agents have been exercised.
+    let unrelated = Agent::new(provider.clone(), registry.clone());
+    let unrelated_split_before = unrelated.build_system_prompt_split(Some("unrelated memory"));
+    let unrelated_prompt_before = format!(
+        "{}\n{}",
+        unrelated_split_before.static_part, unrelated_split_before.dynamic_part
+    );
+    let unrelated_tools_before = unrelated.tool_names().await;
+
+    let alpha_prompts = {
+        let skills = registry.skills();
+        let shared = skills.read().await;
+        SkillRegistry::effective_for_working_dir(&shared, Some(alpha_dir.path()))
+            .render_profile_skills("alpha", ["alpha"])
+            .expect("alpha skill should resolve in alpha workspace")
+    };
+    let beta_prompts = {
+        let skills = registry.skills();
+        let shared = skills.read().await;
+        SkillRegistry::effective_for_working_dir(&shared, Some(beta_dir.path()))
+            .render_profile_skills("beta", ["beta"])
+            .expect("beta skill should resolve in beta workspace")
+    };
+
+    let alpha = Agent::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+        provider.clone(),
+        registry.clone(),
+        alpha_dir.path().to_str(),
+        ToolSelection {
+            allowed_tools: Some(["read".to_string()].into_iter().collect()),
+            disabled_tools: ["write".to_string()].into_iter().collect(),
+        },
+        SessionPromptOverlay {
+            skill_names: vec!["alpha".to_string()],
+            skill_prompts: alpha_prompts,
+            instructions: Some("Alpha profile instructions".to_string()),
+        },
+    );
+    let alpha_split = alpha.build_system_prompt_split(Some("alpha memory"));
+    let alpha_prompt = format!("{}\n{}", alpha_split.static_part, alpha_split.dynamic_part);
+    let alpha_tools = alpha.tool_names().await;
+
+    let beta = Agent::new_with_initial_working_dir_and_tool_selection_and_prompt_overlay(
+        provider.clone(),
+        registry.clone(),
+        beta_dir.path().to_str(),
+        ToolSelection {
+            allowed_tools: Some(["write".to_string()].into_iter().collect()),
+            disabled_tools: ["read".to_string()].into_iter().collect(),
+        },
+        SessionPromptOverlay {
+            skill_names: vec!["beta".to_string()],
+            skill_prompts: beta_prompts,
+            instructions: Some("Beta profile instructions".to_string()),
+        },
+    );
+    let beta_split = beta.build_system_prompt_split(Some("beta memory"));
+    let beta_prompt = format!("{}\n{}", beta_split.static_part, beta_split.dynamic_part);
+    let beta_tools = beta.tool_names().await;
+
+    assert!(alpha_prompt.contains("# Skill: alpha"));
+    assert!(alpha_prompt.contains("Alpha profile instructions"));
+    assert!(alpha_prompt.contains("alpha memory"));
+    assert!(!alpha_prompt.contains("# Skill: beta"));
+    assert!(!alpha_prompt.contains("Beta profile instructions"));
+    assert_eq!(alpha_tools, vec!["read"]);
+
+    assert!(beta_prompt.contains("# Skill: beta"));
+    assert!(beta_prompt.contains("Beta profile instructions"));
+    assert!(beta_prompt.contains("beta memory"));
+    assert!(!beta_prompt.contains("# Skill: alpha"));
+    assert!(!beta_prompt.contains("Alpha profile instructions"));
+    assert_eq!(beta_tools, vec!["write"]);
+
+    assert_eq!(
+        shared_skill_fingerprint(&registry).await,
+        shared_before,
+        "profile skill resolution must not mutate the shared registry"
+    );
+    assert_eq!(
+        serde_json::to_string(crate::config::config()).expect("persisted config should serialize"),
+        config_before,
+        "profile runs must not mutate persisted config"
+    );
+
+    let unrelated_split_after = unrelated.build_system_prompt_split(Some("unrelated memory"));
+    assert_eq!(
+        format!(
+            "{}\n{}",
+            unrelated_split_after.static_part, unrelated_split_after.dynamic_part
+        ),
+        unrelated_prompt_before,
+        "an unrelated session must retain its original prompt context"
+    );
+    assert_eq!(
+        unrelated.tool_names().await,
+        unrelated_tools_before,
+        "an unrelated session must retain its original tool policy"
+    );
+}
+
+#[tokio::test]
+async fn profile_skill_policy_truth_table_filters_agent_surfaces_atomically() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let workspace = tempfile::tempdir().expect("create policy workspace");
+    for (name, description, body) in [
+        ("alpha", "Alpha policy skill", "Alpha policy body"),
+        ("beta", "Beta policy skill", "Beta policy body"),
+        ("gamma", "Gamma policy skill", "Gamma policy body"),
+    ] {
+        let dir = workspace.path().join(".jcode/skills").join(name);
+        std::fs::create_dir_all(&dir).expect("create skill directory");
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {description}\n---\n\n{body}\n"),
+        )
+        .expect("write skill");
+    }
+
+    let startup = |mode: Option<crate::config::SkillsMode>,
+                   selected: &[&str],
+                   disabled: &[&str]| crate::protocol::SessionProfileStartup {
+        profile_name: Some("policy".to_owned()),
+        provider: None,
+        model: None,
+        provider_profile: None,
+        reasoning_effort: None,
+        allowed_tools: None,
+        disabled_tools: Vec::new(),
+        skill_names: selected.iter().map(|name| (*name).to_owned()).collect(),
+        skills_mode: mode,
+        disabled_skills: disabled.iter().map(|name| (*name).to_owned()).collect(),
+        skill_prompts: vec!["alpha overlay".to_owned(), "beta overlay".to_owned()],
+        instructions: None,
+    };
+
+    let unfiltered_names = {
+        let global = registry.skills().read().await.clone();
+        crate::skill::SkillRegistry::effective_for_working_dir(&global, Some(workspace.path()))
+            .available_names()
+    };
+    let mut expected_all = unfiltered_names
+        .iter()
+        .filter(|name| name.as_str() != "beta")
+        .cloned()
+        .collect::<Vec<_>>();
+    expected_all.sort_unstable();
+
+    let all = Agent::new_with_initial_working_dir_and_profile(
+        provider.clone(),
+        registry.clone(),
+        workspace.path().to_str(),
+        Some(&startup(
+            Some(crate::config::SkillsMode::All),
+            &["alpha", "beta"],
+            &["beta"],
+        )),
+    )
+    .expect("all policy should resolve");
+    assert_eq!(all.available_skill_names(), expected_all);
+    let all_prompt = all.build_system_prompt_split(None);
+    let all_prompt = format!("{}\n{}", all_prompt.static_part, all_prompt.dynamic_part);
+    assert!(all_prompt.contains("alpha overlay"));
+    assert!(!all_prompt.contains("beta overlay"));
+    assert_eq!(
+        all.session
+            .profile_snapshot
+            .as_ref()
+            .expect("snapshot")
+            .skill_policy
+            .effective_skills,
+        all.available_skill_names()
+    );
+
+    let allowlist = Agent::new_with_initial_working_dir_and_profile(
+        provider.clone(),
+        registry.clone(),
+        workspace.path().to_str(),
+        Some(&startup(
+            Some(crate::config::SkillsMode::Allowlist),
+            &["alpha", "alpha", "gamma"],
+            &["gamma"],
+        )),
+    )
+    .expect("allowlist policy should resolve");
+    assert_eq!(allowlist.available_skill_names(), vec!["alpha"]);
+
+    let none = Agent::new_with_initial_working_dir_and_profile(
+        provider.clone(),
+        registry.clone(),
+        workspace.path().to_str(),
+        Some(&startup(
+            Some(crate::config::SkillsMode::None),
+            &["alpha", "beta"],
+            &[],
+        )),
+    )
+    .expect("none policy should resolve");
+    assert!(none.available_skill_names().is_empty());
+    let none_prompt = none.build_system_prompt_split(None);
+    let none_prompt = format!("{}\n{}", none_prompt.static_part, none_prompt.dynamic_part);
+    assert!(!none_prompt.contains("alpha overlay"));
+    assert!(!none_prompt.contains("beta overlay"));
+
+    let unknown = Agent::new_with_initial_working_dir_and_profile(
+        provider,
+        registry,
+        workspace.path().to_str(),
+        Some(&startup(
+            Some(crate::config::SkillsMode::Allowlist),
+            &["missing"],
+            &[],
+        )),
+    );
+    let error = match unknown {
+        Ok(_) => panic!("unavailable skills must fail before agent creation"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("unknown skill 'missing'"));
+}
+
+#[tokio::test]
+async fn profile_skill_policy_blocks_invocation_and_retrieval_without_registry_mutation() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let workspace = tempfile::tempdir().expect("create policy workspace");
+    for name in ["allowed", "blocked"] {
+        let dir = workspace.path().join(".jcode/skills").join(name);
+        std::fs::create_dir_all(&dir).expect("create skill directory");
+        std::fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: {name}\n---\n\n{name} body\n"),
+        )
+        .expect("write skill");
+    }
+    let startup = crate::protocol::SessionProfileStartup {
+        profile_name: Some("restricted".to_owned()),
+        skills_mode: Some(crate::config::SkillsMode::All),
+        skill_names: vec!["allowed".to_owned(), "blocked".to_owned()],
+        disabled_skills: vec!["blocked".to_owned()],
+        ..Default::default()
+    };
+    let restricted = Agent::new_with_initial_working_dir_and_profile(
+        provider.clone(),
+        registry.clone(),
+        workspace.path().to_str(),
+        Some(&startup),
+    )
+    .expect("restricted profile should resolve");
+    let view = restricted.current_skills_snapshot();
+    assert!(view.get("allowed").is_some());
+    assert!(view.get("blocked").is_none());
+    assert!(view.resolve_invocation("/allowed").is_some());
+    assert!(view.get("blocked").is_none());
+    assert!(view.list().iter().all(|skill| skill.name != "blocked"));
+
+    let unrestricted =
+        Agent::new_with_initial_working_dir(provider, registry, workspace.path().to_str());
+    assert!(
+        unrestricted
+            .current_skills_snapshot()
+            .get("blocked")
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -871,6 +1328,42 @@ async fn restore_session_resets_runtime_interrupt_and_queue_state() {
     assert_eq!(agent.last_usage.input_tokens, 0);
     assert_eq!(agent.last_usage.output_tokens, 0);
     assert!(agent.locked_tools.is_none());
+}
+
+#[tokio::test]
+async fn restore_session_preserves_snapshot_and_marks_missing_profile_without_fallback() {
+    let _guard = crate::storage::lock_test_env();
+    let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+
+    let mut restored_session = crate::session::Session::create_with_id(
+        "session_restore_missing_profile".to_string(),
+        None,
+        None,
+    );
+    let snapshot = crate::config::ResolvedProfileSnapshot {
+        profile_name: Some("profile-that-does-not-exist".to_owned()),
+        fingerprint: "sha256:stored".to_owned(),
+        ..Default::default()
+    };
+    restored_session.set_profile_state(
+        Some("profile-that-does-not-exist".to_owned()),
+        Some(snapshot.clone()),
+        crate::config::ProfileRestoreStatus::Matching,
+    );
+    restored_session.save().expect("save profiled session");
+
+    agent
+        .restore_session(&restored_session.id)
+        .expect("restore session should succeed");
+
+    assert_eq!(agent.session.profile_snapshot, Some(snapshot));
+    assert!(matches!(
+        agent.session.profile_restore_status,
+        Some(crate::config::ProfileRestoreStatus::Missing { .. })
+    ));
+    assert!(agent.session.profile_restore_warning().is_some());
 }
 
 #[tokio::test]

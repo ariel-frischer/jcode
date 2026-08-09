@@ -1547,16 +1547,30 @@ async fn run_swarm_task(
     selection: SwarmTaskSelection,
 ) -> Result<String> {
     let started = Instant::now();
-    let (provider, registry, session_id, working_dir) = {
+    let (provider, registry, session_id, working_dir, parent_identity) = {
         let agent = agent.lock().await;
         (
             agent.provider_fork(),
             agent.registry(),
             agent.session_id().to_string(),
             agent.working_dir().map(PathBuf::from),
+            super::comm_session::CoordinatorSpawnIdentity {
+                model: Some(agent.provider_model()),
+                provider_key: agent.session_provider_key(),
+                route_api_method: agent.session_route_api_method(),
+                is_canary: agent.is_canary(),
+                profile_name: agent.session_profile_name().map(str::to_owned),
+                profile_snapshot: agent.session_profile_snapshot(),
+                profile_restore_status: agent.session_profile_restore_status(),
+            },
         )
     };
     let parent_session_id = session_id.clone();
+    let inherited_profile_snapshot = super::comm_session::resolve_spawn_profile_snapshot(
+        &parent_identity,
+        selection.model.as_deref(),
+        selection.effort.as_deref(),
+    );
     let mut session = Session::create(
         Some(session_id),
         Some(format!("{} (@{} swarm)", description, role)),
@@ -1569,6 +1583,9 @@ async fn run_swarm_task(
     session.provider_key = selection.provider_key;
     session.route_api_method = selection.route_api_method;
     session.reasoning_effort = selection.effort;
+    session.profile_name = parent_identity.profile_name;
+    session.profile_snapshot = inherited_profile_snapshot;
+    session.profile_restore_status = parent_identity.profile_restore_status;
     if let Some(dir) = working_dir {
         session.working_dir = Some(dir.display().to_string());
     }
@@ -1589,9 +1606,18 @@ async fn run_swarm_task(
     for blocked in ["subagent", "task", "todo", "todowrite", "todoread"] {
         allowed.remove(blocked);
     }
-    crate::config::config()
-        .tools
-        .apply_to_allowed_set(&mut allowed);
+    if let Some(snapshot) = session.profile_snapshot.as_ref() {
+        if let Some(parent_allowed) = snapshot.tool_policy.allowed_tools.as_ref() {
+            allowed.retain(|name| parent_allowed.iter().any(|allowed| allowed == name));
+        }
+        for disabled in &snapshot.tool_policy.disabled_tools {
+            allowed.remove(disabled);
+        }
+    } else {
+        crate::config::config()
+            .tools
+            .apply_to_allowed_set(&mut allowed);
+    }
 
     let mut worker = Agent::new_with_session(provider, registry, session, Some(allowed));
     match worker.run_once_capture(prompt).await {

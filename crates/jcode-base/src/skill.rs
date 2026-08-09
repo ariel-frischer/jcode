@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(not(test))]
@@ -528,6 +528,118 @@ impl SkillRegistry {
         self.skills.get(name)
     }
 
+    /// Resolve and render the skills selected by one session profile.
+    ///
+    /// The registry is an immutable effective snapshot, so resolving a
+    /// profile cannot add project-local skills to the shared registry or alter
+    /// another session's view. Requested order is retained and duplicate names
+    /// are rendered only once. Unknown names fail before any partial prompt is
+    /// returned, with only safe profile/name metadata in the diagnostic.
+    pub fn render_profile_skills<I, S>(
+        &self,
+        profile_name: &str,
+        requested_names: I,
+    ) -> Result<Vec<String>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let available = self
+            .list()
+            .into_iter()
+            .map(|skill| skill.name.as_str())
+            .collect::<Vec<_>>();
+        let available_display = if available.is_empty() {
+            "(none)".to_owned()
+        } else {
+            available
+                .iter()
+                .map(|name| format!("'{name}'"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let mut seen = HashSet::new();
+        let mut prompts = Vec::new();
+        for requested in requested_names {
+            let name = requested.as_ref();
+            if name.trim().is_empty() {
+                anyhow::bail!(
+                    "Session profile '{}' references an empty skill name; available skills: {}",
+                    profile_name,
+                    available_display
+                );
+            }
+            if !seen.insert(name.to_owned()) {
+                continue;
+            }
+
+            let Some(skill) = self.get(name) else {
+                anyhow::bail!(
+                    "Session profile '{}' references unknown skill '{}'; available skills: {}",
+                    profile_name,
+                    name,
+                    available_display
+                );
+            };
+            prompts.push(skill.get_prompt());
+        }
+
+        Ok(prompts)
+    }
+
+    /// Return an immutable registry view containing only skills permitted by
+    /// an already-resolved session policy. The source registry is untouched.
+    pub fn filtered_for_policy(&self, policy: &crate::config::SkillPolicy) -> Self {
+        let mut filtered = Self::default();
+        for name in &policy.effective_skills {
+            if let Some(skill) = self.skills.get(name) {
+                filtered.skills.insert(name.clone(), skill.clone());
+            }
+        }
+        filtered
+    }
+
+    /// Resolve and apply a profile policy at the registry trust boundary.
+    /// Unknown selected/disabled names fail before a filtered view is
+    /// returned, while the shared registry remains unchanged.
+    pub fn policy_view<SI, SD, SS, DS>(
+        &self,
+        profile_name: &str,
+        mode: Option<crate::config::SkillsMode>,
+        selected_skills: SI,
+        disabled_skills: SD,
+    ) -> Result<Self>
+    where
+        SI: IntoIterator<Item = SS>,
+        SD: IntoIterator<Item = DS>,
+        SS: AsRef<str>,
+        DS: AsRef<str>,
+    {
+        let available = self
+            .list()
+            .into_iter()
+            .map(|skill| skill.name.clone())
+            .collect::<Vec<_>>();
+        let policy = crate::config::SkillPolicy::for_available(
+            profile_name,
+            mode,
+            selected_skills,
+            disabled_skills,
+            available,
+        )?;
+        Ok(self.filtered_for_policy(&policy))
+    }
+
+    /// Stable names in this registry. This is intentionally a value snapshot
+    /// so callers cannot mutate registry contents through the result.
+    pub fn available_names(&self) -> Vec<String> {
+        self.list()
+            .into_iter()
+            .map(|skill| skill.name.clone())
+            .collect()
+    }
+
     /// List all available skills.
     ///
     /// Sorted by skill name so the ordering is deterministic. The backing store
@@ -940,6 +1052,7 @@ fn normalize_skill_search_text(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{SkillPolicy, SkillsMode};
 
     fn test_skill(name: &str, description: &str, content: &str) -> Skill {
         Skill {
@@ -1131,6 +1244,190 @@ mod tests {
             skill.path.starts_with(temp.path()),
             "project-local overlay must win over a same-named global skill"
         );
+    }
+
+    #[test]
+    fn profile_skills_render_in_requested_order_without_mutating_shared_registry() {
+        let first = tempfile::tempdir().expect("create first workspace");
+        write_test_skill(first.path(), ".jcode", "first-skill");
+        write_test_skill(first.path(), ".jcode", "second-skill");
+
+        let mut shared = SkillRegistry::default();
+        shared.skills.insert(
+            "global-skill".to_string(),
+            test_skill("global-skill", "Global skill", "GLOBAL_BODY"),
+        );
+        let before_shared = shared
+            .list()
+            .iter()
+            .map(|skill| skill.name.clone())
+            .collect::<Vec<_>>();
+
+        let effective = SkillRegistry::effective_for_working_dir(&shared, Some(first.path()));
+        let prompts = effective
+            .render_profile_skills("review", ["second-skill", "first-skill", "global-skill"])
+            .expect("all selected working-directory skills should resolve");
+
+        assert_eq!(prompts.len(), 3);
+        assert!(prompts[0].contains("# Skill: second-skill"));
+        assert!(prompts[1].contains("# Skill: first-skill"));
+        assert!(prompts[2].contains("# Skill: global-skill"));
+        assert_eq!(
+            shared
+                .list()
+                .iter()
+                .map(|skill| skill.name.clone())
+                .collect::<Vec<_>>(),
+            before_shared,
+            "resolving a per-session profile must not mutate the shared registry"
+        );
+        assert!(
+            shared.get("first-skill").is_none(),
+            "project-local skills must remain outside the shared registry"
+        );
+    }
+
+    #[test]
+    fn missing_profile_skill_reports_profile_and_safe_available_name_guidance() {
+        let mut registry = SkillRegistry::default();
+        registry.skills.insert(
+            "available-skill".to_string(),
+            test_skill(
+                "available-skill",
+                "Safe description",
+                "PRIVATE_SKILL_BODY_MUST_NOT_APPEAR_IN_DIAGNOSTIC",
+            ),
+        );
+
+        let error = registry
+            .render_profile_skills("review", ["missing-skill"])
+            .expect_err("unknown selected skills must fail before prompt rendering");
+        let message = error.to_string();
+
+        assert!(message.contains("review"));
+        assert!(message.contains("missing-skill"));
+        assert!(message.contains("available-skill"));
+        assert!(
+            !message.contains("PRIVATE_SKILL_BODY_MUST_NOT_APPEAR_IN_DIAGNOSTIC"),
+            "skill bodies must never be included in profile diagnostics"
+        );
+    }
+
+    #[test]
+    fn policy_view_applies_all_allowlist_none_and_disabled_without_mutating_source() {
+        let mut registry = SkillRegistry::default();
+        for name in ["alpha", "beta", "gamma"] {
+            registry
+                .skills
+                .insert(name.to_owned(), test_skill(name, name, name));
+        }
+        let before = registry
+            .list()
+            .iter()
+            .map(|skill| skill.name.clone())
+            .collect::<Vec<_>>();
+
+        let all = SkillPolicy::for_available(
+            "all",
+            Some(SkillsMode::All),
+            ["alpha"],
+            ["beta"],
+            ["alpha", "beta", "gamma"],
+        )
+        .expect("all policy should resolve");
+        assert_eq!(all.effective_skills, ["alpha", "gamma"]);
+        assert_eq!(
+            registry.filtered_for_policy(&all).available_names(),
+            ["alpha", "gamma"]
+        );
+
+        let allowlist = SkillPolicy::for_available(
+            "allowlist",
+            Some(SkillsMode::Allowlist),
+            ["gamma", "alpha", "gamma"],
+            ["gamma"],
+            ["alpha", "beta", "gamma"],
+        )
+        .expect("allowlist policy should resolve");
+        assert_eq!(allowlist.selected_skills, ["gamma", "alpha"]);
+        assert_eq!(
+            registry.filtered_for_policy(&allowlist).available_names(),
+            ["alpha"]
+        );
+
+        let none = SkillPolicy::for_available(
+            "none",
+            Some(SkillsMode::None),
+            std::iter::empty::<&str>(),
+            std::iter::empty::<&str>(),
+            ["alpha", "beta", "gamma"],
+        )
+        .expect("none policy should resolve");
+        assert!(
+            registry
+                .filtered_for_policy(&none)
+                .available_names()
+                .is_empty()
+        );
+        assert_eq!(
+            registry
+                .list()
+                .iter()
+                .map(|skill| skill.name.clone())
+                .collect::<Vec<_>>(),
+            before,
+            "a policy view must never mutate the shared registry"
+        );
+    }
+
+    #[test]
+    fn policy_view_rejects_unknown_or_disabled_skill_names_at_registry_boundary() {
+        let mut registry = SkillRegistry::default();
+        registry
+            .skills
+            .insert("available".to_owned(), test_skill("available", "d", "body"));
+
+        let error = registry
+            .policy_view(
+                "review",
+                Some(SkillsMode::Allowlist),
+                ["missing"],
+                std::iter::empty::<&str>(),
+            )
+            .expect_err("unknown allowlist entries must fail");
+        assert!(error.to_string().contains("missing"));
+
+        let error = registry
+            .policy_view(
+                "review",
+                Some(SkillsMode::All),
+                std::iter::empty::<&str>(),
+                ["missing"],
+            )
+            .expect_err("unknown disabled entries must fail");
+        assert!(error.to_string().contains("disabled_skills"));
+    }
+
+    #[test]
+    fn empty_profile_skills_and_instructions_add_no_prompt_overlay_section() {
+        let registry = SkillRegistry::default();
+        let prompts = registry
+            .render_profile_skills("empty", std::iter::empty::<&str>())
+            .expect("empty skill selections should be valid");
+        assert!(prompts.is_empty());
+
+        let mut config = crate::config::Config::default();
+        config.profiles.insert(
+            "empty".to_string(),
+            crate::config::SessionProfileConfig {
+                instructions: Some(" \t".to_string()),
+                ..Default::default()
+            },
+        );
+        let resolved = config
+            .resolve_session_profile(Some("empty"))
+            .expect("empty profile should resolve");
+        assert!(resolved.prompt_overlay.is_empty());
     }
 
     #[test]

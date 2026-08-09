@@ -498,6 +498,7 @@ async fn send_history_from_persisted_session(
         .reasoning_effort
         .clone()
         .or_else(|| provider.reasoning_effort());
+    let profile_restore_warning = session.profile_restore_warning();
     drop(session);
 
     let messages = rendered_messages
@@ -550,7 +551,38 @@ async fn send_history_from_persisted_session(
         side_panel,
     };
 
-    write_event(writer, &history_event).await
+    write_event(writer, &history_event).await?;
+    send_profile_restore_warning_message(session_id, profile_restore_warning, writer).await
+}
+
+async fn send_profile_restore_warning(
+    session_id: &str,
+    agent: &Arc<Mutex<Agent>>,
+    writer: &Arc<Mutex<WriteHalf>>,
+) -> Result<()> {
+    let warning = agent.lock().await.profile_restore_warning();
+    send_profile_restore_warning_message(session_id, warning, writer).await
+}
+
+async fn send_profile_restore_warning_message(
+    session_id: &str,
+    warning: Option<String>,
+    writer: &Arc<Mutex<WriteHalf>>,
+) -> Result<()> {
+    let Some(message) = warning else {
+        return Ok(());
+    };
+    let event = ServerEvent::Notification {
+        from_session: session_id.to_owned(),
+        from_name: None,
+        notification_type: crate::protocol::NotificationType::Message {
+            scope: Some("profile_restore".to_owned()),
+            channel: None,
+            tldr: None,
+        },
+        message,
+    };
+    write_event(writer, &event).await
 }
 
 #[expect(
@@ -790,7 +822,8 @@ pub(super) async fn send_history(
         history_start.elapsed().as_millis(),
     ));
 
-    result.map_err(Into::into)
+    result?;
+    send_profile_restore_warning(session_id, agent, writer).await
 }
 
 pub(super) async fn session_activity_snapshot(
