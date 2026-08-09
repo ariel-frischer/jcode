@@ -1,0 +1,369 @@
+tasks:
+  branch: "agent/jcode-g25-render-cache"
+  created: "2026-08-08"
+  spec_path: "specs/003-optimize-render-cache/spec.yaml"
+  plan_path: "specs/003-optimize-render-cache/plan.yaml"
+
+summary:
+  total_tasks: 21
+  total_phases: 6
+  parallel_opportunities: 5
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Freeze a reproducible benchmark contract and enforce the coordinator release gate before Rust-heavy work"
+    tasks:
+      - id: "T001"
+        title: "Define the render-cache benchmark contract in specs/003-optimize-render-cache/benchmark-design.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/003-optimize-render-cache/benchmark-design.md"
+        dependencies: []
+        acceptance_criteria:
+          - "The matrix names deterministic 1 KiB and 64 KiB assistant/tool fixtures; widths 80 and 160; applicable DiffDisplayMode Off, Inline, FullInline, and File cases; applicable DiagramDisplayMode None, Margin, and Pinned cases; cold miss, warm hit, invalidation, unchanged-body control, bounded eviction, and 1/4-reader scenarios."
+          - "The document fixes five isolated post-warmup samples per cell, identical baseline/candidate machine and build controls, and a machine-readable report schema with cpu_ns, wall_ns, allocation_count, allocated_bytes, allocator memory fields, and peak_rss_bytes."
+          - "The decision formula requires at least 10% lower median CPU time and allocated volume for both short and large hit workloads, no required median regression above 3%, complete cells, and zero correctness failures."
+          - "The design states that cache-local attribution is supplementary and that representative TestBackend frames are the acceptance authority."
+      - id: "T002"
+        title: "Record the unchanged revision and coordinator execution gate in specs/003-optimize-render-cache/benchmark-design.md"
+        status: "Pending"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/003-optimize-render-cache/benchmark-design.md"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "The document records the unchanged Git revision, stable Rust toolchain, target host, build profile, allocator settings, serialized command plan, fixture-generation method, and metric collection method without running a Rust-heavy command."
+          - "Every FR-002 through FR-004 measurement has an executable collection method and consistent unit; unavailable data is defined as an incomplete, non-passing cell."
+          - "A dated Bead comment explicitly releasing serialized Rust-heavy benchmark, test, build, and runtime execution is recorded before T003 begins; without that release all later tasks remain Pending."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Build behavior-neutral measurement infrastructure shared by baseline, correctness, and candidate evaluation"
+    tasks:
+      - id: "T003"
+        title: "Add failing tests for benchmark-only cache reset and statistics hooks in crates/jcode-tui-messages/src/cache.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-tui-messages/src/cache.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Tests define deterministic reset plus hit, miss, replacement, invalidation, and eviction classification without exposing mutable cached storage."
+          - "Tests prove instrumentation is absent from normal production behavior, retains poisoned-lock recovery, and does not alter the 2048-entry bound or insertion-order replacement semantics."
+          - "The focused tests fail for the missing hooks before T004 implements them."
+      - id: "T004"
+        title: "Implement benchmark-only cache reset and statistics hooks in crates/jcode-tui-messages/src/cache.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui-messages/src/cache.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Narrow test/dev-benchmark hooks reset process-global cache state and report cache classifications needed by the matrix while normal callers retain unchanged behavior and cost."
+          - "The implementation adds no dependency, unsafe code, public mutable alias, key change, invalidation change, or bounded-policy change."
+          - "The exact tests from T003 pass."
+      - id: "T005"
+        title: "Add failing render-cache workload and metric-contract tests in src/bin/tui_bench.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "src/bin/tui_bench.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Tests define deterministic fixture sizing, matrix selection, warmup exclusion, five-sample invocation, and one machine-readable record per workload sample."
+          - "Tests require process CPU, wall latency, jemalloc allocation count and size-class volume deltas after epoch refresh, allocated/active/resident/retained memory, peak RSS, cache classification, and explicit incomplete-field handling."
+          - "Tests distinguish unchanged PreparedMessages body-cache frames from frames that invalidate prepared-body state while retaining identical message-cache keys."
+          - "The focused tests fail for the missing render-cache benchmark mode before T006 implements it."
+      - id: "T006"
+        title: "Implement the bounded render-cache benchmark mode in src/bin/tui_bench.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "src/bin/tui_bench.rs"
+        dependencies: ["T004", "T005"]
+        acceptance_criteria:
+          - "The existing dev-bins TestBackend path executes every matrix cell from T001, including short/large hits and misses, invalidation, unchanged-body control, bounded eviction, and 1/4 concurrent readers."
+          - "The harness refreshes allocator statistics at both boundaries, emits consistent machine-readable units, excludes warmup, contains no private session data, and adds no dependency."
+          - "Cache-local attribution and representative full-frame measurements are labeled separately so a synthetic-only gain cannot satisfy acceptance."
+          - "The exact tests from T005 pass without changing ordinary tui_bench modes."
+
+  - number: 3
+    title: "User Story 1 - Establish a representative render-cache baseline"
+    purpose: "Capture complete unchanged-cache evidence before any ownership candidate is created"
+    story_reference: "US-001"
+    independent_test: "Run the approved five-sample matrix against the recorded unchanged revision and verify every required cell reports CPU, wall, allocation-count, allocated-volume, and memory measurements plus cache classification."
+    tasks:
+      - id: "T007"
+        title: "Capture the unchanged render-cache matrix in specs/003-optimize-render-cache/baseline.yaml"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/003-optimize-render-cache/baseline.yaml"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "The report identifies the unchanged revision, date, host, toolchain, build profile, allocator settings, commands, workload identifiers, warmup method, and five isolated samples for every required cell."
+          - "Separate short-hit, short-miss, large-hit, and large-miss results cover the approved widths, display modes, unchanged-body control, invalidation, bounded eviction, and 1/4-reader workloads."
+          - "Every sample reports process CPU, wall latency, allocation count, allocated volume, allocator memory fields, peak RSS, and cache classification in the schema from T001; any missing field makes the baseline incomplete."
+          - "The report contains only unchanged-cache measurements and exists before T008 or any runtime ownership candidate begins."
+      - id: "T008"
+        title: "Verify baseline completeness and repeatability in specs/003-optimize-render-cache/baseline.yaml"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/003-optimize-render-cache/baseline.yaml"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "A deterministic completeness check confirms 100% of the required matrix cells, exactly five comparable measured samples per cell, consistent units, and no candidate revision or mixed environment."
+          - "Repeated control cells are stable enough for the documented 10% improvement and 3% regression thresholds to be meaningful; otherwise the benchmark design is corrected and the unchanged baseline is recaptured before proceeding."
+          - "Invalidation cost and concurrent-reader cross-session observations are explicit rather than inferred from ordinary hit/miss cells."
+
+  - number: 4
+    title: "User Story 3 - Preserve render-cache behavior and isolation"
+    purpose: "Establish baseline-passing regression contracts before a conditional ownership change"
+    story_reference: "US-003"
+    independent_test: "Run focused cache and TUI preparation checks for hit/miss parity, the complete key, width and display modes, invalidation, the 2048-entry policy, immutable readers, and distinct concurrent sessions; all must pass on the unchanged cache and after any candidate."
+    tasks:
+      - id: "T009"
+        title: "Add cache identity, lifecycle, immutability, and concurrency tests in crates/jcode-tui-messages/src/cache.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-tui-messages/src/cache.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Focused tests cover every RenderCacheKey field, stable message hash/content-length collision guard, hit/miss parity, invalidation epoch, replacement without duplicate order entries, 2048-entry eviction, and poisoned-lock recovery."
+          - "Sequential and concurrent consumers cannot mutate cached storage or change another consumer's content or ordering."
+          - "The tests pass against the unchanged baseline implementation and become mandatory candidate regression checks."
+      - id: "T010"
+        title: "Add cached-versus-fresh parity and caller-ownership tests in crates/jcode-tui/src/tui/ui_prepare/tests.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/ui_prepare/tests.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Tests compare cached and freshly rendered PreparedMessages content and ordering for representative short and large messages."
+          - "Tests exercise alignment-changing consumers and prove their transformations cannot mutate a cached entry or another prepared result."
+          - "The tests pass against the unchanged baseline implementation and require no public API change."
+      - id: "T011"
+        title: "Add width, display-mode, body-cache, and session-isolation tests in crates/jcode-tui/src/tui/ui_tests/prepare.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/ui_tests/prepare.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Tests cover widths 80 and 160, applicable diff and diagram modes, unchanged PreparedMessages body-cache frames, body-cache invalidation with stable message-cache keys, and output ordering."
+          - "Distinct session identities and 1/4 concurrent readers produce zero stale or cross-session render observations."
+          - "The tests pass against the unchanged baseline implementation and become mandatory candidate regression checks."
+
+  - number: 5
+    title: "User Story 2 - Accept only a material general-purpose optimization"
+    purpose: "Prototype at most one ownership-preserving view and retain it only when complete evidence passes every gate"
+    story_reference: "US-002"
+    independent_test: "Run the unchanged and candidate revisions through the identical five-sample matrix, then retain the candidate only if both representative hit workloads improve by at least 10%, every required regression is at most 3%, and all focused correctness checks have zero failures."
+    tasks:
+      - id: "T012"
+        title: "Prove or reject clone-free direct-consumer reachability in specs/003-optimize-render-cache/decision.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "specs/003-optimize-render-cache/decision.md"
+        dependencies: ["T009", "T010", "T011"]
+        acceptance_criteria:
+          - "The ownership trace starts at MessageCacheState::get, follows ui_messages_cache into ui_prepare and the pinned viewport consumer, and identifies whether an immutable shared or owned-or-shared result avoids equivalent Vec/Line materialization."
+          - "The proof explicitly rejects broad PreparedMessages Arcification, renderer redesign, unsafe aliasing, a breaking public signature, and any new dependency."
+          - "If direct consumers fundamentally require equivalent cloning, the report records an immediate reject decision and T013 through T016 complete as verified no-op checks with no runtime edits."
+      - id: "T013"
+        title: "Implement or reject one internal immutable cache view in crates/jcode-tui-messages/src/cache.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui-messages/src/cache.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "When T012 proves viability, one internal immutable shared-view or owned-or-shared result removes the measured deep Vec/Line clone without unsafe aliasing, mutable aliases, key/invalidation/bound changes, or a second cache implementation."
+          - "get_cached_message_lines retains its public Vec-returning behavior as a compatibility adapter, and existing public consumers require no migration."
+          - "When T012 rejects viability, this file remains unchanged from the baseline candidate boundary and the rejection evidence identifies the unavoidable clone."
+      - id: "T014"
+        title: "Preserve public exports while exposing only required internal access in crates/jcode-tui-messages/src/lib.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui-messages/src/lib.rs"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "If a candidate exists, only the narrowly required internal/dev-benchmark symbol is exported while every existing public import path and Vec-returning contract remains source-compatible."
+          - "If no candidate exists, no ownership-view export is added; benchmark-only exposure remains no broader than T006 requires."
+          - "No dependency direction, feature-default, or production behavior changes."
+      - id: "T015"
+        title: "Adapt or retain the presentation cache boundary in crates/jcode-tui/src/tui/ui_messages_cache.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/ui_messages_cache.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "If a candidate exists, the existing adapter carries the internal immutable result without recreating the avoided deep clone and without widening cache ownership into unrelated TUI code."
+          - "If the adapter must materialize an equivalent Vec, the candidate is rejected and runtime files are restored to baseline behavior."
+          - "No public caller, cache key, rendering input, or fallback path changes."
+      - id: "T016"
+        title: "Consume or reject the immutable result in crates/jcode-tui/src/tui/ui_prepare.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/ui_prepare.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "If viable, direct preparation consumers preserve sharing until mutation is genuinely required and do not perform an equivalent unconditional Vec/Line clone."
+          - "Alignment changes use ownership-preserving or copy-on-write behavior without mutating cached storage; broader PreparedMessages or renderer redesign is forbidden."
+          - "If these constraints cannot be met surgically, all runtime candidate edits from T013 through T016 are removed and the no-change reason is recorded."
+      - id: "T017"
+        title: "Run the complete focused candidate regression suite from Cargo.toml"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "Cargo.toml"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Exact focused tests from T003, T005, and T009 through T011 pass for hit/miss parity, every key dimension, invalidation, replacement, eviction, poison recovery, immutability, output ordering, caller ownership, and distinct concurrent sessions."
+          - "Existing public consumers compile unchanged and no test observes stale, mutable, cross-session, width-dependent, or display-mode-dependent regression."
+          - "If there is no runtime candidate, the checks confirm runtime files match baseline behavior and document that candidate comparison is inapplicable rather than fabricating evidence."
+      - id: "T018"
+        title: "Measure the candidate and apply the accept-or-reject gates in specs/003-optimize-render-cache/decision.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "specs/003-optimize-render-cache/decision.md"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "For a viable candidate, the identical controlled matrix produces five isolated samples per required cell and the report calculates per-cell medians, both short/large hit CPU and allocated-volume gains, and worst miss/invalidation/wall-latency/allocated-volume/peak-memory regressions."
+          - "The candidate is accepted only when both representative hit workloads improve by at least 10%, every required regression is at most 3%, every cell is complete, representative TestBackend frames show the gain, and correctness failures are zero."
+          - "A synthetic-only, large-only, noisy, incomplete, or regressing candidate is rejected; all runtime ownership edits are removed and focused checks are rerun against unchanged runtime behavior."
+          - "If T012 rejected feasibility before a candidate existed, the report documents the ownership evidence, tested alternative, baseline measurements, and unchanged runtime outcome without claiming candidate measurements."
+
+  - number: 6
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Finalize the evidence trail and satisfy repository delivery gates without broadening scope"
+    tasks:
+      - id: "T019"
+        title: "Finalize requirement traceability and the optimization decision in specs/003-optimize-render-cache/decision.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/003-optimize-render-cache/decision.md"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "The report maps FR-001 through FR-012 and NFR-001 through NFR-004 to exact commands, report cells, focused tests, or an explicit evidence gap."
+          - "The final outcome is unambiguously accept or reject; reject leaves runtime behavior unchanged, while accept retains only the measured surgical candidate."
+          - "The report records tested revisions, environment, threshold calculations, correctness evidence, compatibility result, rejected alternatives, and any skipped or deferred validation without overstating evidence."
+      - id: "T020"
+        title: "Run focused builds and isolated built-binary validation from Cargo.toml"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "Cargo.toml"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "Run exact-name focused tests first, then cargo fmt --check, relevant jcode-tui-messages and jcode-tui checks/tests, and the dev-bins tui_bench build using the current stable toolchain; all changed-surface checks pass."
+          - "Run the newly built tui_bench TestBackend render-cache mode in an isolated process and record the resolved executable, revision, commands, and results; compilation alone is not behavioral evidence."
+          - "Rust-heavy commands remain serialized under the coordinator release, and resource or pre-existing failures are isolated rather than hidden or rebaselined."
+      - id: "T021"
+        title: "Run repository delivery guardrails and scoped-diff review with scripts/check_guardrails.sh"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "scripts/check_guardrails.sh passes, or each failure is proven pre-existing and outside the changed surface; no formatting, warning, clippy, lockfile, dependency, code-size, test-size, panic, swallowed-error, wildcard-reexport, frame-budget, or unused-dependency ratchet is worsened or rebaselined."
+          - "The final diff is limited to approved benchmark/report artifacts, behavior-neutral instrumentation, focused tests, and—only if all gates pass—the cache plus directly required TUI consumers."
+          - "There is no unsafe code, new dependency, public breaking change, broad Arc conversion, renderer redesign, cache-key/invalidation/bound change, unrelated cleanup, or disturbance of unrelated dirty files."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-003", "US-002"]
+    - story_id: "US-003"
+      depends_on: ["US-001"]
+      blocks: ["US-002"]
+    - story_id: "US-002"
+      depends_on: ["US-001", "US-003"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: []
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T003", "T005"]
+        rationale: "Cache hook tests and benchmark output-contract tests touch different files after the same coordinator release gate."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T009", "T010", "T011"]
+        rationale: "Cache-state, preparation-unit, and TUI integration regression contracts occupy separate test surfaces and share only the completed unchanged baseline."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Benchmark contract, behavior-neutral harness, and complete unchanged baseline for an evidence-backed go/no-go decision"
+    validation: "Validate benchmark-design.md against FR-002 through FR-005, run focused harness tests after coordinator release, and verify baseline.yaml contains five complete comparable samples for every approved cell."
+  incremental_delivery:
+    - milestone: "Execution Contract Ready"
+      phases: [1]
+      deliverable: "A reproducible matrix, metric schema, threshold formula, unchanged revision, and explicit coordinator gate with no Rust runtime changes."
+    - milestone: "Foundation Ready"
+      phases: [1, 2]
+      deliverable: "Behavior-neutral cache instrumentation and a deterministic TestBackend render-cache benchmark capable of emitting every required metric."
+    - milestone: "MVP Complete"
+      phases: [1, 2, 3]
+      deliverable: "A complete repeatable baseline that determines whether candidate work may proceed."
+    - milestone: "Correctness Gate Ready"
+      phases: [1, 2, 3, 4]
+      deliverable: "Baseline-passing tests lock cache identity, lifecycle, immutability, rendering parity, and session isolation before candidate code."
+    - milestone: "Investigation Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Either a measured compatible optimization passing every threshold and delivery gate, or a documented rejection with unchanged runtime behavior."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-09T03:39:46Z"
+  artifact_type: "tasks"

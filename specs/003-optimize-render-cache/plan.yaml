@@ -1,0 +1,347 @@
+plan:
+  branch: "agent/jcode-g25-render-cache"
+  created: "2026-08-08"
+  spec_path: "specs/003-optimize-render-cache/spec.yaml"
+
+summary: |
+  Establish a controlled, baseline-first benchmark for the existing message render
+  cache before changing runtime ownership. Reuse the opt-in tui_bench TestBackend,
+  existing render functions, and existing jemalloc/process-memory instrumentation so
+  short and large hit, miss, invalidation, width, display-mode, bounded-policy, and
+  concurrent-reader workloads are measured through representative caller paths rather
+  than only through a synthetic cache lookup.
+
+  After coordinator release for serialized Rust-heavy work, compare the unchanged
+  baseline with one narrow immutable shared-view or ownership-preserving prototype.
+  Preserve the current Vec-returning public API as a compatibility adapter and change
+  direct internal callers only if both short and large representative hit workloads
+  improve by at least 10% while every miss, invalidation, latency, and memory result
+  stays within 3% and all correctness checks remain exact. If the caller ownership
+  boundary forces equivalent cloning or any gate fails, remove the prototype, leave
+  runtime behavior unchanged, and publish the rejection evidence.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "None; Ratatui terminal rendering with the existing TestBackend benchmark path"
+  primary_dependencies:
+    - name: "ratatui"
+      version: "0.30"
+      purpose: "Defines Line and Span render data and provides the TestBackend used by representative frame workloads."
+    - name: "jcode-tui-messages"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns MessageCacheKey, MessageCacheState, MessageCacheContext, and the public Vec-returning cache function."
+    - name: "jcode-config-types"
+      version: "workspace path dependency (0.1.0)"
+      purpose: "Owns the existing DiffDisplayMode and DiagramDisplayMode cache-key contracts."
+    - name: "tikv-jemallocator and tikv-jemalloc-ctl"
+      version: "existing optional workspace dependencies (0.6)"
+      purpose: "Provide allocator statistics for allocation count, allocated volume, active/resident memory, and retained-memory comparison without adding a dependency."
+  storage: "One process-global OnceLock<Mutex<MessageCacheState>> containing at most 2048 immutable Arc-backed render entries; benchmark reports are repository artifacts, not runtime persistence."
+  testing:
+    framework: "Rust built-in test harness plus the existing opt-in tui_bench binary"
+    approach: "Add deterministic cache-state and caller parity tests; after coordinator release run five isolated comparable samples per benchmark cell, focused package tests/checks, a built-binary TestBackend workload, and repository guardrails."
+  target_platform: "Runtime behavior remains portable across Jcode-supported Linux, macOS, and Windows builds; performance evidence is collected on the assigned Linux coordinator host."
+  project_type: "cli"
+  performance_goals: "At least 10% lower median CPU time and allocated volume for both representative short and large cache-hit workloads across five comparable samples, with no required miss, invalidation, wall-latency, allocated-volume, or peak-memory median regression above 3%."
+  constraints:
+    - "Capture and retain the unchanged baseline before creating or measuring any runtime candidate."
+    - "Do not run Rust-heavy benchmarks, tests, builds, or implementation until the coordinator explicitly releases serialized execution."
+    - "Keep runtime ownership in crates/jcode-tui-messages/src/cache.rs and limit caller changes to the existing jcode-tui cache adapter and directly consuming preparation or viewport paths."
+    - "Preserve the complete key, width, diff-mode, diagram-mode, invalidation, bounded-policy, and poison-recovery behavior."
+    - "Keep returned cached data immutable and do not introduce unsafe aliasing, broad Arc conversion, renderer redesign, or new dependencies."
+    - "Preserve get_cached_message_lines and all existing public import paths and Vec-returning behavior."
+    - "Reject a candidate that only wins in a cache-local microbenchmark or whose caller conversion recreates the avoided clone."
+  scale_scope: "A bounded 2048-entry process-global message cache, representative 1 KiB and 64 KiB assistant/tool fixtures, widths 80 and 160, supported cache-relevant display modes, single-reader and concurrent-reader cases, and five isolated samples per matrix cell."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Limits the candidate to the message cache, its existing TUI adapter/direct consumers, focused tests, and benchmark/report artifacts; failed candidates are removed rather than expanded into renderer work."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Preserves the public Vec-returning function, cache key fields, display behavior, invalidation semantics, and default runtime behavior."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "N/A"
+      notes: "The feature adds no configuration field, environment override, default, or resolution path."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Keeps the cache contract in jcode-tui-messages and presentation adaptation in jcode-tui, with no dependency inversion or protocol, server, SDK, provider, or storage change."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Maps hit/miss parity, every key dimension, invalidation, bounded eviction, immutability, and concurrent isolation to focused cache and TUI preparation checks before broader validation."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Retains existing poisoned-lock recovery and introduces no external input, secret, telemetry, persistence, or silent fallback path."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Runs the plan artifact validator now and, only after coordinator release, exact tests, relevant package checks/build, and scripts/check_guardrails.sh; no Rust-heavy result is claimed by this plan."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Reuses the existing cache and tui_bench owners, adds no parallel cache or dependency, and treats the candidate as removable unless the complete matrix proves value."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Defines both valid terminal outcomes—an accepted measured improvement or an evidence-backed no-change decision—and retains the coordinator gate for costly Rust execution."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Requires before/after CPU, latency, allocation, and memory evidence from the actual benchmark binary and representative TestBackend rendering, not compilation or a cache-only synthetic result."
+
+research_findings:
+  decisions:
+    - topic: "Current clone and ownership boundary"
+      decision: "Treat MessageCacheState::get's Arc<Vec<Line>>::as_ref().clone() as the measured target, but do not assume an Arc return is useful until direct consumers demonstrate that they can preserve sharing without recreating the deep clone."
+      rationale: "The cache already stores Arc-backed vectors, while ui_prepare consumes owned Lines and sometimes changes alignment. A cheap Arc clone can become a false win if the caller immediately materializes another Vec."
+      alternatives_considered:
+        - "Return Arc<Vec<Line>> from the existing public function, which is a breaking API change and may only defer the same clone."
+        - "Arc-convert PreparedMessages or redesign the renderer, which exceeds the approved boundary."
+        - "Remove caching unconditionally, which ignores hit value and the baseline-first contract."
+    - topic: "Representative benchmark path"
+      decision: "Add a focused render-cache mode and benchmark-only cache reset/stat hooks to the existing dev-bins tui_bench/TestBackend path, while retaining a cache-local attribution workload."
+      rationale: "The real frame path covers rendering, preparation, line alignment, and consumption costs. Cache-local attribution identifies clone cost, but cannot by itself satisfy the general-purpose acceptance gate."
+      alternatives_considered:
+        - "Use Criterion or another new benchmark dependency, which violates the zero-dependency constraint."
+        - "Benchmark MessageCacheState::get alone, which would overstate gains that callers cannot retain."
+        - "Run an interactive shared-daemon session, which is less repeatable and would violate the current execution gate."
+    - topic: "Higher-level prepared-body cache interaction"
+      decision: "Report unchanged-body frames separately from frames that invalidate prepared-body state while retaining identical message cache keys."
+      rationale: "The existing PreparedMessages body cache can bypass message rendering entirely. Mixing those frames with message-cache hits would hide the target cost and make the result non-attributable."
+      alternatives_considered:
+        - "Disable the prepared-body cache for every sample, which creates an unrepresentative synthetic workload."
+        - "Ignore the prepared-body cache, which could make a message-cache candidate appear irrelevant or noisy without explaining why."
+    - topic: "Workload matrix and sampling"
+      decision: "Use deterministic 1 KiB and 64 KiB assistant/tool fixtures, widths 80 and 160, DiffDisplayMode Off/Inline/FullInline/File where applicable, DiagramDisplayMode None/Margin/Pinned where applicable, explicit cold miss/warm hit/invalidation/bounded-eviction cases, and 1/4 concurrent readers; run five isolated samples per cell after warmup."
+      rationale: "These dimensions exercise every current cache-key class while keeping the matrix bounded and separating ordinary from large messages, hits from misses, and single-session from concurrent use."
+      alternatives_considered:
+        - "Use only tui_bench defaults, which do not cover a large-message case or all key dimensions."
+        - "Exhaustively cross every enum and flag, which would add cost without representative value."
+        - "Use a saved private session as the sole fixture, which would reduce reproducibility and risk sensitive data in reports."
+    - topic: "CPU, allocation, and memory measurement"
+      decision: "Measure wall latency inside the harness, process CPU over the measured interval, jemalloc nmalloc and size-class volume deltas for allocation count/bytes, and existing process-memory allocated/active/resident/retained plus peak RSS; emit consistent machine-readable units."
+      rationale: "The repository already carries optional jemalloc statistics and Linux process-memory snapshots. Jemalloc requires an epoch refresh before reading cached statistics, and its merged small/large nmalloc counters provide allocation counts without adding a profiler dependency."
+      alternatives_considered:
+        - "Install heaptrack, Valgrind, perf, or hyperfine, none of which is currently available on the assigned host and all of which would add an external prerequisite."
+        - "Infer allocations from Vec length, which is not an allocation count or allocated-volume measurement."
+        - "Report wall time alone, which fails the specification."
+    - topic: "Candidate and compatibility strategy"
+      decision: "Prototype at most one internal immutable shared-view or owned-or-shared result type, keep get_cached_message_lines as a Vec-returning compatibility adapter, and migrate only direct internal callers that can consume the view without equivalent cloning."
+      rationale: "This makes public compatibility explicit, bounds the diff, and provides an early rejection point if current consumers fundamentally require owned mutable lines."
+      alternatives_considered:
+        - "Change the existing public signature, which violates FR-010."
+        - "Introduce unsafe borrowing from the global cache, which violates immutability and aliasing constraints."
+        - "Generalize cache storage or add a new caching framework, which is unnecessary and out of scope."
+    - topic: "Acceptance and no-change decision"
+      decision: "Apply the 10% hit-improvement and 3% regression thresholds to medians from the same five-sample matrix, require zero correctness failures, and remove all runtime candidate code if any gate fails."
+      rationale: "The feature is an investigation, so a documented rejection with unchanged runtime behavior is a complete and safer outcome than landing a narrow microbenchmark win."
+      alternatives_considered:
+        - "Accept a large-message-only win, which fails the general-purpose requirement."
+        - "Average away a regressing cell, which violates the worst-cell regression budget."
+
+data_model:
+  entities:
+    - name: "RenderCacheKey"
+      description: "The complete identity of one cached message rendering."
+      fields:
+        - name: "geometry_and_modes"
+          type: "width: u16, diff_mode: DiffDisplayMode, diagram_mode: DiagramDisplayMode, centered: bool, mermaid_aspect_bucket: Option<u16>"
+          description: "Layout and display inputs that can change rendered output."
+          constraints: "Existing equality and hash semantics remain exact."
+        - name: "message_identity"
+          type: "message_hash: u64, content_len: usize"
+          description: "Stable message identity and collision guard used by the current cache."
+          constraints: "Derived through DisplayMessage::stable_cache_hash and unchanged by this feature."
+        - name: "runtime_flags"
+          type: "mermaid_epoch: u64, show_agentgrep_output: bool, tool_call_details: bool"
+          description: "Runtime-sensitive render inputs and invalidation epoch."
+          constraints: "Every field remains part of key equality and hashing."
+      relationships:
+        - target: "RenderCacheEntry"
+          type: "one-to-one"
+          description: "Each live key identifies at most one immutable cached rendering."
+    - name: "RenderCacheEntry"
+      description: "An immutable ordered collection of rendered Ratatui lines held by the bounded process-global cache."
+      fields:
+        - name: "lines"
+          type: "Arc<Vec<Line<'static>>> or evidence-approved immutable equivalent"
+          description: "Rendered content and order returned on a cache hit."
+          constraints: "Callers cannot mutate cached storage through aliases; observable output is identical to a fresh render."
+        - name: "recency_position"
+          type: "VecDeque position"
+          description: "Insertion-order position used by the current bounded policy."
+          constraints: "At most 2048 live entries; replacement does not duplicate order entries."
+      relationships:
+        - target: "RenderCacheKey"
+          type: "one-to-one"
+          description: "Stored under exactly one complete render key."
+        - target: "BenchmarkWorkload"
+          type: "one-to-many"
+          description: "The same entry shape is exercised by hit, invalidation, eviction, and reader workloads."
+    - name: "BenchmarkWorkload"
+      description: "One controlled matrix cell used for baseline and candidate comparison."
+      fields:
+        - name: "scenario"
+          type: "enum"
+          description: "Hit, miss, invalidation, unchanged-body control, bounded eviction, or concurrent readers."
+          constraints: "Hit and miss cells exist for both short and large fixtures."
+        - name: "fixture"
+          type: "message kind and byte size"
+          description: "Deterministic assistant or tool content at approximately 1 KiB or 64 KiB."
+          constraints: "Contains no session, credential, or personal data."
+        - name: "render_inputs"
+          type: "width, diff mode, diagram mode, reader count, session identity"
+          description: "Representative cache-key and isolation dimensions."
+          constraints: "Baseline and candidate use identical values and machine state."
+      relationships:
+        - target: "MeasurementSample"
+          type: "one-to-many"
+          description: "Each workload produces five isolated comparable samples per revision."
+    - name: "MeasurementSample"
+      description: "Machine-readable evidence from one isolated benchmark process."
+      fields:
+        - name: "timing"
+          type: "cpu_ns: u64, wall_ns: u64"
+          description: "Process CPU and elapsed wall latency for the measured interval."
+          constraints: "Warmup is excluded and units are identical for baseline and candidate."
+        - name: "allocations"
+          type: "count: u64, allocated_bytes: u64"
+          description: "Jemalloc small and large allocation count and size-class volume deltas."
+          constraints: "Allocator statistics are refreshed before both boundary snapshots."
+        - name: "memory"
+          type: "allocated_bytes, active_bytes, resident_bytes, retained_bytes, peak_rss_bytes"
+          description: "Live allocator and process memory impact."
+          constraints: "Unavailable fields are an incomplete cell, not a passing result."
+      relationships:
+        - target: "OptimizationDecision"
+          type: "many-to-one"
+          description: "All required samples contribute to the final threshold decision."
+    - name: "OptimizationDecision"
+      description: "The evidence-backed accept or reject outcome for the runtime candidate."
+      fields:
+        - name: "performance_result"
+          type: "per-cell median deltas"
+          description: "Hit improvements and worst miss/invalidation/latency/memory regressions."
+          constraints: "Both short and large hits improve by at least 10%; no required regression exceeds 3%."
+        - name: "correctness_result"
+          type: "parity and isolation observations"
+          description: "Output, key, invalidation, immutability, bound, and cross-session evidence."
+          constraints: "Zero failures or stale/mutable/cross-session observations."
+        - name: "outcome"
+          type: "accept | reject"
+          description: "Whether the runtime prototype is retained."
+          constraints: "Reject removes runtime candidate code and preserves the baseline implementation."
+      relationships:
+        - target: "MeasurementSample"
+          type: "one-to-many"
+          description: "Consumes the complete baseline and candidate evidence set."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/003-optimize-render-cache/spec.yaml"
+      description: "Behavioral requirements, thresholds, constraints, and accepted no-change outcome."
+    - path: "specs/003-optimize-render-cache/plan.yaml"
+      description: "Architecture, benchmark design, conditional implementation sequence, and constitution gates."
+    - path: "specs/003-optimize-render-cache/benchmark-design.md"
+      description: "Pre-execution workload matrix, fixture definitions, environment controls, commands, metric units, and report schema."
+    - path: "specs/003-optimize-render-cache/baseline.yaml"
+      description: "Dated unchanged-revision measurements and environment metadata captured before any candidate."
+    - path: "specs/003-optimize-render-cache/decision.md"
+      description: "Baseline/candidate comparison, threshold evaluation, correctness evidence, and accept-or-reject rationale."
+  source_code:
+    - path: "crates/jcode-tui-messages/src/cache.rs"
+      description: "Current bounded cache, deterministic state tests, benchmark-only reset/stat access, and the sole conditional ownership/view prototype."
+    - path: "crates/jcode-tui-messages/src/lib.rs"
+      description: "Preserves the existing public Vec-returning export and exposes only narrowly required compatibility or dev-benchmark symbols."
+    - path: "crates/jcode-tui/src/tui/ui_messages_cache.rs"
+      description: "Existing presentation-layer adapter and the preferred boundary for an internal shared-view result."
+    - path: "crates/jcode-tui/src/tui/ui_prepare.rs"
+      description: "Direct consumer updated only where evidence shows shared or ownership-preserving consumption avoids equivalent cloning."
+    - path: "crates/jcode-tui/src/tui/ui_viewport.rs"
+      description: "Pinned-todo direct consumer updated only if required by the approved internal adapter."
+    - path: "src/bin/tui_bench.rs"
+      description: "Existing dev-bins TestBackend harness extended with bounded render-cache scenarios and machine-readable timing/cache metrics."
+  tests:
+    - path: "crates/jcode-tui-messages/src/cache.rs"
+      description: "Focused hit/miss, complete-key, invalidation, replacement, 2048-entry eviction, immutable-reader, poison-recovery, and concurrent-reader tests."
+    - path: "crates/jcode-tui/src/tui/ui_prepare/tests.rs"
+      description: "Cached-versus-fresh parity and caller ownership tests for prepared messages."
+    - path: "crates/jcode-tui/src/tui/ui_tests/prepare.rs"
+      description: "Representative width, display-mode, body-cache invalidation, output ordering, and distinct-session preparation checks."
+
+implementation_phases:
+  - phase: 1
+    name: "Benchmark contract and execution gate"
+    goal: "Finish all allowed non-Rust design work and make the later baseline reproducible before requesting coordinator release."
+    deliverables:
+      - "Write benchmark-design.md with the bounded workload matrix, deterministic fixtures, five-sample method, environment controls, units, baseline/candidate report schema, and exact acceptance formula."
+      - "Record the unchanged revision and verify that every required metric has a collection method; do not run Rust-heavy commands or modify runtime Rust."
+      - "Obtain explicit coordinator release before beginning Phase 2."
+  - phase: 2
+    name: "Harness and unchanged baseline"
+    goal: "Capture complete attributable evidence from the unchanged cache before any runtime candidate exists."
+    dependencies:
+      - "Phase 1"
+      - "Explicit coordinator release for serialized Rust-heavy execution"
+    deliverables:
+      - "Add only benchmark/test instrumentation needed to reset and classify message-cache and prepared-body-cache hits without changing production behavior."
+      - "Extend tui_bench with short/large hit, miss, invalidation, width, display-mode, bounded-eviction, and 1/4-reader workloads plus CPU, wall, allocation, and memory output."
+      - "Run five isolated samples per required baseline cell against the unchanged cache implementation and write baseline.yaml before creating a candidate."
+  - phase: 3
+    name: "Conditional ownership prototype"
+    goal: "Determine whether one narrow immutable view can remove real caller-visible clone cost while preserving all contracts."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "First prove the proposed view can reach direct TUI consumers without equivalent Vec/Line cloning or broader PreparedMessages/renderer redesign; reject immediately if it cannot."
+      - "If viable, add one internal immutable shared-view or owned-or-shared path while retaining get_cached_message_lines as an unchanged Vec-returning compatibility adapter."
+      - "Add focused parity, key, invalidation, eviction, immutability, concurrent-reader, and distinct-session tests before candidate measurement."
+  - phase: 4
+    name: "Comparison, decision, and delivery"
+    goal: "Apply the complete evidence gates and finish with either a validated surgical optimization or an unchanged runtime."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Run the identical five-sample candidate matrix and calculate per-cell medians, both required hit gains, and the worst miss/invalidation/latency/memory regression."
+      - "Accept only if both hit gains are at least 10%, every regression is at most 3%, all required cells are complete, and correctness failures are zero; otherwise remove all runtime candidate edits."
+      - "Write decision.md, run exact focused tests first, then relevant package checks/build and scripts/check_guardrails.sh, and record commands/results without claiming unavailable or deferred evidence."
+
+risks:
+  - id: "RISK-001"
+    risk: "An Arc-return microbenchmark looks faster while direct TUI consumers recreate the deep clone to own or align Lines."
+    likelihood: "high"
+    impact: "high"
+    mitigation: "Require an end-to-end TestBackend gain and reject before implementation if the ownership proof shows equivalent materialization."
+  - id: "RISK-002"
+    risk: "The higher-level PreparedMessages body cache masks message-cache behavior and produces noisy or irrelevant results."
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Separate unchanged-body controls from prepared-body invalidation with stable message keys and report cache classification per cell."
+  - id: "RISK-003"
+    risk: "Allocator retention or process noise makes a reduction in cloned bytes appear as no gain or a memory regression."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Use isolated processes, fixed allocator settings, warmup exclusion, five samples, complete allocator/RSS fields, and the conservative reject-on-uncertainty rule."
+  - id: "RISK-004"
+    risk: "A process-global cache test leaks state across cases or mistakes concurrency for cross-session isolation."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Use local MessageCacheState for deterministic unit tests, explicit benchmark-only resets for process-global scenarios, distinct fixture identities, and serialized stateful cases."
+  - id: "RISK-005"
+    risk: "Benchmark additions to the large tui_bench or ui_prepare surfaces worsen repository size ratchets."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Keep benchmark logic mode-specific and focused, extract only directly required benchmark code if a touched-file ratchet requires it, and never rebaseline unrelated growth."
+
+open_questions:
+  - question: "When will the coordinator release serialized Rust-heavy benchmark and test execution for this worktree?"
+    context: "The spec and Bead explicitly permit only planning and benchmark-design artifacts until unrelated Cargo work is idle and the coordinator releases execution."
+    proposed_resolution: "Generate tasks now with a hard phase gate; complete Phase 1 only, then require a dated Bead comment granting release before any Phase 2 Cargo, Rust benchmark, build, test, or runtime command."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-09T03:30:10Z"
+  artifact_type: "plan"
