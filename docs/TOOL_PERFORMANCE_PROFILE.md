@@ -236,7 +236,7 @@ The optimized indexed reads were 99.4% lower wall time and 99.5% lower reported 
 
 A fresh private daemon using the same root binary also passed the public-path checks. Read output was stable across repeated near-tail calls, a same-length mutation was observed immediately, and inventory output remained stable across repeated calls. Inventory create, rename, delete, `max_files`, glob filtering, and four concurrent callers all returned the expected results. A persistent-hook daemon produced exactly five valid `post_tool` records for five reads with matching session IDs, tool names, statuses, and payloads.
 
-A second fresh private-daemon matrix exercised the remaining low-cost public edge paths against the same `faa9860a1` binary. Read passed near-tail pagination, same-length mutation, truncation, inode replacement, CRLF, and invalid-UTF-8 fixtures. Inventory passed visible and nested results, `.gitignore` exclusion, sensitive `.env` exclusion, recursive `**/*.rs` filtering, and `max_files=1`. The daemon cleaned up all temporary fixtures and no tracked files changed. This closes those specific public edge observations, but it does not establish cold-first timing, persistent-worker CPU attribution outside parent `RUSAGE_CHILDREN`, read-index eviction, or read-side concurrent contention behavior.
+A second fresh private-daemon matrix exercised the remaining low-cost public edge paths against the same `faa9860a1` binary. Read passed near-tail pagination, same-length mutation, truncation, inode replacement, CRLF, and invalid-UTF-8 fixtures. Inventory passed visible and nested results, `.gitignore` exclusion, sensitive `.env` exclusion, recursive `**/*.rs` filtering, and `max_files=1`. The daemon cleaned up all temporary fixtures and no tracked files changed. This closes those specific public edge observations; the subsequent hypothesis probe below covers the cold-first, eviction-sequence, worker-accounting, and read-concurrency cases that were not part of this matrix.
 
 A third fresh private-daemon probe exercised those hypotheses directly against the same root binary:
 
@@ -247,7 +247,44 @@ A third fresh private-daemon probe exercised those hypotheses directly against t
 - During the same three-cycle cache probe, daemon `VmRSS` and `VmHWM` were 89,340 KiB before the fill and 98,540 KiB after it, a 9,200 KiB process high-water delta. This confirms bounded process growth under the exercised workload, but does not attribute every byte to the line index because runtime initialization and allocator state are included.
 - A controlled comparison ran 50 identical bounded-hash observer events through separate exact-binary daemons. Ordinary hooks measured 0.198859 s wall and 2.604675 s summed child CPU; persistent hooks measured 0.021193 s wall and 0.190 s worker CPU. Both delivered 50 valid payloads. The controlled hook workload demonstrates the accounting and dispatch difference, but is not a production-hook workload benchmark.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a paired cold baseline and no-regression gate, memory attribution under cache fill, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+A paired public baseline was then run with the same probe, fixtures, debug-socket
+protocol, 64-file fill sequence, and eight-way read concurrency. The baseline was
+the parent source commit `4ac6a7355`, built in an isolated worktree. That historical
+source required three compile-only compatibility edits for the current Rust
+compiler: explicit `String` types for hook envelope keys and two local copies of
+the inventory usage counter to satisfy newer borrow checking. No benchmark or
+runtime behavior was changed by those edits, but this is therefore a
+compatibility-patched historical baseline rather than a byte-for-byte rebuild.
+
+| Public daemon probe | Historical baseline | Optimized binary | Observation |
+|---|---:|---:|---|
+| First near-tail read | 2.104 ms | 2.255 ms | Single cold samples were comparable; this is not a no-regression confidence interval |
+| Five-call warm median | 0.864 ms | 0.434 ms | 49.8% lower optimized wall time |
+| 64-file fill median | 0.816 ms | 0.828 ms | Comparable traversal cost |
+| First reread after fill | 1.280/0.677/0.707 ms | 0.747/0.797/0.716 ms | Exact output parity in all cycles |
+| Eight concurrent callers | Passed | Passed | Byte-for-byte parity with serial baselines |
+| Process VmRSS/VmHWM before to after fill | 88,308 to 90,300 KiB | 88,428 to 97,876 KiB | 1,992 versus 9,448 KiB process delta; allocator/runtime attribution remains open |
+
+Both binaries also delivered 100 valid persistent-hook envelopes without drops or
+duplicates. The historical and optimized hook batches measured 0.091123 s and
+0.086211 s wall time, with `/proc` worker CPU deltas of 0.400 s and 0.410 s
+respectively. The identical 50-event bounded-hash comparison likewise measured
+historical ordinary/persistent wall times of 0.199259/0.020215 s and optimized
+times of 0.198859/0.021193 s. The parent already contained a persistent-hook path,
+so these paired hook numbers validate public compatibility and accounting, not a
+claim that the integrated observer redesign alone produced that difference.
+
+The same public protocol was exercised for `agentgrep find` against an
+workspace-scoped eight-Rust-file fixture. Historical first/warm-median wall times
+were 7.526/0.646 ms; optimized times were 10.029/0.969 ms. Repeated output,
+`**/*.rs` filtering, and hashes were identical, and create, rename, and delete
+transitions all returned the expected changed/changed/restored states in both
+binaries. The small fixture is dominated by daemon and ranking overhead, so it
+does not demonstrate a warm latency gain. It does establish public output parity
+and freshness behavior while leaving the larger representative inventory gain
+and cold-regression gate open.
+
+The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a repeated paired cold baseline and no-regression confidence gate, representative inventory warm gain, memory attribution under cache fill, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
 
 ## Other opportunities
 
