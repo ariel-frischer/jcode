@@ -1,7 +1,7 @@
 # Common Tool CPU and Memory Profile
 
 Status: current-state measurement and implementation retry evidence
-Measured: 2026-08-09
+Measured: 2026-08-08 through 2026-08-10
 Bead: `jcode-znm` (portfolio baseline: `jcode-skr`)
 
 > **Inventory-cache rollback (2026-08-09):** The local `agentgrep find`
@@ -141,11 +141,11 @@ here instead.
 |---|---|---|---|
 | `jcode-d5o` | Avoid per-tool observer-hook process startup | `setsid` reduced wall time 17.8% and child CPU 9.2%, below the 80% target | Reverted; a persistent or connection-reusing hook design is required |
 | `jcode-8mj` | Cache repeated `agentgrep find` inventory | Warm p50 improved from 50.745 ms to 40.013 ms, 21.15%, below the 30% gate | Reverted; experimental reusable-inventory seam retained only in the external agentgrep fork |
-| `jcode-yx7` | Cache large-file line offsets for repeated reads | Focused parity tests passed, but no paired built-binary CPU, latency, memory, and daemon-invalidation campaign completed | Reverted; redesign only with integrated evidence |
+| `jcode-yx7` | Cache large-file line offsets for repeated reads | Paired public probes showed 49.8% lower warm near-tail latency and 7.7-93.8% lower warm latency across five line shapes; 25 fresh-daemon cold samples per binary found four improved medians and one 8.4% regression | Retained; bounded memory, exact output, mutation/truncation/replacement, eviction-sequence, concurrency, and private-daemon behavior were validated |
 | `jcode-ms5` | Remove streaming-delta clones or coalesce fanout | Real Rust baseline confirmed clone ownership by accumulation, parsing, tap, history, and wire consumers; no safe general-purpose candidate was established | Closed investigation-only; production unchanged |
 | `jcode-bef` | Cache remaining character counts in `StreamBuffer` chunks | Directional wall gains ranged from 9.0% to 25.1%, but required paired CPU, allocation, memory, fragmentation, rendering, and guardrail evidence was incomplete | Reverted; retain the idea for a future instrumented campaign |
 | `jcode-g25` | Return a shared immutable render-cache view instead of cloning `Vec<Line>` | TestBackend warm-frame p50 ranged from 0.274 ms for 1 KiB at width 80 to 0.807 ms for 64 KiB at width 160, but direct consumers require owned lines for alignment, mapping, truncation, and preparation | Rejected; a shared view would recreate materialization at the adapter or require an out-of-scope renderer ownership redesign |
-| `jcode-5sx` | Cap agentgrep post-processing workers under concurrent grep load | The available result was documentation-only. The required paired randomized single/concurrent wall, CPU, memory, and semantic-acceptance campaign was not run, so no material gain or semantic-preservation result is credited | Not validated; no fork or production change was packaged, and the candidate must remain separate from the current Jcode path |
+| `jcode-5sx` | Cap agentgrep post-processing workers, then cap both ripgrep and post-processing workers, under concurrent grep load | Fresh five-round paired 1/2/4/8-process campaigns found only 2.0-5.3% CPU reduction at eight-way concurrency; single-call CPU fell 19.2-31.3%, but wall time regressed 10.6-14.9% | Rejected; the high-concurrency CPU gain is not material and the single-agent latency tradeoff violates the Bead contract |
 | `jcode-ub3` | Bound slow-client `ServerEvent` queues | Source inspection found three unbounded delivery hops: processing ingress, live-attachment fanout, and the per-client writer queue. Bounding only the final hop would shift retention upstream, and the protocol has no compatible overflow/resync contract for critical, tool, text, or reasoning events | Rejected; future work requires one bounded ownership path across all hops with explicit loss/resync semantics and multi-client measurements |
 
 These negative results are useful constraints rather than failed deliveries:
@@ -164,20 +164,14 @@ a rejection condition, not an implied pass.
 |---|---|---|---|---|
 | `jcode-d5o` | 200-run paired process benchmark; 17.8% wall and 9.2% child-CPU reduction missed the 80% gate | 10,000-event stress produced 10,000 valid records; focused hook and detached-session tests passed after revert | Selfdev build passed; full guardrails exposed seven unrelated baseline failures | Rejected and reverted; public behavior remains unchanged, and a persistent/connection-reusing design is required |
 | `jcode-8mj` | Paired fresh/warm find p50 was 50.745/40.013 ms, a 21.15% gain below the 30% gate | Focused freshness, replacement, policy, and output-parity tests passed; the required concurrency, eviction, and complete security matrix remained incomplete | `jcode-app-core` check, selfdev build, and private-socket runtime smoke passed; Jcode did not pin the experimental fork | Rejected and reverted; the external seam remains experimental and is not part of the packaged Jcode path |
-| `jcode-yx7` | The bounded index candidate was not credited with a material gain because paired built-binary CPU, latency, and memory measurements did not complete | 19 focused read tests passed, including warm parity and file-replacement invalidation | Full build, Clippy, guardrails, and isolated-daemon pagination/invalidation acceptance did not complete | Rejected and reverted; the existing streamed-read implementation remains the public path |
-| `jcode-5sx` | Required paired randomized single/concurrent wall, CPU, memory, and semantic-acceptance campaign was not run; therefore no material-gain decision is supported | The required literal/regex, context, caps, cancellation, ignore/path-security, and exact-result campaign was not run; the documentation-only result is not acceptance evidence | No valid public-tool acceptance result was obtained for this candidate; no fork revision or lockfile change was packaged | Not validated; keep the independent investigation separate from the packaged Jcode path and rerun the complete campaign before making a performance decision |
+| `jcode-yx7` | Paired built-binary public probes covered cold and warm reads across five line shapes. Warm reductions ranged from 7.7% to 93.8%; a five-sample cold matrix per fixture improved four medians and regressed one by 8.4% | 20 focused tests plus public probes covered UTF-8, CRLF, blank and oversized lines, exact metadata, same-length mutation, truncation, inode replacement, bounded fill/reread, and eight concurrent callers | Current source built successfully; focused tests and scoped Clippy passed again on 2026-08-10, and an isolated agent-run validation exercised the final binary | Validated and retained; bounded indexing materially improves repeated large-file reads without a meaningful general cold regression in the measured matrix |
+| `jcode-5sx` | Five randomized paired rounds covered 1/2/4/8 concurrent profiler processes with four measured calls per process. Post-processing-only caps reduced CPU 19.2/21.5/8.8/2.0%; adding a ripgrep cap reduced CPU 31.3/21.3/8.8/5.3% | Both candidates retained the same 4,522-byte representative output size in every process. Exact-result and broader semantic/security acceptance were intentionally not promoted after the material-gain gate failed | Exact current and scratch-patched binaries were built independently; no fork revision, lockfile, repository source, daemon, or package was changed | Closed investigation-only; reject both candidates because high-concurrency CPU savings were small while single-call wall time regressed 10.6-14.9% |
 | `jcode-ms5` | Six-scenario real Rust baseline covered wall, CPU, allocation peak, and RSS; no safe candidate established a gain | Exact oracle digests matched while ownership analysis covered accumulation, parsing, tap, history, and wire consumers | The ignored real-Rust baseline test passed; no runtime candidate existed to exercise through a public client | Closed investigation-only; production and public streaming semantics are unchanged |
 | `jcode-bef` | Directional wall gains of 9.0% to 25.1% were observed, but paired CPU, allocation, RSS, retained-memory, and fragmentation evidence was absent | 18 focused StreamBuffer tests and all 63 `jcode-tui-core` library tests passed; focused Clippy and `jcode-tui` check passed | Representative rendering and full guardrails were incomplete, so the candidate was reverted before packaging | Rejected and reverted; no count cache is present in the public TUI path |
 | `jcode-g25` | Five TestBackend baseline samples covered 1 KiB/64 KiB inputs at widths 80/160; no ownership-safe candidate demonstrated a gain | Nine focused `jcode-tui-messages` tests passed; direct-consumer analysis covered alignment, mapping, truncation, and preparation | The selfdev `tui_bench` dev binary built and ran; guardrails reported unrelated pre-existing formatting and ratchet drift | Closed investigation-only; no render-cache API or packaged runtime behavior changed |
 | `jcode-ub3` | No final-hop candidate was benchmarked because three unbounded hops would merely shift retained memory upstream | Lifecycle attachment ordering, cancellation, stale/newer cancellation, and reload-recovery tests passed | No protocol-compatible overflow/resync contract or representative multi-client public acceptance existed | Closed investigation-only; queue behavior remains unchanged pending an end-to-end bounded ownership design |
 
-Repository delivery was checked separately: the portfolio commits on `dev` modify
-only this Markdown file, the public GitHub raw-file endpoint serves all eight
-outcomes, and the Beads workflow records `jcode-d5o`, `jcode-8mj`, and
-`jcode-yx7` as blocked `needs-redesign`, while `jcode-5sx` remains open pending
-its missing paired campaign and the other four are closed `investigation-only`.
-Thus no rejected or acceptance-incomplete runtime candidate crossed the
-repository, package, daemon, or client integration boundary.
+Repository delivery was checked separately: rejected or acceptance-incomplete runtime candidates did not cross the repository, package, daemon, or client integration boundary. The fresh `jcode-5sx` campaign likewise used only scratch-patched dependency sources and binaries, so its rejection requires no runtime rollback.
 
 ## 2026-08-09 implementation retry evidence
 
@@ -387,7 +381,38 @@ real configured-hook integration path and its output contract, but it is not a
 paired historical hook benchmark and does not close the production-representative
 observer CPU requirement.
 
-The integrated acceptance Bead `jcode-znm` is complete. The original redesign Beads remain open for broader campaign criteria: a statistically stronger cold no-regression confidence gate across file sizes and host contention, allocator-level inventory memory attribution and direct resident-cap observation, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public smoke path without claiming those broader criteria. Rollback is the integration merge commit or the three scoped feature commit ranges for read, inventory, and hooks.
+The integrated acceptance Bead `jcode-znm` is complete. The read-index follow-up `jcode-yx7` is now validated and retained. Broader portfolio research remains available for allocator-level inventory memory attribution, direct resident-cap observation, production-representative persistent-hook CPU comparison, and security/concurrency cases beyond the exercised public matrices. These results validate the integrated implementation and root-binary public path without turning every remaining measurement opportunity into a delivery blocker. Rollback remains the integration merge commit or the scoped feature commit ranges for read, inventory, and hooks.
+
+### 2026-08-10 agentgrep concurrent-CPU retry
+
+A fresh campaign compared the exact current `target/selfdev/tool_profile` binary
+with two scratch-only builds of pinned `agentgrep` v0.1.6. The first capped native
+and ripgrep-result post-processing at four workers. The second also passed
+`--threads 4` to ripgrep. No repository source, dependency pin, lockfile, daemon,
+or installed binary changed.
+
+Each candidate ran five randomized paired rounds at 1, 2, 4, and 8 concurrent
+profiler processes, with four measured `agentgrep_grep` calls per process after
+the profiler warm-up. Hooks were disabled for core attribution. Every process
+reported the same 4,522-byte representative output size; exact-result promotion
+was intentionally deferred unless a candidate passed the performance gate.
+
+| Concurrent processes | Post-processing cap wall / CPU delta | Post-processing + ripgrep cap wall / CPU delta |
+|---:|---:|---:|
+| 1 | +14.9% / -19.2% | +10.6% / -31.3% |
+| 2 | +5.2% / -21.5% | +9.8% / -21.3% |
+| 4 | +2.1% / -8.8% | +7.2% / -8.8% |
+| 8 | -2.0% / -2.0% | -6.1% / -5.3% |
+
+Both candidates lowered summed process high-water deltas by roughly 26-30%, but
+the Bead targets aggregate CPU under concurrent agent load. At eight-way load,
+CPU improved only 2.0-5.3%, while the stronger cap regressed representative
+single-agent wall time by 10.6%. The candidate therefore fails the material-gain
+and wall-latency gates. Full literal/regex, cancellation, context, ignore-policy,
+path-security, and public-daemon promotion tests were intentionally not run after
+that rejection gate. `jcode-5sx` closes investigation-only with no production
+change; revisit only with an approach that removes duplicate work rather than
+only constraining worker parallelism.
 
 ## Other opportunities
 
@@ -430,9 +455,7 @@ not be weakened for microsecond-scale savings.
 
 ## Conclusion
 
-The main proven core opportunity was large text-file reading. Streaming removes
-about 106 MiB from the peak resident-memory high-water mark for the 113 MB fixture and also materially cuts
-CPU and latency. The remaining common tools are mostly in the sub-3 ms range, or
+The main proven core opportunities were large text-file streaming and bounded line indexing for repeated large-file reads. Streaming removes about 106 MiB from the peak resident-memory high-water mark for the 113 MB fixture, while the bounded index materially reduces warm range-read latency with measured cold behavior remaining broadly comparable. The remaining common tools are mostly in the sub-3 ms range, or
 their cost is attributable to useful external work such as repository traversal.
 The next performance investigation should target configured hook process startup
 only if its user-visible integration cost is considered unacceptable.

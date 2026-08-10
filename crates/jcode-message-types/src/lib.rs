@@ -512,7 +512,8 @@ pub fn messages_with_dynamic_system_context(
         return messages.to_vec();
     };
 
-    let mut out = messages.to_vec();
+    let mut out = Vec::with_capacity(messages.len() + 1);
+    out.extend_from_slice(messages);
     let insert_at = out
         .iter()
         .rposition(is_fresh_user_text_message)
