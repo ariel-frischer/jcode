@@ -145,3 +145,141 @@ impl Tool for SessionTransitionTool {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct JcodeHomeGuard {
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl Drop for JcodeHomeGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous.take() {
+                crate::env::set_var("JCODE_HOME", previous);
+            } else {
+                crate::env::remove_var("JCODE_HOME");
+            }
+            crate::config::Config::invalidate_cache();
+        }
+    }
+
+    fn isolated_config(contents: &str) -> (tempfile::TempDir, JcodeHomeGuard) {
+        let directory = tempfile::TempDir::new().expect("temp jcode home");
+        let guard = JcodeHomeGuard {
+            previous: std::env::var_os("JCODE_HOME"),
+        };
+        crate::env::set_var("JCODE_HOME", directory.path());
+        let path = directory.path().join("config.toml");
+        std::fs::write(path, contents).expect("write config");
+        crate::config::Config::invalidate_cache();
+        (directory, guard)
+    }
+
+    fn context(session_id: String) -> ToolContext {
+        ToolContext {
+            session_id,
+            message_id: "message".to_string(),
+            tool_call_id: "tool-call".to_string(),
+            working_dir: None,
+            stdin_request_tx: None,
+            graceful_shutdown_signal: None,
+            execution_mode: super::super::ToolExecutionMode::Direct,
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn confirmation_gate_and_durable_context_are_applied_before_staging() {
+        let _environment = crate::storage::lock_test_env();
+        let (_directory, _home) = isolated_config(
+            "[handoff]\nagent_requires_confirmation = true\nauto_start = false\nmax_chain_transitions = 3\n",
+        );
+        let mut session = crate::session::Session::create(None, None);
+        session.save().expect("save source session");
+        let session_id = session.id.clone();
+        let tool = SessionTransitionTool::new();
+
+        let error = tool
+            .execute(
+                json!({"goal": "Continue validation"}),
+                context(session_id.clone()),
+            )
+            .await
+            .expect_err("confirmation must be required");
+        assert!(error.to_string().contains("confirmed=true"));
+        assert!(take_pending(&session_id).is_none());
+
+        tool.execute(
+            json!({
+                "goal": "Continue validation",
+                "bead_id": "jcode-ggj",
+                "relevant_files": ["docs/proposals/FRESH_SESSION_HANDOFF.md"],
+                "auto_start": true,
+                "confirmed": true
+            }),
+            context(session_id.clone()),
+        )
+        .await
+        .expect("confirmed transition should stage");
+
+        let pending = take_pending(&session_id).expect("staged transition");
+        let prompt = pending.prompt.expect("durable continuation prompt");
+        assert!(prompt.starts_with("Continue validation"));
+        assert!(prompt.contains("Bead `jcode-ggj`"));
+        assert!(prompt.contains("docs/proposals/FRESH_SESSION_HANDOFF.md"));
+        assert!(pending.auto_start);
+        assert_eq!(pending.max_chain_transitions, 3);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn disabled_agent_policy_rejects_without_staging() {
+        let _environment = crate::storage::lock_test_env();
+        let (_directory, _home) =
+            isolated_config("[handoff]\nenabled = true\nagent_enabled = false\n");
+        let mut session = crate::session::Session::create(None, None);
+        session.save().expect("save source session");
+        let session_id = session.id.clone();
+
+        let error = SessionTransitionTool::new()
+            .execute(json!({"prompt": "next"}), context(session_id.clone()))
+            .await
+            .expect_err("agent-disabled policy must reject");
+
+        assert!(error.to_string().contains("disabled"));
+        assert!(take_pending(&session_id).is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn oversized_handoff_inputs_are_rejected_without_staging() {
+        let _environment = crate::storage::lock_test_env();
+        let (_directory, _home) = isolated_config("[handoff]\n");
+        let mut session = crate::session::Session::create(None, None);
+        session.save().expect("save source session");
+        let session_id = session.id.clone();
+        let tool = SessionTransitionTool::new();
+
+        let paths = (0..33)
+            .map(|index| format!("path-{index}"))
+            .collect::<Vec<_>>();
+        let error = tool
+            .execute(
+                json!({"prompt": "next", "relevant_files": paths}),
+                context(session_id.clone()),
+            )
+            .await
+            .expect_err("too many relevant files must be rejected");
+        assert!(error.to_string().contains("32-path limit"));
+        assert!(take_pending(&session_id).is_none());
+
+        let error = tool
+            .execute(
+                json!({"prompt": "x".repeat(MAX_PROMPT_CHARS + 1)}),
+                context(session_id.clone()),
+            )
+            .await
+            .expect_err("oversized prompt must be rejected");
+        assert!(error.to_string().contains("32 KiB limit"));
+        assert!(take_pending(&session_id).is_none());
+    }
+}
