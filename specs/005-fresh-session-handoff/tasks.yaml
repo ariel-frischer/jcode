@@ -1,0 +1,240 @@
+tasks:
+  branch: "agent/jcode-ggj-fresh-session-handoff"
+  created: "2026-08-10"
+  spec_path: "specs/005-fresh-session-handoff/spec.yaml"
+  plan_path: "specs/005-fresh-session-handoff/plan.yaml"
+summary:
+  total_tasks: 18
+  total_phases: 5
+  parallel_opportunities: 0
+  estimated_complexity: "high"
+phases:
+  - number: 1
+    title: "Policy and lineage"
+    purpose: "Establish tested stable configuration, profile precedence, dynamic instructions, and clean-child metadata"
+    tasks:
+      - id: "T001"
+        title: "Write handoff config defaults, serde, precedence, and instruction tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-008"
+        file_path: "crates/jcode-base/src/config_tests/"
+        dependencies: []
+        acceptance_criteria:
+          - "Defaults enable manual and agent handoff, disable confirmation, enable auto-start, and set max_chain_transitions to 8."
+          - "Profile values override global values and disabled handoff does not read or append instruction files."
+          - "Inline instructions precede file instructions exactly once and unreadable enabled files fail visibly without printing content."
+      - id: "T002"
+        title: "Add global and session-profile handoff configuration records"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-008"
+        file_path: "crates/jcode-config-types/src/lib.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Global HandoffConfig uses safe built-in defaults and additive serde fields."
+          - "SessionProfileConfig exposes optional handoff overrides without changing omitted-profile behavior."
+      - id: "T003"
+        title: "Resolve effective handoff policy and compose prompt instructions"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-008"
+        file_path: "crates/jcode-base/src/config/session_profile.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "One resolver applies global then profile values and validates limits/file input."
+          - "Enabled policy instructions are appended to SessionPromptOverlay after normal profile instructions without editing AGENTS.md."
+      - id: "T004"
+        title: "Write clean child and lineage denylist tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-base/src/session_tests/"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Child preserves supported working directory/profile/model/reasoning/selfdev metadata."
+          - "Child has no messages, compaction, provider session ID, replay events, memory injections, or source transient state."
+          - "Handoff depth increments and stops at the effective maximum."
+      - id: "T005"
+        title: "Add persisted handoff lineage and clean child constructor"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-base/src/session.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Optional lineage fields deserialize legacy sessions."
+          - "The constructor copies an explicit operational allowlist and resets the forbidden denylist."
+  - number: 2
+    title: "Protocol and manual handoff"
+    purpose: "Create and activate a clean child from /handoff using the current TUI process"
+    tasks:
+      - id: "T006"
+        title: "Write handoff request/event protocol roundtrip tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-protocol/src/protocol_tests/"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Prompted, blank/new, auto_start, confirmation, Bead, files, reason, and idempotency fields roundtrip."
+          - "Old request/event payloads remain unchanged."
+      - id: "T007"
+        title: "Add manual handoff request and transition-ready event"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-protocol/src/wire.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Request and event are additive and bounded by server validation."
+      - id: "T008"
+        title: "Write server manual handoff creation tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Idle requests create one clean child and save non-empty startup content using existing startup-submission storage."
+          - "Busy, disabled, conflicting new+prompt, invalid, duplicate, and exhausted-chain requests fail visibly without extra children."
+      - id: "T009"
+        title: "Implement server-authoritative manual handoff creation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/client_actions.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Server creates and persists the child before emitting transition-ready."
+          - "new remains blank and handoff startup content contains no source transcript."
+      - id: "T010"
+        title: "Write /handoff parsing and in-place resume tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-006"
+        file_path: "crates/jcode-tui/src/tui/app/tests/"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "The command supports /handoff [prompt] and /handoff new with actionable usage errors."
+          - "Transition-ready schedules existing ResumeSession on the next idle tick and does not open another terminal."
+          - "auto_start=false or confirmation leaves an editable draft, while enabled non-empty startup auto-submits."
+      - id: "T011"
+        title: "Implement /handoff command and current-client activation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-006"
+        file_path: "crates/jcode-tui/src/tui/app/"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "Remote TUI sends the handoff request, presents lineage/status, and resumes in place."
+          - "Local mode creates a clean child and uses the closest existing safe session-switch path without altering /transfer."
+  - number: 3
+    title: "Agent self-handoff"
+    purpose: "Expose a default-enabled model tool that defers activation until the source turn is complete"
+    tasks:
+      - id: "T012"
+        title: "Write session_transition schema, validation, and idempotency tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/session_transition.rs"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "Schema exposes handoff/new, prompt, goal, bead_id, relevant_files, auto_start, reason, and idempotency_key."
+          - "Disabled agent policy removes/refuses the tool while manual handoff remains."
+          - "Repeated keys return one accepted transition and one pending record."
+      - id: "T013"
+        title: "Implement the model-callable session_transition tool"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/session_transition.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Tool returns an accepted transition ID without detaching or terminating the active turn."
+          - "Only one bounded pending transition exists per source session."
+      - id: "T014"
+        title: "Write deferred post-turn transition consumption tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "No child activates inside tool execution."
+          - "Successful source Done precedes transition-ready and failed/cancelled turns retain an actionable pending or failed state."
+      - id: "T015"
+        title: "Consume agent transitions after the durable source-turn boundary"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Post-turn code creates at most one child, emits transition-ready after terminal source events, and preserves retry identity."
+  - number: 4
+    title: "Recovery and bounded automation"
+    purpose: "Finish chain limits, Bead/file startup composition, confirmation, and failure diagnostics"
+    tasks:
+      - id: "T016"
+        title: "Add bounded startup composition and recovery coverage"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-007"
+        file_path: "crates/jcode-app-core/src/session_transition.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "Explicit prompt wins over goal, Bead/files are bounded orientation only, and generated text never copies the transcript."
+          - "Blank/new never submits an empty turn."
+          - "Chain refusal reports current position and effective maximum."
+  - number: 5
+    title: "Documentation and delivery validation"
+    purpose: "Polish, validate the built runtime, commit, and merge the approved feature"
+    tasks:
+      - id: "T017"
+        title: "Document handoff workflow, configuration, profiles, safety, and recovery"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "docs/proposals/FRESH_SESSION_HANDOFF.md"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Docs describe /handoff, session_transition, defaults, precedence, inline/file instructions, clean-child guarantees, and chain limits."
+          - "Canonical changelog records the user-visible feature."
+      - id: "T018"
+        title: "Run focused tests, fmt, Clippy, selfdev build, private-socket runtime, commit, and merge"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "Cargo.toml"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "Autospec artifacts validate."
+          - "Focused tests, cargo fmt check, affected-package Clippy, and selfdev TUI build pass."
+          - "A newly built binary demonstrates prompted and blank handoff on an isolated socket."
+          - "The worktree changes are committed and merged non-rewriting into dev."
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-10T07:15:00Z"
+  artifact_type: "tasks"

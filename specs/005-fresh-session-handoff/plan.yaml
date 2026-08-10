@@ -1,0 +1,256 @@
+plan:
+  branch: "agent/jcode-ggj-fresh-session-handoff"
+  created: "2026-08-10"
+  spec_path: "specs/005-fresh-session-handoff/spec.yaml"
+summary: |
+  Add a bounded fresh-session transition primitive instead of overloading fork,
+  transfer, compaction, schedule, or process restart. A global handoff policy and
+  optional session-profile overlay resolve once per session. Enabled policy text
+  is appended dynamically to the existing prompt overlay without editing
+  AGENTS.md. Manual `/handoff` requests and the `session_transition` model tool
+  both produce a clean child containing operational metadata and explicit startup
+  content, but no source messages, compaction, provider conversation identity, or
+  pending execution state.
+
+  The server remains authoritative for child creation. Manual remote requests are
+  accepted only at an idle boundary. Agent requests are durably staged by the
+  tool and consumed after the source turn's terminal event. A protocol event tells
+  the current TUI to use its existing in-place ResumeSession flow, after which the
+  existing startup-submission machinery either auto-submits or leaves an editable
+  draft. Transition lineage and a finite chain limit prevent runaway loops.
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "None"
+  primary_dependencies:
+    - name: "jcode-config-types"
+      version: "workspace"
+      purpose: "Owns serde-compatible global and session-profile handoff policy records."
+    - name: "jcode-base"
+      version: "workspace"
+      purpose: "Owns policy resolution, prompt overlays, session metadata, and persistence."
+    - name: "jcode-app-core"
+      version: "workspace"
+      purpose: "Owns the model tool, deferred transition queue, clean-child creation, and server lifecycle."
+    - name: "jcode-protocol"
+      version: "workspace"
+      purpose: "Carries manual handoff requests and transition-ready events."
+    - name: "jcode-tui"
+      version: "workspace"
+      purpose: "Owns `/handoff`, transition presentation, in-place resume, and startup submission."
+  storage: "Existing config.toml and session JSON/journal files plus a bounded per-session pending transition record"
+  testing:
+    framework: "Rust built-in test harness and existing protocol/server/TUI fixtures"
+    approach: "Tests first for policy resolution, clean-child denylist, tool validation, protocol roundtrips, deferred safe-boundary consumption, and TUI in-place resume"
+  target_platform: "Jcode-supported Linux, macOS, and Windows CLI/server builds"
+  project_type: "cli"
+  performance_goals: "Transition creation is local and bounded; the current TUI begins in-place resume within two seconds of the safe boundary"
+  constraints:
+    - "Do not mutate AGENTS.md or global instruction files."
+    - "Do not copy source messages, compaction, provider session IDs, replay events, pending tools, or approvals."
+    - "Manual handoff remains available when only agent invocation is disabled."
+    - "Use the existing profile resolver, prompt overlay, session persistence, ResumeSession, and startup-submission paths."
+    - "Default maximum chain length is eight."
+    - "Existing fork, transfer, compaction, schedule, resume, and restart behavior remains unchanged."
+  scale_scope: "One pending transition per source session and a maximum default lineage depth of eight"
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Adds one transition primitive and reuses existing lifecycle seams."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "New config and protocol fields are additive and serde-defaulted."
+    - name: "Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "Built-in defaults are overlaid by global config, then session profile, then explicit request options."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Stable types live below runtime orchestration and TUI presentation."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every new boundary has a focused unit or integration test."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Invalid actions, oversized input, disabled policy, unreadable files, and exhausted chains return actionable errors."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Requires focused tests, formatting, Clippy, selfdev build, isolated-socket runtime, docs, and changelog."
+research_findings:
+  decisions:
+    - topic: "Relationship to existing /transfer"
+      decision: "Keep /transfer unchanged because it intentionally carries compacted context and opens another terminal; implement /handoff as a clean child and in-place resume."
+      rationale: "The requested semantics require no conversation or compaction and a same-client continuation."
+      alternatives_considered:
+        - "Rename or change /transfer, which would break an existing workflow."
+        - "Treat handoff as compaction, which would not clear model context."
+    - topic: "Agent safe boundary"
+      decision: "The tool stages one pending transition and returns normally; server turn completion consumes it only after the source turn is persisted and emits a transition-ready event."
+      rationale: "A tool cannot safely detach or terminate its own active turn."
+      alternatives_considered:
+        - "Create and start the child inside tool execution, which risks concurrent source and child work."
+        - "Spawn a separate coordinator, which defeats the sequential self-handoff goal."
+    - topic: "Instruction ownership"
+      decision: "Resolve inline and file-backed handoff instructions into the existing session prompt overlay only while effective handoff is enabled."
+      rationale: "This is toggleable per config/profile and does not rewrite repository instruction files."
+      alternatives_considered:
+        - "Edit AGENTS.md automatically, which creates persistent project mutations."
+        - "Use a separate system prompt path, which would duplicate prompt ownership."
+    - topic: "Client transition"
+      decision: "Emit an additive protocol event and let the TUI call its existing ResumeSession path on the next idle tick."
+      rationale: "This preserves one client process and reuses tested history/startup synchronization."
+      alternatives_considered:
+        - "Open a second terminal like split/transfer."
+        - "Mutate TUI session state without server ResumeSession, which would desynchronize ownership."
+data_model:
+  entities:
+    - name: "HandoffPolicy"
+      description: "Effective per-session availability, startup, instruction, and chain settings."
+      fields:
+        - name: "enabled"
+          type: "bool"
+          description: "Controls manual and agent handoff availability."
+          constraints: "Defaults true."
+        - name: "agent_enabled"
+          type: "bool"
+          description: "Controls model tool exposure and execution."
+          constraints: "Defaults true and cannot override enabled=false."
+        - name: "agent_requires_confirmation"
+          type: "bool"
+          description: "Leaves agent-generated startup content editable when true."
+          constraints: "Defaults false."
+        - name: "auto_start"
+          type: "bool"
+          description: "Auto-submits non-empty startup content after child resume."
+          constraints: "Defaults true."
+        - name: "max_chain_transitions"
+          type: "usize"
+          description: "Maximum child lineage depth attributable to handoff."
+          constraints: "Defaults 8 and must be finite."
+        - name: "instructions"
+          type: "Option<String>"
+          description: "Inline policy appended to normal instructions while enabled."
+          constraints: "Bounded and non-empty after trim."
+        - name: "instructions_file"
+          type: "Option<PathBuf>"
+          description: "File-backed policy appended after inline policy while enabled."
+          constraints: "Readable, bounded, and resolved with config path conventions."
+      relationships: []
+    - name: "SessionTransition"
+      description: "A bounded pending request from one source session to one clean child."
+      fields:
+        - name: "id"
+          type: "String"
+          description: "Stable transition identifier."
+          constraints: "Unique and returned to the caller."
+        - name: "source_session_id"
+          type: "String"
+          description: "Session whose safe boundary owns the request."
+          constraints: "Must exist and not already have another pending transition."
+        - name: "child_session_id"
+          type: "Option<String>"
+          description: "Created once when transition is consumed."
+          constraints: "At most one child."
+        - name: "action"
+          type: "handoff | new"
+          description: "Prompted continuation or intentionally blank child."
+          constraints: "new never auto-submits an empty turn."
+        - name: "startup_content"
+          type: "Option<String>"
+          description: "Explicit bounded prompt/goal and optional Bead/file orientation."
+          constraints: "Contains no source transcript."
+        - name: "chain_position"
+          type: "usize"
+          description: "Current handoff depth."
+          constraints: "Must not exceed effective maximum."
+      relationships:
+        - target: "Session"
+          type: "many-to-one"
+          description: "Links source and child using the existing parent_id."
+api_contracts:
+  endpoints: []
+project_structure:
+  documentation:
+    - path: "docs/proposals/FRESH_SESSION_HANDOFF.md"
+      description: "Update implementation status and final user/config semantics."
+    - path: "docs/CONFIG.md"
+      description: "Document global and profile handoff settings if this is the canonical config reference."
+    - path: "CHANGELOG.md"
+      description: "Record the new command and model tool in the repository's canonical changelog path."
+  source_code:
+    - path: "crates/jcode-config-types/src/lib.rs"
+      description: "Global and profile handoff config records."
+    - path: "crates/jcode-base/src/config/session_profile.rs"
+      description: "Effective handoff policy and instruction overlay resolution."
+    - path: "crates/jcode-base/src/session.rs"
+      description: "Persisted handoff lineage metadata."
+    - path: "crates/jcode-app-core/src/tool/session_transition.rs"
+      description: "Model-callable validation and pending transition staging."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+      description: "Manual request handling and deferred safe-boundary consumption."
+    - path: "crates/jcode-protocol/src/wire.rs"
+      description: "Additive request and transition-ready event."
+    - path: "crates/jcode-tui/src/tui/app/"
+      description: "Slash command, presentation, pending resume, and startup behavior."
+  tests:
+    - path: "crates/jcode-base/src/config_tests/"
+      description: "Policy precedence and instruction-file tests."
+    - path: "crates/jcode-app-core/src/tool/"
+      description: "Tool schema, validation, and idempotency tests."
+    - path: "crates/jcode-app-core/src/server/"
+      description: "Clean-child and deferred boundary tests."
+    - path: "crates/jcode-protocol/src/protocol_tests/"
+      description: "Wire roundtrip and backward-compatibility tests."
+    - path: "crates/jcode-tui/src/tui/app/tests/"
+      description: "Slash parsing and automatic in-place resume tests."
+implementation_phases:
+  - phase: 1
+    name: "Policy and lineage"
+    goal: "Add tested config/profile resolution, dynamic instructions, and bounded lineage metadata."
+    deliverables:
+      - "Global and session-profile handoff records with defaults and precedence"
+      - "Enabled-only prompt overlay composition"
+      - "Session lineage fields and clean-child helper"
+  - phase: 2
+    name: "Protocol and manual handoff"
+    goal: "Create clean children from `/handoff` and resume them in the current remote TUI."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Handoff request and transition-ready event"
+      - "Server idle-boundary child creation"
+      - "TUI command and in-place ResumeSession followup"
+  - phase: 3
+    name: "Agent self-handoff"
+    goal: "Stage model requests and consume them after successful source-turn completion."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "session_transition schema and validation"
+      - "One pending transition per source session"
+      - "Post-turn transition-ready emission"
+  - phase: 4
+    name: "Recovery and limits"
+    goal: "Enforce idempotency, disabled states, confirmation/start behavior, and finite chains."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Stable retry result"
+      - "Chain exhaustion diagnostics"
+      - "Blank/new and editable draft behavior"
+  - phase: 5
+    name: "Delivery validation"
+    goal: "Document, polish, build, and validate the workflow against a new binary on a private socket."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Focused tests, fmt, and Clippy"
+      - "Selfdev build and isolated runtime evidence"
+      - "Docs, changelog, commit, and merge"
+open_questions: []
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-10T07:14:00Z"
+  artifact_type: "plan"
