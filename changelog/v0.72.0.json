@@ -4,13 +4,15 @@
   "title": "Interactive session profiles",
   "highlights": [
     "Start interactive TUI sessions with --profile, switch profiles for future turns with /profile, or clear the selection with /profile none",
-    "Inspect configured and effective profiles with profile list, show, current, and resolve without initializing a provider"
+    "Inspect configured and effective profiles with profile list, show, current, and resolve without initializing a provider",
+    "Use /handoff or the agent-callable session_transition tool to continue sequential work in a clean child session without inherited conversation context"
   ],
   "improvements": [
     "Profiles now expose all, allowlist, and none skill modes with subtractive disabled_skills enforcement across activation, discovery, retrieval, and prompt context",
     "Child agents and swarm workers inherit the active profile, tool policy, and skill restrictions unless explicitly overridden",
     "Session restore keeps a credential-free resolved snapshot and warns when the saved profile is missing or changed instead of silently falling back",
     "Profile values compose with explicit flags and environment overrides while preserving existing headless run modes and no-profile behavior",
-    "Unknown profiles and invalid profile fields fail before a provider request with actionable diagnostics"
+    "Unknown profiles and invalid profile fields fail before a provider request with actionable diagnostics",
+    "Fresh-session handoff supports global and per-profile enablement, confirmation, auto-start, chain limits, and inline or file-backed custom instructions"
   ]
 }
