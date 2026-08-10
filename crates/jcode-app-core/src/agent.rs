@@ -304,11 +304,32 @@ impl Agent {
         registry: Registry,
         session: Session,
         allowed_tools: Option<HashSet<String>>,
-        disabled_tools: HashSet<String>,
-        session_prompt_overlay: crate::config::SessionPromptOverlay,
+        mut disabled_tools: HashSet<String>,
+        mut session_prompt_overlay: crate::config::SessionPromptOverlay,
     ) -> Self {
         let skills = SkillRegistry::shared_snapshot();
         let session_profile_name = session.profile_name.clone();
+        let config_dir = crate::storage::jcode_dir().ok();
+        match crate::config::config()
+            .resolve_handoff_policy(session_profile_name.as_deref(), config_dir.as_deref())
+        {
+            Ok(policy) => {
+                if !policy.enabled || !policy.agent_enabled {
+                    disabled_tools.insert("session_transition".to_string());
+                } else if let Some(instructions) = policy.instructions {
+                    let handoff = format!("# Fresh-session handoff policy\n\n{instructions}");
+                    session_prompt_overlay.instructions =
+                        Some(match session_prompt_overlay.instructions {
+                            Some(existing) => format!("{existing}\n\n{handoff}"),
+                            None => handoff,
+                        });
+                }
+            }
+            Err(error) => {
+                crate::logging::warn(&format!("Invalid handoff configuration: {error}"));
+                disabled_tools.insert("session_transition".to_string());
+            }
+        }
         let initial_provider_model = provider.model();
         let agent = Self {
             provider,

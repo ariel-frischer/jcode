@@ -15,6 +15,20 @@ pub fn save_startup_submission_for_session(
     input: String,
     pending_images: Vec<(String, String)>,
 ) {
+    save_startup_input_for_session(session_id, input, pending_images, true);
+}
+
+/// Persist an editable startup draft without submitting it automatically.
+pub fn save_startup_draft_for_session(session_id: &str, input: String) {
+    save_startup_input_for_session(session_id, input, Vec::new(), false);
+}
+
+fn save_startup_input_for_session(
+    session_id: &str,
+    input: String,
+    pending_images: Vec<(String, String)>,
+    submit_on_restore: bool,
+) {
     if input.trim().is_empty() && pending_images.is_empty() {
         return;
     }
@@ -27,7 +41,7 @@ pub fn save_startup_submission_for_session(
                 "media_type": media_type,
                 "data": data,
             })).collect::<Vec<_>>(),
-            "submit_on_restore": true,
+            "submit_on_restore": submit_on_restore,
             "queued_messages": [],
             "hidden_queued_system_messages": [],
             "startup_status_notice": "Startup prompt queued",

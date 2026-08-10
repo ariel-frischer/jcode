@@ -445,6 +445,53 @@ pub struct SessionProfileConfig {
     /// Additional instructions for the session prompt.
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions: Option<String>,
+    /// Optional fresh-session handoff policy overrides for this profile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<HandoffProfileConfig>,
+}
+
+/// Global policy for manual and agent-initiated fresh-session handoffs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct HandoffConfig {
+    pub enabled: bool,
+    pub agent_enabled: bool,
+    pub agent_requires_confirmation: bool,
+    pub auto_start: bool,
+    pub max_chain_transitions: usize,
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub instructions: Option<String>,
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub instructions_file: Option<String>,
+}
+
+impl Default for HandoffConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            agent_enabled: true,
+            agent_requires_confirmation: false,
+            auto_start: true,
+            max_chain_transitions: 8,
+            instructions: None,
+            instructions_file: None,
+        }
+    }
+}
+
+/// Optional per-profile overrides for [`HandoffConfig`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct HandoffProfileConfig {
+    pub enabled: Option<bool>,
+    pub agent_enabled: Option<bool>,
+    pub agent_requires_confirmation: Option<bool>,
+    pub auto_start: Option<bool>,
+    pub max_chain_transitions: Option<usize>,
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub instructions: Option<String>,
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub instructions_file: Option<String>,
 }
 
 /// Scope of skills available to one named session profile.
@@ -738,7 +785,41 @@ impl Default for AgentsConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentsConfig, SwarmRolePolicy};
+    use super::{AgentsConfig, HandoffConfig, SessionProfileConfig, SwarmRolePolicy};
+
+    #[test]
+    fn handoff_defaults_enable_bounded_agent_continuation() {
+        let config = HandoffConfig::default();
+        assert!(config.enabled);
+        assert!(config.agent_enabled);
+        assert!(!config.agent_requires_confirmation);
+        assert!(config.auto_start);
+        assert_eq!(config.max_chain_transitions, 8);
+        assert!(config.instructions.is_none());
+        assert!(config.instructions_file.is_none());
+    }
+
+    #[test]
+    fn session_profile_handoff_overrides_are_optional_and_round_trip() {
+        let profile: SessionProfileConfig = toml::from_str(
+            r#"
+            [handoff]
+            agent_enabled = false
+            auto_start = false
+            max_chain_transitions = 3
+            instructions = "Finish validation before handing off."
+            instructions_file = ".jcode/handoff.md"
+            "#,
+        )
+        .expect("profile handoff overrides should parse");
+        let handoff = profile.handoff.expect("handoff override");
+        assert_eq!(handoff.agent_enabled, Some(false));
+        assert_eq!(handoff.auto_start, Some(false));
+        assert_eq!(handoff.max_chain_transitions, Some(3));
+
+        let legacy: SessionProfileConfig = toml::from_str("").expect("legacy profile");
+        assert!(legacy.handoff.is_none());
+    }
 
     #[test]
     fn legacy_agents_config_deserializes_without_swarm_role_policies() {

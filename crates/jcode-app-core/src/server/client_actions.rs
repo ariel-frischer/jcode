@@ -711,6 +711,119 @@ fn create_transfer_child_session(
     Ok((child.id.clone(), child.display_name().to_string()))
 }
 
+pub(super) fn create_handoff_child_session(
+    parent_session_id: &str,
+    prompt: Option<String>,
+    auto_start: bool,
+    max_chain_transitions: usize,
+) -> anyhow::Result<(String, String)> {
+    let parent = Session::load(parent_session_id)?;
+    let mut depth = 0usize;
+    let mut cursor = parent.parent_id.clone();
+    while let Some(parent_id) = cursor {
+        depth += 1;
+        if depth >= max_chain_transitions {
+            anyhow::bail!("Fresh-session handoff chain limit reached ({max_chain_transitions})");
+        }
+        cursor = Session::load(&parent_id)
+            .ok()
+            .and_then(|session| session.parent_id);
+    }
+    let mut child = Session::create(Some(parent_session_id.to_string()), None);
+    child.working_dir = parent.working_dir.clone();
+    child.model = parent.model.clone();
+    child.provider_key = parent.provider_key.clone();
+    child.route_api_method = parent.route_api_method.clone();
+    child.reasoning_effort = parent.reasoning_effort.clone();
+    child.subagent_model = parent.subagent_model.clone();
+    child.improve_mode = parent.improve_mode;
+    child.autoreview_enabled = parent.autoreview_enabled;
+    child.autojudge_enabled = parent.autojudge_enabled;
+    child.is_canary = parent.is_canary;
+    child.testing_build = parent.testing_build.clone();
+    child.is_debug = parent.is_debug;
+    child.profile_name = parent.profile_name.clone();
+    child.profile_snapshot = parent.profile_snapshot.clone();
+    child.profile_restore_status = parent.profile_restore_status.clone();
+    child.status = crate::session::SessionStatus::Closed;
+    child.save()?;
+    if let Some(prompt) = prompt {
+        if auto_start {
+            crate::client_input::save_startup_submission_for_session(&child.id, prompt, Vec::new());
+        } else {
+            crate::client_input::save_startup_draft_for_session(&child.id, prompt);
+        }
+    }
+    Ok((child.id.clone(), child.display_name().to_string()))
+}
+
+pub(super) async fn handle_handoff(
+    id: u64,
+    client_session_id: &str,
+    prompt: Option<String>,
+    auto_start: Option<bool>,
+    client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
+) {
+    let parent = match Session::load(client_session_id) {
+        Ok(parent) => parent,
+        Err(error) => {
+            let _ = client_event_tx.send(ServerEvent::Error {
+                id,
+                message: error.to_string(),
+                retry_after_secs: None,
+            });
+            return;
+        }
+    };
+    let config_dir = crate::storage::jcode_dir().ok();
+    let policy = match crate::config::config()
+        .resolve_handoff_policy(parent.profile_name.as_deref(), config_dir.as_deref())
+    {
+        Ok(policy) if policy.enabled => policy,
+        Ok(_) => {
+            let _ = client_event_tx.send(ServerEvent::Error {
+                id,
+                message: "Fresh-session handoff is disabled".to_string(),
+                retry_after_secs: None,
+            });
+            return;
+        }
+        Err(error) => {
+            let _ = client_event_tx.send(ServerEvent::Error {
+                id,
+                message: error.to_string(),
+                retry_after_secs: None,
+            });
+            return;
+        }
+    };
+    let prompt = prompt.and_then(|prompt| (!prompt.trim().is_empty()).then_some(prompt));
+    let auto_start = auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
+    match create_handoff_child_session(
+        client_session_id,
+        prompt,
+        auto_start,
+        policy.max_chain_transitions,
+    ) {
+        Ok((new_session_id, new_session_name)) => {
+            let _ = client_event_tx.send(ServerEvent::SessionHandoffReady {
+                id,
+                source_session_id: client_session_id.to_string(),
+                new_session_id,
+                new_session_name,
+                auto_start,
+            });
+        }
+        Err(error) => {
+            let _ = client_event_tx.send(ServerEvent::Error {
+                id,
+                message: format!("Failed to create handoff session: {error}"),
+                retry_after_secs: None,
+            });
+        }
+    }
+}
+
 pub(super) async fn handle_split(
     id: u64,
     client_session_id: &str,

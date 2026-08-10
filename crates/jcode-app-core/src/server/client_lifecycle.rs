@@ -1,9 +1,9 @@
 use super::available_models_dedup::available_models_dedup_key;
 use super::client_actions::{
-    AgentTaskContext, NotifySessionContext, handle_agent_task, handle_compact, handle_input_shell,
-    handle_notify_session, handle_rename_session, handle_run_subagent, handle_set_feature,
-    handle_set_subagent_model, handle_split, handle_stdin_response, handle_transfer,
-    handle_trigger_memory_extraction,
+    AgentTaskContext, NotifySessionContext, handle_agent_task, handle_compact, handle_handoff,
+    handle_input_shell, handle_notify_session, handle_rename_session, handle_run_subagent,
+    handle_set_feature, handle_set_subagent_model, handle_split, handle_stdin_response,
+    handle_transfer, handle_trigger_memory_extraction,
 };
 use super::client_comm::{
     handle_comm_channel_members, handle_comm_list, handle_comm_list_channels, handle_comm_message,
@@ -2018,6 +2018,24 @@ pub(super) async fn handle_client(
                 handle_transfer(id, &client_session_id, &agent, &client_event_tx).await;
             }
 
+            Request::Handoff {
+                id,
+                prompt,
+                auto_start,
+            } => {
+                if reject_if_agent_busy_for_request(
+                    id,
+                    "handoff",
+                    &client_session_id,
+                    client_is_processing,
+                    &agent,
+                    &client_event_tx,
+                ) {
+                    continue;
+                }
+                handle_handoff(id, &client_session_id, prompt, auto_start, &client_event_tx).await;
+            }
+
             Request::Compact { id } => {
                 handle_compact(id, &agent, &client_event_tx);
             }
@@ -2990,6 +3008,7 @@ async fn start_processing_message(
         let agent_guard = agent.lock().await;
         agent_guard.message_count()
     };
+    let source_session_id = client_session_id.to_string();
     let agent = Arc::clone(agent);
     let report_agent = Arc::clone(&agent);
     let tx = super::state::session_event_fanout_sender_with_fallback(
@@ -3054,6 +3073,33 @@ async fn start_processing_message(
             },
         };
         let _ = tx.send(terminal_event);
+        if result.is_ok()
+            && let Some(pending) = crate::tool::session_transition::take_pending(&source_session_id)
+        {
+            match super::client_actions::create_handoff_child_session(
+                &source_session_id,
+                pending.prompt,
+                pending.auto_start,
+                pending.max_chain_transitions,
+            ) {
+                Ok((new_session_id, new_session_name)) => {
+                    let _ = tx.send(ServerEvent::SessionHandoffReady {
+                        id,
+                        source_session_id: source_session_id.clone(),
+                        new_session_id,
+                        new_session_name,
+                        auto_start: pending.auto_start,
+                    });
+                }
+                Err(error) => {
+                    let _ = tx.send(ServerEvent::Error {
+                        id,
+                        message: format!("Failed to complete staged handoff: {error}"),
+                        retry_after_secs: None,
+                    });
+                }
+            }
+        }
         let _ = done_tx.send((id, result, completion_report));
     }));
 }

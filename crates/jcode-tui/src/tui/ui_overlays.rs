@@ -305,6 +305,10 @@ pub(super) fn draw_help_overlay(frame: &mut Frame, area: Rect, scroll: usize, ap
         "Open a fresh session with only compacted context + copied todos",
     ));
     lines.push(help_entry(
+        "/handoff [prompt]",
+        "Switch this client to a clean child session",
+    ));
+    lines.push(help_entry(
         "/workspace [status|on|off|add]",
         "Enable and manage the Niri-style session workspace",
     ));

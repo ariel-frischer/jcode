@@ -360,6 +360,16 @@ pub enum Request {
     #[serde(rename = "transfer")]
     Transfer { id: u64 },
 
+    /// Create a clean child session and switch this client to it.
+    #[serde(rename = "handoff")]
+    Handoff {
+        id: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auto_start: Option<bool>,
+    },
+
     /// Trigger manual context compaction
     #[serde(rename = "compact")]
     Compact { id: u64 },
@@ -1468,6 +1478,16 @@ pub enum ServerEvent {
         id: u64,
         new_session_id: String,
         new_session_name: String,
+    },
+
+    /// A clean handoff child is persisted and ready for an in-place resume.
+    #[serde(rename = "session_handoff_ready")]
+    SessionHandoffReady {
+        id: u64,
+        source_session_id: String,
+        new_session_id: String,
+        new_session_name: String,
+        auto_start: bool,
     },
 
     /// Response to compact request — context compaction status

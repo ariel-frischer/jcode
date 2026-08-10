@@ -29,6 +29,7 @@ pub mod selfdev;
 pub(crate) mod serde_coerce;
 mod session_search;
 pub(crate) mod session_search_index;
+pub(crate) mod session_transition;
 mod side_panel;
 mod skill;
 mod todo;
@@ -250,6 +251,12 @@ impl Registry {
                 &mut timings,
                 "session_search",
                 session_search::SessionSearchTool::new,
+            );
+            Self::insert_tool_timed(
+                &mut m,
+                &mut timings,
+                "session_transition",
+                session_transition::SessionTransitionTool::new,
             );
             Self::insert_tool_timed(&mut m, &mut timings, "memory", memory::MemoryTool::new);
             Self::insert_tool_timed(

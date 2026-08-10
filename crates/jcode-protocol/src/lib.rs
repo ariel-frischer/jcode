@@ -599,6 +599,7 @@ impl Request {
             Request::RenameSession { id, .. } => *id,
             Request::Split { id } => *id,
             Request::Transfer { id } => *id,
+            Request::Handoff { id, .. } => *id,
             Request::Compact { id } => *id,
             Request::TriggerMemoryExtraction { id } => *id,
             Request::NotifyAuthChanged { id, .. } => *id,

@@ -1,8 +1,8 @@
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
 use super::{
-    NotifySessionContext, clone_split_session, handle_notify_session, handle_rename_session,
-    handle_resume_all_sessions, handle_set_feature,
+    NotifySessionContext, clone_split_session, create_handoff_child_session, handle_notify_session,
+    handle_rename_session, handle_resume_all_sessions, handle_set_feature,
 };
 use crate::agent::Agent;
 use crate::message::{ContentBlock, Message, Role, StreamEvent, ToolDefinition};
@@ -163,6 +163,65 @@ fn clone_split_session_uses_persisted_session_state() {
     assert_eq!(child.model, parent.model);
     assert_eq!(child.status, crate::session::SessionStatus::Closed);
     assert_ne!(child.id, parent.id);
+
+    if let Some(prev_home) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
+fn handoff_child_is_clean_and_preserves_only_operational_session_state() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let prev_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp.path());
+
+    let mut parent = crate::session::Session::create_with_id(
+        "session_parent_handoff_test".to_string(),
+        None,
+        None,
+    );
+    parent.working_dir = Some("/tmp/jcode-handoff-test".to_string());
+    parent.provider_key = Some("openai".to_string());
+    parent.model = Some("gpt-test".to_string());
+    parent.reasoning_effort = Some("high".to_string());
+    parent.profile_name = Some("focus".to_string());
+    parent.provider_session_id = Some("must-not-copy".to_string());
+    parent.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "old context".to_string(),
+            cache_control: None,
+        }],
+    );
+    parent.compaction = Some(crate::session::StoredCompactionState {
+        summary_text: "must not copy".to_string(),
+        openai_encrypted_content: None,
+        covers_up_to_turn: 1,
+        original_turn_count: 1,
+        compacted_count: 1,
+    });
+    parent.save().expect("save parent");
+
+    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8)
+        .expect("create clean handoff child");
+    let child = crate::session::Session::load(&child_id).expect("load child");
+
+    assert_eq!(child.parent_id.as_deref(), Some(parent.id.as_str()));
+    assert!(child.messages.is_empty());
+    assert!(child.compaction.is_none());
+    assert!(child.provider_session_id.is_none());
+    assert_eq!(child.working_dir, parent.working_dir);
+    assert_eq!(child.provider_key, parent.provider_key);
+    assert_eq!(child.model, parent.model);
+    assert_eq!(child.reasoning_effort, parent.reasoning_effort);
+    assert_eq!(child.profile_name, parent.profile_name);
+    assert_eq!(child.status, crate::session::SessionStatus::Closed);
+    let chain_error = create_handoff_child_session(&child.id, None, false, 1)
+        .expect_err("a second transition must exceed a one-transition chain limit");
+    assert!(chain_error.to_string().contains("chain limit reached"));
 
     if let Some(prev_home) = prev_home {
         crate::env::set_var("JCODE_HOME", prev_home);

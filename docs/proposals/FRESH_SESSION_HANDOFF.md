@@ -1,10 +1,10 @@
 # Fresh-session handoff for long-running agent work
 
-Status: research and design proposal. Nothing here is implemented yet.
+Status: initial implementation completed and validated against an isolated built server.
 
 Date: 2026-08-10
 
-Bead: `jcode-zod`
+Bead: `jcode-ggj`
 
 ## Executive summary
 
@@ -22,7 +22,7 @@ The strongest case is at a verified task boundary, such as after one Bead is com
 
 This pattern is not unprecedented. Amp has an explicit Handoff feature and, since January 2026, lets the agent initiate it. Anthropic recommends starting a new session when starting a new task. Ralph implementations deliberately run one task per fresh agent instance while persisting state in Git and task files.
 
-Recommendation: implement a first-class `handoff` or `session_transition` tool rather than overloading Jcode's existing `restart` terminology. Make it opt-in, safe-boundary based, lineage-preserving, and bounded against accidental infinite chains.
+Recommendation: implement a first-class user-facing `/handoff` command and model-callable `session_transition` tool rather than overloading Jcode's existing `restart` terminology. The initial implementation now provides both paths, same-client switching, clean-child semantics, profile-aware configuration, custom inline/file instructions, editable drafts, automatic continuation, and a bounded parent chain.
 
 ## Terminology
 
@@ -386,13 +386,19 @@ Jcode should advertise the tool with concise policy instructions similar to:
 A configurable instruction field is useful for project-specific policy. For example:
 
 ```toml
-[session_handoff]
+[handoff]
 enabled = true
 agent_enabled = true
 agent_requires_confirmation = false
 max_chain_transitions = 8
 auto_start = true
+instructions = "Finish and validate the current Bead before handing off."
 instructions_file = ".jcode/handoff-instructions.md"
+
+[profiles.long-running.handoff]
+agent_enabled = true
+max_chain_transitions = 4
+instructions = "Select the next actionable Bead and include its ID in the prompt."
 ```
 
 The controls are intentionally independent:

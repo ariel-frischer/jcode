@@ -934,6 +934,22 @@ impl RemoteConnection {
         Ok(id)
     }
 
+    pub async fn handoff(
+        &mut self,
+        prompt: Option<String>,
+        auto_start: Option<bool>,
+    ) -> Result<u64> {
+        let id = self.next_request_id;
+        self.next_request_id += 1;
+        self.send_request(Request::Handoff {
+            id,
+            prompt,
+            auto_start,
+        })
+        .await?;
+        Ok(id)
+    }
+
     /// Trigger manual context compaction on the server
     pub async fn compact(&mut self) -> Result<u64> {
         let id = self.next_request_id;

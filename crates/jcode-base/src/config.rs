@@ -6,14 +6,14 @@
 pub use jcode_config_types::{
     AgentsConfig, AmbientConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig, CompactionConfig,
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
-    DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, HookCommands, HooksConfig,
-    KeybindingsConfig, LatexRenderingMode, LaunchHotkeyEntry, LaunchHotkeysConfig,
-    MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
-    NamedProviderType, NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode,
-    PowerConfig, ProviderConfig, ReasoningDisplayMode, RunSafetyConfig, SafetyConfig,
-    SessionPickerResumeAction, SessionProfileConfig, SkillsMode, SponsorsConfig, SwarmRolePolicy,
-    SwarmSpawnMode, SwarmStripLayout, TerminalConfig, UpdateChannel, WebSearchConfig,
-    WebSearchEngine,
+    DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, HandoffConfig,
+    HandoffProfileConfig, HookCommands, HooksConfig, KeybindingsConfig, LatexRenderingMode,
+    LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode, NamedProviderAuth,
+    NamedProviderConfig, NamedProviderModelConfig, NamedProviderType, NativeScrollbarConfig,
+    NotificationsConfig, OverscrollStatusMode, PowerConfig, ProviderConfig, ReasoningDisplayMode,
+    RunSafetyConfig, SafetyConfig, SessionPickerResumeAction, SessionProfileConfig, SkillsMode,
+    SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
+    UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -512,6 +512,10 @@ pub struct Config {
     /// profiles retain their existing serialized shape.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub profiles: BTreeMap<String, SessionProfileConfig>,
+
+    /// Fresh-session handoff policy. Named profiles may override individual
+    /// fields without mutating this global baseline.
+    pub handoff: HandoffConfig,
 
     /// Agent-specific model defaults
     pub agents: AgentsConfig,

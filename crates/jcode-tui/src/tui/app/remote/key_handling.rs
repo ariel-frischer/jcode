@@ -1989,6 +1989,22 @@ async fn handle_remote_key_internal(
                     return Ok(());
                 }
 
+                if trimmed == "/handoff" || trimmed.starts_with("/handoff ") {
+                    if app.is_processing {
+                        app.push_display_message(DisplayMessage::error(
+                            "Wait for the current turn to finish before using /handoff. Agents can use session_transition to hand off automatically at the safe turn boundary."
+                                .to_string(),
+                        ));
+                        app.set_status_notice("Handoff waits for idle");
+                        return Ok(());
+                    }
+                    let prompt = trimmed.strip_prefix("/handoff").unwrap_or_default().trim();
+                    let prompt = (!prompt.is_empty()).then(|| prompt.to_string());
+                    remote.handoff(prompt, None).await?;
+                    app.set_status_notice("Preparing fresh-session handoff...");
+                    return Ok(());
+                }
+
                 if handle_workspace_command(app, remote, trimmed).await? {
                     return Ok(());
                 }

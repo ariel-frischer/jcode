@@ -2796,6 +2796,20 @@ pub(in crate::tui::app) fn handle_server_event(
             }
             false
         }
+        ServerEvent::SessionHandoffReady {
+            new_session_id,
+            new_session_name,
+            auto_start,
+            ..
+        } => {
+            app.workspace_client.queue_resume_session(new_session_id);
+            app.set_status_notice(if auto_start {
+                format!("Handoff → {new_session_name} (starting)")
+            } else {
+                format!("Handoff → {new_session_name}")
+            });
+            true
+        }
         ServerEvent::CompactResult {
             message, success, ..
         } => {

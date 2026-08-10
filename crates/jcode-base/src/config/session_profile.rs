@@ -9,6 +9,20 @@ use super::{Config, SessionProfileConfig, SkillsMode, ToolConfig, ToolSelection}
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
+
+const MAX_HANDOFF_INSTRUCTIONS_FILE_BYTES: u64 = 64 * 1024;
+
+/// Effective fresh-session handoff policy for one session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedHandoffPolicy {
+    pub enabled: bool,
+    pub agent_enabled: bool,
+    pub agent_requires_confirmation: bool,
+    pub auto_start: bool,
+    pub max_chain_transitions: usize,
+    pub instructions: Option<String>,
+}
 
 /// Prompt context selected by one named session profile.
 ///
@@ -554,6 +568,83 @@ fn snapshot_fingerprint(snapshot: &ResolvedProfileSnapshot) -> String {
 }
 
 impl Config {
+    /// Resolve the global handoff policy plus optional per-profile overrides.
+    /// Instruction sources are appended in deterministic order: global inline,
+    /// global file, profile inline, then profile file.
+    pub fn resolve_handoff_policy(
+        &self,
+        profile_name: Option<&str>,
+        config_dir: Option<&Path>,
+    ) -> anyhow::Result<ResolvedHandoffPolicy> {
+        let profile = match profile_name {
+            Some(name) => Some(
+                self.profiles
+                    .get(name)
+                    .ok_or_else(|| anyhow::anyhow!("Unknown session profile '{name}'"))?,
+            ),
+            None => None,
+        };
+        let profile_handoff = profile.and_then(|profile| profile.handoff.as_ref());
+
+        let enabled = profile_handoff
+            .and_then(|handoff| handoff.enabled)
+            .unwrap_or(self.handoff.enabled);
+        let agent_enabled = profile_handoff
+            .and_then(|handoff| handoff.agent_enabled)
+            .unwrap_or(self.handoff.agent_enabled);
+        let agent_requires_confirmation = profile_handoff
+            .and_then(|handoff| handoff.agent_requires_confirmation)
+            .unwrap_or(self.handoff.agent_requires_confirmation);
+        let auto_start = profile_handoff
+            .and_then(|handoff| handoff.auto_start)
+            .unwrap_or(self.handoff.auto_start);
+        let max_chain_transitions = profile_handoff
+            .and_then(|handoff| handoff.max_chain_transitions)
+            .unwrap_or(self.handoff.max_chain_transitions);
+
+        if max_chain_transitions == 0 {
+            anyhow::bail!("handoff.max_chain_transitions must be at least 1");
+        }
+
+        if !enabled {
+            return Ok(ResolvedHandoffPolicy {
+                enabled,
+                agent_enabled,
+                agent_requires_confirmation,
+                auto_start,
+                max_chain_transitions,
+                instructions: None,
+            });
+        }
+
+        let mut instruction_parts = Vec::new();
+        push_nonempty(&mut instruction_parts, self.handoff.instructions.as_deref());
+        if let Some(path) = self.handoff.instructions_file.as_deref() {
+            push_nonempty(
+                &mut instruction_parts,
+                Some(&read_handoff_instructions(path, config_dir)?),
+            );
+        }
+        if let Some(handoff) = profile_handoff {
+            push_nonempty(&mut instruction_parts, handoff.instructions.as_deref());
+            if let Some(path) = handoff.instructions_file.as_deref() {
+                push_nonempty(
+                    &mut instruction_parts,
+                    Some(&read_handoff_instructions(path, config_dir)?),
+                );
+            }
+        }
+
+        Ok(ResolvedHandoffPolicy {
+            enabled,
+            agent_enabled,
+            agent_requires_confirmation,
+            auto_start,
+            max_chain_transitions,
+            instructions: (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n")),
+        })
+    }
+
     /// Resolve an exact profile name into an immutable per-run overlay.
     ///
     /// `None` returns immediately without looking at the profile map. A
@@ -662,6 +753,39 @@ impl Config {
         self.resolve_session_profile(profile_name)?
             .with_available_skills(available_names)
     }
+}
+
+fn push_nonempty(parts: &mut Vec<String>, value: Option<&str>) {
+    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+        parts.push(value.to_owned());
+    }
+}
+
+fn read_handoff_instructions(path: &str, config_dir: Option<&Path>) -> anyhow::Result<String> {
+    let path = PathBuf::from(path);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        config_dir.unwrap_or_else(|| Path::new(".")).join(path)
+    };
+    let metadata = std::fs::metadata(&path).map_err(|error| {
+        anyhow::anyhow!(
+            "Could not read handoff instructions file '{}': {error}",
+            path.display()
+        )
+    })?;
+    if metadata.len() > MAX_HANDOFF_INSTRUCTIONS_FILE_BYTES {
+        anyhow::bail!(
+            "Handoff instructions file '{}' exceeds the 64 KiB limit",
+            path.display()
+        );
+    }
+    std::fs::read_to_string(&path).map_err(|error| {
+        anyhow::anyhow!(
+            "Could not read handoff instructions file '{}': {error}",
+            path.display()
+        )
+    })
 }
 
 /// Return the active named provider profile selected by the existing provider

@@ -10,6 +10,69 @@ use crate::config::SkillsMode;
 use crate::config::ToolSelection;
 use std::path::PathBuf;
 
+#[test]
+fn handoff_defaults_are_enabled_and_bounded() {
+    let policy = Config::default()
+        .resolve_handoff_policy(None, None)
+        .expect("resolve default handoff policy");
+    assert!(policy.enabled);
+    assert!(policy.agent_enabled);
+    assert!(!policy.agent_requires_confirmation);
+    assert!(policy.auto_start);
+    assert_eq!(policy.max_chain_transitions, 8);
+    assert_eq!(policy.instructions, None);
+}
+
+#[test]
+fn handoff_profile_overrides_policy_and_appends_instruction_sources() {
+    let dir = tempfile::TempDir::new().expect("create instruction directory");
+    std::fs::write(dir.path().join("global.md"), "global file").unwrap();
+    std::fs::write(dir.path().join("profile.md"), "profile file").unwrap();
+    let config = config_from_toml(
+        r#"
+[handoff]
+instructions = "global inline"
+instructions_file = "global.md"
+
+[profiles.focus]
+[profiles.focus.handoff]
+agent_enabled = false
+auto_start = false
+max_chain_transitions = 3
+instructions = "profile inline"
+instructions_file = "profile.md"
+"#,
+    );
+
+    let policy = config
+        .resolve_handoff_policy(Some("focus"), Some(dir.path()))
+        .expect("resolve profile handoff policy");
+    assert!(policy.enabled);
+    assert!(!policy.agent_enabled);
+    assert!(!policy.auto_start);
+    assert_eq!(policy.max_chain_transitions, 3);
+    assert_eq!(
+        policy.instructions.as_deref(),
+        Some("global inline\n\nglobal file\n\nprofile inline\n\nprofile file")
+    );
+}
+
+#[test]
+fn disabled_handoff_does_not_read_instruction_files() {
+    let config = config_from_toml(
+        r#"
+[handoff]
+enabled = false
+instructions_file = "missing.md"
+"#,
+    );
+    let policy = config
+        .resolve_handoff_policy(None, None)
+        .expect("disabled policy should not touch the filesystem");
+    assert!(!policy.enabled);
+    assert_eq!(policy.instructions, None);
+}
+
 /// Build a TOML document containing one `[profiles.<name>]` table.
 ///
 /// Callers provide only the profile fields needed by a focused test. Keeping
