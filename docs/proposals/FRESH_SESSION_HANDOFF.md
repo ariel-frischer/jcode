@@ -58,6 +58,30 @@ This is operational continuity, not context clearing. It intentionally keeps the
 
 This is a useful foundation for a fresh child session because lineage can be preserved without copying conversation history.
 
+### The TUI can manually launch a blank session in another terminal
+
+Jcode already supports the no-handoff half of the idea as a user action. The
+TUI's `new_terminal` keybinding launches `jcode --fresh-spawn` in another
+terminal, reusing the current working directory and server socket. The default
+binding is Cmd+Shift+; on macOS and Alt+Shift+; elsewhere. See:
+
+- `crates/jcode-tui/src/tui/app/helpers.rs:738-765`
+- `crates/jcode-tui/src/tui/app/input.rs:1794-1807`
+- `crates/jcode-base/src/config/default_file.rs:86-96`
+
+This creates a genuinely blank session, but it is not a handoff workflow. It is
+not model-callable, does not generate or carry a handoff prompt, opens another
+terminal instead of replacing the current client's session, and does not
+automatically continue work.
+
+The TUI also has a next-prompt-to-new-session gesture using Super+Space or
+Alt+Space. Despite the user-facing wording, that path calls
+`launch_forked_session_local`, clones the current conversation, stages the typed
+prompt, and opens the fork in another terminal. See
+`crates/jcode-tui/src/tui/app/input.rs:1810-1853` and
+`crates/jcode-tui/src/tui/app/commands_review.rs:700-726`. It is therefore a
+prompted fork, not a clean-context handoff.
+
 ### The `schedule` tool can resume or spawn later
 
 The current model-callable `schedule` tool supports targets `resume`, `spawn`, and `ambient`. See `crates/jcode-app-core/src/tool/ambient.rs:710-923`.
