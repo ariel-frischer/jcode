@@ -67,6 +67,7 @@ struct RetainedLine<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct FileFreshness {
     len: u64,
+    #[cfg(not(unix))]
     modified: Option<std::time::SystemTime>,
     #[cfg(unix)]
     dev: u64,
@@ -103,8 +104,7 @@ impl LineIndexCache {
         index
             .line_starts
             .len()
-            .checked_mul(std::mem::size_of::<u64>())
-            .unwrap_or(usize::MAX)
+            .saturating_mul(std::mem::size_of::<u64>())
     }
 
     fn remove(&mut self, key: &Path) {
@@ -162,29 +162,28 @@ fn line_index_cache() -> &'static Mutex<LineIndexCache> {
     CACHE.get_or_init(|| Mutex::new(LineIndexCache::new()))
 }
 
-fn freshness_from_metadata(metadata: &std::fs::Metadata) -> FileFreshness {
+fn freshness_from_metadata(metadata: &std::fs::Metadata) -> Result<FileFreshness> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        return FileFreshness {
+        Ok(FileFreshness {
             len: metadata.len(),
-            modified: metadata.modified().ok(),
             dev: metadata.dev(),
             ino: metadata.ino(),
             mtime: (metadata.mtime(), metadata.mtime_nsec()),
             ctime: (metadata.ctime(), metadata.ctime_nsec()),
-        };
+        })
     }
 
     #[cfg(not(unix))]
-    FileFreshness {
+    Ok(FileFreshness {
         len: metadata.len(),
-        modified: metadata.modified().ok(),
-    }
+        modified: Some(metadata.modified()?),
+    })
 }
 
 fn freshness(path: &Path) -> Result<FileFreshness> {
-    Ok(freshness_from_metadata(&std::fs::metadata(path)?))
+    freshness_from_metadata(&std::fs::metadata(path)?)
 }
 
 fn cache_key(path: &Path) -> PathBuf {
@@ -547,7 +546,7 @@ fn build_line_index_and_read(
     use std::io::Read;
 
     let mut file = std::fs::File::open(path)?;
-    let actual_freshness = freshness_from_metadata(&file.metadata()?);
+    let actual_freshness = freshness_from_metadata(&file.metadata()?)?;
     if actual_freshness != expected_freshness {
         return Ok((read_text_range_uncached(path, range)?, None));
     }
@@ -718,7 +717,7 @@ fn read_indexed_range(
         .checked_sub(start)
         .ok_or_else(|| anyhow::anyhow!("indexed line offsets are invalid"))?;
     let mut file = std::fs::File::open(path)?;
-    let actual_freshness = freshness_from_metadata(&file.metadata()?);
+    let actual_freshness = freshness_from_metadata(&file.metadata()?)?;
     if actual_freshness != index.freshness {
         return read_text_range_uncached(path, range);
     }
