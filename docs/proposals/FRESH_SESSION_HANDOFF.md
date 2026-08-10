@@ -393,7 +393,7 @@ agent_requires_confirmation = false
 max_chain_transitions = 8
 auto_start = true
 instructions = "Finish and validate the current Bead before handing off."
-instructions_file = ".jcode/handoff-instructions.md"
+instructions_file = "handoff-instructions.md"
 
 [profiles.long-running.handoff]
 agent_enabled = true
