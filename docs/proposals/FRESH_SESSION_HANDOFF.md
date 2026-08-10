@@ -284,6 +284,11 @@ Recommendation: user-facing `/handoff`, model-callable `session_transition`.
 
 Avoid `restart` because Jcode already uses restart for binary and server lifecycle continuity.
 
+Product direction recorded 2026-08-10: support both manual handoff and
+agent-initiated self-handoff. The model-callable capability should be enabled by
+default, with a direct configuration switch to disable agent invocation without
+removing the user's `/handoff` command.
+
 ### Tool schema
 
 A minimal first version could be:
@@ -376,26 +381,35 @@ The handoff should not paste large logs or full file contents. The new agent can
 
 Jcode should advertise the tool with concise policy instructions similar to:
 
-> Use a fresh-session handoff after a bounded task is completed and validated, when the next task can be stated independently. Before handing off, persist durable state in Git and the active task tracker. Prefer continuing the current session for tightly coupled work. Prefer compaction when the same task must continue but old tool output can be summarized. Prefer swarm workers when independent work benefits from parallel execution. Do not hand off solely because context usage is high. Do not create an unbounded handoff chain.
+> You may invoke a fresh-session handoff yourself. Use it after a bounded task is completed and validated, when the next task can be stated independently. For the normal Bead workflow, finish the current Bead, persist its commit and validation evidence, select the next actionable Bead, then hand off to a fresh session with that Bead as the next goal. Before handing off, persist durable state in Git and the active task tracker. Prefer continuing the current session for tightly coupled work. Prefer compaction when the same task must continue but old tool output can be summarized. Prefer swarm workers when independent work benefits from parallel execution. Do not hand off solely because context usage is high. Do not create an unbounded handoff chain.
 
 A configurable instruction field is useful for project-specific policy. For example:
 
 ```toml
 [session_handoff]
 enabled = true
-mode = "ask" # disabled | ask | auto
+agent_enabled = true
+agent_requires_confirmation = false
 max_chain_transitions = 8
-auto_start = false
+auto_start = true
 instructions_file = ".jcode/handoff-instructions.md"
 ```
 
-Suggested modes:
+The controls are intentionally independent:
 
-- `disabled`: tool is not registered.
-- `ask`: the model may propose or prepare a handoff, but the user approves the transition or submits the editable draft.
-- `auto`: the model may transition and continue automatically within configured budgets.
+- `enabled=false` disables all handoff behavior.
+- `agent_enabled=false` removes the model-callable tool while retaining manual
+  `/handoff` for the user.
+- `agent_requires_confirmation=true` lets the model prepare a handoff but waits
+  for the user before switching sessions.
+- `auto_start=false` opens the fresh session with an editable draft instead of
+  immediately submitting it.
 
-Default recommendation: `ask`, `auto_start=false` for initial release. Add fully automatic chaining after runtime and cost telemetry are available.
+Target default: manual and agent handoff enabled, no per-transition confirmation,
+and automatic submission in the fresh session. Chain, token, cost, and wall-clock
+budgets remain mandatory safety boundaries. An initial preview release may
+temporarily require confirmation while telemetry and transition recovery are
+validated, but that is a rollout gate rather than the intended steady-state UX.
 
 ## When to use each mechanism
 
@@ -442,19 +456,22 @@ A fresh-session handoff lets the durable tracker become the coordinator. Swarm r
 
 This validates session semantics and UX with low runaway risk.
 
-### Slice 2: model-callable prepared handoff
+### Slice 2: model-callable self-handoff
 
-- Register `session_transition` in `ask` mode.
-- Let the model prepare the transition at task completion.
-- Require user approval or submission of the draft.
+- Register `session_transition` for normal sessions by default.
+- Let the model invoke the transition at a completed task or Bead boundary.
+- Respect `agent_enabled`, `agent_requires_confirmation`, and `auto_start`.
+- Make the steady-state defaults self-handoff enabled, no confirmation, and
+  automatic continuation.
 - Add Bead-aware bootstrap context.
 
-### Slice 3: bounded automatic continuation
+### Slice 3: budgets and chain controls
 
-- Add `auto` mode and `auto_start=true`.
 - Enforce transition, token, cost, and wall-clock budgets.
 - Stop on dirty or failed validation according to configured policy.
 - Show chain progress and cumulative usage.
+- Add recovery for a transition that was admitted but could not start its child
+  turn.
 
 ### Slice 4: controller mode
 
