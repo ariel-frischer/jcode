@@ -908,6 +908,28 @@ impl MultiProvider {
         crate::provider_catalog::openai_compatible_profile_by_id(&fallback?)
     }
 
+    /// Return the active direct OpenAI-compatible runtime when its own catalog
+    /// serves `model`. Bare model switches must stay on that runtime rather than
+    /// rebinding the shared slot to native OpenRouter.
+    fn active_openai_compatible_profile_serving_model(
+        &self,
+        model: &str,
+    ) -> Option<Arc<dyn Provider>> {
+        if self.active_provider() != ActiveProvider::OpenRouter {
+            return None;
+        }
+        let provider = self.active_openrouter_execution_provider()?;
+        if provider.supports_provider_routing_features() {
+            return None;
+        }
+        let (_, api_method, _) = provider.direct_openai_compatible_route_parts()?;
+        self.fresh_routes_memo_entry()
+            .routes
+            .iter()
+            .any(|route| route.available && route.model == model && route.api_method == api_method)
+            .then_some(provider)
+    }
+
     /// Parse a `<name>:<model>` spec whose prefix is a user-defined named
     /// provider profile from config (`[providers.<name>]`). Built-in provider
     /// prefixes and catalog profile ids take precedence and never reach here.
@@ -1124,6 +1146,14 @@ impl MultiProvider {
                 Ok(())
             }
             ActiveProvider::OpenRouter => {
+                if let Some(active_profile) =
+                    self.active_openai_compatible_profile_serving_model(model)
+                {
+                    active_profile.set_model(model)?;
+                    self.set_active_provider(ActiveProvider::OpenRouter);
+                    return Ok(());
+                }
+
                 // Decide whether the slot must be rebound to the real
                 // OpenRouter API-key runtime. Rebinding repairs a slot left
                 // flavored as a *known catalog profile* runtime by startup
@@ -1305,6 +1335,13 @@ impl MultiProvider {
                 .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(openai);
         }
 
+        let current_openrouter_model = self.openrouter_provider().map(|existing| {
+            let model = existing.model();
+            existing
+                .explicit_provider_pin_for_current_model()
+                .map(|pin| format!("{model}@{pin}"))
+                .unwrap_or(model)
+        });
         if openrouter::has_credentials() {
             match external::instantiate_openrouter_runtime(external::OpenRouterRuntimeSpec::Default)
             {
@@ -1323,6 +1360,13 @@ impl MultiProvider {
                         true
                     };
                     if should_install {
+                        if let Some(model) = current_openrouter_model.as_deref()
+                            && let Err(error) = provider.set_model(model)
+                        {
+                            crate::logging::warn(&format!(
+                                "Failed to preserve OpenRouter model routing after auth change: {error}"
+                            ));
+                        }
                         crate::logging::info(
                             "Hot-initialized OpenRouter/OpenAI-compatible provider after auth change",
                         );
@@ -1709,6 +1753,13 @@ impl Provider for MultiProvider {
                 .map(|o| o.model())
                 .unwrap_or_else(|| "anthropic/claude-sonnet-4".to_string()),
         }
+    }
+
+    fn explicit_provider_pin_for_current_model(&self) -> Option<String> {
+        matches!(self.active_provider(), ActiveProvider::OpenRouter)
+            .then(|| self.active_openrouter_execution_provider())
+            .flatten()
+            .and_then(|provider| provider.explicit_provider_pin_for_current_model())
     }
 
     fn active_resolved_credential(&self) -> Option<jcode_provider_core::ResolvedCredential> {

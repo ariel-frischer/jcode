@@ -356,6 +356,51 @@ fn named_openai_compatible_provider_uses_per_model_image_input_support() {
 }
 
 #[test]
+fn named_openai_compatible_model_with_omitted_input_defaults_to_text_only() {
+    let _lock = ENV_LOCK.lock();
+    let _namespace = EnvVarGuard::remove("JCODE_OPENROUTER_CACHE_NAMESPACE");
+
+    let profile = jcode_base::config::NamedProviderConfig {
+        base_url: "http://localhost:1234/v1".to_string(),
+        auth: jcode_base::config::NamedProviderAuth::None,
+        default_model: Some("text-model".to_string()),
+        models: vec![jcode_base::config::NamedProviderModelConfig {
+            id: "text-model".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let provider = OpenRouterProvider::new_named_openai_compatible("local-compat", &profile)
+        .expect("local named profile should initialize without auth");
+
+    assert!(!provider.supports_image_input());
+}
+
+#[test]
+fn named_openai_compatible_model_with_empty_input_defaults_to_text_only() {
+    let _lock = ENV_LOCK.lock();
+    let _namespace = EnvVarGuard::remove("JCODE_OPENROUTER_CACHE_NAMESPACE");
+
+    let profile = jcode_base::config::NamedProviderConfig {
+        base_url: "http://localhost:1234/v1".to_string(),
+        auth: jcode_base::config::NamedProviderAuth::None,
+        default_model: Some("text-model".to_string()),
+        models: vec![jcode_base::config::NamedProviderModelConfig {
+            id: "text-model".to_string(),
+            input: Vec::new(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let provider = OpenRouterProvider::new_named_openai_compatible("local-compat", &profile)
+        .expect("local named profile should initialize without auth");
+
+    assert!(!provider.supports_image_input());
+}
+
+#[test]
 fn direct_deepseek_profile_does_not_advertise_image_input_support() {
     let provider = OpenRouterProvider {
         profile_id: Some("deepseek".to_string()),
@@ -1150,7 +1195,7 @@ fn test_parse_model_spec() {
     assert_eq!(model, "anthropic/claude-sonnet-4");
     let provider = provider.expect("provider");
     assert_eq!(provider.name, "Fireworks");
-    assert!(provider.allow_fallbacks);
+    assert!(!provider.allow_fallbacks);
 
     let (model, provider) = parse_model_spec("anthropic/claude-sonnet-4@Fireworks!");
     assert_eq!(model, "anthropic/claude-sonnet-4");
@@ -1166,6 +1211,22 @@ fn test_parse_model_spec() {
     let (model, provider) = parse_model_spec("anthropic/claude-sonnet-4@auto");
     assert_eq!(model, "anthropic/claude-sonnet-4");
     assert!(provider.is_none());
+}
+
+#[test]
+fn fork_preserves_explicit_provider_pin() {
+    let provider = make_provider();
+    provider
+        .set_model("z-ai/glm-5.2@Novita")
+        .expect("set explicitly pinned model");
+
+    let fork = provider.fork();
+
+    assert_eq!(fork.model(), "z-ai/glm-5.2");
+    assert_eq!(
+        fork.explicit_provider_pin_for_current_model().as_deref(),
+        Some("Novita")
+    );
 }
 
 fn make_endpoint(name: &str, throughput: f64, uptime: f64, cache: bool, cost: f64) -> EndpointInfo {
