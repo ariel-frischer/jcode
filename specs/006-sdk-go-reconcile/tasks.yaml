@@ -1,0 +1,542 @@
+tasks:
+    branch: "agent/jcode-5rv-sdk-reconcile"
+    created: "2026-08-11"
+    spec_path: "specs/006-sdk-go-reconcile/spec.yaml"
+    plan_path: "specs/006-sdk-go-reconcile/plan.yaml"
+summary:
+    total_tasks: 37
+    total_phases: 7
+    parallel_opportunities: 21
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Establish a read-only baseline for the protected public repository before reconciliation"
+      tasks:
+        - id: "T001"
+          title: "Record the public jcode-go baseline in the divergence inventory"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: []
+          acceptance_criteria:
+            - "Record the public repository's resolved path, main branch, HEAD commit, clean status, tracked-path list, file modes, and a deterministic tracked-content fingerprint without printing file contents."
+            - "Record the exact read-only commands needed to repeat the baseline after reconciliation."
+            - "Do not modify, switch, stage, commit, or otherwise mutate /home/ari/repos/jcode-go."
+    - number: 2
+      title: "Foundational"
+      purpose: "Fix the authority taxonomy and publication boundary used by every story"
+      tasks:
+        - id: "T002"
+          title: "Define authority, disposition, inclusion, and protection rules"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Define source, test, example, module, documentation, and governance categories plus canonical, public, shared, and repository-specific authorities."
+            - "Define import, retain-canonical, protect-public, merge, and remove-obsolete dispositions and map recurring dispositions to named synchronization rules."
+            - "Declare sdk/go as publication source, crates/jcode-harness-api as wire authority, and the public lifecycle behavior as authoritative only within that wire contract."
+            - "List explicit publishable payload paths and protected destination-only paths, including .autospec, .beads, .worktrees, specs, governance files, and public repository docs."
+    - number: 3
+      title: "User Story 1 - Understand every SDK divergence"
+      purpose: "Account for every canonical/public difference before changing SDK behavior"
+      story_reference: "US-001"
+      independent_test: "Run a fresh recursive comparison of sdk/go and /home/ari/repos/jcode-go and verify every divergent path has a complete, evidence-backed inventory record."
+      tasks:
+        - id: "T003"
+          title: "Populate the complete path-level divergence ledger"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Inventory every difference across source, tests, examples, module files, SDK documentation, and repository governance, including paths existing on only one side."
+            - "Each unique normalized path records category, authority, disposition, rationale, and supporting source/test/architecture evidence."
+            - "Every wire-facing disposition is checked against crates/jcode-harness-api rather than inferred from CLI output or public SDK code alone."
+            - "All newer public lifecycle, observability, private-runtime, terminal-outcome, process-safety, ToolExec, ReasoningDone, test, and example behavior receives an explicit disposition."
+        - id: "T004"
+          title: "Verify inventory completeness and approve all authority exceptions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "A fresh recursive comparison yields zero divergent paths absent from the ledger."
+            - "Every entry has all required fields and maps to a one-time reconciliation action or a named recurring synchronization rule."
+            - "Any decision not to preserve established public behavior cites concrete current architecture evidence and its compatibility impact; otherwise no exception is recorded."
+            - "The public repository baseline still matches T001 before implementation begins."
+    - number: 4
+      title: "User Story 2 - Use the complete canonical SDK contract"
+      purpose: "Reconcile authoritative public behavior into sdk/go while preserving compatible canonical and wire contracts"
+      story_reference: "US-002"
+      independent_test: "Run focused canonical Go tests and race tests covering lifecycle, observability, private runtime, terminal outcomes, protocol v1, process safety, ToolExec, ReasoningDone, and examples."
+      tasks:
+        - id: "T005"
+          title: "Add Turn lifecycle compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/turn_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests define the established public Turn API lifecycle, streaming, cancellation, and completion behavior."
+            - "Tests preserve existing Session APIs and require no consumer migration."
+        - id: "T006"
+          title: "Add typed terminal Turn outcome tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/turn_outcome_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests cover every established success, failure, cancellation, and protocol terminal outcome."
+            - "Unknown and terminal events retain the public compatibility and fail-visible contract."
+        - id: "T007"
+          title: "Add bounded and redacted observability tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/observability_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests cover authoritative public observations without exposing prompts, credentials, or private runtime data."
+            - "Diagnostic payloads remain bounded and preserve compatible event metadata."
+        - id: "T008"
+          title: "Add Linux private-runtime acceptance coverage"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/private_runtime_acceptance_linux_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests exercise private runtime launch, readiness, connection, and bounded shutdown on Linux without live OAuth."
+            - "The fixture uses controlled local processes and leaves no child process or socket behind."
+        - id: "T009"
+          title: "Expand launch lifecycle regression tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/launch_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests cover compatible runtime options, readiness failures, cleanup, and repeated close behavior."
+            - "Failure diagnostics identify the launch boundary without leaking runtime content."
+        - id: "T010"
+          title: "Add bounded Unix process-supervision tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/process_unix_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests cover process-group termination, bounded graceful shutdown, forced cleanup, and already-exited processes."
+            - "Tests verify no unrelated process is signaled and no zombie is retained."
+        - id: "T011"
+          title: "Add Windows process-safety compile tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/process_windows_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests or compile-time seams cover the established Windows cleanup contract without Unix-only assumptions."
+            - "The package remains compilable for GOOS=windows GOARCH=amd64."
+        - id: "T012"
+          title: "Expand protocol v1 event compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/protocol/protocol_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests cover canonical protocol v1 wire values for ToolExec, ReasoningDone, terminal events, and unknown events."
+            - "Existing serialized field names, enum representations, and decoding fallback behavior remain backward compatible."
+        - id: "T013"
+          title: "Expand public typed API compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/typed_api_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Compile-time and behavioral tests cover public imports, exported types, event decoding, runtime controls, and established aliases."
+            - "The reconciled API requires no source changes for existing consumers."
+        - id: "T014"
+          title: "Add one-shot example behavior tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/examples/oneshot/main_test.go"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests exercise the documented one-shot lifecycle and terminal outcome using a controlled transport."
+            - "The example remains deterministic and requires no live provider credentials."
+        - id: "T015"
+          title: "Add the authoritative Turn lifecycle implementation"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "sdk/go/turn.go"
+          dependencies: ["T005", "T006"]
+          acceptance_criteria:
+            - "The canonical SDK exposes the established public Turn API and typed terminal outcomes."
+            - "Turn completion, cancellation, and error behavior satisfy T005 and T006 without replacing compatible Session behavior."
+        - id: "T016"
+          title: "Reconcile client observability and runtime controls"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/client.go"
+          dependencies: ["T007", "T013"]
+          acceptance_criteria:
+            - "Canonical client options and observations match authoritative public behavior while retaining compatible canonical-only behavior."
+            - "Diagnostics are bounded and redacted and public imports remain stable."
+        - id: "T017"
+          title: "Reconcile Session lifecycle and event dispatch"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "sdk/go/session.go"
+          dependencies: ["T012", "T013", "T015", "T016"]
+          acceptance_criteria:
+            - "Session and Turn paths share the canonical protocol v1 decoder and preserve existing Session method behavior."
+            - "ToolExec, ReasoningDone, terminal, and unknown events follow the tested compatibility contract."
+        - id: "T018"
+          title: "Reconcile private-runtime launch and cleanup"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/launch.go"
+          dependencies: ["T008", "T009"]
+          acceptance_criteria:
+            - "Launch, readiness, failure, close, and repeated-close behavior matches authoritative public behavior."
+            - "The implementation remains dependency-free and exposes actionable bounded failures."
+        - id: "T019"
+          title: "Reconcile bounded Unix process supervision"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/process_unix.go"
+          dependencies: ["T010", "T018"]
+          acceptance_criteria:
+            - "Unix runtime shutdown uses bounded process-group supervision and satisfies all safety tests."
+            - "Cleanup does not signal unrelated processes or leave runtime children behind."
+        - id: "T020"
+          title: "Reconcile Windows process handling"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/process_windows.go"
+          dependencies: ["T011", "T018"]
+          acceptance_criteria:
+            - "Windows process handling preserves the established cleanup contract and contains no Unix-only code."
+            - "GOOS=windows GOARCH=amd64 compilation passes."
+        - id: "T021"
+          title: "Reconcile the one-shot example"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/examples/oneshot/main.go"
+          dependencies: ["T014", "T017"]
+          acceptance_criteria:
+            - "The example demonstrates the reconciled Turn lifecycle and typed terminal result."
+            - "The example builds and its controlled test passes."
+        - id: "T022"
+          title: "Reconcile the private-runtime example"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/examples/private/main.go"
+          dependencies: ["T017", "T019", "T020"]
+          acceptance_criteria:
+            - "The example uses current private-runtime launch, readiness, and cleanup APIs."
+            - "The example builds on supported host platforms without weakening process-safety behavior."
+        - id: "T023"
+          title: "Reconcile the streaming example"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/examples/streaming/main.go"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "The example demonstrates authoritative event streaming, terminal outcomes, ToolExec, and ReasoningDone behavior."
+            - "The example builds without third-party dependencies."
+        - id: "T024"
+          title: "Align example selection and usage guidance"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "sdk/go/examples/README.md"
+          dependencies: ["T021", "T022", "T023"]
+          acceptance_criteria:
+            - "Guidance accurately distinguishes one-shot, streaming, and private-runtime examples and their lifecycle guarantees."
+            - "Every documented command and public symbol exists in the reconciled canonical SDK."
+        - id: "T025"
+          title: "Run focused canonical SDK behavior and race validation"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "sdk/go/go.mod"
+          dependencies: ["T017", "T019", "T020", "T024"]
+          acceptance_criteria:
+            - "Focused tests pass for lifecycle, terminal outcomes, observability, protocol v1, private runtime, process safety, typed API compatibility, and examples."
+            - "Go race tests pass for the reconciled lifecycle and process paths."
+            - "A fresh comparison shows no authoritative public source, test, or example behavior remaining only in /home/ari/repos/jcode-go."
+    - number: 5
+      title: "User Story 3 - Preview and apply deterministic publication sync"
+      purpose: "Provide a reviewable, non-mutating preview and stale-safe controlled apply workflow"
+      story_reference: "US-003"
+      independent_test: "Run two previews against unchanged temporary repositories, compare manifests byte-for-byte, verify zero mutations, then apply the reviewed manifest to a controlled copy and compare exact operations and protected paths."
+      tasks:
+        - id: "T026"
+          title: "Write synchronization preview and apply fixture tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/test_sync_jcode_go.sh"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Temporary Git fixtures cover named include/protect rules, add/update/remove operations, retained exclusions, deterministic ordering, file modes, and exact controlled-copy apply."
+            - "Tests prove default and preview modes mutate neither tree and two unchanged previews are byte-identical."
+            - "Tests cover wrong repository identity, wrong branch, dirty destination, missing source, invalid mode, malformed or unsupported manifests, unsafe paths, duplicate operations, and changed source or destination fingerprints."
+            - "Every invalid precondition fails non-zero with an actionable bounded diagnostic and zero mutation."
+        - id: "T027"
+          title: "Implement deterministic manifest preview and stale-safe apply"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/sync-jcode-go.sh"
+          dependencies: ["T002", "T026"]
+          acceptance_criteria:
+            - "Bash 3.2+ and Git produce a version-1, timestamp-free, C-locale ordered manifest containing the full named rule set, source and destination fingerprints, and exact operations."
+            - "Default and preview invocations are read-only; apply requires an explicit reviewed manifest and recomputes both fingerprints before any write."
+            - "Apply rejects malformed, stale, unsafe, dirty, wrong-branch, or wrong-repository inputs before mutation and performs only reviewed add/update/remove operations."
+            - "Public-only governance, specifications, worktrees, Beads/Autospec state, and repository documentation are retained through explicit protection rules."
+            - "The implementation introduces no rsync or non-system dependency and all T026 fixtures pass."
+    - number: 6
+      title: "User Story 4 - Validate and document SDK publication readiness"
+      purpose: "Expose one complete non-mutating validator and documentation that matches the delivered publication boundary"
+      story_reference: "US-004"
+      independent_test: "Run scripts/validate_go_sdk.sh and follow the canonical publication guide from a clean checkout, verifying seven visible validation results and agreement among scripts, CI, and documentation."
+      tasks:
+        - id: "T028"
+          title: "Write aggregate SDK validator fixture tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "scripts/test_validate_go_sdk.sh"
+          dependencies: ["T025", "T027"]
+          acceptance_criteria:
+            - "Command shims prove formatting, module consistency, vet, build, tests, race tests, and Windows amd64 build are each invoked exactly as documented."
+            - "A controlled failure in each category remains visible, later categories still run, the final summary identifies every failure, and the script exits non-zero."
+            - "Tests prove validation does not rewrite go.mod, go.sum, source, or either repository working tree."
+        - id: "T029"
+          title: "Implement the seven-category non-mutating SDK validator"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "scripts/validate_go_sdk.sh"
+          dependencies: ["T028"]
+          acceptance_criteria:
+            - "The script runs formatting, go mod tidy -diff plus go mod verify, vet, build, tests, race tests, and GOOS=windows GOARCH=amd64 build as seven named categories."
+            - "All categories run even after a failure, emit bounded category-specific pass/fail results, and produce one final non-zero aggregate result if any category fails."
+            - "The script is Bash 3.2+ compatible, non-mutating, dependency-free beyond the Go toolchain, and passes T028."
+        - id: "T030"
+          title: "Make CI reuse the canonical Go SDK validator"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: ".github/workflows/ci.yml"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "CI invokes scripts/validate_go_sdk.sh instead of maintaining a divergent validation sequence."
+            - "The supported Go 1.23.x and 1.24.x matrix is explicit; any newer locally installed toolchain is supplemental evidence only."
+            - "CI retains the Windows amd64 compile boundary and requires no live OAuth or production-adjacent service."
+        - id: "T031"
+          title: "Document the reconciled public Go SDK contract"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "sdk/go/README.md"
+          dependencies: ["T024", "T027", "T029"]
+          acceptance_criteria:
+            - "The publishable README documents the actual public module path, Session and Turn lifecycle, terminal outcomes, observability, private runtime, process safety, platform limits, and current examples."
+            - "Preview, apply, validation, and compatibility statements match the delivered scripts and tests."
+        - id: "T032"
+          title: "Update the repository Go SDK overview"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK.md"
+          dependencies: ["T024", "T027", "T029"]
+          acceptance_criteria:
+            - "The overview names sdk/go as canonical source and github.com/ariel-frischer/jcode-go as public destination."
+            - "All commands, module paths, supported boundaries, and no-live-mutation rules match the implementation."
+        - id: "T033"
+          title: "Update canonical SDK architecture ownership"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK_ARCHITECTURE.md"
+          dependencies: ["T025", "T027", "T029"]
+          acceptance_criteria:
+            - "The document declares current state and identifies crates/jcode-harness-api as wire owner, sdk/go as SDK behavior/publication owner, and the public repository as a protected publication destination."
+            - "Lifecycle, transport, process supervision, compatibility, and repository-specific protection boundaries match current source and tests."
+        - id: "T034"
+          title: "Update the SDK release and publication runbook"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK_RELEASE_PLAN.md"
+          dependencies: ["T027", "T029", "T030"]
+          acceptance_criteria:
+            - "The runbook documents baseline capture, complete inventory review, deterministic preview, reviewed-manifest apply, protected exclusions, seven-category validation, supported Go matrix, and post-publication verification."
+            - "It explicitly forbids applying to the live public repository during reconciliation and requires a fresh eligibility/fingerprint check before any future authorized publication."
+        - id: "T035"
+          title: "Validate the documented publication-readiness workflow"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "docs/GO_SDK_RELEASE_PLAN.md"
+          dependencies: ["T030", "T031", "T032", "T033", "T034"]
+          acceptance_criteria:
+            - "Every referenced command, file, module path, exclusion, and validation category agrees across documentation, scripts, tests, and CI."
+            - "scripts/validate_go_sdk.sh passes all seven categories with supported Go 1.23/1.24 evidence recorded; other toolchain results are labeled supplemental."
+            - "The workflow reaches a publication-readiness decision without undocumented choices or live provider access."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Record the change and prove final reconciliation, repository safety, and delivery gates"
+      tasks:
+        - id: "T036"
+          title: "Record the SDK reconciliation and publication workflow change"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: ["T035"]
+          acceptance_criteria:
+            - "The reconciliation evidence concisely records canonical SDK behavior reconciliation, deterministic preview/apply safety, and the complete validation entry point."
+            - "The evidence does not claim that the public repository was published or mutated before integration."
+        - id: "T037"
+          title: "Run final reconciliation and repository delivery gates"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+          dependencies: ["T036"]
+          acceptance_criteria:
+            - "Two final previews over unchanged inputs are byte-identical, mutate zero files, and contain no unclassified source, test, example, module, or behavioral drift."
+            - "The complete canonical SDK validator passes all seven categories, synchronization and validator fixture suites pass, formatting checks pass, and scripts/check_guardrails.sh passes."
+            - "The final inventory records exact commands and results and maps every FR-001 through FR-015 to automated evidence or a reviewed artifact check."
+            - "The public repository's branch, clean status, HEAD commit, tracked-path list, modes, and content fingerprint exactly match T001."
+            - "The final diff is limited to the approved SDK, scripts, tests, CI, documentation, and Autospec artifacts; no public-repository file is changed before integration."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002", "US-003"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-004"]
+        - story_id: "US-003"
+          depends_on: ["US-001"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-002", "US-003"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4, 5]
+        - phase: 4
+          blocks: [6]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: []
+parallel_execution:
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T005", "T006", "T007", "T008", "T009", "T010", "T011", "T012", "T013", "T014"]
+          rationale: "The behavior-first tests occupy distinct Go test files and share only the completed inventory prerequisite."
+        - tasks: ["T016", "T018"]
+          rationale: "Client observability and private-runtime launch are separate source files with separate test prerequisites."
+        - tasks: ["T019", "T020"]
+          rationale: "Unix and Windows process implementations are platform-separated files after the shared launch contract is established."
+        - tasks: ["T021", "T022", "T023"]
+          rationale: "The three examples occupy distinct directories after their required SDK contracts are complete."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T031", "T032", "T033", "T034"]
+          rationale: "Publishable README, repository overview, architecture, and release runbook are distinct documents based on completed scripts and behavior."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "Complete the safety baseline and inventory, then reconcile the P0 canonical SDK behavior without yet adding the reusable publication workflow."
+        validation: "Run the focused canonical Go behavior and race tests in T025 and confirm the public repository still matches the T001 baseline."
+    incremental_delivery:
+        - milestone: "Reconciliation Boundary Approved"
+          phases: [1, 2, 3]
+          deliverable: "Every current divergence is classified with authority, disposition, and an explicit publish/protect rule."
+        - milestone: "MVP Canonical SDK Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "sdk/go contains all authoritative public lifecycle, observability, runtime, terminal, protocol, process-safety, test, and example behavior."
+        - milestone: "Safe Publication Workflow Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "A deterministic reviewed manifest can be previewed and applied safely to controlled copies while protecting public-only content."
+        - milestone: "Publication Readiness Complete"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "The seven-category validator, CI, documentation, final previews, guardrails, and no-public-mutation proof all pass."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-11T08:21:45Z"
+    artifact_type: "tasks"
