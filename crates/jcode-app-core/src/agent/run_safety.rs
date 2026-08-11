@@ -204,14 +204,16 @@ fn parse_positive(
 
 fn parse_deadline(source: RunSafetySource, value: &str) -> Result<Instant, RunSafetyError> {
     let correction = "use a future RFC3339 timestamp with an explicit UTC offset";
-    let parsed = DateTime::parse_from_rfc3339(value.trim()).ok();
-    let Some(parsed) = parsed else {
-        return Err(RunSafetyError {
-            bound: RunSafetyBound::Deadline,
-            source,
-            value: value.to_string(),
-            correction,
-        });
+    let parsed = match DateTime::parse_from_rfc3339(value.trim()) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            return Err(RunSafetyError {
+                bound: RunSafetyBound::Deadline,
+                source,
+                value: value.to_string(),
+                correction,
+            });
+        }
     };
     let parsed = parsed.with_timezone(&Utc);
     let now = Utc::now();
