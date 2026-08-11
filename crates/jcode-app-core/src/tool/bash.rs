@@ -1,4 +1,7 @@
 use super::{StdinInputRequest, Tool, ToolContext, ToolOutput};
+#[cfg(unix)]
+#[path = "bash_process_guard.rs"]
+mod process_guard;
 use crate::background::TaskResult;
 use crate::bus::{
     BackgroundTaskProgress, BackgroundTaskProgressKind, BackgroundTaskProgressSource,
@@ -8,6 +11,8 @@ use crate::util::truncate_str;
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
+#[cfg(unix)]
+use process_guard::{DetachedChildKillGuard, ProcessGroupKillGuard};
 use serde::Deserialize;
 use serde_json::{Value, json};
 #[cfg(unix)]
@@ -508,31 +513,6 @@ fn configure_tool_scratch(command: &mut TokioCommand) {
     }
 }
 
-#[cfg(unix)]
-struct ProcessGroupKillGuard {
-    pid: Option<u32>,
-}
-
-#[cfg(unix)]
-impl ProcessGroupKillGuard {
-    fn new(pid: Option<u32>) -> Self {
-        Self { pid }
-    }
-
-    fn disarm(&mut self) {
-        self.pid = None;
-    }
-}
-
-#[cfg(unix)]
-impl Drop for ProcessGroupKillGuard {
-    fn drop(&mut self) {
-        if let Some(pid) = self.pid {
-            let _ = crate::platform::signal_detached_process_group(pid, libc::SIGKILL);
-        }
-    }
-}
-
 fn build_shell_command(cmd_str: &str) -> TokioCommand {
     #[cfg(windows)]
     {
@@ -1016,12 +996,14 @@ impl BashTool {
             cmd.current_dir(dir);
         }
 
-        let mut child = crate::platform::spawn_detached(&mut cmd)?;
+        let child = crate::platform::spawn_detached(&mut cmd)?;
         let pid = child.id();
+        let mut child_guard = DetachedChildKillGuard::new(child);
         let shutdown_signal = ctx.graceful_shutdown_signal.clone();
 
         loop {
-            if let Some(status) = child.try_wait()? {
+            if let Some(status) = child_guard.try_wait()? {
+                child_guard.disarm();
                 let output = tokio::fs::read_to_string(&info.output_file)
                     .await
                     .unwrap_or_default();
@@ -1051,6 +1033,7 @@ impl BashTool {
                         params.wake,
                     )
                     .await;
+                child_guard.disarm();
 
                 let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
                 let output = format!(
@@ -1108,6 +1091,7 @@ impl BashTool {
                         params.wake,
                     )
                     .await;
+                child_guard.disarm();
                 let output = format!(
                     "Command continued in background due to reload.\n\nTask ID: {}\nOutput file: {}\nStatus file: {}\n\nUse `bg` with action=\"wait\" and task_id=\"{}\" after reload to wait for completion or the next progress checkpoint.",
                     info.task_id,
