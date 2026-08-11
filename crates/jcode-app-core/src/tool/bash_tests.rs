@@ -5,6 +5,16 @@ use crate::tool::bash::{BashTool, parse_heuristic_progress};
 use serde_json::json;
 use tokio::sync::mpsc;
 
+#[cfg(target_os = "linux")]
+fn linux_process_is_live(pid: u32) -> bool {
+    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    stat.rsplit_once(") ")
+        .and_then(|(_, fields)| fields.chars().next())
+        .is_some_and(|state| state != 'Z')
+}
+
 #[test]
 fn repository_commands_export_a_logged_cargo_function() {
     let repo =
@@ -277,6 +287,15 @@ async fn test_reload_persistable_bash_continues_in_background() {
     let tool = BashTool::new();
     let signal = jcode_agent_runtime::InterruptSignal::new();
     let ctx = make_agent_ctx(signal.clone());
+    let temp = tempfile::Builder::new()
+        .prefix("bash-reload-transfer-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("temp dir");
+    let pid_file = temp.path().join("pids");
+    let command = format!(
+        "sleep 1 & descendant=$!; printf '%s\\n%s\\n' \"$$\" \"$descendant\" > {}; wait \"$descendant\"; echo reload_persist_ok",
+        shell_single_quote(&pid_file.to_string_lossy())
+    );
 
     let signal_task = tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
@@ -284,10 +303,7 @@ async fn test_reload_persistable_bash_continues_in_background() {
     });
 
     let result = tool
-        .execute(
-            json!({"command": "sleep 1; echo reload_persist_ok", "timeout": 10000}),
-            ctx,
-        )
+        .execute(json!({"command": command, "timeout": 10000}), ctx)
         .await
         .expect("reload-persistable command should succeed");
     signal_task.await.expect("signal task should complete");
@@ -310,6 +326,23 @@ async fn test_reload_persistable_bash_continues_in_background() {
             .expect("status_file should be present"),
     );
 
+    let pids = std::fs::read_to_string(&pid_file).expect("command should record process ids");
+    let mut pids = pids.lines().map(|pid| {
+        pid.parse::<u32>()
+            .expect("command should record numeric process ids")
+    });
+    let parent_pid = pids.next().expect("parent pid");
+    let descendant_pid = pids.next().expect("descendant pid");
+    assert_eq!(metadata["pid"], parent_pid);
+    assert!(
+        crate::platform::is_process_running(parent_pid),
+        "ownership transfer must preserve the detached parent"
+    );
+    assert!(
+        crate::platform::is_process_running(descendant_pid),
+        "ownership transfer must preserve detached descendants"
+    );
+
     tokio::time::sleep(std::time::Duration::from_millis(1400)).await;
 
     let status = crate::background::global()
@@ -325,6 +358,61 @@ async fn test_reload_persistable_bash_continues_in_background() {
 
     let _ = tokio::fs::remove_file(output_file).await;
     let _ = tokio::fs::remove_file(status_file).await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn cancelling_reload_persistable_bash_kills_parent_and_descendants() {
+    let tool = BashTool::new();
+    let signal = jcode_agent_runtime::InterruptSignal::new();
+    let ctx = make_agent_ctx(signal);
+    let temp = tempfile::Builder::new()
+        .prefix("bash-cancel-ownership-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("temp dir");
+    let pid_file = temp.path().join("pids");
+    let command = format!(
+        "sleep 60 & descendant=$!; printf '%s\\n%s\\n' \"$$\" \"$descendant\" > {}; wait",
+        shell_single_quote(&pid_file.to_string_lossy())
+    );
+
+    let handle = tokio::spawn(async move {
+        tool.execute(json!({"command": command, "timeout": 10000}), ctx)
+            .await
+    });
+
+    let startup_deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !pid_file.exists() && std::time::Instant::now() < startup_deadline {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let pids = std::fs::read_to_string(&pid_file).expect("command should record process ids");
+    let mut pids = pids.lines().map(|pid| {
+        pid.parse::<u32>()
+            .expect("command should record numeric process ids")
+    });
+    let parent_pid = pids.next().expect("parent pid");
+    let descendant_pid = pids.next().expect("descendant pid");
+    assert!(linux_process_is_live(parent_pid));
+    assert!(linux_process_is_live(descendant_pid));
+
+    handle.abort();
+    assert!(
+        handle
+            .await
+            .expect_err("tool task should be cancelled")
+            .is_cancelled()
+    );
+
+    let teardown_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < teardown_deadline {
+        if !linux_process_is_live(parent_pid) && !linux_process_is_live(descendant_pid) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!(
+        "cancelled tool left process group alive: parent={parent_pid}, descendant={descendant_pid}"
+    );
 }
 
 #[tokio::test]
