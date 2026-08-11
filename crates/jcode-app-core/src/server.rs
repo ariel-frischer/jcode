@@ -1288,7 +1288,6 @@ impl Server {
             .await;
         });
 
-        // Log when we receive SIGTERM for debugging
         #[cfg(unix)]
         {
             let sigterm_server_name = self.identity.name.clone();
@@ -1297,12 +1296,12 @@ impl Server {
                 if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
                     sigterm.recv().await;
                     crate::logging::info("Server received SIGTERM, shutting down gracefully");
+                    crate::tool::terminate_owned_foreground_process_groups();
                     let _ = crate::registry::unregister_server(&sigterm_server_name).await;
                     std::process::exit(0);
                 }
             });
         }
-
         // Spawn the bus monitor for swarm coordination
         let monitor_file_touch = self.file_touch.clone();
         let monitor_swarm_members = Arc::clone(&self.swarm_state.members);
@@ -1804,6 +1803,7 @@ impl Server {
                                     "Server idle for {} minutes with no clients. Shutting down.",
                                     idle_duration / 60
                                 ));
+                                crate::tool::terminate_owned_foreground_process_groups();
                                 let _ = crate::registry::unregister_server(&idle_server_name).await;
                                 std::process::exit(EXIT_IDLE_TIMEOUT);
                             }

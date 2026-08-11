@@ -40,6 +40,11 @@ const BASH_TOOL_DESCRIPTION: &str = "Run a bash command.";
 const WINDOWS_SHELL_TOOL_DESCRIPTION: &str =
     "Run a Windows cmd.exe command (compatibility name `bash`). Use cmd.exe syntax, not Bash.";
 
+pub(crate) fn terminate_owned_foreground_process_groups() {
+    #[cfg(unix)]
+    process_guard::terminate_owned_foreground_process_groups();
+}
+
 fn bounded_timeout_ms(timeout: Option<u64>) -> u64 {
     timeout.unwrap_or(DEFAULT_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
 }
