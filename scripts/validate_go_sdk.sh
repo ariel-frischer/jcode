@@ -1,92 +1,92 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-# Go SDK Integration and Final Validation Script
-# Run this after all jcode-zqc implementation stages complete
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+sdk_dir="$ROOT/sdk/go"
 
-echo "=== Go SDK Final Validation ==="
+usage() {
+  echo "usage: validate_go_sdk.sh [--sdk-dir DIR]" >&2
+}
 
-# Check if Go SDK exists and is properly structured
-if [ ! -d "sdk/go" ] || [ ! -f "sdk/go/go.mod" ]; then
-    echo "ERROR: Go SDK not found or incomplete"
-    exit 1
-fi
-
-cd sdk/go
-
-echo "--- Go SDK Format Check ---"
-if ! gofmt -d . | tee /tmp/gofmt-output; then
-    echo "ERROR: gofmt failed"
-    exit 1
-fi
-
-if [ -s /tmp/gofmt-output ]; then
-    echo "ERROR: Go code is not formatted correctly"
-    cat /tmp/gofmt-output
-    exit 1
-fi
-
-echo "--- Go SDK Vet Check ---"
-if ! go vet ./...; then
-    echo "ERROR: go vet failed"
-    exit 1
-fi
-
-echo "--- Go SDK Build Check ---"
-if ! go build ./...; then
-    echo "ERROR: go build failed"
-    exit 1
-fi
-
-echo "--- Go SDK Test Suite ---"
-if ! go test ./...; then
-    echo "ERROR: go test failed"
-    exit 1
-fi
-
-echo "--- Go SDK Race Detector ---"
-if ! go test -race ./...; then
-    echo "ERROR: go test -race failed"
-    exit 1
-fi
-
-echo "--- Go Module Validation ---"
-if ! go mod verify; then
-    echo "ERROR: go mod verify failed"
-    exit 1
-fi
-
-# Check for module cleanliness
-go mod tidy
-if ! git diff --exit-code go.mod go.sum 2>/dev/null; then
-    echo "WARNING: go.mod or go.sum needs tidying"
-    git status go.mod go.sum
-fi
-
-cd ../..
-
-echo "--- Integration Test with Real Binary ---"
-if command -v jcode >/dev/null 2>&1; then
-    echo "Found jcode binary, running integration smoke test"
-    # This would run a minimal integration test
-    echo "Integration test: SKIP (requires live jcode instance)"
-else
-    echo "No jcode binary found, skipping integration test"
-fi
-
-echo "--- Bead Status Check ---"
-echo "Checking jcode-zqc bead completion status..."
-
-# Check critical beads
-for bead in "jcode-zqc.4" "jcode-zqc.5" "jcode-zqc.6" "jcode-zqc.8"; do
-    if command -v bd >/dev/null 2>&1; then
-        echo "Checking $bead..."
-        bd show "$bead" 2>/dev/null | head -3 || echo "Bead $bead not found or incomplete"
-    else
-        echo "bd command not available, skipping bead checks"
-        break
-    fi
+while (( $# > 0 )); do
+  case $1 in
+    --sdk-dir)
+      (( $# >= 2 )) || { usage; exit 2; }
+      sdk_dir=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      echo "validate-go-sdk: unknown argument '$1'" >&2
+      exit 2
+      ;;
+  esac
 done
 
-echo "=== Go SDK Validation Complete ==="
-echo "Ready for final integration and release preparation"
+[[ -d $sdk_dir && -f $sdk_dir/go.mod ]] || {
+  echo "validate-go-sdk: SDK directory or go.mod is missing: $sdk_dir" >&2
+  exit 2
+}
+sdk_dir=$(cd "$sdk_dir" && pwd -P)
+cd "$sdk_dir"
+
+failed_categories=()
+
+run_category() {
+  name=$1
+  shift
+  echo "[RUN] $name"
+  if "$@"; then
+    echo "[PASS] $name"
+  else
+    echo "[FAIL] $name"
+    failed_categories+=("$name")
+  fi
+}
+
+check_formatting() {
+  result=0
+  while IFS= read -r file; do
+    output=$(gofmt -l "$file") || result=1
+    if [[ -n $output ]]; then
+      printf '%s\n' "$output"
+      result=1
+    fi
+  done < <(find . -type f -name '*.go' -print | LC_ALL=C sort)
+  return "$result"
+}
+
+check_module_consistency() {
+  result=0
+  go mod tidy -diff || result=1
+  go mod verify || result=1
+  return "$result"
+}
+
+check_vet() { go vet ./...; }
+check_build() { go build ./...; }
+check_tests() { go test ./...; }
+check_race_tests() { go test -race ./...; }
+check_windows_build() { GOOS=windows GOARCH=amd64 go build ./...; }
+
+run_category formatting check_formatting
+run_category module-consistency check_module_consistency
+run_category vet check_vet
+run_category build check_build
+run_category tests check_tests
+run_category race-tests check_race_tests
+run_category windows-amd64-build check_windows_build
+
+echo "Go SDK validation summary: $((7 - ${#failed_categories[@]})) passed, ${#failed_categories[@]} failed"
+if (( ${#failed_categories[@]} > 0 )); then
+  printf 'Failed categories:'
+  printf ' %s' "${failed_categories[@]}"
+  printf '\n'
+  exit 1
+fi
+
+echo "Go SDK validation: PASS"

@@ -159,6 +159,52 @@ func (s Session) Send(ctx context.Context, content string, options SendOptions) 
 	}
 }
 
+// StartTurn starts one owned turn. Its subscription and dispatcher are ready
+// before send_message is written, so fast acceptance and terminal events cannot
+// be missed. The method returns after the write succeeds, before acceptance.
+func (s Session) StartTurn(lifecycleCtx context.Context, content string, options SendOptions) (*Turn, error) {
+	if options.NoReply {
+		return nil, ErrTurnNoReply
+	}
+	if lifecycleCtx == nil {
+		lifecycleCtx = context.Background()
+	}
+	if err := lifecycleCtx.Err(); err != nil {
+		cause := context.Cause(lifecycleCtx)
+		if cause == nil {
+			cause = err
+		}
+		return nil, fmt.Errorf("start turn lifecycle: %w", cause)
+	}
+	s.client.emit(Observation{Kind: "turn_start"})
+
+	images := make([][2]string, len(options.Images))
+	copy(images, options.Images)
+	req, err := protocol.NewRawRequest("send_message", struct {
+		SessionID string      `json:"session_id"`
+		Content   string      `json:"content"`
+		Images    [][2]string `json:"images,omitempty"`
+	}{s.ID, content, images})
+	if err != nil {
+		return nil, fmt.Errorf("encode turn message: %w", err)
+	}
+
+	// The Turn owns this single subscription until its first terminal result.
+	// The internal subscription reserves slots for acceptance and the event that
+	// proves the public Turn queue has reached its configured bound.
+	subscription := s.client.subscribeTurn(s.ID, s.client.options.EventBuffer+2)
+	turn := newTurn(s.client, s.ID, subscription)
+	turn.start(lifecycleCtx)
+	if err := s.client.Notify(req); err != nil {
+		result := turnResultFromSubscriptionError(err)
+		wrapped := fmt.Errorf("send turn message: %w", result.Err)
+		turn.finishTerminal(result)
+		return nil, wrapped
+	}
+	turn.markWriteComplete()
+	return turn, nil
+}
+
 func (s Session) Events(ctx context.Context) *TypedEventStream {
 	return &TypedEventStream{subscription: s.client.Subscribe(s.ID)}
 }
@@ -218,6 +264,14 @@ type ToolInputDelta struct {
 }
 
 func (ToolInputDelta) typedEvent() {}
+
+type ToolExec struct {
+	SessionID string `json:"session_id"`
+	CallID    string `json:"call_id"`
+	Name      string `json:"name"`
+}
+
+func (ToolExec) typedEvent() {}
 
 type ToolDone struct {
 	SessionID string `json:"session_id"`
@@ -281,6 +335,8 @@ func decodeTypedEvent(event Event) (TypedEvent, error) {
 		value = &ToolStart{}
 	case "tool_input_delta":
 		value = &ToolInputDelta{}
+	case "tool_exec":
+		value = &ToolExec{}
 	case "tool_done":
 		value = &ToolDone{}
 	case "token_usage":

@@ -1,166 +1,85 @@
 # Go SDK
 
-The Go SDK is implemented in `sdk/go/` as a separate Go module:
+**Status:** Current implementation and publication boundary
+
+Jcode's Go SDK is the dependency-free module in [`sdk/go/`](../sdk/go):
 
 ```text
-module github.com/1jehuang/jcode-go
+module github.com/ariel-frischer/jcode-go
 ```
 
-## Current availability
+`sdk/go` is the canonical source. [`github.com/ariel-frischer/jcode-go`](https://github.com/ariel-frischer/jcode-go) is the public destination. Publication copies only declared SDK payload; public-repository governance, specifications, automation, worktree/task state, and maintainer docs remain destination-owned.
 
-The SDK is **in the repository source**, but it is not a globally installed command and it has not been published to the public Go module proxy. There is no `jcode-go` executable to install. Applications import the Go package, while the Jcode runtime remains a separate `jcode` executable or daemon.
+## Runtime contract
 
-The public installation command will be:
+The SDK is an external protocol-v1 client. It uses the local harness API over newline-delimited JSON; it is not Rust FFI, an ACP client, or a CLI-output parser.
 
-```bash
-go get github.com/1jehuang/jcode-go@v0.1.0
-```
+- `Connect` attaches non-owningly to an existing bridge and never stops the shared daemon.
+- `Launch`/`LaunchInstance` own an isolated private runtime, readiness, and bounded cleanup.
+- `Session.Send` and `Session.Events` remain source-compatible.
+- `Session.StartTurn` owns acceptance, ordered events, cancellation, and an immutable typed terminal result.
+- Typed streams expose ReasoningDone, ToolExec, terminal events, and an unknown-event compatibility seam.
+- Observations are bounded classifications and exclude prompts, credentials, raw frames, private paths, session IDs, and provider content.
+- Linux/macOS use Unix sockets. Windows is a package compile boundary; no production Windows transport is claimed.
 
-Do not run that command yet. It will work only after a maintainer creates and publishes an approved release. Until then, use one of the source-checkout workflows below.
+See [`sdk/go/README.md`](../sdk/go/README.md) for API examples and lifecycle/error details.
 
-## Use from a source checkout
+## Use from source
 
-Clone Jcode and run the SDK checks:
-
-```bash
-git clone https://github.com/1jehuang/jcode.git
-cd jcode/sdk/go
-go test ./...
-go vet ./...
-```
-
-To use the SDK from another local Go application, add a local replacement to that application's `go.mod`:
+In another module:
 
 ```text
-module example.com/my-jcode-app
-
-go 1.23
-
-require github.com/1jehuang/jcode-go v0.0.0
-
-replace github.com/1jehuang/jcode-go => /absolute/path/to/jcode/sdk/go
+require github.com/ariel-frischer/jcode-go v0.0.0
+replace github.com/ariel-frischer/jcode-go => /absolute/path/to/jcode/sdk/go
 ```
 
-Then import it normally:
+Then import `github.com/ariel-frischer/jcode-go`. Remove the local replacement when using an approved published version.
 
-```go
-import jcode "github.com/1jehuang/jcode-go"
-```
+## Validation
 
-The `replace` directive is a development workaround. Remove it and require a published semantic version after the SDK release is available.
-
-## Connect to an existing Jcode runtime
-
-The Go SDK does not start a shared runtime in connect mode. Start the local API bridge separately:
+From the Jcode repository root:
 
 ```bash
-jcode api-bridge
+scripts/validate_go_sdk.sh
 ```
 
-Then connect from Go. The socket can be supplied explicitly, or resolved from `JCODE_API_SOCKET`, `JCODE_RUNTIME_DIR`, or `XDG_RUNTIME_DIR`:
+The command is non-mutating and always reports seven categories:
 
-```go
-ctx := context.Background()
-client, err := jcode.Connect(ctx, jcode.ConnectOptions{
-    SocketPath: os.Getenv("JCODE_API_SOCKET"),
-    ClientOptions: jcode.Options{
-        ClientName: "my-tool/1.0",
-    },
-})
-if err != nil {
-    return err
-}
-defer client.Close()
+1. formatting;
+2. module consistency (`go mod tidy -diff`, then `go mod verify`);
+3. vet;
+4. build;
+5. tests;
+6. race tests;
+7. Windows amd64 build.
 
-session, err := client.CreateSession(ctx, jcode.CreateSessionOptions{
-    WorkingDir: workingDir,
-})
-if err != nil {
-    return err
-}
+CI runs the same command for Go 1.23.x and 1.24.x. A newer local toolchain is useful supplementary evidence, not a substitute for the supported matrix. Tests and builds require no OAuth, provider credentials, shared daemon, or paid model call.
 
-stream := session.Events(ctx)
-defer stream.Close()
-if err := session.Send(ctx, prompt, jcode.SendOptions{}); err != nil {
-    return err
-}
+## Publication preview
 
-for {
-    event, err := stream.Next(ctx)
-    if err != nil {
-        return err
-    }
-    switch value := event.(type) {
-    case *jcode.TextDelta:
-        fmt.Print(value.Text)
-    case *jcode.PermissionRequest:
-        // Apply an explicit application policy before responding.
-    case *jcode.TurnDone:
-        return nil
-    }
-}
-```
-
-This mode operates on the user's shared sessions. Treat prompts, transcripts, tool calls, permissions, and file contents as sensitive.
-
-## Launch an isolated private instance
-
-Use `jcode.Launch` when the application should own a separate Jcode runtime:
-
-```go
-inheritLogins := false
-client, err := jcode.Launch(ctx, jcode.LaunchOptions{
-    Binary:        "/path/to/jcode", // optional; defaults to jcode on PATH
-    WorkingDir:    workingDir,
-    InheritLogins: &inheritLogins,
-    ClientOptions: jcode.Options{ClientName: "private-service/1.0"},
-})
-if err != nil {
-    return err
-}
-defer client.Close()
-```
-
-By default, launch creates an SDK-owned temporary home, starts an isolated bridge, waits for its API socket, and removes the temporary state when the client closes. Set `JcodeHome` to a persistent directory if sessions must survive process restarts. Persistent homes are never deleted automatically.
-
-Credential inheritance defaults to enabled for compatibility with the existing SDKs. Set `InheritLogins` to a pointer to `false` for an empty credential store. Do not inherit a developer's credentials into untrusted or multi-tenant services.
-
-`LaunchInstance` is the lower-level option. It starts the private process and returns its socket path without creating a client, for applications that need to own connection setup themselves.
-
-## What is supported
-
-| Platform | SDK build | Local runtime transport |
-| --- | --- | --- |
-| Linux | Supported | Unix-domain socket |
-| macOS | Supported | Unix-domain socket |
-| Windows | Package compile boundary | No production transport in v1 |
-
-The protocol is harness API v1 over newline-delimited JSON. The SDK does not use Rust FFI, parse CLI terminal output, or speak ACP. Unknown event kinds are preserved for forward compatibility.
-
-## Development and validation
-
-From the repository:
+Capture the public baseline first, then generate two previews:
 
 ```bash
-cd sdk/go
-gofmt -l .
-go test ./...
-go test -race ./...
-go vet ./...
-go mod verify
-GOOS=windows GOARCH=amd64 go build ./...
+scripts/sync-jcode-go.sh preview \
+  --source sdk/go \
+  --destination /absolute/path/to/jcode-go > /tmp/jcode-go.manifest
 ```
 
-The examples are under `sdk/go/examples/`:
+Preview is the default, writes its deterministic manifest to stdout, and mutates neither tree. Review the named inclusion/protection rules, fingerprints, exact add/update/remove operations, and retained exclusions. Apply requires the exact reviewed manifest and unchanged inputs:
 
-- `oneshot`: connect, create a session, send one prompt, and stream output.
-- `streaming`: long-lived raw event subscription.
-- `private`: private-instance lifecycle pattern.
+```bash
+scripts/sync-jcode-go.sh apply \
+  --source sdk/go \
+  --destination /absolute/path/to/jcode-go \
+  --manifest /tmp/jcode-go.manifest
+```
 
-They compile without provider credentials or a live model. Runtime examples require a compatible local Jcode bridge or binary.
+Apply is a publication action and requires explicit authorization. Reconciliation work must exercise it only on controlled temporary repositories, never on live public `main`. See [`GO_SDK_RELEASE_PLAN.md`](GO_SDK_RELEASE_PLAN.md).
 
-## Release status
+## Examples
 
-The architecture, protocol, lifecycle, resilience, validation, documentation, and release-planning work is tracked under the closed `jcode-zqc` Bead epic. Publication remains a separate maintainer decision. Until a version is tagged and published, consumers should use the source-checkout replacement above rather than assuming `go get` can resolve the module.
+- `sdk/go/examples/oneshot`: owned Turn lifecycle and typed terminal result.
+- `sdk/go/examples/streaming`: long-lived typed event streaming, including ToolExec and ReasoningDone.
+- `sdk/go/examples/private`: isolated launch, detached ownership, and bounded shutdown.
 
-For the lower-level API and protocol details, see [`sdk/go/README.md`](../sdk/go/README.md), [`GO_SDK_ARCHITECTURE.md`](GO_SDK_ARCHITECTURE.md), and [`GO_SDK_RELEASE_PLAN.md`](GO_SDK_RELEASE_PLAN.md).
+All examples build in the canonical validator. Runtime execution requires the compatible bridge or private Jcode binary described by the example.

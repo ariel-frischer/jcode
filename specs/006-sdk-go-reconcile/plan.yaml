@@ -1,0 +1,308 @@
+plan:
+  branch: "agent/jcode-5rv-sdk-reconcile"
+  created: "2026-08-11"
+  spec_path: "specs/006-sdk-go-reconcile/spec.yaml"
+
+summary: |
+  Reconcile the public jcode-go module into the canonical sdk/go source in two
+  deliberately separate steps. First, classify every current divergence and
+  bring authoritative public lifecycle, observability, private-runtime, turn,
+  process-safety, event, test, and example behavior into sdk/go while retaining
+  compatible canonical behavior. The Rust harness API remains the wire-contract
+  owner; public Go behavior is authoritative only within that boundary.
+
+  Then establish a repeatable publication boundary. A dependency-free Bash/Git
+  workflow will produce an ordered manifest containing explicit inclusion and
+  protection rules, content fingerprints, and exact add/update/remove actions.
+  Apply must consume that reviewed manifest and reject changed inputs. The public
+  repository will not be mutated during this feature: apply coverage uses a
+  controlled fixture. A non-mutating validation entry point will aggregate the
+  seven required Go checks and canonical documentation will describe the same
+  preview, apply, validation, and verification contract.
+
+technical_context:
+  language: "Go 1.23 module with Bash publication tooling"
+  framework: "None"
+  primary_dependencies:
+    - name: "Go toolchain"
+      version: "1.23.x and 1.24.x supported matrix"
+      purpose: "Builds, vets, tests, race-tests, verifies, tidies, and cross-compiles the dependency-free SDK."
+    - name: "Go standard library"
+      version: "Go 1.23"
+      purpose: "Implements the SDK protocol client, lifecycle, process supervision, and tests without third-party modules."
+    - name: "Bash"
+      version: "3.2+"
+      purpose: "Hosts the required sync and validation entry points using repository script conventions."
+    - name: "Git CLI"
+      version: "2.x"
+      purpose: "Validates repository identity and eligibility and fingerprints tracked repository state."
+  storage: "Canonical and destination working-tree files plus a deterministic, reviewable sync manifest; no database"
+  testing:
+    framework: "Go testing package and repository-local Bash fixture scripts"
+    approach: "Run focused Go unit/race tests for reconciled contracts, fixture tests for preview/apply and validation failures, then the complete canonical Go SDK validator and repository guardrails"
+  target_platform: "Linux and macOS SDK/runtime support, with a Windows amd64 compile-only boundary"
+  project_type: "library"
+  performance_goals: "Two previews over unchanged inputs are byte-identical, preview mutates zero files, apply performs exactly the reviewed operations, and all 7 validation categories pass"
+  constraints:
+    - "sdk/go remains the canonical publication source and crates/jcode-harness-api remains the wire-contract authority."
+    - "The public repository at /home/ari/repos/jcode-go must remain on main, clean, and byte-for-byte untouched throughout this feature."
+    - "Public imports, protocol v1 decoding, lifecycle outcomes, runtime controls, and process-safety behavior remain backward compatible."
+    - "Public-only .autospec, .beads, .worktrees, governance, specs, and repository documentation are protected by explicit destination rules."
+    - "Default and preview sync modes are read-only; apply requires an explicit reviewed manifest and unchanged source and destination fingerprints."
+    - "Apply validation uses only controlled temporary copies, never the live public repository."
+    - "Validation is local and non-production-adjacent; the optional real OAuth smoke is excluded."
+    - "The supported Go 1.23/1.24 matrix is authoritative; the currently installed Go 1.26.3 toolchain is supplementary evidence only."
+    - "No rsync dependency is introduced because it is absent locally and does not provide stale-preview replay guarantees."
+  scale_scope: "One dependency-free Go module, roughly thirty current payload divergences, protected public repository metadata, two shell workflows, and focused fixture coverage"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Limits edits to classified SDK payload, the two required scripts and tests, CI reuse, and canonical Go SDK documentation."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Preserves public imports, additive event decoding, existing Session APIs, terminal outcomes, runtime controls, and protocol v1 wire shapes."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "No product configuration is added; sync command arguments are explicit and have no environment or persisted-config shadow path."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "The Go SDK remains an external protocol client and validates against crates/jcode-harness-api instead of duplicating or changing server ownership."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Each reconciled lifecycle/event/safety contract and every sync or validation boundary has focused Go or fixture evidence before broad checks."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Repository identity, clean branch, path safety, manifest fingerprints, modes, exclusions, and validation failures are checked with actionable non-zero results."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Delivery requires focused checks, the complete Go SDK validator, CI contract alignment, and scripts/check_guardrails.sh."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "Uses Ariel's public module as the behavior authority while retaining canonical Jcode wire ownership and avoiding a second publication implementation."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Produces classification, canonical behavior, reproducible preview, controlled apply proof, and publication-readiness evidence without mutating or publishing externally."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The change adds no protocol hot-path design; imported behavior is exercised by focused and race tests, and deterministic sync has a measurable reproducibility target."
+
+research_findings:
+  decisions:
+    - topic: "Behavior and wire authority"
+      decision: "Treat public jcode-go main as authoritative for established Go lifecycle, observability, private-runtime, terminal-outcome, process-safety, ToolExec, ReasoningDone, test, and example behavior, while checking every wire-facing value against crates/jcode-harness-api and existing parity tests."
+      rationale: "The public tree contains the newer Turn API, typed terminal outcomes, bounded Linux supervision, redacted observations, acceptance tests, and updated examples, while the constitution assigns serialized protocol ownership to the Rust harness boundary."
+      alternatives_considered:
+        - "Replace public behavior with the older canonical SDK, which would regress consumers."
+        - "Treat the public SDK as the wire owner, which would duplicate the server contract."
+    - topic: "Repository-specific content"
+      decision: "Publish SDK payload files such as Go source, tests, examples, module files, license, and root SDK README; protect public-only governance, Autospec/Beads state, specs, worktrees, and repository documentation through named exclusion rules."
+      rationale: "A whole-tree mirror would delete intentional public repository history and governance, but excluding the entire README/docs category would also preserve stale consumer guidance."
+      alternatives_considered:
+        - "Force byte identity across repository roots."
+        - "Exclude all documentation, including the publishable SDK README."
+    - topic: "Preview and apply equivalence"
+      decision: "Preview emits a versioned, timestamp-free manifest with ordered rules and operations plus source and destination content fingerprints; apply requires that manifest, recomputes both fingerprints, and refuses stale or malformed input."
+      rationale: "The specification requires apply to match a previously reviewed preview and explicitly requires rejection when either input changes. A fresh dry run at apply time cannot prove that contract."
+      alternatives_considered:
+        - "Run the same copy command with and without --dry-run, which does not bind apply to the reviewed result."
+        - "Use an interactive confirmation without persisted fingerprints, which cannot detect stale previews."
+    - topic: "Synchronization implementation"
+      decision: "Implement scripts/sync-jcode-go.sh with Bash, Git, sorted path traversal, portable content hashing, and explicit file operations; do not depend on rsync."
+      rationale: "The required entry point is a shell script, repository scripts already use this pattern, rsync is absent locally, and direct manifest execution makes each removal reviewable and stale-safe."
+      alternatives_considered:
+        - "Add rsync as a system dependency."
+        - "Add a general-purpose Go synchronization application for this single publication boundary."
+    - topic: "Validation contract"
+      decision: "Replace the stale validator with seven named, non-mutating categories: formatting, module consistency using go mod tidy -diff plus go mod verify, vet, build, tests, race tests, and Windows amd64 build. Run all categories and emit a final pass/fail summary."
+      rationale: "Go 1.23 supports non-mutating go mod tidy -diff, the CI workflow already defines the same platform boundary, and aggregated results satisfy the requirement that one failure not conceal other boundaries."
+      alternatives_considered:
+        - "Keep go mod tidy in place and merely warn about changes."
+        - "Fail on the first category and leave later readiness boundaries unknown."
+    - topic: "Public repository mutation safety"
+      decision: "Record public branch, status, commit, and tracked-content fingerprint before reconciliation; exercise apply only against temporary fixture repositories; repeat the public checks after all validation."
+      rationale: "The public main working tree is an explicit protected boundary and no live/costly/external action is needed to prove the workflow."
+      alternatives_considered:
+        - "Apply to public main and revert afterward."
+        - "Rely only on git status without content fingerprints."
+
+data_model:
+  entities:
+    - name: "Divergence Record"
+      description: "One path-level difference between canonical sdk/go and public jcode-go, retained as the reviewed reconciliation inventory."
+      fields:
+        - name: "path"
+          type: "repository-relative path"
+          description: "Identifies the divergent file or directory entry."
+          constraints: "Unique, normalized, and complete against a fresh recursive comparison."
+        - name: "category"
+          type: "enum"
+          description: "Classifies source, test, example, module, documentation, or governance content."
+          constraints: "Must use one documented category."
+        - name: "authority"
+          type: "enum"
+          description: "Names canonical, public, shared, or repository-specific ownership."
+          constraints: "Wire-facing authority must cite the canonical harness contract."
+        - name: "disposition"
+          type: "enum"
+          description: "Records import, retain-canonical, protect-public, merge, or remove-obsolete treatment."
+          constraints: "Must map to a synchronization rule or an explicit one-time reconciliation action."
+        - name: "rationale"
+          type: "string"
+          description: "Explains the behavioral, architectural, or repository-boundary evidence."
+          constraints: "Non-empty and reviewable."
+      relationships:
+        - target: "Synchronization Rule"
+          type: "many-to-one"
+          description: "Each recurring publication disposition is enforced by one declared rule."
+    - name: "Synchronization Rule"
+      description: "A named include or protect rule governing one publication path class."
+      fields:
+        - name: "name"
+          type: "string"
+          description: "Stable rule identifier printed in preview output."
+          constraints: "Unique and deterministic."
+        - name: "path_scope"
+          type: "path pattern"
+          description: "Canonical or destination-relative paths covered by the rule."
+          constraints: "Explicit; no implicit catch-all may delete protected content."
+        - name: "treatment"
+          type: "include | protect"
+          description: "Declares whether content is synchronized or retained destination-only."
+          constraints: "Protected paths are never add, update, or remove operations."
+        - name: "reason"
+          type: "string"
+          description: "Documents the repository-specific purpose."
+          constraints: "Non-empty and included in the manifest."
+      relationships:
+        - target: "Preview Manifest"
+          type: "many-to-many"
+          description: "Every manifest records the complete ordered rule set used to derive operations."
+    - name: "Preview Manifest"
+      description: "The deterministic reviewed change set that binds preview to apply."
+      fields:
+        - name: "format_version"
+          type: "integer"
+          description: "Allows strict parsing and future incompatible changes."
+          constraints: "Initially 1; unsupported versions fail closed."
+        - name: "source_fingerprint"
+          type: "digest"
+          description: "Fingerprint of publishable canonical content and modes."
+          constraints: "Recomputed immediately before apply."
+        - name: "destination_fingerprint"
+          type: "digest"
+          description: "Fingerprint of destination payload and protected-boundary state."
+          constraints: "Recomputed immediately before apply."
+        - name: "operations"
+          type: "ordered list"
+          description: "Exact add, update, remove, and retained-exclusion records."
+          constraints: "C-locale path order, no timestamps, duplicates, unsafe paths, tabs, or newlines."
+      relationships:
+        - target: "Divergence Record"
+          type: "one-to-many"
+          description: "Manifest operations are the executable projection of the reviewed classifications."
+    - name: "Validation Result"
+      description: "One category outcome from the canonical SDK validation run."
+      fields:
+        - name: "category"
+          type: "enum"
+          description: "Formatting, module consistency, vet, build, tests, race, or Windows compile."
+          constraints: "Exactly seven categories are reported."
+        - name: "status"
+          type: "pass | fail"
+          description: "Machine-visible result for the category."
+          constraints: "Any failure makes the entry point exit non-zero."
+        - name: "diagnostic"
+          type: "string"
+          description: "Bounded category-specific failure information."
+          constraints: "Must not expose credentials, prompts, or private runtime data."
+      relationships: []
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/006-sdk-go-reconcile/divergence-inventory.md"
+      description: "Complete path-level authority, disposition, rationale, and evidence ledger for the initial and final comparisons."
+    - path: "sdk/go/README.md"
+      description: "Canonical publishable SDK usage, lifecycle, observability, safety, platform, and example guidance."
+    - path: "docs/GO_SDK.md"
+      description: "Jcode-repository SDK overview with the actual public module path and source/public relationship."
+    - path: "docs/GO_SDK_ARCHITECTURE.md"
+      description: "Canonical wire ownership and reconciled Go lifecycle/process ownership boundaries."
+    - path: "docs/GO_SDK_RELEASE_PLAN.md"
+      description: "Preview, apply, exclusions, validation, publication verification, and no-live-mutation workflow."
+  source_code:
+    - path: "sdk/go/**/*.go"
+      description: "Reconciled canonical SDK implementation, protocol, transport, process, turn, observability, and examples."
+    - path: "scripts/sync-jcode-go.sh"
+      description: "Deterministic preview-manifest generation and explicit stale-safe apply workflow."
+    - path: "scripts/validate_go_sdk.sh"
+      description: "Non-mutating aggregate runner for all seven required SDK validation categories."
+    - path: ".github/workflows/ci.yml"
+      description: "Calls the canonical validator so CI and publication checks cannot drift."
+  tests:
+    - path: "sdk/go/**/*_test.go"
+      description: "Focused compatibility, lifecycle, observability, protocol, process-safety, acceptance, example, and race coverage."
+    - path: "scripts/test_sync_jcode_go.sh"
+      description: "Temporary-repository fixtures for classification coverage, deterministic preview, exclusions, stale manifests, invalid preconditions, exact apply, and no mutation."
+    - path: "scripts/test_validate_go_sdk.sh"
+      description: "Command-shim fixtures proving every validation category is invoked, failures remain visible, and aggregate exit status is non-zero."
+
+implementation_phases:
+  - phase: 1
+    name: "Inventory and authority ledger"
+    goal: "Account for every current canonical/public difference and fix the publication boundary before copying content."
+    deliverables:
+      - "Recorded public main branch, clean status, commit, and tracked-content fingerprint baseline"
+      - "Complete divergence inventory with category, authority, disposition, rationale, and architecture evidence"
+      - "Reviewed publishable path set and explicit protected destination rules"
+  - phase: 2
+    name: "Canonical behavior reconciliation"
+    goal: "Bring all authoritative public SDK behavior into sdk/go without removing compatible canonical contracts."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Turn lifecycle, terminal outcomes, observability, private-runtime, bounded process shutdown, ToolExec, and ReasoningDone behavior in canonical source"
+      - "Authoritative public tests and examples reconciled into canonical locations"
+      - "Focused Go and race tests proving public API and protocol v1 compatibility"
+  - phase: 3
+    name: "Deterministic publication workflow"
+    goal: "Create a non-mutating preview and stale-safe explicit apply contract with protected public content."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Versioned ordered preview manifest with source/destination fingerprints and exact operations"
+      - "Explicit apply mode that consumes the manifest and rejects changed, dirty, ineligible, or unsafe inputs"
+      - "Fixture coverage for reproducibility, exclusions, invalid preconditions, stale inputs, and exact controlled-copy apply"
+  - phase: 4
+    name: "Canonical validation and publication documentation"
+    goal: "Make publication readiness one non-mutating command and align all operator guidance with the delivered boundary."
+    dependencies:
+      - "Phase 2"
+      - "Phase 3"
+    deliverables:
+      - "Seven-category aggregate Go SDK validator using go mod tidy -diff and visible category summaries"
+      - "Validation failure fixture coverage and CI reuse of the canonical entry point"
+      - "Updated SDK, architecture, release, preview/apply, exclusion, and verification documentation"
+  - phase: 5
+    name: "Reconciliation proof and delivery gates"
+    goal: "Prove canonical readiness, intentional-only residual drift, and zero mutation of public jcode-go."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Two byte-identical final previews containing no unclassified source, test, example, module, or behavior drift"
+      - "Complete scripts/validate_go_sdk.sh result with all 7 categories passing"
+      - "Repository guardrail result and before/after public branch, status, commit, and content-fingerprint equality evidence"
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-11T08:13:55Z"
+  artifact_type: "plan"

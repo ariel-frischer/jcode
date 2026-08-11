@@ -36,21 +36,23 @@ const (
 	StateClosed       State = "closed"
 )
 
-// Observation contains only metadata. It intentionally excludes request fields,
-// prompts, credentials, server messages, and session identifiers.
+// Observation contains only bounded lifecycle metadata. It intentionally
+// excludes request fields, prompts, credentials and environment values, server
+// response or tool content, raw frames, private paths, and session identifiers.
 type Observation struct {
 	Kind     string
 	State    State
 	Request  string
 	Error    string
 	Attempts int
+	// Outcome is set only for an immutable terminal turn observation.
+	Outcome TurnResultKind
 }
 
 // Observer receives redacted lifecycle metadata. Implementations must be safe
-// for concurrent calls and should return quickly. Request lifecycle events are
-// emitted as request_write_start, request_write_complete, request_reply, or
-// request_timeout, so a missing phase identifies the stalled boundary without
-// exposing payloads, credentials, or identifiers.
+// for concurrent calls and should return quickly. Request events and the launch,
+// connect, owned-turn, and Linux private-instance phases identify a stalled
+// boundary without exposing payloads, credentials, paths, or identifiers.
 type Observer interface{ Observe(Observation) }
 
 type ReconnectPolicy struct {
@@ -143,34 +145,96 @@ func (s *Subscription) Next(ctx context.Context) (Event, error) {
 func (s *Subscription) Close() { s.once.Do(func() { s.client.unsubscribe(s.id) }) }
 
 type Client struct {
-	transportMu  sync.RWMutex
-	transport    transport.Transport
-	encoder      *protocol.Encoder
-	decoder      *protocol.Decoder
-	options      Options
-	reconnectMu  sync.Mutex
-	stateMu      sync.RWMutex
-	state        State
-	capMu        sync.RWMutex
-	capabilities map[string]struct{}
-	sessionID    string
-	writeMu      sync.Mutex
-	pendingMu    sync.Mutex
-	pending      map[uint64]chan protocol.ServerFrame
-	subsMu       sync.Mutex
-	subs         map[uint64]*subscriber
-	nextID       atomic.Uint64
-	nextSub      atomic.Uint64
-	closed       chan struct{}
-	closeOnce    sync.Once
-	closeErr     error
-	instance     Instance
+	transportMu   sync.RWMutex
+	transport     transport.Transport
+	encoder       *protocol.Encoder
+	decoder       *protocol.Decoder
+	options       Options
+	reconnectMu   sync.Mutex
+	stateMu       sync.RWMutex
+	state         State
+	capMu         sync.RWMutex
+	capabilities  map[string]struct{}
+	sessionID     string
+	writeMu       sync.Mutex
+	pendingMu     sync.Mutex
+	pending       map[uint64]pendingRequest
+	subsMu        sync.Mutex
+	subs          map[uint64]*subscriber
+	nextID        atomic.Uint64
+	nextSub       atomic.Uint64
+	closed        chan struct{}
+	closeOnce     sync.Once
+	closeErr      error
+	instance      Instance
+	bridgeMonitor *bridgeExitMonitor
+}
+
+type bridgeExitMonitor struct {
+	canceled   chan struct{}
+	done       chan struct{}
+	cancelOnce sync.Once
+}
+
+func newBridgeExitMonitor() *bridgeExitMonitor {
+	return &bridgeExitMonitor{
+		canceled: make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+}
+
+func (m *bridgeExitMonitor) cancel() {
+	m.cancelOnce.Do(func() { close(m.canceled) })
 }
 
 func (c *Client) setInstance(instance Instance) {
+	var exited <-chan struct{}
+	if source, ok := instance.(interface{ bridgeExited() <-chan struct{} }); ok {
+		exited = source.bridgeExited()
+	}
+	var monitor *bridgeExitMonitor
+	if exited != nil {
+		monitor = newBridgeExitMonitor()
+	}
+
 	c.stateMu.Lock()
+	c.cancelBridgeMonitorLocked()
 	c.instance = instance
+	c.bridgeMonitor = monitor
 	c.stateMu.Unlock()
+	if monitor != nil {
+		go c.watchBridgeExit(monitor, exited)
+	}
+}
+
+func (c *Client) cancelBridgeMonitorLocked() {
+	if c.bridgeMonitor != nil {
+		c.bridgeMonitor.cancel()
+		c.bridgeMonitor = nil
+	}
+}
+
+func (c *Client) watchBridgeExit(monitor *bridgeExitMonitor, exited <-chan struct{}) {
+	defer close(monitor.done)
+	select {
+	case <-exited:
+	case <-monitor.canceled:
+		return
+	case <-c.closed:
+		return
+	}
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+	if c.bridgeMonitor != monitor || c.instance == nil || c.state == StateClosing || c.state == StateClosed {
+		return
+	}
+	select {
+	case <-monitor.canceled:
+		return
+	default:
+	}
+	c.failTurnSubscribers(ErrBridgeExited)
+	c.bridgeMonitor = nil
 }
 
 // DetachInstance transfers ownership of a private runtime from the client to
@@ -183,10 +247,11 @@ func (c *Client) setInstance(instance Instance) {
 func (c *Client) DetachInstance() (Instance, bool) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
-	if c.instance == nil {
+	if c.instance == nil || c.state == StateClosing || c.state == StateClosed {
 		return nil, false
 	}
 	instance := c.instance
+	c.cancelBridgeMonitorLocked()
 	c.instance = nil
 	return instance, true
 }
@@ -197,6 +262,12 @@ type subscriber struct {
 	done   chan struct{}
 	once   sync.Once
 	err    error
+	turn   bool
+}
+
+type pendingRequest struct {
+	reply   chan protocol.ServerFrame
+	onReply func(protocol.ServerFrame)
 }
 
 // NewClient starts reading from t and completes the protocol hello handshake.
@@ -212,17 +283,20 @@ func NewClient(ctx context.Context, t transport.Transport, options Options) (*Cl
 	c := &Client{
 		transport: transport.NewSafe(t), options: o, state: StateConnecting,
 		capabilities: make(map[string]struct{}), sessionID: o.SessionID,
-		pending: make(map[uint64]chan protocol.ServerFrame), subs: make(map[uint64]*subscriber),
+		pending: make(map[uint64]pendingRequest), subs: make(map[uint64]*subscriber),
 		closed: make(chan struct{}),
 	}
 	c.installDecoder(c.transport)
+	c.emit(Observation{Kind: "connect_start"})
 	c.emit(Observation{Kind: "state", State: StateConnecting})
 	go c.readLoop(c.decoder)
 	if err := c.handshake(ctx); err != nil {
+		c.emit(Observation{Kind: "connect_error", Error: "handshake_failed"})
 		c.Close()
 		return nil, err
 	}
 	c.setState(StateConnected)
+	c.emit(Observation{Kind: "connect_ready"})
 	return c, nil
 }
 
@@ -274,6 +348,13 @@ func (c *Client) handshake(ctx context.Context) error {
 }
 
 func (c *Client) request(ctx context.Context, req protocol.RawRequest, internal ...bool) (protocol.ServerFrame, error) {
+	return c.requestWithReplyObserver(ctx, req, nil, internal...)
+}
+
+// requestWithReplyObserver runs onReply on the reader goroutine after a
+// correlated reply is removed from the pending map and before any following
+// asynchronous event is dispatched. The observer must not block.
+func (c *Client) requestWithReplyObserver(ctx context.Context, req protocol.RawRequest, onReply func(protocol.ServerFrame), internal ...bool) (protocol.ServerFrame, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -291,7 +372,7 @@ func (c *Client) request(ctx context.Context, req protocol.RawRequest, internal 
 	id := c.nextID.Add(1)
 	reply := make(chan protocol.ServerFrame, 1)
 	c.pendingMu.Lock()
-	c.pending[id] = reply
+	c.pending[id] = pendingRequest{reply: reply, onReply: onReply}
 	c.pendingMu.Unlock()
 	frame := protocol.ClientFrame{V: protocol.APIVersionMajor, ID: id, Request: req}
 	c.writeMu.Lock()
@@ -434,8 +515,19 @@ func (c *Client) State() State { c.stateMu.RLock(); defer c.stateMu.RUnlock(); r
 // Subscribe receives asynchronous events. A full buffer terminates only that
 // subscription, keeping the reader bounded and other callers live.
 func (c *Client) Subscribe(sessionID string) *Subscription {
-	buffer := c.options.EventBuffer
-	s := &subscriber{events: make(chan Event, buffer), errors: make(chan error, 1), done: make(chan struct{})}
+	return c.subscribe(sessionID, c.options.EventBuffer)
+}
+
+func (c *Client) subscribe(sessionID string, buffer int) *Subscription {
+	return c.subscribeOwned(sessionID, buffer, false)
+}
+
+func (c *Client) subscribeTurn(sessionID string, buffer int) *Subscription {
+	return c.subscribeOwned(sessionID, buffer, true)
+}
+
+func (c *Client) subscribeOwned(sessionID string, buffer int, turn bool) *Subscription {
+	s := &subscriber{events: make(chan Event, buffer), errors: make(chan error, 1), done: make(chan struct{}), turn: turn}
 	id := c.nextSub.Add(1)
 	c.subsMu.Lock()
 	select {
@@ -467,13 +559,16 @@ func (c *Client) readLoop(decoder *protocol.Decoder) {
 		}
 		if frame.ReplyTo != nil {
 			c.pendingMu.Lock()
-			reply := c.pending[*frame.ReplyTo]
-			if reply != nil {
+			pending, ok := c.pending[*frame.ReplyTo]
+			if ok {
 				delete(c.pending, *frame.ReplyTo)
 			}
 			c.pendingMu.Unlock()
-			if reply != nil {
-				reply <- frame
+			if ok {
+				if pending.onReply != nil {
+					pending.onReply(frame)
+				}
+				pending.reply <- frame
 			}
 			continue
 		}
@@ -536,13 +631,17 @@ func (c *Client) unsubscribe(id uint64) {
 }
 func (c *Client) subscriptionError(id uint64, fallback *subscriber) error {
 	c.subsMu.Lock()
-	defer c.subsMu.Unlock()
 	if sub := c.subs[id]; sub != nil && sub.err != nil {
-		return sub.err
+		err := sub.err
+		c.subsMu.Unlock()
+		return err
 	}
 	if fallback != nil && fallback.err != nil {
-		return fallback.err
+		err := fallback.err
+		c.subsMu.Unlock()
+		return err
 	}
+	c.subsMu.Unlock()
 	if c.State() == StateClosed {
 		return ErrClosed
 	}
@@ -582,10 +681,10 @@ func (c *Client) disconnect(err error, terminal bool) {
 	}
 	c.pendingMu.Lock()
 	pending := c.pending
-	c.pending = make(map[uint64]chan protocol.ServerFrame)
+	c.pending = make(map[uint64]pendingRequest)
 	c.pendingMu.Unlock()
-	for _, ch := range pending {
-		close(ch)
+	for _, request := range pending {
+		close(request.reply)
 	}
 	if terminal {
 		c.subsMu.Lock()
@@ -593,7 +692,19 @@ func (c *Client) disconnect(err error, terminal bool) {
 			c.closeSubscriberLocked(id, sub, err)
 		}
 		c.subsMu.Unlock()
+	} else {
+		c.failTurnSubscribers(ErrDisconnected)
 	}
+}
+
+func (c *Client) failTurnSubscribers(err error) {
+	c.subsMu.Lock()
+	for id, sub := range c.subs {
+		if sub.turn {
+			c.closeSubscriberLocked(id, sub, err)
+		}
+	}
+	c.subsMu.Unlock()
 }
 
 func errorKind(err error) string {
@@ -702,7 +813,13 @@ func (c *Client) resume(ctx context.Context) error {
 
 func (c *Client) closeWith(err error) {
 	c.closeOnce.Do(func() {
-		c.setState(StateClosing)
+		c.stateMu.Lock()
+		c.state = StateClosing
+		instance := c.instance
+		c.cancelBridgeMonitorLocked()
+		c.instance = nil
+		c.stateMu.Unlock()
+		c.emit(Observation{Kind: "state", State: StateClosing})
 		c.closeErr = err
 		close(c.closed)
 		c.transportMu.RLock()
@@ -713,10 +830,10 @@ func (c *Client) closeWith(err error) {
 		}
 		c.pendingMu.Lock()
 		pending := c.pending
-		c.pending = make(map[uint64]chan protocol.ServerFrame)
+		c.pending = make(map[uint64]pendingRequest)
 		c.pendingMu.Unlock()
-		for _, ch := range pending {
-			close(ch)
+		for _, request := range pending {
+			close(request.reply)
 		}
 		c.subsMu.Lock()
 		for id, sub := range c.subs {
@@ -724,9 +841,6 @@ func (c *Client) closeWith(err error) {
 		}
 		c.subsMu.Unlock()
 		c.setState(StateClosed)
-		c.stateMu.RLock()
-		instance := c.instance
-		c.stateMu.RUnlock()
 		if instance != nil {
 			_ = instance.Shutdown()
 		}
