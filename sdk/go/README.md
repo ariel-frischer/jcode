@@ -470,4 +470,4 @@ scripts/sync-jcode-go.sh apply \
   --manifest /tmp/jcode-go.manifest
 ```
 
-Apply rejects stale, malformed, unsafe, dirty, wrong-branch, or wrong-repository inputs before writing. Reconciliation and validation must use a controlled destination copy; they do not authorize applying to or publishing the live public repository.
+Apply rejects stale, malformed, unsafe, dirty, wrong-branch, or wrong-repository inputs before writing. Preview and validation alone do not authorize live publication. Applying the reviewed manifest, committing the public repository, and pushing `main` each require explicit maintainer approval.
