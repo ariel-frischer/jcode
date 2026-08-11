@@ -415,6 +415,10 @@ async fn cancelling_reload_persistable_bash_kills_parent_and_descendants() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[path = "bash_shutdown_tests.rs"]
+mod shutdown_tests;
+
 #[tokio::test]
 async fn test_reload_persistable_bash_timeout_promotes_to_background() {
     let tool = BashTool::new();

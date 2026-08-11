@@ -307,6 +307,7 @@ impl ServerRuntime {
     }
 
     pub(super) async fn shutdown(&self) {
+        crate::tool::terminate_owned_foreground_process_groups();
         self.tasks.shutdown().await;
     }
 
