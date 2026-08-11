@@ -1288,7 +1288,6 @@ impl Server {
             .await;
         });
 
-        // Log when we receive SIGTERM for debugging
         #[cfg(unix)]
         {
             let sigterm_server_name = self.identity.name.clone();
@@ -1303,7 +1302,6 @@ impl Server {
                 }
             });
         }
-
         // Spawn the bus monitor for swarm coordination
         let monitor_file_touch = self.file_touch.clone();
         let monitor_swarm_members = Arc::clone(&self.swarm_state.members);
