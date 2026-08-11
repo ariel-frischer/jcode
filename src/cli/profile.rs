@@ -633,6 +633,7 @@ mod tests {
                 skills_mode: None,
                 disabled_skills: Vec::new(),
                 instructions: Some("Keep the review focused and actionable.".to_owned()),
+                handoff: None,
             },
         );
         config
@@ -667,6 +668,7 @@ mod tests {
             skills_mode: None,
             disabled_skills: Vec::new(),
             instructions: None,
+            handoff: None,
         }
     }
 

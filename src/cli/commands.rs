@@ -2686,16 +2686,16 @@ async fn run_single_message_command_schema(
     let working_dir = std::env::current_dir()?;
     let daemon_socket = crate::server::socket_path();
     let report = tokio::task::spawn_blocking(move || {
-        run_structured_sdk_turn(
+        run_structured_sdk_turn(StructuredSdkTurnRequest {
             schema,
-            &provider,
-            model.as_deref(),
-            resume_session.as_deref(),
-            &message,
+            provider,
+            model,
+            resume_session,
+            message,
             working_dir,
             daemon_socket,
             profile_startup,
-        )
+        })
     })
     .await??;
 
@@ -2775,16 +2775,31 @@ fn schema_bridge_command_args(daemon_socket: &Path, api_socket: &Path) -> Vec<St
 }
 
 #[cfg(unix)]
-fn run_structured_sdk_turn(
+struct StructuredSdkTurnRequest {
     schema: serde_json::Value,
-    provider: &str,
-    model: Option<&str>,
-    resume_session: Option<&str>,
-    message: &str,
+    provider: String,
+    model: Option<String>,
+    resume_session: Option<String>,
+    message: String,
     working_dir: PathBuf,
     daemon_socket: PathBuf,
     profile_startup: Option<serde_json::Value>,
+}
+
+#[cfg(unix)]
+fn run_structured_sdk_turn(
+    request: StructuredSdkTurnRequest,
 ) -> Result<StructuredRunCommandReport> {
+    let StructuredSdkTurnRequest {
+        schema,
+        provider,
+        model,
+        resume_session,
+        message,
+        working_dir,
+        daemon_socket,
+        profile_startup,
+    } = request;
     let (api_socket, _bridge) = start_schema_api_bridge(&daemon_socket)?;
     let client = jcode_sdk::JcodeClient::connect(jcode_sdk::ConnectOptions {
         socket_path: Some(api_socket),
@@ -2793,7 +2808,7 @@ fn run_structured_sdk_turn(
         ensure_runtime: false,
     })?;
 
-    let session = match resume_session {
+    let session = match resume_session.as_deref() {
         Some(session_id) => client.attach_session(session_id)?,
         None => match client
             .request(jcode_sdk::ApiRequest::CreateSession {
@@ -2806,13 +2821,13 @@ fn run_structured_sdk_turn(
             other => anyhow::bail!("expected attached after create_session, got {other:?}"),
         },
     };
-    if let Some(model) = model {
+    if let Some(model) = model.as_deref() {
         client.set_model(&session.session_id, model)?;
     }
     let runtime = client.get_runtime_info(&session.session_id)?;
     let result = client.run_structured::<serde_json::Value>(
         &session.session_id,
-        message,
+        &message,
         jcode_sdk::RunStructuredOptions::new(schema),
     )?;
     let usage = result.usage.map(|usage| StructuredRunUsage {
@@ -2824,8 +2839,8 @@ fn run_structured_sdk_turn(
     Ok(StructuredRunCommandReport {
         data: result.data,
         session_id: session.session_id,
-        provider: runtime.provider.or_else(|| Some(provider.to_string())),
-        model: runtime.model.or_else(|| model.map(str::to_string)),
+        provider: runtime.provider.or(Some(provider)),
+        model: runtime.model.or(model),
         attempts: result.attempts.len(),
         usage,
     })
