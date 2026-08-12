@@ -1,0 +1,80 @@
+- generic [ref=e2]:
+  - list [ref=e4]:
+    - listitem [ref=e5]:
+      - link [ref=e6] [cursor=pointer]:
+        - /url: http://antithesis.com
+        - img "Antithesis" [ref=e7]
+    - listitem [ref=e8]:
+      - link "Back to Antithesis’s Job Listings" [ref=e9] [cursor=pointer]:
+        - /url: /antithesis
+    - listitem
+  - generic [ref=e12]:
+    - heading "Forward Deployed Engineer" [level=1] [ref=e14]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "Location" [level=2] [ref=e18]
+          - paragraph [ref=e19]: San Francisco, CA; Vienna, VA, USA
+        - generic [ref=e20]:
+          - heading "Employment Type" [level=2] [ref=e21]
+          - paragraph [ref=e22]: Full time
+        - generic [ref=e23]:
+          - heading "Location Type" [level=2] [ref=e24]
+          - paragraph [ref=e25]: On-site
+        - generic [ref=e26]:
+          - heading "Department" [level=2] [ref=e27]
+          - paragraph [ref=e28]: Antithesis
+        - generic [ref=e29]:
+          - heading "Compensation" [level=2] [ref=e30]
+          - list [ref=e31]:
+            - listitem [ref=e32]:
+              - generic [ref=e33]: $110K – $170K • Offers Equity • Offers Commission
+      - generic [ref=e34]:
+        - tablist [ref=e35]:
+          - tab "Overview" [selected] [ref=e36] [cursor=pointer]
+          - tab "Application" [ref=e37] [cursor=pointer]
+        - tabpanel "Overview" [ref=e39]:
+          - generic [ref=e40]:
+            - heading "About Antithesis" [level=2] [ref=e41]
+            - paragraph [ref=e42]: We’re on a mission to redefine how modern distributed systems are tested and released. Our platform is trusted by engineering teams who demand rock-solid reliability, scalable performance, and deep technical visibility. Our platform doesn’t just assure system correctness and reliability, it exists because developers need something better. If you’ve ever experienced the pain of a production outage, had a bad week on-call, or had a release delayed by weeks because of one killer bug – you’ll understand exactly why we’re doing what we do. If you're passionate about developer-first products, system resilience, and correctness, we’d love to talk.
+            - heading "About the Role" [level=2] [ref=e44]
+            - paragraph [ref=e45]: The best way to learn what our platform should do next is to sit next to the people using it. That's this job. You'll embed with our customers, find where shipping reliable software is still too hard or too slow, and help build what Antithesis does next.
+            - heading "What You’ll Do" [level=2] [ref=e47]
+            - paragraph [ref=e48]: "Almost every company we work with shows up with some version of this:"
+            - paragraph [ref=e49]: "\"We're building a new system that we need to ship fast, but it can't fail. So every big change turns into weeks of careful review before we trust it. How can we use Antithesis to do this?\""
+            - paragraph [ref=e50]: "You're the person who shows up. From day one you help a customer get their system running inside Antithesis, make sure it's catching the bugs they care about most, chase down the real ones it finds, and fold Antithesis into how they ship: their CI, their reviews, the way their agents write and check code. When it works, they merge big changes fast and trust that what they shipped holds."
+            - paragraph [ref=e51]: "That's the customer-facing half. The other half is why we send an engineer. You notice what was slow, manual, or missing, and propose a fix. You work with our platform engineers to prototype it: a sharper way to find bugs, an easier way to fix them, or an agent skill that iterates on the results. Then you take it back to your customer to validate that it solves their problem. A lot of what makes Antithesis good today came out of that loop."
+            - heading "What We Need:" [level=2] [ref=e53]
+            - list [ref=e54]:
+              - listitem [ref=e55]:
+                - paragraph [ref=e56]: You've spent real time building or operating serious systems software, where correctness matters and the failures are subtle. You know how systems break under concurrency, faults, and load in ways no test caught. The domain matters less than the instinct for where things go wrong.
+              - listitem [ref=e57]:
+                - paragraph [ref=e58]: You've worked with customers as an engineer. You've been in the room where something's broken and you're the one who has to help, and you didn't hate it.
+              - listitem [ref=e59]:
+                - paragraph [ref=e60]: You can read an unfamiliar codebase, instrument it, write a test, and debug something you've never seen before.
+              - listitem [ref=e61]:
+                - paragraph [ref=e62]: When you hit a rough edge, you'd rather fix it than route around it. Here, your fix might ship to everyone.
+              - listitem [ref=e63]:
+                - paragraph [ref=e64]: You can explain hard things to non-technical people without lecturing.
+              - listitem [ref=e65]:
+                - paragraph [ref=e66]: You're up for five days a week in the office (DC, London, or SF) and occasional travel to our customers' offices.
+            - heading "Bonus" [level=2] [ref=e68]
+            - paragraph [ref=e69]: "Experience with fuzzing, property-based testing, or chaos engineering. Time building the kind of software our customers build: fintech, databases, blockchain, event streaming, cloud infra, trading. Building internal tools for other engineers. A startup where the job changed every six months."
+            - paragraph [ref=e70]
+            - heading "Why this one's different" [level=2] [ref=e71]
+            - paragraph [ref=e72]: "Most customer-facing engineering jobs stop at deployment. Most jobs that let you shape a new platform keep you far from the people using it. This one does both: close enough to real systems to see what's missing, close enough to the product to build it. If that's the job you've been looking for, let's talk."
+          - link [ref=e73] [cursor=pointer]:
+            - /url: /antithesis/3db48e68-50bf-48be-9d84-68ce4498d9fc/application
+            - button "Apply for this Job" [ref=e74]
+  - contentinfo [ref=e75]:
+    - link "Learn more about Ashby" [ref=e76] [cursor=pointer]:
+      - /url: https://www.ashbyhq.com
+      - generic [ref=e77]: Powered by
+      - img "Ashby" [ref=e78]
+    - paragraph [ref=e84]:
+      - link "Privacy Policy" [ref=e85] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/privacy
+      - link "Security" [ref=e86] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/security
+      - link "Vulnerability Disclosure" [ref=e87] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/disclosure

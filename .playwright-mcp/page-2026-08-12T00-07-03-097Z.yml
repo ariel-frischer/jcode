@@ -1,0 +1,176 @@
+- generic [ref=e2]:
+  - list [ref=e4]:
+    - listitem [ref=e5]:
+      - link [ref=e6] [cursor=pointer]:
+        - /url: https://legora.com/careers
+        - img "Legora" [ref=e7]
+    - listitem [ref=e8]:
+      - link "Back to Legora’s Job Listings" [ref=e9] [cursor=pointer]:
+        - /url: /legora
+    - listitem
+  - generic [ref=e12]:
+    - heading "Forward Deployed Engineer" [level=1] [ref=e14]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "Location" [level=2] [ref=e18]
+          - paragraph [ref=e19]: New York City; Denver
+        - generic [ref=e20]:
+          - heading "Employment Type" [level=2] [ref=e21]
+          - paragraph [ref=e22]: Full time
+        - generic [ref=e23]:
+          - heading "Location Type" [level=2] [ref=e24]
+          - paragraph [ref=e25]: On-site
+        - generic [ref=e26]:
+          - heading "Department" [level=2] [ref=e27]
+          - paragraph [ref=e28]:
+            - generic [ref=e29]: Global Services
+        - generic [ref=e30]:
+          - heading "Compensation" [level=2] [ref=e31]
+          - list [ref=e32]:
+            - listitem [ref=e33]:
+              - generic [ref=e34]: $194,650 – $240,000 • Offers Equity
+      - generic [ref=e35]:
+        - tablist [ref=e36]:
+          - tab "Overview" [selected] [ref=e37] [cursor=pointer]
+          - tab "Application" [ref=e38] [cursor=pointer]
+        - tabpanel "Overview" [ref=e40]:
+          - generic [ref=e41]:
+            - heading "About Us" [level=2] [ref=e42]
+            - paragraph [ref=e43]:
+              - text: "Legora is redefining how legal work gets done. Not built for lawyers, built with them. We work alongside the world’s best legal teams, who expect excellence, precision, and speed, and we hold ourselves to the same bar.Our AI-native workspace lets legal professionals move faster, think more clearly, and operate with sharper precision. By analysing thousands of documents in minutes and powering end-to-end workflows, we cut through complexity, teams can focus on what matters: judgment, strategy, and outcomes.1,000+ customers across 50+ countries trust us, including Cleary Gottlieb, Goodwin, Linklaters, White & Case, Dentons, and Barclays. We’ve scaled to"
+              - strong [ref=e44]: $100M+ in ARR
+              - text: ", with teams across Europe, North America and APAC, and continue to expand through acquisitions including Qura, Walter AI and Graceview.We partner with world-class performers: including Aaron Judge and the New York Yankees, Ludvig Åberg (and his caddie), and campaigns featuring Jude Law.Joining Legora means three things."
+            - list [ref=e45]:
+              - listitem [ref=e46]:
+                - paragraph [ref=e47]:
+                  - text: We
+                  - strong [ref=e48]: "lean in:"
+                  - text: ownership over titles, outcomes over intentions.
+              - listitem [ref=e49]:
+                - paragraph [ref=e50]:
+                  - text: We
+                  - strong [ref=e51]: "fight for excellence:"
+                  - text: high standards, direct, ego-free feedback.
+              - listitem [ref=e52]:
+                - paragraph [ref=e53]:
+                  - text: We
+                  - strong [ref=e54]: "grow together:"
+                  - text: as a team and with our customers.
+            - paragraph [ref=e55]: Mission before ego. Everyone contributes. No one coasts.
+            - paragraph [ref=e56]: If you’re driven by impact, pace, and raising the bar. This is the place.
+            - heading [level=2] [ref=e57]:
+              - strong [ref=e58]: The role
+            - paragraph [ref=e59]: As a Forward Deployed Engineer at Legora, you'll sit at the intersection of product engineering and customer success — embedded directly with our most complex enterprise clients to make our AI-native platform work seamlessly in their environments. You'll write real code, solve real integration challenges, and leave behind infrastructure that outlasts your visit.
+            - paragraph [ref=e60]:
+              - strong [ref=e61]: What you'll be doing
+            - list [ref=e62]:
+              - listitem [ref=e63]:
+                - paragraph [ref=e64]: Embed with enterprise customers during and after deployment, writing production-grade code to bridge Legora's platform with their existing legal tech stack
+              - listitem [ref=e65]:
+                - paragraph [ref=e66]: "Own the full technical scoping process: gather requirements, design integration architecture, and deliver working solutions end-to-end"
+              - listitem [ref=e67]:
+                - paragraph [ref=e68]: Build and maintain reusable connectors, automation scripts, and tooling that accelerate future customer deployments
+              - listitem [ref=e69]:
+                - paragraph [ref=e70]: Debug and resolve complex production issues at the intersection of customer environments and Legora's platform — often under time pressure
+              - listitem [ref=e71]:
+                - paragraph [ref=e72]: Act as the technical voice of the customer internally — surface friction points, edge cases, and integration gaps directly to our product and engineering teams
+              - listitem [ref=e73]:
+                - paragraph [ref=e74]: Partner with Sales and Customer Success to scope new deals and expand existing accounts where technical complexity is a deciding factor
+              - listitem [ref=e75]:
+                - paragraph [ref=e76]: Work closely with Engineering and Product to deliver successful integrations and improve general product offering
+            - paragraph [ref=e77]:
+              - strong [ref=e78]: Who you are
+            - list [ref=e79]:
+              - listitem [ref=e80]:
+                - paragraph [ref=e81]: A strong generalist engineer comfortable writing backend code and working across APIs, auth protocols, and data pipelines
+              - listitem [ref=e82]:
+                - paragraph [ref=e83]: Experienced in customer-facing technical roles — pre-sales engineering, solutions engineering, or embedded delivery — where you've had to own outcomes, not just hand off specs
+              - listitem [ref=e84]:
+                - paragraph [ref=e85]: "Familiar with enterprise integration patterns: SSO (SAML, OIDC), REST and webhook-based APIs, and document management systems like iManage, SharePoint, or NetDocuments"
+              - listitem [ref=e86]:
+                - paragraph [ref=e87]: Able to move fast without cutting corners — you know when to build something robust and when to ship something good enough to unblock a customer
+              - listitem [ref=e88]:
+                - paragraph [ref=e89]: A clear communicator who can hold a technical conversation with an IT administrator and a strategic one with a managing partner — sometimes in the same meeting
+              - listitem [ref=e90]:
+                - paragraph [ref=e91]: Comfortable with ambiguity and energised by early-stage problems that don't have a playbook yet
+            - list [ref=e92]:
+              - listitem [ref=e93]:
+                - paragraph [ref=e94]:
+                  - strong [ref=e95]: "Global collaboration:"
+                  - text: Partner with teams and clients across Europe, APAC, and North America.
+              - listitem [ref=e96]:
+                - paragraph [ref=e97]:
+                  - strong [ref=e98]: "Competitive package:"
+                  - text: Comprehensive salary, benefits, and tools for success.
+              - listitem [ref=e99]:
+                - paragraph [ref=e100]:
+                  - strong [ref=e101]: "Meaningful work:"
+                  - text: Your efforts shape how thousands of lawyers use AI daily.
+              - listitem [ref=e102]:
+                - paragraph [ref=e103]:
+                  - strong [ref=e104]: "In-person environment:"
+                  - text: Union Square office designed for ambitious builders and company provided lunch daily.
+              - listitem [ref=e105]:
+                - paragraph [ref=e106]:
+                  - strong [ref=e107]: "Benefits & Perks:"
+                  - text: We invest in our people with a comprehensive, thoughtfully designed benefits package:Medical, Dental & Vision
+                - list [ref=e108]:
+                  - listitem [ref=e109]:
+                    - paragraph [ref=e110]: Multiple medical plan options through Aetna and Kaiser Permanente
+                  - listitem [ref=e111]:
+                    - paragraph [ref=e112]: HSA or Healthcare FSA (based on plan selection)
+                  - listitem [ref=e113]:
+                    - paragraph [ref=e114]: Dental plans via MetLife
+                  - listitem [ref=e115]:
+                    - paragraph [ref=e116]: Vision plans via Vision Care
+                - paragraph [ref=e117]: Family Support
+                - list [ref=e118]:
+                  - listitem [ref=e119]:
+                    - paragraph [ref=e120]: Generous parental leave
+                  - listitem [ref=e121]:
+                    - paragraph [ref=e122]: Free access to Maven Clinic
+                  - listitem [ref=e123]:
+                    - paragraph [ref=e124]: Dependent Care FSA
+                  - listitem [ref=e125]:
+                    - paragraph [ref=e126]: Free One Medical membership for employees and dependents
+                - paragraph [ref=e127]: Additional Perks
+                - list [ref=e128]:
+                  - listitem [ref=e129]:
+                    - paragraph [ref=e130]: Pre-tax commuter benefits
+                  - listitem [ref=e131]:
+                    - paragraph [ref=e132]: Life Insurance + STD/LTD
+                  - listitem [ref=e133]:
+                    - paragraph [ref=e134]: 401(K) with generous company match
+                  - listitem [ref=e135]:
+                    - paragraph [ref=e136]: Unlimited PTO
+                  - listitem [ref=e137]:
+                    - paragraph [ref=e138]: Robust voluntary benefits, including identity protection (via Aura), legal coverage via MetLife, pet savings programs, and more
+            - paragraph [ref=e139]:
+              - strong [ref=e140]: Legora is an Equal Opportunity Employer
+            - paragraph [ref=e141]: At Legora, we believe great teams are built on diversity of thought and experience. We’re proud to be an equal opportunity employer and committed to creating an inclusive, high-performance culture where everyone can do their best work. We welcome people of all backgrounds and don’t discriminate based on race, color, religion, national origin, gender, gender identity or expression, sexual orientation, age, disability, veteran status, or any other characteristic protected by law.
+          - link [ref=e142] [cursor=pointer]:
+            - /url: /legora/42de977d-201e-4ef1-854a-91d422047b73/application
+            - button "Apply for this Job" [ref=e143]
+  - dialog "Cookie consent" [ref=e144]:
+    - heading "Cookie Management" [level=3] [ref=e145]
+    - paragraph [ref=e146]:
+      - text: We use some essential cookies to make this site work. We would like to set performance cookies to help us make sure the website functions as expected. Learn more in our
+      - link "Privacy Policy." [ref=e147] [cursor=pointer]:
+        - /url: https://legora.com/legal/recruiting-privacy-policy
+    - generic [ref=e148]:
+      - button "Accept All" [ref=e149] [cursor=pointer]
+      - button "Necessary Only" [ref=e150] [cursor=pointer]
+      - button "Customize Settings" [ref=e151] [cursor=pointer]
+  - contentinfo [ref=e152]:
+    - link "Learn more about Ashby" [ref=e153] [cursor=pointer]:
+      - /url: https://www.ashbyhq.com
+      - generic [ref=e154]: Powered by
+      - img "Ashby" [ref=e155]
+    - paragraph [ref=e161]:
+      - link "Privacy Policy" [ref=e162] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/privacy
+      - link "Security" [ref=e163] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/security
+      - link "Vulnerability Disclosure" [ref=e164] [cursor=pointer]:
+        - /url: https://www.ashbyhq.com/disclosure

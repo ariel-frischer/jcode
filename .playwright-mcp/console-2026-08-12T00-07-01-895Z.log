@@ -1,0 +1,10 @@
+[     972ms] [WARNING] <link rel=preload> uses an unsupported `as` value @ https://www.geniussports.com/:0
+[    1685ms] [LOG] Message from iframe: {type: Init, config: Object, args: Array(3)} @ https://www.geniussports.com/_next/static/chunks/pages/_app-898f09c9b47e0e0d.js:10
+[    1685ms] [LOG] Message from iframe: {type: EventData, eventData: Object, args: Array(3)} @ https://www.geniussports.com/_next/static/chunks/pages/_app-898f09c9b47e0e0d.js:10
+[    2563ms] [LOG] TypeError: window.__gpp is not a function
+    at new I (https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:1:4463)
+    at <instance_members_initializer> (https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:1:112566)
+    at new pn (https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:1:112512)
+    at new Vn (https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:1:119071)
+    at ui (https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:1:131417)
+    at https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/sdk.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:2:352485 @ https://sdk.privacy-center.org/sdk/50100e54a1170cd56cf6c888e5df9d34f4aee641/modern/gpp-library.50100e54a1170cd56cf6c888e5df9d34f4aee641.js:0
