@@ -12,7 +12,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 #[cfg(unix)]
-use process_guard::{DetachedChildKillGuard, ProcessGroupKillGuard};
+use process_guard::{DetachedChildKillGuard, ForegroundProcessGuard, ProcessGroupKillGuard};
 use serde::Deserialize;
 use serde_json::{Value, json};
 #[cfg(unix)]
@@ -770,31 +770,29 @@ impl BashTool {
 
         let timeout_ms = bounded_timeout_ms(params.timeout);
         let timeout_duration = Duration::from_millis(timeout_ms);
-
         let has_stdin_channel = ctx.stdin_request_tx.is_some();
-
         let mut command = build_shell_command(&params.command);
+        #[cfg(unix)]
+        process_guard::isolate_process_group(&mut command);
         command
             .kill_on_drop(true)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-
         if has_stdin_channel {
             command.stdin(Stdio::piped());
         }
-
         if let Some(ref dir) = ctx.working_dir {
             command.current_dir(dir);
         }
         let mut child = command.spawn()?;
-
         let child_pid = child.id().unwrap_or(0);
+        #[cfg(unix)]
+        let mut foreground_guard = ForegroundProcessGuard::new(child.id());
         let stdin_handle = child.stdin.take();
         let stdout_handle = child.stdout.take();
         let stderr_handle = child.stderr.take();
 
-        // Owned copies so the work can outlive this call if it is promoted to a
-        // background task on timeout.
+        // Owned copies let timeout promotion move the work to the background.
         let title = params
             .intent
             .clone()
@@ -803,11 +801,12 @@ impl BashTool {
         let tool_call_id = ctx.tool_call_id.clone();
         let title_for_work = title.clone();
 
-        // Run the command (read stdout/stderr, service stdin, wait for exit) in a
-        // dedicated task so that, if it exceeds the foreground timeout, we can hand
-        // the still-running task off to the background manager instead of killing it.
+        // A dedicated task can be handed to the background manager on timeout
+        // instead of killing the still-running command.
         let mut work_handle: tokio::task::JoinHandle<Result<ToolOutput>> =
             tokio::spawn(async move {
+                #[cfg(unix)]
+                let mut process_group_guard = ProcessGroupKillGuard::new(child.id());
                 let stdout_task = tokio::spawn(async move {
                     let mut buf = String::new();
                     if let Some(mut out) = stdout_handle {
@@ -888,6 +887,8 @@ impl BashTool {
                 };
 
                 let status = child.wait().await?;
+                #[cfg(unix)]
+                process_group_guard.disarm();
 
                 if let Some(task) = stdin_task {
                     task.abort();
@@ -909,13 +910,19 @@ impl BashTool {
                 let output = format_command_output(output, status.code());
                 Ok(ToolOutput::new(output).with_title(title_for_work))
             });
+        #[cfg(unix)]
+        foreground_guard.attach_task(work_handle.abort_handle());
 
         match tokio::time::timeout(timeout_duration, &mut work_handle).await {
-            Ok(join_result) => match join_result {
-                Ok(Ok(output)) => Ok(output),
-                Ok(Err(e)) => Err(anyhow::anyhow!("Command failed: {}", e)),
-                Err(join_err) => Err(anyhow::anyhow!("Command task panicked: {}", join_err)),
-            },
+            Ok(join_result) => {
+                #[cfg(unix)]
+                foreground_guard.disarm();
+                match join_result {
+                    Ok(Ok(output)) => Ok(output),
+                    Ok(Err(e)) => Err(anyhow::anyhow!("Command failed: {}", e)),
+                    Err(join_err) => Err(anyhow::anyhow!("Command task panicked: {}", join_err)),
+                }
+            }
             Err(_) => {
                 // Timed out, but the command is still running. Instead of killing
                 // it, promote it to a background task so it keeps running, renders
@@ -932,6 +939,10 @@ impl BashTool {
                         work_handle,
                     )
                     .await;
+                #[cfg(unix)]
+                // Keep the task-local kill guard armed for explicit cancellation,
+                // but remove transferred work from foreground runtime cleanup.
+                foreground_guard.disarm();
 
                 let output = format!(
                     "Command exceeded the foreground timeout after {:.1}s and is continuing in background (not killed).\n\n\

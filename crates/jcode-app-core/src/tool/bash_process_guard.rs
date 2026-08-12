@@ -36,6 +36,19 @@ impl ProcessGroupOwnership {
     }
 }
 
+impl Drop for ProcessGroupOwnership {
+    fn drop(&mut self) {
+        if let Some(pid) = self.take()
+            && let Err(err) = crate::platform::signal_detached_process_group(pid, libc::SIGKILL)
+            && !matches!(err.raw_os_error(), Some(libc::ESRCH))
+        {
+            crate::logging::info(&format!(
+                "failed to terminate owned foreground bash process group {pid}: {err}"
+            ));
+        }
+    }
+}
+
 fn owned_process_groups() -> std::sync::MutexGuard<'static, HashMap<u32, u64>> {
     OWNED_PROCESS_GROUPS
         .lock()
@@ -74,11 +87,54 @@ impl Drop for ProcessGroupKillGuard {
     fn drop(&mut self) {
         if let Some(pid) = self.pid
             && let Err(err) = crate::platform::signal_detached_process_group(pid, libc::SIGKILL)
+            && !matches!(err.raw_os_error(), Some(libc::ESRCH))
         {
             crate::logging::info(&format!(
                 "failed to terminate detached bash process group {pid}: {err}"
             ));
         }
+    }
+}
+
+pub(super) struct ForegroundProcessGuard {
+    ownership: ProcessGroupOwnership,
+    task_abort: Option<tokio::task::AbortHandle>,
+}
+
+impl ForegroundProcessGuard {
+    pub(super) fn new(pid: Option<u32>) -> Self {
+        Self {
+            ownership: ProcessGroupOwnership::new(pid),
+            task_abort: None,
+        }
+    }
+
+    pub(super) fn attach_task(&mut self, handle: tokio::task::AbortHandle) {
+        self.task_abort = Some(handle);
+    }
+
+    pub(super) fn disarm(&mut self) {
+        self.task_abort = None;
+        self.ownership.disarm();
+    }
+}
+
+impl Drop for ForegroundProcessGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.task_abort.take() {
+            handle.abort();
+        }
+    }
+}
+
+pub(super) fn isolate_process_group(command: &mut tokio::process::Command) {
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
     }
 }
 
