@@ -171,6 +171,7 @@ pub(super) async fn await_reload_signal(
             "background_tasks_finalized",
             serde_json::json!({ "count": aborted }),
         );
+        crate::tool::terminate_owned_foreground_process_groups();
 
         let prefers_selfdev = signal.prefer_selfdev_binary;
 
