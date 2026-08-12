@@ -1,5 +1,0 @@
-[     998ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://my.greenhouse.io/users/self?job_post_id=8635719002:0
-[    1020ms] UnauthorizedError: Unauthorized: User is not logged in.
-    at Ys.fetchProfile (https://job-boards.cdn.greenhouse.io/assets/entry.client-3yVJKuI7.js:61:71486)
-[    4500ms] [WARNING] The resource https://app.ashbyhq.com/api/images/org-theme-logo/6e785dcc-ff2f-4c11-b488-52f7bb078851/3dba118f-7447-444b-95d7-3ad81e6a8d71/3c1eb33d-641a-410c-98e6-98418c1f27d9.png was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://jobs.ashbyhq.com/legora/42de977d-201e-4ef1-854a-91d422047b73:0
-[   10844ms] [LOG] Download the Apollo DevTools for a better development experience: %s https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm @ https://cdn.ashbyprd.com/frontend_non_user/9fdb82c59816092bf74304dfb8673860113573c2/assets/index-BHgQsHyZ.js:31

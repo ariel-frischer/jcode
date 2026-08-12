@@ -39,3 +39,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Generated browser automation logs and page snapshots.
+/.playwright-mcp/
