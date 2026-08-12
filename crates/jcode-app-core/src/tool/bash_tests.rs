@@ -6,6 +6,10 @@ use serde_json::json;
 use tokio::sync::mpsc;
 
 #[cfg(target_os = "linux")]
+#[path = "bash_ordinary_foreground_tests.rs"]
+mod ordinary_foreground_tests;
+
+#[cfg(target_os = "linux")]
 fn linux_process_is_live(pid: u32) -> bool {
     let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
         return false;
