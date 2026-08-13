@@ -1938,8 +1938,62 @@ fn test_model_switch_notice_omits_placeholder_route_details() {
             !notice.contains("refreshing route details"),
             "got {notice}"
         );
-        assert!(notice.starts_with("Model → "), "got {notice}");
+        assert!(notice.starts_with("Model: other-model → "), "got {notice}");
         assert!(!notice.contains(" via "), "got {notice}");
+    });
+}
+
+#[test]
+fn test_model_switch_notice_shows_source_without_stale_route_detail() {
+    with_temp_jcode_home(|| {
+        let model = "fresh-model";
+        let mut app = create_test_app();
+        app.is_remote = true;
+        app.remote_provider_name = Some("OpenAI".to_string());
+        app.remote_provider_model = Some("old-model".to_string());
+        app.remote_available_entries = vec![model.to_string()];
+        app.remote_model_options = vec![crate::provider::ModelRoute {
+            model: model.to_string(),
+            provider: "OpenAI".to_string(),
+            api_method: "oauth".to_string(),
+            available: true,
+            detail: "availability snapshot is stale (account-snapshot)".to_string(),
+            cheapness: None,
+        }];
+
+        app.open_model_picker();
+        let entry_idx = app
+            .inline_interactive_state
+            .as_ref()
+            .expect("model picker should be open")
+            .entries
+            .iter()
+            .position(|entry| entry.name == model)
+            .expect("fresh model should be present");
+        let filtered_pos = app
+            .inline_interactive_state
+            .as_ref()
+            .unwrap()
+            .filtered
+            .iter()
+            .position(|&i| i == entry_idx)
+            .expect("fresh model should be in the filtered list");
+        app.inline_interactive_state.as_mut().unwrap().selected = filtered_pos;
+
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+            .unwrap();
+
+        let notice = app
+            .status_notice
+            .as_ref()
+            .map(|(text, _)| text.clone())
+            .expect("a model switch notice should be set");
+        assert_eq!(
+            notice,
+            "Model: old-model → fresh-model via OpenAI (oauth)"
+        );
+        assert!(!notice.contains("availability snapshot is stale"));
+        assert!(!notice.contains("account-snapshot"));
     });
 }
 

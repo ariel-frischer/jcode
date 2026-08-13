@@ -418,6 +418,7 @@ async fn apply_terminal_event(
                             forward_pending_reasoning_effort(app, remote).await;
                         }
                         Err(error) => {
+                            app.pending_model_switch_from = None;
                             app.pending_reasoning_effort = None;
                             // A fallback-offer resend must not fire without its
                             // route switch; drop it with the failed request.
@@ -436,6 +437,7 @@ async fn apply_terminal_event(
                             forward_pending_reasoning_effort(app, remote).await;
                         }
                         Err(error) => {
+                            app.pending_model_switch_from = None;
                             app.pending_reasoning_effort = None;
                             app.push_display_message(DisplayMessage::error(format!(
                                 "Failed to request model switch: {}",

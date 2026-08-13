@@ -2226,6 +2226,10 @@ pub(in crate::tui::app) fn handle_server_event(
             ..
         } => {
             app.remote_model_switch_in_flight = false;
+            let previous_model = app
+                .pending_model_switch_from
+                .take()
+                .or_else(|| app.remote_provider_model.clone());
             if let Some(err) = error {
                 if let Some(prepared) = app.pending_prompt_after_model_switch.take() {
                     super::input_dispatch::restore_prepared_remote_input(app, prepared);
@@ -2258,7 +2262,11 @@ pub(in crate::tui::app) fn handle_server_event(
                         model
                     )));
                 }
-                app.set_status_notice(format!("Model → {}", model));
+                app.set_status_notice(crate::tui::app::model_context::format_model_switch_notice(
+                    previous_model.as_deref(),
+                    &model,
+                    None,
+                ));
             }
             false
         }

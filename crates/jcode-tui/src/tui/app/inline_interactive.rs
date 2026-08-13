@@ -3438,26 +3438,24 @@ impl App {
                             crate::provider::ModelRouteApiMethod::parse(&route.api_method)
                                 .display_label();
                         // Placeholder routes ("remote-catalog"/"current") are
-                        // catalog-refresh stand-ins, not real provider routes:
-                        // surfacing them produced confusing notices like
-                        // "Model → x via Claude (remote-catalog) · refreshing
-                        // route details…" right before the real switch
-                        // confirmation. Show just the model in that case.
+                        // catalog-refresh stand-ins, not real provider routes.
+                        // Keep them out of the confirmation while still showing
+                        // the source-to-target model transition.
                         let placeholder_route =
                             placeholder_routes::is_placeholder_route_method(&route.api_method);
-                        let notice = if placeholder_route {
-                            format!("Model → {}", entry.name)
+                        let previous_model = if self.is_remote {
+                            self.remote_provider_model
+                                .clone()
+                                .or_else(|| self.session.model.clone())
                         } else {
-                            format!(
-                                "Model → {} via {} ({})",
-                                entry.name, route.provider, method_label
-                            )
+                            Some(self.provider.model())
                         };
-                        let route_detail = if placeholder_route {
-                            String::new()
-                        } else {
-                            route.detail.trim().to_string()
-                        };
+                        let notice = crate::tui::app::model_context::format_model_switch_notice(
+                            previous_model.as_deref(),
+                            &entry.name,
+                            (!placeholder_route)
+                                .then_some((route.provider.as_str(), method_label.as_str())),
+                        );
 
                         // Record exactly which model spec + route the user chose
                         // and how it will be applied. Pairs with the server-side
@@ -3492,6 +3490,7 @@ impl App {
                             // route bookkeeping).
                             self.session.route_api_method =
                                 Some(route_selection.api_method.clone());
+                            self.pending_model_switch_from = previous_model;
                             self.pending_route_selection = Some(route_selection);
                             self.pending_model_switch = Some(spec);
                             // In remote mode `self.provider` is a local
@@ -3556,17 +3555,7 @@ impl App {
                         if let Some(effort) = effort {
                             let _ = self.provider.set_reasoning_effort(&effort);
                         }
-                        if !route_detail.is_empty() {
-                            self.push_display_message(DisplayMessage::system(format!(
-                                "{}\n{}",
-                                notice, route_detail
-                            )));
-                        }
-                        self.set_status_notice(if route_detail.is_empty() {
-                            notice
-                        } else {
-                            format!("{} · {}", notice, route_detail)
-                        });
+                        self.set_status_notice(notice);
                         // First-run onboarding: a model choice advances the flow.
                         self.onboarding_after_model_select();
                     }
