@@ -914,6 +914,26 @@ make install       # Full LTO release rebuild, install, and server reload
 make i             # Short alias for make install
 ```
 
+#### Post-merge dev workflow
+
+After merging a feature into your checkout, the normal workflow is simply:
+
+```bash
+make install-fast   # or: make install
+```
+
+The installer builds the current checkout, updates the `current` and launcher
+symlinks, and then asks any running shared daemon to perform a **graceful,
+conditional reload** onto the new binary. No manual daemon restart is normally
+needed. If no daemon is running, the reload step is a no-op and the next
+`jcode` launch starts the installed binary.
+
+The reload keeps the same socket and persisted session records. Other jcode
+clients therefore reconnect and continue using their existing sessions rather
+than being discarded. A turn or tool that is actively running during the brief
+handoff can still be interrupted, so wait for active work to finish first when
+that operation must not be interrupted.
+
 ### Uninstall
 
 Removes installed binaries and the launcher but keeps your config, auth, and
