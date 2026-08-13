@@ -16,6 +16,18 @@ fn markdown_link_regex() -> Option<&'static Regex> {
         .as_ref()
 }
 
+fn file_path_regex() -> Option<&'static Regex> {
+    static FILE_PATH_REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    FILE_PATH_REGEX
+        .get_or_init(|| {
+            Regex::new(
+                r#"(?:^|[\s'\"`(])((?:(?:\.{0,2}/|~/|/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9_-]+)?)|(?:[A-Za-z][A-Za-z0-9_.@+-]*\.[A-Za-z][A-Za-z0-9_-]*))(?:$|[\s'\"`),:;])"#,
+            )
+            .ok()
+        })
+        .as_ref()
+}
+
 pub(crate) fn trim_url_candidate(candidate: &str) -> &str {
     let mut trimmed = candidate;
     loop {
@@ -64,6 +76,19 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
         let end_col = start_col + trimmed.width();
         if column >= start_col && column < end_col && ::url::Url::parse(trimmed).is_ok() {
             return Some(trimmed.to_string());
+        }
+    }
+
+    if let Some(regex) = file_path_regex() {
+        for captures in regex.captures_iter(raw_text) {
+            let Some(path) = captures.get(1) else {
+                continue;
+            };
+            let start_col = raw_text[..path.start()].width();
+            let end_col = start_col + path.as_str().width();
+            if column >= start_col && column < end_col {
+                return Some(path.as_str().to_string());
+            }
         }
     }
 
@@ -164,5 +189,22 @@ mod tests {
             Some("docs/guide.md#setup".to_string())
         );
         assert_eq!(link_target_for_display_column(text, 8), None);
+    }
+
+    #[test]
+    fn link_target_for_display_column_resolves_plain_relative_file_path() {
+        let text = "- ' docs/grok-4.6-vs-deepseek-v4-pro-deepswe-cost.md'";
+
+        assert_eq!(
+            link_target_for_display_column(text, 12),
+            Some("docs/grok-4.6-vs-deepseek-v4-pro-deepswe-cost.md".to_string())
+        );
+        assert_eq!(link_target_for_display_column(text, 1), None);
+
+        let bare = "See README.md for details";
+        assert_eq!(
+            link_target_for_display_column(bare, 6),
+            Some("README.md".to_string())
+        );
     }
 }

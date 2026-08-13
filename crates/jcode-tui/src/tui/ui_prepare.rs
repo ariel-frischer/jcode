@@ -669,6 +669,7 @@ pub(super) fn prepare_messages(
             .display_messages_version()
             .wrapping_mul(2)
             .wrapping_add(u64::from(crate::config::config().display.pin_todos)),
+        inline_file_previews_version: app.inline_file_previews_version(),
         diagram_mode: app.diagram_mode(),
         centered: app.centered_mode(),
         mermaid_aspect_bucket: crate::tui::mermaid::current_preferred_aspect_ratio_bucket(),
@@ -1118,6 +1119,7 @@ fn prepare_body_cached(app: &dyn TuiState, width: u16) -> Arc<PreparedMessages> 
             .display_messages_version()
             .wrapping_mul(2)
             .wrapping_add(u64::from(crate::config::config().display.pin_todos)),
+        inline_file_previews_version: app.inline_file_previews_version(),
         diagram_mode: app.diagram_mode(),
         centered: app.centered_mode(),
         mermaid_aspect_bucket: crate::tui::mermaid::current_preferred_aspect_ratio_bucket(),
@@ -1735,6 +1737,12 @@ fn render_message_into(
             acc.line_copy_offsets.push(prefix_width);
         }
         _ => {}
+    }
+
+    if let Some(preview) = app.inline_file_preview(msg.stable_cache_hash()) {
+        for line in super::inline_file_preview_ui::render(preview) {
+            acc.push_auto(line);
+        }
     }
 
     acc.segments.push((
