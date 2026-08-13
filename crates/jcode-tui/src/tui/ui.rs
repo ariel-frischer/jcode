@@ -1679,6 +1679,7 @@ mod profile;
 pub(crate) mod selection_highlight;
 #[path = "ui/url.rs"]
 mod url_regex_support;
+pub(crate) use self::copy_selection::chat_inline_file_preview_message_from_screen;
 use self::copy_selection::{
     copy_point_from_snapshot, copy_selection_text_from_raw_lines, link_target_from_snapshot,
 };
@@ -2466,40 +2467,6 @@ pub(crate) fn chat_link_target_from_screen(column: u16, row: u16) -> Option<(Str
         CopyViewportData::Dense { .. } => return None,
     };
     Some((target, prepared.message_index_at_line(point.abs_line)?))
-}
-
-/// Return the transcript message whose expanded inline-file preview contains a
-/// screen row. Preview lines are appended to the owning message, so searching
-/// backwards within that message keeps ordinary message text and earlier
-/// previews from becoming accidental collapse targets.
-pub(crate) fn chat_inline_file_preview_message_from_screen(column: u16, row: u16) -> Option<usize> {
-    let point = copy_point_from_screen(column, row)?;
-    if point.pane != crate::tui::CopySelectionPane::Chat {
-        return None;
-    }
-    let snapshot = copy_snapshot_for_pane(point.pane)?;
-    let prepared = match &snapshot.data {
-        CopyViewportData::ChatFrame { prepared } => prepared,
-        CopyViewportData::Dense { .. } => return None,
-    };
-    let message_index = prepared.message_index_at_line(point.abs_line)?;
-    let mut line = point.abs_line;
-    loop {
-        if prepared.message_index_at_line(line) != Some(message_index) {
-            break;
-        }
-        if prepared
-            .wrapped_plain_line(line)
-            .is_some_and(|text| text.trim_start().starts_with("▾ Inline file · "))
-        {
-            return Some(message_index);
-        }
-        if line == 0 {
-            break;
-        }
-        line -= 1;
-    }
-    None
 }
 
 /// If a screen click landed on an inline-image label line, return the image

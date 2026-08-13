@@ -1513,19 +1513,9 @@ impl App {
             self.reset_tab_completion();
         }
 
-        let plain_chat_click = if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
-            && !self.copy_selection_mode
-            && !self.copy_selection_dragging
-        {
-            let pending = self.copy_selection_pending_anchor;
-            pending.is_some_and(|anchor| {
-                anchor.pane == crate::tui::CopySelectionPane::Chat
-                    && crate::tui::ui::copy_point_from_screen(mouse.column, mouse.row)
-                        == Some(anchor)
-            })
-        } else {
-            false
-        };
+        if self.try_collapse_inline_file_preview_at(mouse) {
+            finish_mouse_event!(false, "collapse_inline_file_preview");
+        }
 
         if let Some(scroll_only) = self.handle_copy_selection_mouse(mouse) {
             finish_mouse_event!(scroll_only, "copy_selection");
@@ -1654,17 +1644,6 @@ impl App {
 
         if handled_scroll {
             finish_mouse_event!(!immediate_redraw, "pane_or_focused_diagram_scroll");
-        }
-
-        if plain_chat_click
-            && let Some(message_index) =
-                super::super::ui::chat_inline_file_preview_message_from_screen(
-                    mouse.column,
-                    mouse.row,
-                )
-            && self.try_collapse_inline_file_preview(message_index)
-        {
-            finish_mouse_event!(false, "collapse_inline_file_preview");
         }
 
         if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))

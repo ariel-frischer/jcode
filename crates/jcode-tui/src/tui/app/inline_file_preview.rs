@@ -1,6 +1,32 @@
 use super::*;
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 impl App {
+    pub(super) fn try_collapse_inline_file_preview_at(&mut self, mouse: MouseEvent) -> bool {
+        if !matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
+            || self.copy_selection_mode
+            || self.copy_selection_dragging
+        {
+            return false;
+        }
+        let Some(anchor) = self.copy_selection_pending_anchor else {
+            return false;
+        };
+        if anchor.pane != crate::tui::CopySelectionPane::Chat
+            || crate::tui::ui::copy_point_from_screen(mouse.column, mouse.row) != Some(anchor)
+        {
+            return false;
+        }
+        let Some(message_index) =
+            crate::tui::ui::chat_inline_file_preview_message_from_screen(mouse.column, mouse.row)
+        else {
+            return false;
+        };
+        self.copy_selection_pending_anchor = None;
+        self.copy_selection_edge_autoscroll = None;
+        self.try_collapse_inline_file_preview(message_index)
+    }
+
     pub(super) fn try_collapse_inline_file_preview(&mut self, message_index: usize) -> bool {
         let Some(message_hash) = self
             .display_messages
