@@ -241,6 +241,12 @@ impl App {
     }
 
     pub(super) fn try_open_link_at(&mut self, column: u16, row: u16) -> bool {
+        if let Some((target, message_index)) =
+            super::super::ui::chat_link_target_from_screen(column, row)
+            && self.try_toggle_inline_file_preview(&target, message_index)
+        {
+            return true;
+        }
         let Some(target) = super::super::ui::link_target_from_screen(column, row) else {
             return false;
         };
