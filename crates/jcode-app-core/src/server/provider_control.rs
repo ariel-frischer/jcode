@@ -750,6 +750,7 @@ pub(super) async fn handle_refresh_models(
                     id,
                     message: format!("Failed to refresh models: {}", err),
                     retry_after_secs: None,
+                    provider_code: None,
                 });
             }
         }
@@ -1266,6 +1267,7 @@ pub(super) async fn handle_switch_anthropic_account(
                 id,
                 message: format!("Failed to switch Anthropic account: {}", e),
                 retry_after_secs: None,
+                provider_code: None,
             });
         }
     }
@@ -1287,6 +1289,7 @@ pub(super) async fn handle_switch_openai_account(
                 id,
                 message: format!("Failed to switch OpenAI account: {}", e),
                 retry_after_secs: None,
+                provider_code: None,
             });
         }
     }

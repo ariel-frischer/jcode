@@ -442,6 +442,7 @@ impl ClaudeEventTranslator {
             SseEvent::Error { error } => vec![StreamEvent::Error {
                 message: error.message,
                 retry_after_secs: error.retry_after_secs,
+                provider_code: None,
             }],
             _ => Vec::new(),
         }
@@ -473,6 +474,7 @@ impl CliOutputParser {
                         return vec![StreamEvent::Error {
                             message: format!("Failed to parse Claude CLI stream event: {}", err),
                             retry_after_secs: None,
+                            provider_code: None,
                         }];
                     }
                 };
@@ -589,6 +591,7 @@ impl CliOutputParser {
                     events.push(StreamEvent::Error {
                         message: "Claude CLI reported an error".to_string(),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                 }
                 if !self.saw_message_end {
@@ -603,6 +606,7 @@ impl CliOutputParser {
             } => vec![StreamEvent::Error {
                 message,
                 retry_after_secs,
+                provider_code: None,
             }],
             CliOutput::System { session_id } => {
                 session_id.map(StreamEvent::SessionId).into_iter().collect()
@@ -1040,6 +1044,7 @@ async fn run_claude_cli(
                         let event = StreamEvent::Error {
                             message: format!("Failed to parse Claude CLI output: {}", err),
                             retry_after_secs: None,
+                            provider_code: None,
                         };
                         if tx.send(Ok(event)).await.is_err() {
                             terminate_child(&mut child).await;
@@ -1056,6 +1061,7 @@ async fn run_claude_cli(
         let event = StreamEvent::Error {
             message: format!("Claude CLI exited with status {}", status),
             retry_after_secs: None,
+            provider_code: None,
         };
         let _ = tx.send(Ok(event)).await;
     }

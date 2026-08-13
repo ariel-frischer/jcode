@@ -366,6 +366,7 @@ fn test_error_event_retry_after_roundtrip() -> Result<()> {
         id: 42,
         message: "rate limited".to_string(),
         retry_after_secs: Some(17),
+        provider_code: None,
     };
     let json = encode_event(&event);
     let decoded = parse_event_json(json.trim())?;

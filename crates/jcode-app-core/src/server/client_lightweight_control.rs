@@ -46,6 +46,7 @@ pub(super) fn parse_swarm_spawn_mode(
                         "Invalid spawn_mode '{value}'. Expected one of: visible, headless, inline, auto"
                     ),
                     retry_after_secs: None,
+                    provider_code: None,
                 });
                 None
             }
@@ -795,6 +796,7 @@ pub(super) async fn handle_lightweight_control_request(
                 id: other.id(),
                 message: "unsupported lightweight control request".to_string(),
                 retry_after_secs: None,
+                provider_code: None,
             });
         }
     }

@@ -20,7 +20,12 @@ pub enum ApiEvent {
     Ok,
 
     /// Request failed.
-    Error { code: ErrorCode, message: String },
+    Error {
+        code: ErrorCode,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_code: Option<ProviderCode>,
+    },
 
     /// Reply to `ListSessions`.
     Sessions { sessions: Vec<SessionInfo> },
@@ -247,6 +252,14 @@ pub enum ErrorCode {
     UnknownSession,
     InvalidRequest,
     Internal,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderCode {
+    TemporarilyUnavailable,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

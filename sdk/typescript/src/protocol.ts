@@ -19,6 +19,8 @@ export type ErrorCode =
   | "invalid_request"
   | "internal";
 
+export type ProviderCode = "temporarily_unavailable" | "unknown";
+
 export interface SessionInfo {
   session_id: string;
   working_dir?: string;
@@ -106,7 +108,12 @@ export type ApiRequest =
 export type ApiEvent =
   | { ev: "hello_ok"; version: number; server: string; capabilities?: string[] }
   | { ev: "ok" }
-  | { ev: "error"; code: ErrorCode; message: string }
+  | {
+      ev: "error";
+      code: ErrorCode;
+      message: string;
+      provider_code?: ProviderCode;
+    }
   | { ev: "sessions"; sessions: SessionInfo[] }
   | { ev: "attached"; session: SessionInfo }
   | { ev: "history"; session_id: string; messages: HistoryMessage[] }

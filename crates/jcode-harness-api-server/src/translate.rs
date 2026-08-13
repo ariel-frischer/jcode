@@ -3,7 +3,8 @@
 
 use crate::background_progress::parse_background_notification;
 use jcode_harness_api::{
-    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ServerFrame, SessionInfo, TextMatch,
+    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, ServerFrame, SessionInfo,
+    TextMatch,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
@@ -189,6 +190,7 @@ impl BridgeState {
                             "not attached to session `{requested}`; call attach_session first (it is not attached, or does not exist)"
                         )
                     },
+                    provider_code: None,
                 },
             ))];
         }
@@ -210,6 +212,7 @@ impl BridgeState {
                     message: format!(
                         "this connection is attached to `{attached}`, not `{requested}`; attach to it first or use another connection"
                     ),
+                    provider_code: None,
                 },
             ))];
         }
@@ -636,6 +639,7 @@ impl BridgeState {
                         ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message: "set_model needs a non-empty `model`".into(),
+                            provider_code: None,
                         },
                     ))];
                 }
@@ -655,6 +659,7 @@ impl BridgeState {
                         ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message: "set_reasoning_effort needs a non-empty `effort`".into(),
+                            provider_code: None,
                         },
                     ))];
                 }
@@ -710,6 +715,7 @@ impl BridgeState {
                         message: "this server does not issue permission prompts \
                                   (no `permissions` capability), so there is nothing to respond to"
                             .into(),
+                        provider_code: None,
                     },
                 ))]
             }
@@ -718,6 +724,7 @@ impl BridgeState {
                 ApiEvent::Error {
                     code: ErrorCode::UnknownRequest,
                     message: format!("unknown request: {other}"),
+                    provider_code: None,
                 },
             ))],
         }
@@ -902,6 +909,7 @@ impl BridgeState {
                     let frame = ApiEvent::Error {
                         code: ErrorCode::InvalidRequest,
                         message: error.to_string(),
+                        provider_code: None,
                     };
                     return match reply_to {
                         Some(api_id) => vec![ServerFrame::reply(api_id, frame)],
@@ -941,6 +949,7 @@ impl BridgeState {
                         ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message: error.to_string(),
+                            provider_code: None,
                         },
                     )],
                     None => vec![ServerFrame::reply(api_id, ApiEvent::Ok)],
@@ -962,6 +971,7 @@ impl BridgeState {
                         ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message,
+                            provider_code: None,
                         },
                     )];
                 }
@@ -1058,6 +1068,11 @@ impl BridgeState {
                 if no_reply_api_id.is_some() {
                     self.pending_no_reply_message_id = None;
                 }
+                let provider_code = match event["provider_code"].as_str() {
+                    Some("temporarily_unavailable") => Some(ProviderCode::TemporarilyUnavailable),
+                    Some(_) => Some(ProviderCode::Unknown),
+                    None => None,
+                };
                 // Route to a pending request when possible, else stream it.
                 let reply_to = no_reply_api_id.or_else(|| {
                     self.pending_simple
@@ -1068,6 +1083,7 @@ impl BridgeState {
                 let frame_event = ApiEvent::Error {
                     code: ErrorCode::Internal,
                     message,
+                    provider_code,
                 };
                 vec![match reply_to {
                     Some(api_id) => ServerFrame::reply(api_id, frame_event),
@@ -1776,6 +1792,7 @@ impl BridgeState {
             ApiEvent::Error {
                 code,
                 message: message.to_string(),
+                provider_code: None,
             },
         ))]
     }

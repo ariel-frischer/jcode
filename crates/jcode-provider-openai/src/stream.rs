@@ -2,7 +2,7 @@ use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use bytes::Bytes;
 use futures::Stream;
-use jcode_message_types::{StreamEvent, sanitize_tool_id};
+use jcode_message_types::{ProviderFailureCode, StreamEvent, sanitize_tool_id};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -104,6 +104,30 @@ fn extract_error_with_retry(
         });
 
     (message, retry_after)
+}
+
+fn classify_provider_failure(
+    response: &Option<Value>,
+    top_level_error: &Option<Value>,
+) -> Option<ProviderFailureCode> {
+    let error = response
+        .as_ref()
+        .and_then(|value| value.get("error"))
+        .or(top_level_error.as_ref())?;
+    let error_type = error.get("type").and_then(Value::as_str);
+    let code = error.get("code").and_then(Value::as_str);
+
+    if matches!(
+        error_type,
+        Some("service_unavailable_error") | Some("server_is_overloaded")
+    ) || matches!(
+        code,
+        Some("service_unavailable_error") | Some("server_is_overloaded")
+    ) {
+        Some(ProviderFailureCode::TemporarilyUnavailable)
+    } else {
+        None
+    }
 }
 pub fn parse_text_wrapped_tool_call(text: &str) -> Option<(String, String, String, String)> {
     let marker = "to=functions.";
@@ -315,6 +339,7 @@ pub fn parse_openai_response_event(
         return Some(StreamEvent::Error {
             message: data.to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 
@@ -469,6 +494,7 @@ pub fn parse_openai_response_event(
             return Some(StreamEvent::Error {
                 message,
                 retry_after_secs,
+                provider_code: classify_provider_failure(&event.response, &event.error),
             });
         }
         _ => {}
@@ -1011,5 +1037,88 @@ mod tests {
         );
 
         assert!(event.is_none());
+    }
+
+    #[test]
+    fn server_overloaded_error_exposes_only_a_bounded_provider_code() {
+        let mut saw_text_delta = false;
+        let mut saw_thinking_delta = false;
+        let mut streaming_tool_calls = HashMap::new();
+        let mut completed_tool_items = HashSet::new();
+        let mut pending = VecDeque::new();
+
+        let payload = serde_json::json!({
+            "type": "error",
+            "error": {
+                "type": "service_unavailable_error",
+                "code": "server_is_overloaded",
+                "message": "private prompt and credential details must remain private",
+                "session_id": "private-session-id"
+            }
+        })
+        .to_string();
+
+        let event = parse_openai_response_event(
+            &payload,
+            &mut saw_text_delta,
+            &mut saw_thinking_delta,
+            &mut streaming_tool_calls,
+            &mut completed_tool_items,
+            &mut pending,
+        );
+
+        let Some(StreamEvent::Error {
+            provider_code,
+            message,
+            ..
+        }) = event
+        else {
+            panic!("expected a typed provider error");
+        };
+        assert_eq!(
+            provider_code,
+            Some(jcode_message_types::ProviderFailureCode::TemporarilyUnavailable)
+        );
+        assert!(message.contains("private prompt"));
+        assert_eq!(
+            serde_json::to_string(&provider_code).unwrap(),
+            "\"temporarily_unavailable\""
+        );
+    }
+
+    #[test]
+    fn generic_openai_error_omits_provider_code() {
+        let mut saw_text_delta = false;
+        let mut saw_thinking_delta = false;
+        let mut streaming_tool_calls = HashMap::new();
+        let mut completed_tool_items = HashSet::new();
+        let mut pending = VecDeque::new();
+
+        let payload = serde_json::json!({
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "code": "bad_request",
+                "message": "private request detail"
+            }
+        })
+        .to_string();
+
+        let event = parse_openai_response_event(
+            &payload,
+            &mut saw_text_delta,
+            &mut saw_thinking_delta,
+            &mut streaming_tool_calls,
+            &mut completed_tool_items,
+            &mut pending,
+        );
+
+        assert!(matches!(
+            event,
+            Some(StreamEvent::Error {
+                provider_code: None,
+                ..
+            })
+        ));
     }
 }

@@ -190,6 +190,7 @@ impl Client {
             id,
             message: "History response not received".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         })
     }
 

@@ -7,8 +7,8 @@
 //! against a scripted server on a real socket pair.
 
 use jcode_harness_api::{
-    API_VERSION_MAJOR, ApiEvent, ApiRequest, ClientFrame, ModelRouteInfo, ServerFrame, SessionInfo,
-    TextMatch, read_frame, write_frame,
+    API_VERSION_MAJOR, ApiEvent, ApiRequest, ClientFrame, ModelRouteInfo, ProviderCode,
+    ServerFrame, SessionInfo, TextMatch, read_frame, write_frame,
 };
 use jcode_sdk::{ConnectOptions, JcodeClient, SearchTextOptions, Transport};
 use std::io::{BufRead, BufReader, Write};
@@ -336,6 +336,7 @@ fn an_error_frame_becomes_a_typed_failure() {
             ApiEvent::Error {
                 code: jcode_harness_api::ErrorCode::UnknownSession,
                 message: "no such session".to_string(),
+                provider_code: None,
             },
             writer,
         );
@@ -343,6 +344,27 @@ fn an_error_frame_becomes_a_typed_failure() {
     let error = client.attach_session("gone").expect_err("must fail");
     assert_eq!(error.code(), "unknown_session");
     assert!(error.message.contains("no such session"));
+}
+
+#[test]
+fn provider_code_is_exposed_without_parsing_the_provider_message() {
+    let client = fake_harness(|frame, writer| {
+        reply(
+            frame,
+            ApiEvent::Error {
+                code: jcode_harness_api::ErrorCode::Internal,
+                message: "service_unavailable_error: private provider detail".to_string(),
+                provider_code: Some(ProviderCode::TemporarilyUnavailable),
+            },
+            writer,
+        );
+    });
+    let error = client.attach_session("busy").expect_err("must fail");
+    assert_eq!(
+        error.provider_code(),
+        Some(ProviderCode::TemporarilyUnavailable)
+    );
+    assert!(error.message.contains("private provider detail"));
 }
 
 /// A reply of the wrong kind is a distinct failure from a harness error: it
@@ -519,6 +541,7 @@ fn an_error_mid_turn_fails_the_run_instead_of_hanging() {
                 ApiEvent::Error {
                     code: jcode_harness_api::ErrorCode::Internal,
                     message: "provider exploded".to_string(),
+                    provider_code: None,
                 },
                 writer,
             );

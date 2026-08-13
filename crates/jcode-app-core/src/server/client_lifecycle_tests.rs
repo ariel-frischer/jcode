@@ -265,6 +265,7 @@ async fn busy_agent_request_rejection_does_not_wait_for_agent_lock() {
         Some(ServerEvent::Error {
             id: 17,
             retry_after_secs: Some(1),
+            provider_code: None,
             ..
         })
     ));
@@ -362,6 +363,7 @@ async fn context_message_rejects_while_busy_without_waiting_for_agent_lock() {
         Some(ServerEvent::Error {
             id: 78,
             retry_after_secs: Some(1),
+            provider_code: None,
             ..
         })
     ));

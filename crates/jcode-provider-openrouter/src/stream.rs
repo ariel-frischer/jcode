@@ -329,6 +329,7 @@ impl OpenRouterStream {
                 return Some(StreamEvent::Error {
                     message,
                     retry_after_secs: None,
+                    provider_code: None,
                 });
             }
 
