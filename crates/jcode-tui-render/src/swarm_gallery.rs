@@ -123,19 +123,6 @@ fn format_elapsed(seconds: u64) -> String {
     }
 }
 
-fn format_model(model: &str) -> String {
-    let routed = model.rsplit([':', '/']).next().unwrap_or(model);
-    let model = routed
-        .strip_suffix("-sol")
-        .or_else(|| routed.strip_suffix("-luna"))
-        .unwrap_or(routed);
-    if let Some(rest) = model.strip_prefix("gpt-") {
-        format!("GPT-{rest}")
-    } else {
-        model.to_string()
-    }
-}
-
 /// Combine provider display name and credential route into one metadata piece,
 /// e.g. "OpenAI oauth". Returns `None` when both are blank.
 fn format_route(provider: Option<&str>, auth_method: Option<&str>) -> Option<String> {
@@ -147,6 +134,38 @@ fn format_route(provider: Option<&str>, auth_method: Option<&str>) -> Option<Str
         (None, Some(method)) => Some(method.to_string()),
         (None, None) => None,
     }
+}
+
+/// Format the effective route shown beside every visible swarm member.
+///
+/// The order is model, provider/auth route, then reasoning effort. Keep the
+/// model suffix intact so `gpt-5.6-luna` and `gpt-5.6-sol` remain distinguishable
+/// instead of collapsing to the shared base model name.
+pub fn runtime_metadata(member: &GalleryMember) -> Option<String> {
+    let mut metadata = Vec::new();
+    if let Some(model) = member
+        .model
+        .as_deref()
+        .filter(|model| !model.trim().is_empty())
+    {
+        let model = model
+            .trim()
+            .rsplit([':', '/'])
+            .next()
+            .unwrap_or(model.trim());
+        metadata.push(model.to_string());
+    }
+    if let Some(route) = format_route(member.provider.as_deref(), member.auth_method.as_deref()) {
+        metadata.push(route);
+    }
+    if let Some(effort) = member
+        .effort
+        .as_deref()
+        .filter(|effort| !effort.trim().is_empty())
+    {
+        metadata.push(effort.trim().to_string());
+    }
+    (!metadata.is_empty()).then(|| metadata.join(" · "))
 }
 
 /// Sort rank for stable placement: coordinator first, then everything else.
@@ -307,8 +326,8 @@ pub fn render_gallery(
 /// tool progress, and animated glyphs. Those fields update frequently and make
 /// old chat rows move while the user is reading them. The dedicated live swarm
 /// page owns the detailed, animated representation instead. Spawn-time-stable
-/// metadata (model, provider/auth route) is shown since it answers "what is
-/// this agent running on" without churning.
+/// metadata (model, provider/auth route, and reasoning effort) is shown since it
+/// answers "what is this agent running on" without churning.
 pub fn render_swarm_chat_cards(members: &[GalleryMember], width: usize) -> Vec<Line<'static>> {
     if members.is_empty() || width < 8 {
         return Vec::new();
@@ -324,20 +343,12 @@ pub fn render_swarm_chat_cards(members: &[GalleryMember], width: usize) -> Vec<L
         );
         let label = member.label.clone();
 
-        // Stable runtime metadata (model and provider/auth route) is fixed at
-        // spawn time, so it can live on the transcript card without making old
-        // chat rows churn. Drop trailing pieces first when width is tight.
+        // Stable runtime metadata is fixed at spawn time, so it can live on the
+        // transcript card without making old chat rows churn. Drop trailing
+        // pieces first when width is tight.
         let mut metadata = vec![card_status_label(&member.status).to_string()];
-        if let Some(model) = member
-            .model
-            .as_deref()
-            .filter(|model| !model.trim().is_empty())
-        {
-            metadata.push(format_model(model));
-        }
-        if let Some(route) = format_route(member.provider.as_deref(), member.auth_method.as_deref())
-        {
-            metadata.push(route);
+        if let Some(runtime) = runtime_metadata(member) {
+            metadata.extend(runtime.split(" · ").map(str::to_string));
         }
         let mut tail = format!(" · {}", metadata.join(" · "));
         while metadata.len() > 1 && disp_w(&lead) + disp_w(&label) + disp_w(&tail) > width {
@@ -383,22 +394,8 @@ pub fn render_swarm_live_card(
     if let Some(elapsed) = member.elapsed_secs {
         metadata.push(format_elapsed(elapsed));
     }
-    if let Some(model) = member
-        .model
-        .as_deref()
-        .filter(|model| !model.trim().is_empty())
-    {
-        metadata.push(format_model(model));
-    }
-    if let Some(route) = format_route(member.provider.as_deref(), member.auth_method.as_deref()) {
-        metadata.push(route);
-    }
-    if let Some(effort) = member
-        .effort
-        .as_deref()
-        .filter(|effort| !effort.trim().is_empty())
-    {
-        metadata.push(effort.to_string());
+    if let Some(runtime) = runtime_metadata(member) {
+        metadata.push(runtime);
     }
 
     let lead = format!(
@@ -602,6 +599,7 @@ pub fn render_swarm_strip(
         name: String,
         task: Option<String>,
         todo: Option<String>,
+        runtime: Option<String>,
         color: Color,
         is_sel: bool,
     }
@@ -617,12 +615,17 @@ pub fn render_swarm_strip(
                 .filter(|t| !t.trim().is_empty())
                 .map(|t| truncate_label(t, CHIP_TASK_MAX_W)),
             todo: m.todo.map(|(done, total)| format!("{done}/{total}")),
+            runtime: runtime_metadata(m),
             color: status_accent(&m.status),
             is_sel: idx == selected,
         })
         .collect();
     let chip_w = |c: &Chip| -> usize {
-        disp_w(&c.glyph) + 1 + disp_w(&c.name) + c.todo.as_ref().map(|t| disp_w(t) + 1).unwrap_or(0)
+        disp_w(&c.glyph)
+            + 1
+            + disp_w(&c.name)
+            + c.runtime.as_ref().map(|r| disp_w(r) + 3).unwrap_or(0)
+            + c.todo.as_ref().map(|t| disp_w(t) + 1).unwrap_or(0)
     };
 
     // Fit as many chips as possible into `budget`, collapsing overflow into a
@@ -734,6 +737,12 @@ pub fn render_swarm_strip(
                 style = style.add_modifier(Modifier::BOLD);
             }
             spans.push(Span::styled(format!("{} {}", chip.glyph, chip.name), style));
+            if let Some(runtime) = &chip.runtime {
+                spans.push(Span::styled(
+                    format!(" · {runtime}"),
+                    Style::default().fg(rgb(135, 135, 148)),
+                ));
+            }
             if per_task_w > 0
                 && let Some(task) = &chip.task
             {
@@ -993,8 +1002,8 @@ pub fn render_swarm_strip_vertical(
             if let Some(elapsed) = m.elapsed_secs {
                 metadata.push(format_elapsed(elapsed));
             }
-            if let Some(model) = m.model.as_deref().filter(|model| !model.trim().is_empty()) {
-                metadata.push(format_model(model));
+            if let Some(runtime) = runtime_metadata(m) {
+                metadata.push(runtime);
             }
 
             let mut tail = metadata.join(" · ");
@@ -1034,11 +1043,16 @@ pub fn render_swarm_strip_vertical(
         let head = format!("{marker}{glyph} {ident}");
         let head_w = disp_w(&head);
         let todo_w = todo.as_ref().map(|t| disp_w(t) + 1).unwrap_or(0);
+        let runtime = runtime_metadata(m).map(|metadata| format!(" · {metadata}"));
+        let runtime_w = runtime
+            .as_ref()
+            .map(|metadata| disp_w(metadata))
+            .unwrap_or(0);
         let mut used = head_w;
         spans.push(Span::styled(head, style));
 
         if let Some(task) = m.task.as_deref().filter(|t| !t.trim().is_empty()) {
-            let avail = body_budget.saturating_sub(used + todo_w + disp_w(" · "));
+            let avail = body_budget.saturating_sub(used + todo_w + runtime_w + disp_w(" · "));
             if avail >= CHIP_TASK_MIN_W {
                 let label = truncate_label(task, avail);
                 used += disp_w(" · ") + disp_w(&label);
@@ -1049,12 +1063,21 @@ pub fn render_swarm_strip_vertical(
             }
         }
         if let Some(todo) = &todo
-            && used + todo_w <= body_budget
+            && used + todo_w + runtime_w <= body_budget
         {
             used += todo_w;
             spans.push(Span::styled(
                 format!(" {todo}"),
                 Style::default().fg(rgb(130, 130, 140)),
+            ));
+        }
+        if let Some(runtime) = runtime
+            && used + runtime_w <= body_budget
+        {
+            used += runtime_w;
+            spans.push(Span::styled(
+                runtime,
+                Style::default().fg(rgb(135, 135, 148)),
             ));
         }
 
@@ -1431,12 +1454,17 @@ fn dock_row(
         .unwrap_or_default();
     let status = status_glyph(&member.status, spinner_frame);
     let todo = member.todo.map(|(d, t)| format!(" {d}/{t}"));
+    let runtime = runtime_metadata(member).map(|metadata| format!(" · {metadata}"));
+    let runtime_w = runtime
+        .as_ref()
+        .map(|metadata| disp_w(metadata))
+        .unwrap_or(0);
 
     let right_w = disp_w(status) + todo.as_ref().map(|t| disp_w(t)).unwrap_or(0);
-    let fixed = 2 + disp_w(&glyph) + 1 + right_w;
+    let fixed = 2 + disp_w(&glyph) + 1 + runtime_w + right_w;
     let label = truncate_label(&member.label, width.saturating_sub(fixed).max(4));
     let filler = width
-        .saturating_sub(2 + disp_w(&glyph) + disp_w(&label) + right_w)
+        .saturating_sub(2 + disp_w(&glyph) + disp_w(&label) + runtime_w + right_w)
         .max(1);
 
     let mut label_style = Style::default().fg(if selected {
@@ -1455,6 +1483,12 @@ fn dock_row(
         spans.push(Span::styled(glyph, Style::default().fg(accent)));
     }
     spans.push(Span::styled(label, label_style));
+    if let Some(runtime) = runtime {
+        spans.push(Span::styled(
+            runtime,
+            Style::default().fg(rgb(135, 135, 148)),
+        ));
+    }
     spans.push(Span::raw(" ".repeat(filler)));
     spans.push(Span::styled(
         status.to_string(),
@@ -1858,8 +1892,13 @@ fn list_row(member: &GalleryMember, selected: bool, focused: bool, width: usize)
     let glyph_w = disp_w(&glyph);
     let badge_w = disp_w(&badge);
     let age_w = age.as_ref().map(|a| disp_w(a) + 1).unwrap_or(0);
-    // Reserve: marker + glyph + label + space + badge + space + age.
-    let reserved = marker_w + glyph_w + 1 + badge_w + age_w + 1;
+    let runtime = runtime_metadata(member).map(|metadata| format!(" · {metadata}"));
+    let runtime_w = runtime
+        .as_ref()
+        .map(|metadata| disp_w(metadata))
+        .unwrap_or(0);
+    // Reserve: marker + glyph + label + runtime + badge + space + age.
+    let reserved = marker_w + glyph_w + 1 + runtime_w + badge_w + age_w + 1;
     let label_budget = width.saturating_sub(reserved).max(4);
     let label = truncate_label(&member.label, label_budget);
     let label_w = disp_w(&label);
@@ -1878,7 +1917,7 @@ fn list_row(member: &GalleryMember, selected: bool, focused: bool, width: usize)
     };
 
     // Compute filler so the badge/age right-align.
-    let used = marker_w + glyph_w + label_w;
+    let used = marker_w + glyph_w + label_w + runtime_w;
     let right_w = badge_w + age_w;
     let filler = width.saturating_sub(used + right_w).max(1);
 
@@ -1887,6 +1926,12 @@ fn list_row(member: &GalleryMember, selected: bool, focused: bool, width: usize)
         spans.push(Span::styled(glyph, Style::default().fg(accent)));
     }
     spans.push(Span::styled(label, label_style));
+    if let Some(runtime) = runtime {
+        spans.push(Span::styled(
+            runtime,
+            Style::default().fg(rgb(135, 135, 148)),
+        ));
+    }
     spans.push(Span::raw(" ".repeat(filler)));
     spans.push(Span::styled(badge, Style::default().fg(accent)));
     if let Some(age) = age {
@@ -2369,7 +2414,7 @@ mod tests {
             "assigned agent emoji missing: {all}"
         );
         assert!(
-            all.contains("reviewer · Working · GPT-5.6 · OpenAI OAuth"),
+            all.contains("reviewer · Working · gpt-5.6-sol · OpenAI OAuth · high"),
             "stable status/model/route metadata missing: {all}"
         );
         assert!(
@@ -2393,7 +2438,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(
-            live.contains("reviewer · 00:18 · GPT-5.6 · OpenAI OAuth · high"),
+            live.contains("reviewer · 00:18 · gpt-5.6-sol · OpenAI OAuth · high"),
             "live header metadata missing: {live}"
         );
         assert!(
@@ -2427,7 +2472,10 @@ mod tests {
         // Wide: everything fits. Narrow: route drops before model, model before
         // status, and the label always survives.
         let wide = plain_line(&render_swarm_chat_cards(std::slice::from_ref(&worker), 100)[0]);
-        assert!(wide.contains("Working · GPT-5.6 · OpenAI OAuth"), "{wide}");
+        assert!(
+            wide.contains("Working · gpt-5.6-sol · OpenAI OAuth"),
+            "{wide}"
+        );
         let mid = plain_line(&render_swarm_chat_cards(std::slice::from_ref(&worker), 34)[0]);
         assert!(
             mid.contains("Working") && !mid.contains("OpenAI OAuth"),
@@ -2438,6 +2486,108 @@ mod tests {
         bare.icon = Some("🦕".to_string());
         let bare_line = plain_line(&render_swarm_chat_cards(std::slice::from_ref(&bare), 100)[0]);
         assert_eq!(bare_line.trim(), "🦕 ● plain · Working");
+    }
+
+    #[test]
+    fn swarm_rows_show_effective_model_provider_and_reasoning() {
+        let mut worker = member("reviewer", "running", None, &[]);
+        worker.model = Some("openai:gpt-5.6-luna".into());
+        worker.provider = Some("OpenAI".into());
+        worker.auth_method = Some("OAuth".into());
+        worker.effort = Some("xhigh".into());
+
+        let panel = render_swarm_panel(std::slice::from_ref(&worker), 0, false, 120, 8);
+        let panel_text = panel.iter().map(plain_line).collect::<Vec<_>>().join("\n");
+        assert!(
+            panel_text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
+            "panel row metadata missing: {panel_text}"
+        );
+
+        let strip = render_swarm_strip_vertical(
+            std::slice::from_ref(&worker),
+            0,
+            false,
+            &hints(),
+            None,
+            0,
+            120,
+            4,
+            4,
+        );
+        let strip_text = strip.iter().map(plain_line).collect::<Vec<_>>().join("\n");
+        assert!(
+            strip_text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
+            "strip row metadata missing: {strip_text}"
+        );
+
+        let dock = render_swarm_dock(std::slice::from_ref(&worker), 0, false, None, 0, 120, 4);
+        let dock_text = dock.iter().map(plain_line).collect::<Vec<_>>().join("\n");
+        assert!(
+            dock_text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
+            "dock row metadata missing: {dock_text}"
+        );
+
+        let horizontal = render_swarm_strip(
+            std::slice::from_ref(&worker),
+            0,
+            false,
+            &hints(),
+            None,
+            0,
+            120,
+            4,
+        );
+        let horizontal_text = horizontal
+            .iter()
+            .map(plain_line)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            horizontal_text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
+            "horizontal strip metadata missing: {horizontal_text}"
+        );
+
+        for width in 0..=120 {
+            for lines in [
+                render_swarm_panel(std::slice::from_ref(&worker), 0, false, width, 8),
+                render_swarm_strip_vertical(
+                    std::slice::from_ref(&worker),
+                    0,
+                    false,
+                    &hints(),
+                    None,
+                    0,
+                    width,
+                    4,
+                    4,
+                ),
+                render_swarm_dock(std::slice::from_ref(&worker), 0, false, None, 0, width, 4),
+                render_swarm_strip(
+                    std::slice::from_ref(&worker),
+                    0,
+                    false,
+                    &hints(),
+                    None,
+                    0,
+                    width,
+                    4,
+                ),
+            ] {
+                for line in lines {
+                    assert!(line.width() <= width, "line exceeded width {width}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn swarm_rows_without_runtime_metadata_keep_identity_and_status() {
+        let worker = member("plain", "running", None, &[]);
+        let lines = render_swarm_panel(std::slice::from_ref(&worker), 0, false, 80, 8);
+        let text = lines.iter().map(plain_line).collect::<Vec<_>>().join("\n");
+        assert!(text.contains("plain"), "identity disappeared: {text}");
+        assert!(text.contains("[running]"), "status disappeared: {text}");
+        assert!(!text.contains("OAuth"), "unexpected route metadata: {text}");
     }
 
     #[test]
