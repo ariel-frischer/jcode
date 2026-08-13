@@ -161,6 +161,7 @@ impl Provider for GrokBuildProvider {
                     let _ = tx.blocking_send(Ok(StreamEvent::Error {
                         message: format!("{error:#}"),
                         retry_after_secs: None,
+                        provider_code: None,
                     }));
                 }
             })

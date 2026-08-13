@@ -187,6 +187,7 @@ async fn handle_api_client(stream: Stream, legacy_socket: PathBuf) -> Result<()>
             let frame = ServerFrame::event(ApiEvent::Error {
                 code: ErrorCode::InvalidRequest,
                 message: format!("first frame must be a JSON `hello`: {error}"),
+                provider_code: None,
             });
             write_json_line(&mut write_half, &frame).await?;
             return Ok(());
@@ -206,6 +207,7 @@ async fn handle_api_client(stream: Stream, legacy_socket: PathBuf) -> Result<()>
                     hello["min_version"].as_u64().unwrap_or(0),
                     hello["max_version"].as_u64().unwrap_or(0),
                 ),
+                provider_code: None,
             },
         );
         write_json_line(&mut write_half, &frame).await?;
@@ -257,6 +259,7 @@ async fn handle_api_client(stream: Stream, legacy_socket: PathBuf) -> Result<()>
                         let frame = ServerFrame::event(ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message: error.to_string(),
+                            provider_code: None,
                         });
                         write_json_line(&mut write_half, &frame).await?;
                         return Ok(());
@@ -272,6 +275,7 @@ async fn handle_api_client(stream: Stream, legacy_socket: PathBuf) -> Result<()>
                         let frame = ServerFrame::event(ApiEvent::Error {
                             code: ErrorCode::InvalidRequest,
                             message: error.to_string(),
+                            provider_code: None,
                         });
                         write_json_line(&mut write_half, &frame).await?;
                         continue;
@@ -299,6 +303,7 @@ async fn handle_api_client(stream: Stream, legacy_socket: PathBuf) -> Result<()>
                     let frame = ServerFrame::event(ApiEvent::Error {
                         code: ErrorCode::Internal,
                         message: "daemon connection closed".into(),
+                        provider_code: None,
                     });
                     write_json_line(&mut write_half, &frame).await?;
                     return Ok(());

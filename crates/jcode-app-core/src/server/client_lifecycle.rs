@@ -324,6 +324,7 @@ fn send_agent_busy_error(
             "Cannot handle {request_kind} while the session is busy. Try again after the current turn finishes."
         ),
         retry_after_secs: Some(1),
+        provider_code: None,
     });
 }
 
@@ -512,6 +513,7 @@ pub(super) async fn handle_client(
                         id: 0,
                         message: format!("Invalid request: {}", error),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 )
                 .await?;
@@ -528,6 +530,7 @@ pub(super) async fn handle_client(
                     id: initial_request.id(),
                     message,
                     retry_after_secs: None,
+                    provider_code: None,
                 },
             )
             .await?;
@@ -543,6 +546,7 @@ pub(super) async fn handle_client(
                 id: initial_request.id(),
                 message,
                 retry_after_secs: None,
+                provider_code: None,
             },
         )
         .await?;
@@ -573,6 +577,7 @@ pub(super) async fn handle_client(
                 id: initial_request.id(),
                 message,
                 retry_after_secs: None,
+                provider_code: None,
             },
         )
         .await?;
@@ -1006,6 +1011,7 @@ pub(super) async fn handle_client(
                         id: 0,
                         message: format!("Invalid request: {}", e),
                         retry_after_secs: None,
+                        provider_code: None,
                     };
                     let json = encode_event(&event);
                     let mut w = writer.lock().await;
@@ -1350,6 +1356,7 @@ pub(super) async fn handle_client(
                         id,
                         message: "Cannot rewind while a turn is processing.".to_string(),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                     continue;
                 }
@@ -1399,6 +1406,7 @@ pub(super) async fn handle_client(
                             id,
                             message,
                             retry_after_secs: None,
+                            provider_code: None,
                         });
                     }
                 }
@@ -1410,6 +1418,7 @@ pub(super) async fn handle_client(
                         id,
                         message: "Cannot undo rewind while a turn is processing.".to_string(),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                     continue;
                 }
@@ -1458,6 +1467,7 @@ pub(super) async fn handle_client(
                             id,
                             message,
                             retry_after_secs: None,
+                            provider_code: None,
                         });
                     }
                 }
@@ -1504,6 +1514,7 @@ pub(super) async fn handle_client(
                         id,
                         message,
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                     continue;
                 }
@@ -1730,6 +1741,7 @@ pub(super) async fn handle_client(
                     id,
                     message: "debug_command is only supported on the debug socket".to_string(),
                     retry_after_secs: None,
+                    provider_code: None,
                 });
             }
 
@@ -2143,6 +2155,7 @@ pub(super) async fn handle_client(
                             id,
                             message: error.to_string(),
                             retry_after_secs: None,
+                            provider_code: None,
                         });
                     }
                 }
@@ -2935,6 +2948,7 @@ async fn append_context_message(
             id,
             message: crate::util::format_error_chain(&error),
             retry_after_secs: None,
+            provider_code: None,
         },
     };
     let _ = client_event_tx.send(event);
@@ -2971,6 +2985,7 @@ async fn start_processing_message(
             id,
             message: "Already processing a message".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
         return;
     }
@@ -3070,6 +3085,9 @@ async fn start_processing_message(
                 retry_after_secs: error
                     .downcast_ref::<StreamError>()
                     .and_then(|stream_error| stream_error.retry_after_secs),
+                provider_code: error
+                    .downcast_ref::<StreamError>()
+                    .and_then(|stream_error| stream_error.provider_code.clone()),
             },
         };
         let _ = tx.send(terminal_event);
@@ -3096,6 +3114,7 @@ async fn start_processing_message(
                         id,
                         message: format!("Failed to complete staged handoff: {error}"),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                 }
             }

@@ -641,7 +641,7 @@ fn stateful_requests_before_attach_are_refused_locally() {
         };
         assert_eq!(frame.reply_to, Some(7));
         match &frame.event {
-            ApiEvent::Error { code, message } => {
+            ApiEvent::Error { code, message, .. } => {
                 assert_eq!(*code, ErrorCode::UnknownSession, "{req}");
                 assert!(
                     message.contains("session_does_not_exist"),
@@ -669,7 +669,7 @@ fn requests_for_another_session_do_not_hit_the_attached_one() {
         panic!("clear for another session must not reach the daemon");
     };
     match &frame.event {
-        ApiEvent::Error { code, message } => {
+        ApiEvent::Error { code, message, .. } => {
             assert_eq!(*code, ErrorCode::UnknownSession);
             assert!(message.contains("s1") && message.contains("some_other_session"));
         }
@@ -832,7 +832,7 @@ fn a_rejected_model_change_fails_the_request() {
         [frame] => {
             assert_eq!(frame.reply_to, Some(4));
             match &frame.event {
-                ApiEvent::Error { code, message } => {
+                ApiEvent::Error { code, message, .. } => {
                     assert_eq!(*code, ErrorCode::InvalidRequest);
                     assert_eq!(message, "unknown model");
                 }
@@ -1431,4 +1431,49 @@ fn rooted_file_operations_reject_traversal_and_symlink_escapes_and_bound_results
             ..
         } if kind == "missing"
     ));
+}
+
+#[test]
+fn provider_code_is_forwarded_without_replacing_the_private_message() {
+    let mut state = state_with_session();
+    let frames = state.legacy_event_to_api(&json!({
+        "type": "error",
+        "id": 9,
+        "message": "private provider message",
+        "provider_code": "temporarily_unavailable"
+    }));
+
+    assert_eq!(frames.len(), 1);
+    let ApiEvent::Error {
+        code,
+        message,
+        provider_code,
+    } = &frames[0].event
+    else {
+        panic!("expected API error event, got {:?}", frames[0].event);
+    };
+    assert_eq!(*code, ErrorCode::Internal);
+    assert_eq!(message, "private provider message");
+    assert_eq!(*provider_code, Some(ProviderCode::TemporarilyUnavailable));
+}
+
+#[test]
+fn unknown_provider_code_is_redacted_to_a_non_actionable_sentinel() {
+    let mut state = state_with_session();
+    let frames = state.legacy_event_to_api(&json!({
+        "type": "error",
+        "id": 10,
+        "message": "private provider message",
+        "provider_code": "private_future_provider_detail"
+    }));
+
+    let ApiEvent::Error { provider_code, .. } = &frames[0].event else {
+        panic!("expected API error event, got {:?}", frames[0].event);
+    };
+    assert_eq!(*provider_code, Some(ProviderCode::Unknown));
+    assert!(
+        !serde_json::to_string(&frames[0].event)
+            .unwrap()
+            .contains("private_future_provider_detail")
+    );
 }

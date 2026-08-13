@@ -29,6 +29,7 @@ pub(crate) async fn handle_comm_task_control(
             id,
             message: "Unknown task control action. Use start, wake, resume, retry, reassign, replace, or salvage.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
         return;
     };
@@ -59,6 +60,7 @@ pub(crate) async fn handle_comm_task_control(
                         action.as_str()
                     ),
                     retry_after_secs: None,
+                    provider_code: None,
                 },
             );
             return;
@@ -72,6 +74,7 @@ pub(crate) async fn handle_comm_task_control(
                         id,
                         message,
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -88,6 +91,7 @@ pub(crate) async fn handle_comm_task_control(
                 id,
                 message: format!("Task '{}' not found in swarm plan", task_id),
                 retry_after_secs: None,
+                provider_code: None,
             },
         );
         return;
@@ -100,6 +104,7 @@ pub(crate) async fn handle_comm_task_control(
                 id,
                 message: task_control_status_error(action, &snapshot.status, &task_id),
                 retry_after_secs: None,
+                provider_code: None,
             },
         );
         return;
@@ -126,6 +131,7 @@ pub(crate) async fn handle_comm_task_control(
                     task_id
                 ),
                 retry_after_secs: None,
+                provider_code: None,
             },
         );
         return;
@@ -143,6 +149,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -159,6 +166,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id, assignee, requested_target
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -182,6 +190,7 @@ pub(crate) async fn handle_comm_task_control(
                             assignee
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -196,6 +205,7 @@ pub(crate) async fn handle_comm_task_control(
                             assignee
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -221,6 +231,7 @@ pub(crate) async fn handle_comm_task_control(
                             id,
                             message: format!("Task '{}' route rejected: {}", task_id, error),
                             retry_after_secs: None,
+                            provider_code: None,
                         },
                     );
                     return;
@@ -331,6 +342,7 @@ pub(crate) async fn handle_comm_task_control(
                             assignee
                         ),
                         retry_after_secs: Some(1),
+                        provider_code: None,
                     },
                 );
             }
@@ -346,6 +358,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -392,6 +405,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -403,6 +417,7 @@ pub(crate) async fn handle_comm_task_control(
                         id,
                         message: format!("'target_session' is required for {}.", action.as_str()),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -418,6 +433,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id, assignee
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;
@@ -433,6 +449,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id, assignee
                         ),
                         retry_after_secs: Some(1),
+                        provider_code: None,
                     },
                 );
                 return;
@@ -453,6 +470,7 @@ pub(crate) async fn handle_comm_task_control(
                             task_id, snapshot.status
                         ),
                         retry_after_secs: None,
+                        provider_code: None,
                     },
                 );
                 return;

@@ -594,6 +594,7 @@ fn test_error_event_retry_after_roundtrip() -> Result<()> {
         id: 42,
         message: "rate limited".to_string(),
         retry_after_secs: Some(17),
+        provider_code: None,
     };
     let json = encode_event(&event);
     let decoded = parse_event_json(json.trim())?;
@@ -601,6 +602,7 @@ fn test_error_event_retry_after_roundtrip() -> Result<()> {
         id,
         message,
         retry_after_secs,
+        provider_code,
     } = decoded
     else {
         return Err(anyhow!("wrong event type"));
@@ -608,6 +610,7 @@ fn test_error_event_retry_after_roundtrip() -> Result<()> {
     assert_eq!(id, 42);
     assert_eq!(message, "rate limited");
     assert_eq!(retry_after_secs, Some(17));
+    assert_eq!(provider_code, None);
     Ok(())
 }
 
@@ -619,6 +622,7 @@ fn test_error_event_retry_after_back_compat_default() -> Result<()> {
         id,
         message,
         retry_after_secs,
+        provider_code,
     } = decoded
     else {
         return Err(anyhow!("wrong event type"));
@@ -626,5 +630,27 @@ fn test_error_event_retry_after_back_compat_default() -> Result<()> {
     assert_eq!(id, 7);
     assert_eq!(message, "oops");
     assert_eq!(retry_after_secs, None);
+    assert_eq!(provider_code, None);
+    Ok(())
+}
+
+#[test]
+fn test_error_event_provider_code_is_additive_and_redacted() -> Result<()> {
+    let event = ServerEvent::Error {
+        id: 8,
+        message: "private provider message".to_string(),
+        retry_after_secs: None,
+        provider_code: Some("temporarily_unavailable".to_string()),
+    };
+    let json = encode_event(&event);
+    assert!(json.contains("\"provider_code\":\"temporarily_unavailable\""));
+    assert!(json.contains("private provider message"));
+    assert!(!json.contains("server_is_overloaded"));
+
+    let decoded = parse_event_json(json.trim())?;
+    let ServerEvent::Error { provider_code, .. } = decoded else {
+        return Err(anyhow!("wrong event type"));
+    };
+    assert_eq!(provider_code.as_deref(), Some("temporarily_unavailable"));
     Ok(())
 }

@@ -53,6 +53,7 @@ pub(super) async fn handle_comm_list_channels(
             id,
             message: "Not in a swarm. Use a git repository to enable swarm features.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }
@@ -108,6 +109,7 @@ pub(super) async fn handle_comm_channel_members(
             id,
             message: "Not in a swarm. Use a git repository to enable swarm features.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }
@@ -193,6 +195,7 @@ pub(super) async fn handle_comm_subscribe_channel(
             id,
             message: "Not in a swarm.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }
@@ -278,6 +281,7 @@ pub(super) async fn handle_comm_unsubscribe_channel(
             id,
             message: "Not in a swarm.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }

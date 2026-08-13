@@ -894,6 +894,7 @@ impl Agent {
                     StreamEvent::Error {
                         message,
                         retry_after_secs,
+                        provider_code,
                     } => {
                         if self.try_auto_compact_after_context_limit(&message) {
                             log_agent_provider_stream_lifecycle(
@@ -950,7 +951,12 @@ impl Agent {
                                 ),
                             ],
                         );
-                        return Err(StreamError::new(message, retry_after_secs).into());
+                        return Err(StreamError::new(
+                            message,
+                            retry_after_secs,
+                            provider_code.map(|code| code.to_string()),
+                        )
+                        .into());
                     }
                 }
             }

@@ -159,6 +159,7 @@ pub(super) async fn handle_comm_share(
             id,
             message: "Not in a swarm. Use a git repository to enable swarm features.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }
@@ -331,6 +332,7 @@ pub(super) async fn handle_comm_list(
             id,
             message: "Not in a swarm. Use a git repository to enable swarm features.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }

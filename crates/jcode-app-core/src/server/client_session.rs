@@ -1519,6 +1519,7 @@ pub(super) async fn handle_resume_session(
                     session_id
                 ),
                 retry_after_secs: Some(1),
+                provider_code: None,
             });
             crate::logging::event_warn(
                 "SESSION_LIFECYCLE",
@@ -1702,6 +1703,7 @@ pub(super) async fn handle_resume_session(
                     crate::util::format_error_chain(&error)
                 ),
                 retry_after_secs: None,
+                provider_code: None,
             });
             crate::logging::event_warn(
                 "SESSION_LIFECYCLE",

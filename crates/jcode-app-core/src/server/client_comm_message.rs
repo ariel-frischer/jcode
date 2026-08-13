@@ -184,6 +184,7 @@ pub(super) async fn handle_comm_message(
                         id,
                         message: message.to_string(),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                     return;
                 }
@@ -210,6 +211,7 @@ pub(super) async fn handle_comm_message(
                 id,
                 message: format!("DM failed: session '{}' not in swarm", target),
                 retry_after_secs: None,
+                provider_code: None,
             });
             return;
         }
@@ -417,6 +419,7 @@ pub(super) async fn handle_comm_message(
             id,
             message: "Not in a swarm. Use a git repository to enable swarm features.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
     }
 }

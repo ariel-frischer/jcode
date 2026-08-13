@@ -128,13 +128,19 @@ impl Default for InterruptSignal {
 pub struct StreamError {
     pub message: String,
     pub retry_after_secs: Option<u64>,
+    pub provider_code: Option<String>,
 }
 
 impl StreamError {
-    pub fn new(message: String, retry_after_secs: Option<u64>) -> Self {
+    pub fn new(
+        message: String,
+        retry_after_secs: Option<u64>,
+        provider_code: Option<String>,
+    ) -> Self {
         Self {
             message,
             retry_after_secs,
+            provider_code,
         }
     }
 }

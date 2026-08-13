@@ -76,6 +76,7 @@ impl ErrorKind {
 pub struct Error {
     pub kind: ErrorKind,
     pub message: String,
+    provider_code: Option<jcode_harness_api::ProviderCode>,
 }
 
 impl Error {
@@ -83,7 +84,20 @@ impl Error {
         Self {
             kind,
             message: message.into(),
+            provider_code: None,
         }
+    }
+
+    pub(crate) fn with_provider_code(
+        mut self,
+        provider_code: Option<jcode_harness_api::ProviderCode>,
+    ) -> Self {
+        self.provider_code = provider_code;
+        self
+    }
+
+    pub fn provider_code(&self) -> Option<jcode_harness_api::ProviderCode> {
+        self.provider_code
     }
 
     /// The stable code for this failure.

@@ -2445,6 +2445,7 @@ fn process_sse_event(
             events.push(StreamEvent::Error {
                 message: event.data.clone(),
                 retry_after_secs: None,
+                provider_code: None,
             });
         }
         _ => {

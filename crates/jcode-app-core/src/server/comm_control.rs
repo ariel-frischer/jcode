@@ -1438,6 +1438,7 @@ pub(super) async fn handle_comm_assign_role(
             id,
             message: "Only the coordinator can assign roles. (Tip: if the coordinator has disconnected, use assign_role with target_session set to your own session ID to self-promote.)".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
         return;
     }
@@ -1449,6 +1450,7 @@ pub(super) async fn handle_comm_assign_role(
                 id,
                 message: "Not in a swarm.".to_string(),
                 retry_after_secs: None,
+                provider_code: None,
             });
             return;
         }
@@ -1884,6 +1886,7 @@ async fn handle_comm_assign_task_with_mode(
                     selected_task_id
                 ),
                 retry_after_secs: None,
+                provider_code: None,
             })
             .is_err()
         {
@@ -2098,6 +2101,7 @@ pub(super) async fn handle_comm_assign_next(
                 id,
                 message: "No runnable unassigned tasks are available in the swarm plan".to_string(),
                 retry_after_secs: None,
+                provider_code: None,
             });
             return;
         };
@@ -2174,6 +2178,7 @@ pub(super) async fn handle_comm_assign_next(
                         id,
                         message: format!("Failed to spawn preferred worker: {error}"),
                         retry_after_secs: None,
+                        provider_code: None,
                     });
                     return;
                 }
@@ -2212,6 +2217,7 @@ pub(super) async fn handle_comm_assign_next(
                     id,
                     message,
                     retry_after_secs: None,
+                    provider_code: None,
                 });
             }
         }
@@ -2255,6 +2261,7 @@ pub(super) async fn handle_client_debug_command(
         id,
         message: "ClientDebugCommand is for internal use only".to_string(),
         retry_after_secs: None,
+        provider_code: None,
     });
 }
 
@@ -2299,6 +2306,7 @@ async fn require_plan_driver_swarm(
             id,
             message: "Not in a swarm.".to_string(),
             retry_after_secs: None,
+            provider_code: None,
         });
         return None;
     };
@@ -2333,6 +2341,7 @@ async fn require_plan_driver_swarm(
         id,
         message: permission_error.to_string(),
         retry_after_secs: None,
+        provider_code: None,
     });
     None
 }

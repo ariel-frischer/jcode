@@ -652,6 +652,7 @@ impl Agent {
                     StreamEvent::Error {
                         message,
                         retry_after_secs,
+                        provider_code,
                     } => {
                         if trace {
                             eprintln!("[trace] stream_error {}", message);
@@ -700,7 +701,12 @@ impl Agent {
                                 ),
                             ],
                         );
-                        return Err(StreamError::new(message, retry_after_secs).into());
+                        return Err(StreamError::new(
+                            message,
+                            retry_after_secs,
+                            provider_code.map(|code| code.to_string()),
+                        )
+                        .into());
                     }
                 }
             }

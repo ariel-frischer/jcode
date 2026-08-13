@@ -663,6 +663,34 @@ impl std::fmt::Display for ConnectionPhase {
     }
 }
 
+/// Redacted, bounded classification of a provider failure.
+///
+/// This is intentionally independent of provider messages, prompts, response
+/// bodies, credentials, and session identifiers. Unknown values deserialize to
+/// a non-actionable sentinel so additive wire values never expose raw details.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderFailureCode {
+    TemporarilyUnavailable,
+    #[serde(other)]
+    Unknown,
+}
+
+impl ProviderFailureCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::TemporarilyUnavailable => "temporarily_unavailable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for ProviderFailureCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Streaming event from provider.
 #[derive(Debug, Clone)]
 pub enum StreamEvent {
@@ -736,6 +764,8 @@ pub enum StreamEvent {
         message: String,
         /// Seconds until rate limit resets (if this is a rate limit error)
         retry_after_secs: Option<u64>,
+        /// Redacted provider failure classification, when known.
+        provider_code: Option<ProviderFailureCode>,
     },
     /// Provider session ID (for conversation resume)
     SessionId(String),

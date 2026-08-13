@@ -440,7 +440,13 @@ impl JcodeClient {
                 client.capabilities = capabilities;
                 Ok(client)
             }
-            ApiEvent::Error { code, message } => Err(Error::new(ErrorKind::Harness(code), message)),
+            ApiEvent::Error {
+                code,
+                message,
+                provider_code,
+            } => {
+                Err(Error::new(ErrorKind::Harness(code), message).with_provider_code(provider_code))
+            }
             other => Err(Error::new(
                 ErrorKind::HandshakeFailed,
                 format!("unexpected reply to hello: {other:?}"),
@@ -506,7 +512,13 @@ impl JcodeClient {
     fn request_ok(&self, request: ApiRequest) -> Result<ServerFrame> {
         let frame = self.request(request)?;
         match frame.event {
-            ApiEvent::Error { code, message } => Err(Error::new(ErrorKind::Harness(code), message)),
+            ApiEvent::Error {
+                code,
+                message,
+                provider_code,
+            } => {
+                Err(Error::new(ErrorKind::Harness(code), message).with_provider_code(provider_code))
+            }
             _ => Ok(frame),
         }
     }
@@ -1052,8 +1064,13 @@ impl JcodeClient {
                     self.respond_to_permission(session_id, &request_id, PermissionDecision::Allow)?;
                 }
                 ApiEvent::TurnDone { .. } => return Ok(result),
-                ApiEvent::Error { code, message } => {
-                    return Err(Error::new(ErrorKind::Harness(code), message));
+                ApiEvent::Error {
+                    code,
+                    message,
+                    provider_code,
+                } => {
+                    return Err(Error::new(ErrorKind::Harness(code), message)
+                        .with_provider_code(provider_code));
                 }
                 _ => {}
             }

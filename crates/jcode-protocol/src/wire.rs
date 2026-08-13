@@ -1083,6 +1083,8 @@ pub enum ServerEvent {
         message: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         retry_after_secs: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_code: Option<String>,
     },
 
     /// Pong response
