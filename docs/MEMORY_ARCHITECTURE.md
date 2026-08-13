@@ -1,9 +1,13 @@
 # Memory Architecture Design
 
 > **Status:** Implemented (Core), Planned (Graph-Based Hybrid)
-> **Updated:** 2026-01-27
+> **Updated:** 2026-08-13
 
-Local embeddings + lightweight sidecar (GPT-5.3 Codex Spark) are implemented and running in production. This document describes both the current implementation and the planned graph-based hybrid architecture.
+Local embeddings plus a lightweight, configurable LLM sidecar are implemented
+and running in production. This document describes both the current
+implementation and the planned graph-based hybrid architecture. The current
+sidecar model and reasoning effort come from `~/.jcode/config.toml`; older model
+names elsewhere in this document are historical.
 
 ## Overview
 
@@ -16,6 +20,192 @@ A multi-layered memory system for cross-session learning that mimics how human m
 2. **Graph-based organization** - Memories form a connected graph with tags, clusters, and semantic links
 3. **Cascade retrieval** - Embedding hits trigger BFS traversal to find related memories
 4. **Hybrid grouping** - Combines explicit tags, automatic clusters, and semantic links
+
+---
+
+## Current Memory Sidecar FAQ
+
+> **Updated:** 2026-08-13
+>
+> This section describes the current persistent memory-agent path. The phase
+> history below is useful for design context, but configuration and model names
+> should be taken from the live `[agents]` section in `~/.jcode/config.toml`.
+
+### What is the memory sidecar?
+
+The sidecar is a small, separate LLM completion used by the memory subsystem,
+not the main coding model. It judges which locally retrieved memories are worth
+showing to the main agent, and also participates in memory extraction and
+maintenance. The main agent does not delegate its normal coding work to this
+model.
+
+The memory agent itself is an asynchronous task inside the shared Jcode server.
+It is not a separate `jcode` process per session. Multiple sessions share the
+server's memory-agent runtime and embedding model, while each session keeps its
+own retrieval state.
+
+```mermaid
+flowchart LR
+    U[Fresh user turn] --> A[Main agent]
+    A -->|non-blocking context update| M[Memory agent task]
+    M --> E[Local embedding]
+    E --> R[Dense + BM25 hybrid retrieval]
+    R --> J[Sidecar listwise rerank]
+    J --> P[Pending verified memories]
+    P -->|next user turn| A
+    A --> L[Main model]
+```
+
+### What is the current model configuration?
+
+The main provider and memory sidecar have independent settings. For example,
+the current local configuration at the time this FAQ was written was:
+
+```toml
+[provider]
+default_model = "gpt-5.6-luna"
+openai_reasoning_effort = "xhigh"
+
+[agents]
+memory_model = "gpt-5.6-sol"
+memory_reasoning_effort = "medium"
+memory_sidecar_enabled = true
+memory_rerank_cadence = 3
+memory_rerank_votes = 2
+memory_rerank_min_agree = 2
+memory_embedding_backend = "local"
+```
+
+Do not assume that the main model's effort is inherited by memory. The sidecar
+reads `agents.memory_model` and `agents.memory_reasoning_effort` independently.
+The configuration cache watches for changes, and sidecar clients are created
+fresh for memory operations so a changed model or login state can take effect
+without restarting the server. An in-flight request does not change model
+mid-request.
+
+### Does retrieval load the entire memory database into context?
+
+No. The memory graph remains local. Retrieval first narrows the corpus with a
+local embedding and hybrid lexical/semantic search. Only a small candidate pool
+and a focused query are sent to the sidecar. The main model receives at most
+five verified memories from the persistent memory-agent path.
+
+The relevance context is bounded before retrieval:
+
+- The most recent 12 messages are considered.
+- The relevance context is capped at 8,000 characters.
+- Each content block is capped at 1,200 characters.
+- Reasoning traces are excluded.
+- Successful tool output is mostly excluded; abbreviated tool errors remain.
+- The focused rerank query removes system reminders and tool noise and
+  emphasizes the latest user intent.
+
+### Does memory retrieval run for every message?
+
+It runs once for a fresh user turn, not once for every tool result or provider
+continuation. The turn loop consumes any pending result, then submits the new
+context to the memory agent without waiting for retrieval to finish. The result
+is normally injected at the beginning of the next fresh user turn.
+
+Repeated checks are suppressed when the formatted context is unchanged for 30
+seconds. This avoids rerunning local embedding work during tool-heavy loops or
+when no relevant context has changed.
+
+### How does a memory rerank work?
+
+The current Mode-2 pipeline is:
+
+1. Format a bounded recent conversation.
+2. Compute a local query embedding.
+3. Retrieve candidates through hybrid dense plus BM25 search.
+4. Remove memories already surfaced or injected for the session.
+5. Send the focused query and candidate list to the sidecar for listwise
+   reranking.
+6. Keep only candidates meeting the configured agreement threshold.
+7. Surface at most five memories and store them as a pending result.
+
+With `memory_rerank_votes = 2` and `memory_rerank_min_agree = 2`, each expensive
+rerank turn makes two concurrent sidecar calls and keeps only memories selected
+by both judges. The first rerank and topic changes run immediately. Ordinary
+turns are gated by `memory_rerank_cadence`; gated turns carry forward only the
+last judge-verified set and do not make new LLM calls.
+
+If a judge fails, Jcode does not inject unverified hybrid results. It carries
+the previous verified set, and a circuit breaker suppresses repeated failure
+storms. If sidecar mode is enabled but no usable LLM backend exists, memory
+goes dormant rather than silently degrading to the lower-precision path.
+
+### How does injection affect the main model's token usage?
+
+Verified memories are appended as an ephemeral user message at the end of the
+provider request. This preserves the stable conversation prefix for provider
+cache reuse. With `persist_memory_injections = false`, these messages are not
+written into the session transcript, although injection tracking prevents
+immediate duplicates.
+
+The sidecar also caps its response budget at 1,024 tokens. Most relevance
+responses are much smaller because the rerank contract asks for a compact
+ranking rather than an explanation.
+
+### What are the main cost optimizations?
+
+- Local embedding retrieval happens before any LLM call.
+- Hybrid search narrows the candidate set before sidecar judgment.
+- One listwise rerank replaces one binary LLM call per candidate.
+- Reranking is cadence-gated and skipped on unchanged/tool-only continuations.
+- Two votes run concurrently rather than serially.
+- Only the top five verified memories can be injected.
+- Context, blocks, candidate pools, and sidecar output are bounded.
+- The injected memory is an ephemeral suffix, preserving the cacheable prefix.
+- Extraction and graph maintenance run in the background rather than blocking
+  the main response.
+
+### Is Luna `xhigh` the best memory setting?
+
+For the current bounded retrieval/ranking path, keep **Sol at `medium`** as the
+default. The sidecar receives a focused query, a small candidate set, and a
+compact structured-output task, so high-level coding-model reasoning is usually
+not necessary. Sol medium is the better cost, latency, and reliability tradeoff
+for routine memory judging.
+
+Luna `high` or `xhigh` is better reserved for unusually demanding memory work:
+large intentionally configured context or candidate sets, high-stakes
+consolidation, difficult extraction, or an experiment showing that stronger
+reasoning materially reduces false injections or missed memories. More context
+in the main agent does not automatically mean more context reaches the sidecar,
+because the memory pipeline deliberately bounds its own input.
+
+Jcode does not currently auto-switch the sidecar based on token count. A single
+`agents.memory_model` and `agents.memory_reasoning_effort` configuration applies
+to new sidecar operations. Therefore the current recommendation is to leave Sol
+medium configured, and switch explicitly to Luna high/xhigh only for a measured
+workload that justifies the extra cost.
+
+When comparing settings, measure relevance precision, recall, false injections,
+sidecar latency, and request count. Change the model and voting policy
+separately so the result is attributable. Reducing `memory_rerank_votes` from
+2 to 1 is the first cost-saving experiment because it halves judge calls while
+leaving retrieval and prompt construction unchanged.
+
+### When are new memories extracted or maintained?
+
+Memory extraction is not performed after every message. The memory agent can
+extract on a meaningful topic change after enough context has accumulated, on a
+periodic interval during long sessions, and at session end. Write-time
+consolidation handles duplicate reinforcement and contradiction supersession.
+Post-retrieval maintenance updates confidence, links, tags, and clusters in the
+background.
+
+### Where should runtime behavior be verified?
+
+Useful receipts are in the Jcode logs under `~/.jcode/logs/`:
+
+- `jcode-YYYY-MM-DD.log` records consensus reranks and configuration reloads.
+- `memory-events-YYYY-MM-DD.jsonl` records embedding, candidate filtering,
+  `pending_prepared`, `pending_consumed`, and `memory_injected` events.
+
+The logs should be treated as runtime evidence, while this document and the
+source constants describe the intended bounded behavior.
 
 ---
 
@@ -34,7 +224,7 @@ graph TB
         EMB[Embedder<br/>all-MiniLM-L6-v2]
         SR[Similarity Search]
         CR[Cascade Retrieval]
-        HC[Sidecar<br/>GPT-5.3 Codex Spark]
+        HC[Configured memory sidecar]
     end
 
     subgraph "Memory Graph"
@@ -716,7 +906,7 @@ memory { action: "tag", id: "...", tags: ["new", "tags"] }
 
 ### Phase 3: Memory Agent ✅
 - [x] Async channel communication
-- [x] Lightweight sidecar for relevance verification (currently GPT-5.3 Codex Spark)
+- [x] Lightweight sidecar for relevance verification (model configured in `[agents]`)
 - [x] Topic change detection
 - [x] Surfaced memory tracking
 
