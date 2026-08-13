@@ -230,6 +230,59 @@ fn handoff_child_is_clean_and_preserves_only_operational_session_state() {
     }
 }
 
+#[test]
+fn handoff_child_persists_prompt_for_destination_startup() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let prev_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp.path());
+
+    let mut parent = crate::session::Session::create_with_id(
+        "session_parent_handoff_context_test".to_string(),
+        None,
+        None,
+    );
+    parent.save().expect("save parent");
+
+    let (submitted_child_id, _) = create_handoff_child_session(
+        &parent.id,
+        Some("continue with the handoff".to_string()),
+        true,
+        8,
+    )
+    .expect("create submitted handoff child");
+    let submitted_path = temp
+        .path()
+        .join(format!("client-input-{submitted_child_id}"));
+    let submitted: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&submitted_path).expect("read submitted startup context"),
+    )
+    .expect("parse submitted startup context");
+    assert_eq!(submitted["input"], "continue with the handoff");
+    assert_eq!(submitted["submit_on_restore"], true);
+
+    let (draft_child_id, _) = create_handoff_child_session(
+        &parent.id,
+        Some("review the handoff first".to_string()),
+        false,
+        8,
+    )
+    .expect("create draft handoff child");
+    let draft_path = temp.path().join(format!("client-input-{draft_child_id}"));
+    let draft: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&draft_path).expect("read draft startup context"),
+    )
+    .expect("parse draft startup context");
+    assert_eq!(draft["input"], "review the handoff first");
+    assert_eq!(draft["submit_on_restore"], false);
+
+    if let Some(prev_home) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
 #[tokio::test]
 async fn enabling_swarm_does_not_auto_elect_coordinator() {
     let provider: Arc<dyn Provider> = Arc::new(MockProvider);

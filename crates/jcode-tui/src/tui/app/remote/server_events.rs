@@ -2810,8 +2810,21 @@ pub(in crate::tui::app) fn handle_server_event(
             auto_start,
             ..
         } => {
+            let context_restored = if let Some(restored) =
+                App::restore_input_for_reload(&new_session_id)
+            {
+                app.apply_restored_reload_input(restored);
+                true
+            } else {
+                app.push_display_message(DisplayMessage::error(format!(
+                    "Handoff child {new_session_name} is ready, but its startup context could not be restored. Resume manually with: jcode --resume {new_session_id}"
+                )));
+                false
+            };
             app.workspace_client.queue_resume_session(new_session_id);
-            app.set_status_notice(if auto_start {
+            app.set_status_notice(if !context_restored {
+                "Handoff context unavailable".to_string()
+            } else if auto_start {
                 format!("Handoff → {new_session_name} (starting)")
             } else {
                 format!("Handoff → {new_session_name}")
