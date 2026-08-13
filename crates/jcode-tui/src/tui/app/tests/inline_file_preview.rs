@@ -113,6 +113,134 @@ fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
 }
 
 #[test]
+fn test_clicking_visible_inline_file_body_collapses_preview() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let docs = repository.path().join("docs");
+    std::fs::create_dir_all(&docs).expect("create docs directory");
+    let long_markdown = (1..=80)
+        .map(|line| format!("- dismissible preview line {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(docs.join("long.md"), long_markdown).expect("write long markdown");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
+    app.bump_display_messages_version();
+    assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+
+    let backend = ratatui::backend::TestBackend::new(72, 18);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    assert!(app.scroll_up(12), "scrolling should expose the preview body");
+    render_and_snap(&app, &mut terminal);
+
+    let body_position = {
+        let buf = terminal.backend().buffer();
+        let area = *buf.area();
+        (0..area.height).find_map(|row| {
+            let mut line = String::new();
+            for col in 0..area.width {
+                line.push_str(buf[(col, row)].symbol());
+            }
+            line.contains("dismissible preview line ")
+                .then_some((area.left() + 3, row))
+        })
+    }
+    .expect("a visible preview body row");
+
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_mouse_event(MouseEvent {
+            kind,
+            column: body_position.0,
+            row: body_position.1,
+            modifiers: KeyModifiers::empty(),
+        });
+    }
+
+    assert!(
+        app.inline_file_previews.is_empty(),
+        "clicking a visible preview body row should remove the preview state"
+    );
+    let collapsed = render_and_snap(&app, &mut terminal);
+    assert!(
+        !collapsed.contains("Inline file · docs/long.md"),
+        "clicking a visible preview body row should collapse it:\n{collapsed}"
+    );
+}
+
+#[test]
+fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let docs = repository.path().join("docs");
+    std::fs::create_dir_all(&docs).expect("create docs directory");
+    let long_markdown = (1..=80)
+        .map(|line| format!("- drag-protected preview line {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(docs.join("long.md"), long_markdown).expect("write long markdown");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
+    app.bump_display_messages_version();
+    assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+
+    let backend = ratatui::backend::TestBackend::new(72, 18);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    assert!(app.scroll_up(12), "scrolling should expose the preview body");
+    render_and_snap(&app, &mut terminal);
+
+    let body_rows = {
+        let buf = terminal.backend().buffer();
+        let area = *buf.area();
+        (0..area.height)
+            .filter(|row| {
+                let mut line = String::new();
+                for col in 0..area.width {
+                    line.push_str(buf[(col, *row)].symbol());
+                }
+                line.contains("drag-protected preview line ")
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(body_rows.len() >= 2, "a copy drag needs two visible preview rows");
+    let column = terminal.backend().buffer().area().left() + 3;
+    let start_row = body_rows[0];
+    let end_row = body_rows[1];
+
+    app.handle_mouse_event(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column,
+        row: start_row,
+        modifiers: KeyModifiers::empty(),
+    });
+    app.handle_mouse_event(MouseEvent {
+        kind: MouseEventKind::Drag(MouseButton::Left),
+        column,
+        row: end_row,
+        modifiers: KeyModifiers::empty(),
+    });
+    app.handle_mouse_event(MouseEvent {
+        kind: MouseEventKind::Up(MouseButton::Left),
+        column,
+        row: end_row,
+        modifiers: KeyModifiers::empty(),
+    });
+
+    assert!(
+        !app.inline_file_previews.is_empty(),
+        "dragging to copy preview text must not collapse the preview"
+    );
+}
+
+#[test]
 fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
     let repository = tempfile::tempdir().expect("repository tempdir");
     std::fs::write(repository.path().join("large.txt"), vec![b'x'; 512 * 1024 + 1])

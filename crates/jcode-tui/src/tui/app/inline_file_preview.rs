@@ -1,6 +1,22 @@
 use super::*;
 
 impl App {
+    pub(super) fn try_collapse_inline_file_preview(&mut self, message_index: usize) -> bool {
+        let Some(message_hash) = self
+            .display_messages
+            .get(message_index)
+            .map(DisplayMessage::stable_cache_hash)
+        else {
+            return false;
+        };
+        if self.inline_file_previews.remove(&message_hash).is_none() {
+            return false;
+        }
+        self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
+        self.set_status_notice("Collapsed inline file preview");
+        true
+    }
+
     pub(super) fn try_toggle_inline_file_preview(
         &mut self,
         target: &str,
