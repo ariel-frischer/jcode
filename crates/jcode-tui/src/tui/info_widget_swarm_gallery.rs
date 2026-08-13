@@ -12,7 +12,7 @@ use jcode_tui_core::keybind::alt_chord_lower;
 use jcode_tui_render::swarm_gallery::{
     GalleryMember, SwarmStripHint, display_order, humanize_age, is_active_status, render_gallery,
     render_swarm_compact, render_swarm_dock, render_swarm_live_card, render_swarm_panel,
-    render_swarm_strip, render_swarm_strip_vertical, status_accent, status_glyph,
+    render_swarm_strip, render_swarm_strip_vertical, runtime_metadata, status_accent, status_glyph,
 };
 use ratatui::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -388,7 +388,7 @@ fn render_swarm_tree_row(
             Style::default().fg(status_accent(&member.status)),
         ),
         Span::styled(
-            label,
+            label.clone(),
             Style::default()
                 .fg(status_accent(&member.status))
                 .add_modifier(if selected {
@@ -407,6 +407,16 @@ fn render_swarm_tree_row(
         spans.push(Span::styled(
             format!(" · {task}"),
             Style::default().fg(Color::Rgb(145, 145, 158)),
+        ));
+    }
+    let gallery_member = members_to_gallery(std::slice::from_ref(member))
+        .into_iter()
+        .next()
+        .expect("single swarm member maps to one gallery member");
+    if let Some(runtime) = runtime_metadata(&gallery_member) {
+        spans.push(Span::styled(
+            format!(" · {runtime}"),
+            Style::default().fg(Color::Rgb(135, 135, 148)),
         ));
     }
     if let Some((done, total)) = member.todo_progress {
@@ -792,5 +802,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn full_page_tree_shows_effective_runtime_route() {
+        let mut worker = member("reviewer", "running", None, None);
+        worker.runtime.model = Some("openai:gpt-5.6-luna".into());
+        worker.runtime.provider = Some("OpenAI".into());
+        worker.runtime.auth_method = Some("OAuth".into());
+        worker.runtime.effort = Some("xhigh".into());
+
+        let lines = render_swarm_page_lines(&[worker], 0, 0, 120, 4);
+        let text = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
+            "full-page row metadata missing: {text}"
+        );
     }
 }

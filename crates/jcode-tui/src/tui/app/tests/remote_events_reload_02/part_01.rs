@@ -916,7 +916,7 @@ fn test_swarm_completion_notification_inserts_agent_snapshot_without_report_pros
             .join("\n");
     assert_eq!(
         rendered.trim(),
-        "🐄 ✓ card demo · Completed · GPT-5.6 · OpenAI OAuth",
+        "🐄 ✓ card demo · Completed · gpt-5.6-sol · OpenAI OAuth · high",
         "completed transcript snapshots should stay stable and one-line"
     );
     assert!(!rendered.contains("README first heading"));
