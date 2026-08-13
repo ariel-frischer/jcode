@@ -127,6 +127,24 @@ reload, network issue, etc.):
 5. All clients auto-reconnect
 6. The initiating client also re-execs if its binary is outdated
 
+### Installed-binary upgrades
+
+The source-install workflow uses the same reload protocol after installing a
+new binary:
+
+1. `scripts/install_release.sh` updates the immutable version, `current`, and
+   launcher channels.
+2. It runs `jcode server reload`, which reloads only when the installed binary
+   is newer than the running daemon.
+3. The server execs the new binary on the same socket and clients reconnect.
+
+This is safe to run while other sessions are connected. Their persisted session
+state and session IDs are retained, and clients resume after reconnecting. The
+reload is not a transaction boundary for work already in progress, however:
+an active generation or foreground tool can be interrupted during the handoff.
+Headless work has explicit reload recovery where supported, but callers should
+still avoid upgrading in the middle of work that cannot be safely retried.
+
 ## Socket Paths
 
 ```
@@ -153,5 +171,6 @@ When running `jcode` inside the jcode repository:
 | Subsequent `jcode` | Connects to existing server |
 | Kill a client | Server + other clients unaffected |
 | `/reload` | Server execs new binary, clients reconnect |
+| Install a newer binary | Installer conditionally reloads the shared daemon; clients reconnect and sessions persist |
 | All clients close | Server idle-timeout after 5 min |
 | Resume session | `jcode --resume fox` reconnects to existing session |
