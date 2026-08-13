@@ -220,6 +220,7 @@ pub(super) fn handle_bus_event(
             if session_id != app.session.id {
                 return false;
             }
+            let previous_model = app.session.model.clone();
             app.provider_session_id = None;
             app.session.provider_session_id = None;
             app.upstream_provider = None;
@@ -237,7 +238,11 @@ pub(super) fn handle_bus_event(
             if !app.auth_catalog_refresh_pending {
                 app.push_display_message(crate::tui::DisplayMessage::system(message));
             }
-            app.set_status_notice(format!("Model → {}", model));
+            app.set_status_notice(crate::tui::app::model_context::format_model_switch_notice(
+                previous_model.as_deref(),
+                &model,
+                None,
+            ));
             if open_picker {
                 app.open_model_picker();
             }

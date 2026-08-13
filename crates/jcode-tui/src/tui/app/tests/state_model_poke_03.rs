@@ -649,7 +649,7 @@ fn test_tui_api_key_auth_refreshes_catalog_shows_diff_without_opening_picker() {
     assert_eq!(app.session.model.as_deref(), Some("state-space-beta"));
     assert_eq!(
         app.status_notice(),
-        Some("Model → state-space-beta".to_string())
+        Some("Model: state-space-alpha → state-space-beta".to_string())
     );
 }
 

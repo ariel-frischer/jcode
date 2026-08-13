@@ -5,6 +5,34 @@ use super::*;
 /// helps; hopping to the strongest Anthropic route often does.
 const GUARDRAIL_REROUTE_MODEL: &str = "claude-opus-4-8";
 
+/// Format the compact status notice shown after a model switch.
+///
+/// A source model is only shown when it is known and differs from the target;
+/// startup or same-model updates retain the shorter legacy form. Route details
+/// are intentionally limited to provider and API method because catalog detail
+/// may describe a stale availability snapshot rather than the completed switch.
+pub(super) fn format_model_switch_notice(
+    previous_model: Option<&str>,
+    target_model: &str,
+    route: Option<(&str, &str)>,
+) -> String {
+    let target_model = target_model.trim();
+    let transition = match previous_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty() && *model != target_model)
+    {
+        Some(previous_model) => format!("Model: {} → {}", previous_model, target_model),
+        None => format!("Model → {}", target_model),
+    };
+
+    match route {
+        Some((provider, method)) if !provider.trim().is_empty() && !method.trim().is_empty() => {
+            format!("{} via {} ({})", transition, provider.trim(), method.trim())
+        }
+        _ => transition,
+    }
+}
+
 impl App {
     fn format_failover_count(value: usize) -> String {
         match value {
@@ -551,7 +579,11 @@ impl App {
                     "✓ Switched to model: {}{}",
                     next_model, auth_suffix
                 )));
-                self.set_status_notice(format!("Model → {}", next_model));
+                self.set_status_notice(format_model_switch_notice(
+                    Some(&current),
+                    &next_model,
+                    None,
+                ));
             }
             Err(e) => {
                 self.push_display_message(DisplayMessage::error(format!(
@@ -1468,6 +1500,7 @@ pub(super) fn handle_model_command(app: &mut App, trimmed: &str) -> bool {
     if let Some(model_name) = trimmed.strip_prefix("/model ") {
         app.record_keybinding_slow(crate::tui::app::shortcut_hints::LearnableAction::ModelSwitch);
         let model_name = model_name.trim();
+        let previous_model = app.provider.model();
         match app.provider.set_model(model_name) {
             Ok(()) => {
                 let active_model = app.finalize_model_switch(model_name);
@@ -1484,7 +1517,11 @@ pub(super) fn handle_model_command(app: &mut App, trimmed: &str) -> bool {
                     title: None,
                     tool_data: None,
                 });
-                app.set_status_notice(format!("Model → {}", model_name));
+                app.set_status_notice(format_model_switch_notice(
+                    Some(&previous_model),
+                    &active_model,
+                    None,
+                ));
             }
             Err(e) => {
                 app.push_display_message(DisplayMessage::error(model_switch_failure_message(

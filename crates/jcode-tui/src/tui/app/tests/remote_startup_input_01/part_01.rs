@@ -966,6 +966,34 @@ fn test_remote_model_switch_failure_shows_actionable_guidance() {
 }
 
 #[test]
+fn test_remote_model_switch_completion_preserves_source_model() {
+    let mut app = create_test_app();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    app.is_remote = true;
+    app.remote_provider_model = Some("old-model".to_string());
+    app.pending_model_switch_from = Some("old-model".to_string());
+    app.remote_model_switch_in_flight = true;
+
+    app.handle_server_event(
+        crate::protocol::ServerEvent::ModelChanged {
+            id: 9,
+            model: "new-model".to_string(),
+            provider_name: Some("OpenAI".to_string()),
+            error: None,
+        },
+        &mut remote,
+    );
+
+    assert_eq!(app.status_notice(), Some("Model: old-model → new-model".to_string()));
+    assert_eq!(app.remote_provider_model.as_deref(), Some("new-model"));
+    assert!(app.pending_model_switch_from.is_none());
+    assert!(!app.remote_model_switch_in_flight);
+}
+
+#[test]
 fn test_remote_prompt_defers_while_model_switch_is_in_flight() {
     let mut app = create_test_app();
     let rt = tokio::runtime::Runtime::new().unwrap();

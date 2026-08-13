@@ -1433,6 +1433,8 @@ pub struct App {
     model_picker_load_request_id: u64,
     // Pending model switch from picker (for remote mode async processing)
     pending_model_switch: Option<String>,
+    // Source model carried across a remote picker switch until ModelChanged arrives.
+    pending_model_switch_from: Option<String>,
     pending_route_selection: Option<crate::provider::RouteSelection>,
     // Reasoning-effort variant chosen together with a model in the picker
     // (e.g. "gpt-5.5 (high)"), staged for remote mode alongside the model
