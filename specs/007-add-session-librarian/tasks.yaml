@@ -126,7 +126,7 @@ phases:
           - "Invalid or missing explicit source session, concurrent duplicate invocation, and orchestration failure return one actionable non-secret tool result before provider work."
       - id: "T009"
         title: "Implement the focused current-default and explicit-session session_librarian tool"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
