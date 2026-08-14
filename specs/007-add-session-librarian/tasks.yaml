@@ -247,7 +247,7 @@ phases:
           - "A successful pair appears only after one same-filesystem atomic directory rename to ~/.jcode/feedback/sessions/<session-id>/<fingerprint>."
       - id: "T018"
         title: "Implement schema validation, dual rendering, locking, and atomic artifact publication"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"

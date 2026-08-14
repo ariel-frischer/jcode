@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 mod admission;
 #[allow(dead_code)]
 mod fingerprint;
+#[allow(dead_code)]
+mod publication;
 
 /// Canonical source selected for one explicit librarian invocation.
 ///
