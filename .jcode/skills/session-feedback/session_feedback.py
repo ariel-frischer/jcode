@@ -34,6 +34,7 @@ MAX_ERROR_LENGTH = 768
 MAX_SESSION_ID_LENGTH = 128
 MAX_PROPOSAL_LOCATIONS = 16
 MAX_LIBRARIAN_SUMMARY_BYTES = 262_144
+MAX_SHORTLIST_TARGETS = 16
 LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
 EVIDENCE_ITEM_FIELDS = {
     "visible_outcome": frozenset(
@@ -449,6 +450,229 @@ def with_evidence_accounting(document: Mapping[str, Any]) -> dict[str, Any]:
     result = dict(document)
     result["accounting"] = evidence_accounting(items)
     return result
+
+
+def _target_identity(path: str) -> tuple[str, str, str]:
+    target = normalize_concrete_target(path)
+    lowered = target.lower()
+    parts = tuple(part for part in lowered.split("/") if part)
+    name = parts[-1] if parts else ""
+    scope = (
+        "personal-global" if lowered.startswith(("~/", "$home/")) else "project-jcode"
+    )
+
+    if name == "skill.md" or "skills" in parts:
+        category = "skills"
+    elif name in {"agents.md", "claude.md"} or "instructions" in name:
+        category = "global-instructions"
+    elif "hook" in lowered or "config" in name:
+        category = "hooks-config"
+    elif "model" in lowered or "profile" in lowered:
+        category = "model-profile-choices"
+    elif "context" in lowered or "routing" in lowered:
+        category = "context-skill-routing"
+    elif "harness" in lowered or "fixture" in lowered or "schema" in lowered:
+        category = "harness-setup-contracts"
+    elif "sdk" in parts:
+        category = "sdk-public-surfaces"
+    else:
+        category = "jcode"
+    return normalize_scope(scope), normalize_category(category), target
+
+
+def shortlist_targets(
+    evidence: Mapping[str, Any], *, limit: int = MAX_SHORTLIST_TARGETS
+) -> list[dict[str, Any]]:
+    """Build a deterministic target list using evidence metadata only."""
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+        raise ValidationError("shortlist limit must be a positive integer")
+    if not isinstance(evidence, Mapping):
+        raise ValidationError("evidence must be an object")
+    items = evidence.get("items")
+    if not isinstance(items, list):
+        raise ValidationError("evidence items must be an array")
+
+    candidates: dict[tuple[str, str, str], dict[str, set[str]]] = {}
+    for index, item in enumerate(items):
+        if not isinstance(item, Mapping):
+            raise ValidationError(f"evidence item {index} must be an object")
+        path = item.get("relevant_path", item.get("path"))
+        if path is None:
+            continue
+        if not isinstance(path, str):
+            raise ValidationError(f"evidence item {index} target path must be a string")
+        identity = _target_identity(path)
+        metadata = candidates.setdefault(
+            identity,
+            {
+                "selection_evidence": set(),
+                "metadata_hashes": set(),
+                "invocation_outcomes": set(),
+                "cited_hiccups": set(),
+            },
+        )
+        reference = item.get("reference")
+        if isinstance(reference, str):
+            normalized_reference = normalize_evidence_reference(reference)
+            metadata["selection_evidence"].add(normalized_reference)
+        else:
+            normalized_reference = None
+        content_hash = item.get("content_hash")
+        if isinstance(content_hash, str):
+            metadata["metadata_hashes"].add(content_hash.lower())
+        outcome = item.get("outcome")
+        if isinstance(outcome, str):
+            metadata["invocation_outcomes"].add(normalize_text("outcome", outcome))
+        status = item.get("status")
+        is_hiccup = (
+            item.get("category") == "failure_excerpt"
+            or (
+                isinstance(outcome, str)
+                and normalize_text("outcome", outcome)
+                not in {"passed", "succeeded", "success"}
+            )
+            or (
+                isinstance(status, str)
+                and normalize_text("status", status) != "completed"
+            )
+        )
+        if is_hiccup and normalized_reference is not None:
+            metadata["cited_hiccups"].add(normalized_reference)
+
+    result = [
+        {
+            "category": category,
+            "scope": scope,
+            "concrete_target": concrete_target,
+            "selection_evidence": sorted(metadata["selection_evidence"]),
+            "metadata_hashes": sorted(metadata["metadata_hashes"]),
+            "invocation_outcomes": sorted(metadata["invocation_outcomes"]),
+            "cited_hiccups": sorted(metadata["cited_hiccups"]),
+        }
+        for (scope, category, concrete_target), metadata in candidates.items()
+    ]
+    result.sort(
+        key=lambda candidate: (
+            candidate["concrete_target"],
+            candidate["scope"],
+            candidate["category"],
+            candidate["metadata_hashes"],
+            candidate["invocation_outcomes"],
+            candidate["cited_hiccups"],
+            candidate["selection_evidence"],
+        )
+    )
+    return result[:limit]
+
+
+def _positive_byte_limit(field: str, value: Any) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValidationError(f"{field} must be a positive integer")
+    return value
+
+
+def _decode_bounded_utf8(content: bytes) -> str | None:
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        if error.end == len(content):
+            return content[: error.start].decode("utf-8")
+        return None
+
+
+def excerpt_accounting(excerpts: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Reconcile exact excerpt bytes and deterministic token estimates."""
+    if isinstance(excerpts, (str, bytes)):
+        raise ValidationError("excerpts must be a sequence of objects")
+    byte_count = 0
+    token_count = 0
+    for index, excerpt in enumerate(excerpts):
+        if not isinstance(excerpt, Mapping):
+            raise ValidationError(f"excerpt {index} must be an object")
+        measurement = excerpt.get("accounting")
+        if not isinstance(measurement, Mapping):
+            raise ValidationError(f"excerpt {index} is missing accounting")
+        expected = measure_text("excerpt", excerpt.get("excerpt"))
+        if dict(measurement) != expected:
+            raise ValidationError(
+                f"excerpt {index} accounting does not match its exact content"
+            )
+        byte_count += expected["bytes"]
+        token_count += expected["estimated_tokens"]
+    return {"serialized_bytes": byte_count, "estimated_tokens": token_count}
+
+
+def load_shortlisted_excerpts(
+    *,
+    shortlist: Sequence[Mapping[str, Any]],
+    target_root: str | Path,
+    per_excerpt_byte_limit: int,
+    total_excerpt_byte_limit: int,
+    opener: Any = None,
+) -> list[dict[str, Any]]:
+    """Read only exact shortlisted skill or instruction targets within byte budgets."""
+    if isinstance(shortlist, (str, bytes)):
+        raise ValidationError("shortlist must be a sequence of objects")
+    per_limit = _positive_byte_limit("per_excerpt_byte_limit", per_excerpt_byte_limit)
+    total_limit = _positive_byte_limit(
+        "total_excerpt_byte_limit", total_excerpt_byte_limit
+    )
+    root = Path(target_root).resolve()
+    open_file = open if opener is None else opener
+    excerpts: list[dict[str, Any]] = []
+    used_bytes = 0
+
+    for index, candidate in enumerate(shortlist):
+        if not isinstance(candidate, Mapping):
+            raise ValidationError(f"shortlist entry {index} must be an object")
+        category = candidate.get("category")
+        if category not in {"skills", "global-instructions"}:
+            continue
+        target = candidate.get("concrete_target")
+        if not isinstance(target, str):
+            raise ValidationError(
+                f"shortlist entry {index} concrete_target must be a string"
+            )
+        normalized_target = normalize_concrete_target(target)
+        target_path = Path(
+            normalized_target[2:]
+            if normalized_target.startswith("~/")
+            else normalized_target
+        )
+        if ".." in target_path.parts:
+            continue
+        resolved = (
+            target_path.resolve()
+            if target_path.is_absolute()
+            else (root / target_path).resolve()
+        )
+        if resolved == root or root not in resolved.parents:
+            continue
+        remaining = total_limit - used_bytes
+        if remaining <= 0:
+            break
+        read_limit = min(per_limit, remaining)
+        try:
+            with open_file(resolved, "rb") as handle:
+                raw = handle.read(read_limit + 1)[:read_limit]
+        except (OSError, PermissionError):
+            continue
+        excerpt_text = _decode_bounded_utf8(raw)
+        if excerpt_text is None:
+            continue
+        accounting = measure_text("excerpt", excerpt_text)
+        used_bytes += accounting["bytes"]
+        excerpts.append(
+            {
+                "category": category,
+                "scope": candidate.get("scope"),
+                "concrete_target": normalized_target,
+                "selection_evidence": list(candidate.get("selection_evidence", ())),
+                "excerpt": excerpt_text,
+                "accounting": accounting,
+            }
+        )
+    return excerpts
 
 
 def _validate_session_id(field: str, value: Any) -> str:

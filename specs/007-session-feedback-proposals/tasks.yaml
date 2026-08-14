@@ -217,7 +217,7 @@ phases:
           - "Fail safely when neither the librarian nor fallback path can produce valid permitted evidence."
       - id: "T016"
         title: "Implement deterministic target shortlisting and bounded excerpt loading"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
