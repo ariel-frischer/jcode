@@ -33,6 +33,53 @@ SUPPORTED_CATEGORIES = frozenset(
 MAX_ERROR_LENGTH = 768
 MAX_SESSION_ID_LENGTH = 128
 MAX_PROPOSAL_LOCATIONS = 16
+MAX_LIBRARIAN_SUMMARY_BYTES = 262_144
+LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
+EVIDENCE_ITEM_FIELDS = {
+    "visible_outcome": frozenset(
+        {"reference", "category", "summary", "relevant_path", "content_hash"}
+    ),
+    "todo_assessment": frozenset({"reference", "category", "summary", "status"}),
+    "tool_invocation_receipt": frozenset(
+        {
+            "reference",
+            "category",
+            "name",
+            "outcome",
+            "summary",
+            "relevant_path",
+            "content_hash",
+        }
+    ),
+    "skill_invocation_receipt": frozenset(
+        {
+            "reference",
+            "category",
+            "name",
+            "outcome",
+            "summary",
+            "relevant_path",
+            "content_hash",
+        }
+    ),
+    "failure_excerpt": frozenset(
+        {"reference", "category", "name", "excerpt", "relevant_path", "content_hash"}
+    ),
+    "validation_receipt": frozenset(
+        {
+            "reference",
+            "category",
+            "name",
+            "outcome",
+            "summary",
+            "relevant_path",
+            "content_hash",
+        }
+    ),
+    "relevant_path": frozenset(
+        {"reference", "category", "path", "content_hash", "summary"}
+    ),
+}
 
 
 class ValidationError(ValueError):
@@ -448,28 +495,143 @@ def _select_visible_session(
     return selected
 
 
-def _fallback_evidence(visible_items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    if not isinstance(visible_items, Sequence) or isinstance(visible_items, (str, bytes)):
-        raise ValidationError("visible_items must be a sequence of allowlisted evidence objects")
-    items: list[dict[str, Any]] = []
-    for index, item in enumerate(visible_items):
-        if not isinstance(item, Mapping):
-            raise ValidationError(f"visible_items[{index}] must be an evidence object")
-        items.append(dict(item))
+def _allowlist_evidence_items(
+    items: Sequence[Mapping[str, Any]], *, source_label: str
+) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
+        raise ValidationError(f"{source_label} must be a sequence of allowlisted evidence objects")
+    if not items:
+        raise ValidationError(f"{source_label} did not contain any permitted evidence")
 
+    allowlisted: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, Mapping):
+            raise ValidationError(f"{source_label}[{index}] must be an evidence object")
+        category = item.get("category")
+        allowed_fields = EVIDENCE_ITEM_FIELDS.get(category)
+        if allowed_fields is None:
+            raise ContractValidationError(
+                _bounded_error(
+                    f"{source_label}[{index}] has unsupported non-allowlisted "
+                    f"evidence category {category!r}"
+                )
+            )
+        allowlisted.append({key: item[key] for key in allowed_fields if key in item})
+    return allowlisted
+
+
+def _normalized_evidence(
+    *, source: str, items: Sequence[Mapping[str, Any]], source_label: str
+) -> dict[str, Any]:
+    allowlisted_items = _allowlist_evidence_items(items, source_label=source_label)
     document = with_evidence_accounting(
         {
             "contract_version": "evidence-v1",
-            "source": "fallback",
-            "items": items,
+            "source": source,
+            "items": allowlisted_items,
         }
     )
     try:
         return validate_contract("evidence-v1", document)
     except ContractValidationError as error:
         raise ContractValidationError(
-            _bounded_error(f"fallback evidence must contain only allowlisted visible items: {error}")
+            _bounded_error(f"{source_label} must contain only valid allowlisted evidence: {error}")
         ) from error
+
+
+def _fallback_evidence(visible_items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    return _normalized_evidence(
+        source="fallback",
+        items=visible_items,
+        source_label="fallback visible_items",
+    )
+
+
+def _read_librarian_summary(path_value: str | Path) -> Mapping[str, Any]:
+    if not isinstance(path_value, (str, Path)):
+        raise ValidationError("librarian_summary_path must be an explicitly supplied path")
+    path = Path(path_value).expanduser()
+    try:
+        with path.open("rb") as summary_file:
+            payload = summary_file.read(MAX_LIBRARIAN_SUMMARY_BYTES + 1)
+    except OSError as error:
+        raise ValidationError(
+            _bounded_error(f"unable to read supplied librarian summary {path}: {error}")
+        ) from error
+    if len(payload) > MAX_LIBRARIAN_SUMMARY_BYTES:
+        raise ValidationError(
+            f"supplied librarian summary exceeds the {MAX_LIBRARIAN_SUMMARY_BYTES} byte limit"
+        )
+    try:
+        document = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        detail = getattr(error, "msg", str(error))
+        raise ValidationError(
+            _bounded_error(f"supplied librarian summary is invalid JSON: {detail}")
+        ) from error
+    if not isinstance(document, Mapping):
+        raise ValidationError("supplied librarian summary must contain a JSON object")
+    return document
+
+
+def _librarian_evidence(
+    *, session_id: str, librarian_summary_path: str | Path
+) -> dict[str, Any]:
+    summary = _read_librarian_summary(librarian_summary_path)
+    version = summary.get("summary_version")
+    if version != LIBRARIAN_SUMMARY_VERSION:
+        raise ValidationError(
+            _bounded_error(
+                f"unsupported librarian summary version {version!r}; "
+                f"supported value is {LIBRARIAN_SUMMARY_VERSION!r}"
+            )
+        )
+    summary_session_id = _validate_session_id(
+        "librarian summary session_id", summary.get("session_id")
+    )
+    if summary_session_id != session_id:
+        raise ValidationError(
+            _bounded_error(
+                f"librarian summary session id {summary_session_id!r} does not match "
+                f"selected session {session_id!r}"
+            )
+        )
+    return _normalized_evidence(
+        source="librarian",
+        items=summary.get("items"),
+        source_label="librarian summary items",
+    )
+
+
+def acquire_evidence(
+    *,
+    session_id: str,
+    librarian_summary_path: str | Path | None,
+    visible_items: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Adapt an explicitly supplied librarian summary or use visible fallback evidence."""
+    selected_session_id = _validate_session_id("session_id", session_id)
+    librarian_error: ValidationError | None = None
+    if librarian_summary_path is not None:
+        try:
+            return _librarian_evidence(
+                session_id=selected_session_id,
+                librarian_summary_path=librarian_summary_path,
+            )
+        except ValidationError as error:
+            librarian_error = error
+
+    try:
+        return _fallback_evidence(visible_items)
+    except ValidationError as fallback_error:
+        if librarian_error is None:
+            raise
+        raise ValidationError(
+            _bounded_error(
+                "librarian evidence was unusable and fallback evidence was unavailable: "
+                f"librarian: {librarian_error}; fallback: {fallback_error}"
+            )
+        ) from fallback_error
 
 
 def prepare_feedback_invocation(
@@ -482,23 +644,22 @@ def prepare_feedback_invocation(
 ) -> dict[str, Any]:
     """Select a visible session and build its deterministic first-run evidence bundle.
 
-    This preparation step is pure apart from loading the copy-local evidence schema. It
-    does not inspect the selected session, scan the filesystem, invoke a provider, or
-    create feedback state. Librarian acquisition is added by its dedicated later task.
+    This preparation step reads only an explicitly supplied librarian summary path. It
+    never scans for summaries, inspects the selected session, invokes a provider, or
+    creates feedback state.
     """
     session_id = _select_visible_session(
         requested_session_id,
         current_session_id,
         visible_session_ids,
     )
-    if librarian_summary_path is not None:
-        raise ValidationError(
-            "librarian_summary_path is unsupported during fallback acquisition; "
-            "supply already-visible items instead"
-        )
     return {
         "session_id": session_id,
-        "evidence": _fallback_evidence(visible_items),
+        "evidence": acquire_evidence(
+            session_id=session_id,
+            librarian_summary_path=librarian_summary_path,
+            visible_items=visible_items,
+        ),
     }
 
 

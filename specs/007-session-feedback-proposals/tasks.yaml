@@ -205,7 +205,7 @@ phases:
           - "Verify only exact shortlisted skill or instruction targets may yield bounded excerpts and each excerpt's measured added input size reconciles with request accounting."
       - id: "T015"
         title: "Implement librarian adaptation and strict evidence allowlisting"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
