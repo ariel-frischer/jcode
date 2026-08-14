@@ -126,7 +126,7 @@ phases:
           - "Verify no session-end, pre-close, background, or other automatic trigger is registered."
       - id: "T009"
         title: "Register the focused session-feedback slash tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
