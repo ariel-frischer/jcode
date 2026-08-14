@@ -82,7 +82,7 @@ phases:
           - "Reject malformed, oversized, unknown-version, and additional-property output before any persistence action."
       - id: "T006"
         title: "Implement shared schema, normalization, accounting, and fingerprint primitives"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
