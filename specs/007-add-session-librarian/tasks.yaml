@@ -83,7 +83,7 @@ phases:
           - "Invalid finite/positive values remain distinguishable for boundary validation instead of silently falling back."
       - id: "T006"
         title: "Implement one canonical librarian config resolver"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null

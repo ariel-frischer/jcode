@@ -24,6 +24,34 @@ impl Config {
             self.run_safety.deadline = Some(v);
         }
 
+        // Session librarian values stay raw until the canonical resolver applies
+        // source-aware validation. Empty environment values intentionally shadow
+        // persisted values and fail closed instead of silently falling through.
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_PROVIDER") {
+            self.session_librarian.provider = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_MODEL") {
+            self.session_librarian.model = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_REASONING_EFFORT") {
+            self.session_librarian.reasoning_effort = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_MAX_INPUT_TOKENS") {
+            self.session_librarian.max_input_tokens = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_MAX_OUTPUT_TOKENS") {
+            self.session_librarian.max_output_tokens = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_MAX_REQUESTS") {
+            self.session_librarian.max_requests = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_MAX_COST_USD") {
+            self.session_librarian.max_cost_usd = Some(v);
+        }
+        if let Ok(v) = std::env::var("JCODE_SESSION_LIBRARIAN_DEADLINE_SECONDS") {
+            self.session_librarian.deadline_seconds = Some(v);
+        }
+
         // Keybindings
         if let Ok(v) = std::env::var("JCODE_SCROLL_UP_KEY") {
             self.keybindings.scroll_up = v;

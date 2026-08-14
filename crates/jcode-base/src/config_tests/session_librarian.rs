@@ -2,7 +2,7 @@ use super::*;
 use crate::config::{
     LIBRARIAN_MAX_ITEM_TOKENS, LIBRARIAN_MAX_NORMALIZED_FILE_TOKENS, LIBRARIAN_MAX_RECEIPT_BYTES,
     LIBRARIAN_MAX_TOOL_CATEGORY_TOKENS, LibrarianConfigError, LibrarianInvocationOverrides,
-    LibrarianRouteIdentity, resolve_librarian_config,
+    LibrarianRouteIdentity, LibrarianRouteValidation, resolve_librarian_config,
 };
 
 const LIBRARIAN_ENV_KEYS: &[&str] = &[
@@ -46,14 +46,18 @@ impl Drop for LibrarianEnvGuard {
     }
 }
 
-fn supported(route: &LibrarianRouteIdentity) -> bool {
-    matches!(
-        (route.provider.as_str(), route.model.as_str()),
-        ("openai-oauth", "gpt-5.6-luna")
-            | ("openai-api", "gpt-5.6-sol")
-            | ("openai-api", "gpt-5.6-luna")
-            | ("claude-oauth", "claude-opus-4-1")
-    )
+fn supported(route: &LibrarianRouteIdentity) -> LibrarianRouteValidation {
+    LibrarianRouteValidation {
+        supported: matches!(
+            (route.provider.as_str(), route.model.as_str()),
+            ("openai-oauth", "gpt-5.6-luna")
+                | ("openai-api", "gpt-5.6-sol")
+                | ("openai-api", "gpt-5.6-luna")
+                | ("claude-oauth", "claude-opus-4-1")
+        ),
+        authentication_available: true,
+        worst_case_cost_micros: Some(0),
+    }
 }
 
 fn active_route() -> LibrarianRouteIdentity {
@@ -270,6 +274,52 @@ fn librarian_unsupported_route_is_rejected_before_use() {
     assert!(matches!(
         error,
         LibrarianConfigError::UnsupportedRoute { .. }
+    ));
+}
+
+#[test]
+fn librarian_route_boundaries_fail_with_distinct_actionable_errors() {
+    let config = Config::default();
+    let invocation = LibrarianInvocationOverrides::default();
+    let active = active_route();
+
+    let missing_auth = resolve_librarian_config(&config, &invocation, &active, |_| {
+        LibrarianRouteValidation {
+            supported: true,
+            authentication_available: false,
+            worst_case_cost_micros: Some(100_000),
+        }
+    })
+    .expect_err("missing authentication must fail before provider work");
+    assert!(matches!(
+        missing_auth,
+        LibrarianConfigError::MissingAuthentication { .. }
+    ));
+
+    let unknown_pricing = resolve_librarian_config(&config, &invocation, &active, |_| {
+        LibrarianRouteValidation {
+            supported: true,
+            authentication_available: true,
+            worst_case_cost_micros: None,
+        }
+    })
+    .expect_err("unknown pricing must fail closed before provider work");
+    assert!(matches!(
+        unknown_pricing,
+        LibrarianConfigError::UnknownPricing { .. }
+    ));
+
+    let unsafe_cost = resolve_librarian_config(&config, &invocation, &active, |_| {
+        LibrarianRouteValidation {
+            supported: true,
+            authentication_available: true,
+            worst_case_cost_micros: Some(500_001),
+        }
+    })
+    .expect_err("cost exposure above the configured maximum must fail closed");
+    assert!(matches!(
+        unsafe_cost,
+        LibrarianConfigError::UnsafeCost { .. }
     ));
 }
 
