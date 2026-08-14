@@ -1160,6 +1160,26 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             self.generate(complete, runner=timeout_runner)
         timeout_runner.assert_called_once()
 
+    def test_recomputes_generated_fingerprint_from_normalized_material(self) -> None:
+        response = self.invalid_response("fingerprint_mismatch")
+        generated_fingerprint = response["proposals"][1]["fingerprint"]
+
+        result, runner = self.generate(response)
+
+        proposal = result["proposals"][1]
+        expected = self.feedback.proposal_fingerprint(
+            {
+                "category": proposal["target"]["category"],
+                "scope": proposal["target"]["scope"],
+                "concrete_target": proposal["target"]["concrete_target"],
+                "problem": proposal["problem"],
+                "intended_outcome": proposal["expected_benefit"],
+            }
+        )
+        self.assertNotEqual(generated_fingerprint, expected)
+        self.assertEqual(proposal["fingerprint"], expected)
+        runner.assert_called_once()
+
     def test_rejects_untrusted_output_before_persistence_without_retry(self) -> None:
         unresolved = copy.deepcopy(
             self.fixture["valid_responses"]["complete_taxonomy"]["response"]
@@ -1171,7 +1191,6 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
                 "malformed",
                 "oversized",
                 "unknown_category",
-                "fingerprint_mismatch",
                 "unshortlisted_target",
                 "extra_property",
             )

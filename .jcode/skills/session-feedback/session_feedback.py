@@ -1512,10 +1512,6 @@ def _validate_generated_proposals(
                 "intended_outcome": proposal["expected_benefit"],
             }
         )
-        if proposal["fingerprint"] != expected_fingerprint:
-            raise ValidationError(
-                f"generated proposal {index} fingerprint does not match normalized material"
-            )
         canonical_proposal = json.loads(canonical_json(proposal))
         canonical_proposal["target"] = {
             "category": target_identity[0],
