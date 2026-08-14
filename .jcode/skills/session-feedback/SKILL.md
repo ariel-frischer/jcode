@@ -80,6 +80,39 @@ python3 <copy-local-session-feedback/__main__.py> [exact-forwarded-session-id] <
 
 The directory is self-contained and must work unchanged in either supported installation location.
 
+## Install, first run, and remove
+
+The project-local directory is the complete distributable artifact. To install it globally, copy
+the directory unchanged rather than copying individual files or rewriting paths:
+
+```text
+.jcode/skills/session-feedback/ -> ~/.jcode/skills/session-feedback/
+```
+
+The helper resolves its schemas, fixtures, and Python modules relative to its own installed
+directory. It keeps runtime state separate beneath `~/.jcode/feedback/` by default. On the first
+explicit invocation it validates configuration and visible evidence, then creates the local
+feedback layout and bootstraps `~/.jcode/feedback/.beads` without a remote or replication. Runtime
+outputs stay beneath that feedback root:
+
+- `config.json` for optional non-secret operator configuration
+- `runs/` for bounded run artifacts
+- `proposals/` for reviewable proposal JSON and Markdown
+- `.beads/` for the local proposal queue
+
+The project-local copy follows normal skill precedence when both copies exist. Removing only the
+project-local directory leaves the unchanged user-global copy available. Removing both
+`session-feedback` directories removes only the `/session-feedback` skill. It does not require a
+Jcode uninstall, data migration, daemon change, or core-code rollback, and it does not alter other
+slash commands or normal session behavior. Existing `~/.jcode/feedback/` review records are user
+data and are not deleted automatically.
+
+Bootstrap, configuration, input, or persistence failures are visible: the entry point exits
+nonzero and writes a bounded `session-feedback: ...` diagnostic to standard error before reporting
+success. Correct the named input, configuration, executable availability, or filesystem permission
+and invoke the skill again explicitly. Do not recover by broadening evidence, enabling replication,
+deleting the feedback store, editing a target, or silently retrying model work.
+
 ## Operator configuration
 
 The slash surface supports one optional positional argument, `session-id`. The copy-local
@@ -192,4 +225,11 @@ This workflow may create or append bounded proposal evidence only when the helpe
 - delete or replace a skill
 - perform destructive, external, publishing, or replication actions
 
-Return the review result to the user and stop.
+The standalone artifact adds no production core-Jcode requirement, dedicated `jcode feedback` CLI,
+plugin ABI, session-end trigger, pre-close prompt, Beads replication, proposal approval,
+patch application, or implementation behavior. V1 remains an explicit human-triggered review lane.
+
+`orchestrate_feedback(...)` is the reusable callable for the slash flow and a possible future
+explicit caller. Reuse that bounded interface rather than duplicating orchestration. Its existence
+does not register a hook or automatic caller, relax the review-only boundary, or authorize lifecycle
+changes. Return the review result to the user and stop.

@@ -478,7 +478,7 @@ phases:
           - "Expose the same reusable orchestrator callable for the slash flow and a possible future caller without registering a pre-close prompt or automatic hook."
       - id: "T035"
         title: "Finalize standalone installation, removability, and safety guidance"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-006"
