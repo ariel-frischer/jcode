@@ -399,7 +399,7 @@ phases:
           - "autospec artifact validates spec.yaml, plan.yaml, and tasks.yaml."
       - id: "T029"
         title: "Build selfdev and run isolated-socket librarian smoke tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
