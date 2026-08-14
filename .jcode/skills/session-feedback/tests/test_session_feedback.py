@@ -2554,7 +2554,6 @@ class GenerationIsolationProcessTests(unittest.TestCase):
                 "prompt",
             ],
             timeout_seconds=5.0,
-            estimated_cost_usd=0.1,
         )
 
         self.assertEqual(
@@ -2563,6 +2562,7 @@ class GenerationIsolationProcessTests(unittest.TestCase):
         )
         self.assertEqual(receipt["observed_input_tokens"], 321)
         self.assertEqual(receipt["observed_output_tokens"], 17)
+        self.assertEqual(receipt["estimated_cost_usd"], 0.0)
         records = [
             json.loads(line)
             for line in self.observation.read_text(encoding="utf-8").splitlines()
@@ -2594,8 +2594,35 @@ class GenerationIsolationProcessTests(unittest.TestCase):
                 self.feedback._run_generation_command(
                     ["jcode", "run", "bounded prompt"],
                     timeout_seconds=0.01,
-                    estimated_cost_usd=0.0,
                 )
+
+    def test_default_runner_elapsed_time_excludes_owned_server_cleanup(self) -> None:
+        now = [10.0]
+
+        def run(command, **_kwargs):
+            if "server" in command:
+                now[0] = 99.0
+                return subprocess.CompletedProcess(command, 0, "{}", "")
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                jcode_json_report(
+                    self.feedback.canonical_json(
+                        {"contract_version": "generator-response-v1", "proposals": []}
+                    )
+                ),
+                "",
+            )
+
+        with (
+            mock.patch("subprocess.run", side_effect=run),
+            mock.patch("time.monotonic", side_effect=lambda: now[0]),
+        ):
+            receipt = self.feedback._run_generation_command(
+                ["jcode", "run", "bounded prompt"], timeout_seconds=5.0
+            )
+
+        self.assertEqual(receipt["elapsed_seconds"], 0.0)
 
 
 if __name__ == "__main__":

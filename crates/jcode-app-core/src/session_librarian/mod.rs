@@ -275,7 +275,10 @@ impl DefaultSessionLibrarian {
         let configuration_identity = configuration_identity(&config);
         let fingerprint =
             fingerprint::build_source_fingerprint(&admitted, &configuration_identity)?;
-        let store = publication::PublicationStore::new(self.publication_root()?);
+        let store = publication::PublicationStore::new(
+            self.publication_root()?,
+            config.budgets.deadline_seconds,
+        );
         let claim_session_id = session.id.clone();
         let claim_fingerprint = fingerprint.clone();
 

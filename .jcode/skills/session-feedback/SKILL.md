@@ -126,8 +126,8 @@ slash commands or normal session behavior. Existing `~/.jcode/feedback/` review 
 data and are not deleted automatically.
 
 Bootstrap, configuration, input, or persistence failures are visible: the entry point exits
-nonzero and writes a bounded `session-feedback: ...` diagnostic to standard error before reporting
-success. Correct the named input, configuration, executable availability, or filesystem permission
+nonzero and writes a bounded `session-feedback: ...` diagnostic to standard error instead of
+reporting success. Correct the named input, configuration, executable availability, or filesystem permission
 and invoke the skill again explicitly. Do not recover by broadening evidence, enabling replication,
 deleting the feedback store, editing a target, or silently retrying model work.
 
@@ -188,7 +188,9 @@ another provider. Do not add credentials to `config.json` or `JCODE_SESSION_FEED
   usage when the default `jcode run --json` boundary supplies it; injected runners may report
   `null` when no provider was called.
 - `accounting.estimated_cost_usd` is an estimate supplied by the bounded runner receipt, not a
-  billed-cost claim.
+  billed-cost claim. The default native OAuth JSON boundary does not report billed USD, so it
+  records `0.0` rather than misreporting the configured maximum as observed spend; token and time
+  ceilings remain the authoritative default-run bounds.
 - `accounting.proposal_count` is the validated generated proposal count, and
   `accounting.request_count` is measured locally and must be `0` or `1`.
 

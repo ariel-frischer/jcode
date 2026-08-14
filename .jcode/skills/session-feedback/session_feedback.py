@@ -1378,7 +1378,7 @@ def _parse_jcode_json_report(payload: str) -> tuple[str, int, int]:
 
 
 def _run_generation_command(
-    command: Sequence[str], *, timeout_seconds: float, estimated_cost_usd: float
+    command: Sequence[str], *, timeout_seconds: float
 ) -> dict[str, Any]:
     if len(command) < 2 or command[1] != "run":
         raise ValidationError("generation command must invoke jcode run")
@@ -1409,6 +1409,7 @@ def _run_generation_command(
                 cwd=workspace,
                 env=environment,
             )
+            elapsed_seconds = time.monotonic() - started
         except OSError as error:
             raise ValidationError(
                 f"generation request could not start: {_bounded_error(str(error))}"
@@ -1450,8 +1451,10 @@ def _run_generation_command(
             "returncode": completed.returncode,
             "stdout": stdout,
             "stderr": completed.stderr,
-            "elapsed_seconds": time.monotonic() - started,
-            "estimated_cost_usd": estimated_cost_usd,
+            "elapsed_seconds": elapsed_seconds,
+            # The native OAuth JSON report exposes token usage but no billed USD.
+            # Do not misreport the configured maximum exposure as observed spend.
+            "estimated_cost_usd": 0.0,
             "observed_input_tokens": observed_input_tokens,
             "observed_output_tokens": observed_output_tokens,
         }
@@ -2071,7 +2074,6 @@ def generate_review_proposals(
         invoke = lambda value: _run_generation_command(  # noqa: E731
             value,
             timeout_seconds=max_elapsed,
-            estimated_cost_usd=max_cost,
         )
     (
         stdout,

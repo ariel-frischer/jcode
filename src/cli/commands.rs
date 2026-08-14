@@ -2830,6 +2830,7 @@ fn run_structured_sdk_turn(
             other => anyhow::bail!("expected attached after create_session, got {other:?}"),
         },
     };
+    let message = prepare_run_message(&message, &session.session_id);
     if let Some(model) = model.as_deref() {
         client.set_model(&session.session_id, model)?;
     }

@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-const LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const LOCK_WAIT_GRACE_SECONDS: u64 = 5;
 const LOCK_RETRY_DELAY: Duration = Duration::from_millis(5);
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(5);
 const LEGACY_LOCK_STALE_AFTER: Duration = Duration::from_secs(300);
@@ -26,11 +26,17 @@ struct PublicationLockMetadata {
 
 pub(crate) struct PublicationStore {
     root: PathBuf,
+    lock_wait_timeout: Duration,
 }
 
 impl PublicationStore {
-    pub(crate) fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub(crate) fn new(root: PathBuf, generation_deadline_seconds: u64) -> Self {
+        Self {
+            root,
+            lock_wait_timeout: Duration::from_secs(
+                generation_deadline_seconds.saturating_add(LOCK_WAIT_GRACE_SECONDS),
+            ),
+        }
     }
 
     pub(crate) fn claim(
@@ -60,7 +66,7 @@ impl PublicationStore {
         let lock_directory = session_directory.join(format!(".{}.lock", fingerprint.digest));
         let started = Instant::now();
         loop {
-            match fs::create_dir(&lock_directory) {
+            match create_private_directory(&lock_directory) {
                 Ok(()) => {
                     let lock = PublicationLock::initialize(lock_directory)?;
                     if destination.exists() {
@@ -83,7 +89,7 @@ impl PublicationStore {
                     if reclaim_dead_stale_lock(&lock_directory)? {
                         continue;
                     }
-                    if started.elapsed() >= LOCK_WAIT_TIMEOUT {
+                    if started.elapsed() >= self.lock_wait_timeout {
                         return Err(failure(
                             LibrarianFailureStage::Locking,
                             "librarian_lock_timeout",
@@ -101,6 +107,11 @@ impl PublicationStore {
                 }
             }
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn lock_wait_timeout(&self) -> Duration {
+        self.lock_wait_timeout
     }
 }
 
@@ -627,7 +638,7 @@ fn create_staging_directory(
             std::process::id(),
             sequence
         ));
-        match fs::create_dir(&path) {
+        match create_private_directory(&path) {
             Ok(()) => {
                 if let Err(error) = set_private_directory_permissions(&path) {
                     drop(fs::remove_dir(&path));
@@ -650,6 +661,21 @@ fn create_staging_directory(
         "librarian_staging_collision",
         "Could not allocate a unique staging directory.".into(),
     ))
+}
+
+fn create_private_directory(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(path)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir(path)
+    }
 }
 
 fn validate_summary_contract(
