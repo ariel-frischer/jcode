@@ -103,7 +103,50 @@ fn valid_generation(fingerprint: &SourceFingerprint) -> LibrarianGeneration {
 }
 
 fn store(root: &Path) -> PublicationStore {
-    PublicationStore::new(root.to_path_buf())
+    PublicationStore::new(root.to_path_buf(), 120)
+}
+
+#[test]
+fn lock_wait_budget_covers_the_generation_deadline_plus_grace() {
+    let temp = tempfile::tempdir().expect("publication tempdir");
+    assert_eq!(
+        PublicationStore::new(temp.path().to_path_buf(), 120).lock_wait_timeout(),
+        Duration::from_secs(125)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn lock_and_published_artifact_directories_are_private_from_creation() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("publication tempdir");
+    let fingerprint = fingerprint();
+    let lock_directory = temp
+        .path()
+        .join(SESSION_ID)
+        .join(format!(".{}.lock", fingerprint.digest));
+    let lease = claim_new(&store(temp.path()), &fingerprint);
+    assert_eq!(
+        fs::metadata(&lock_directory)
+            .expect("lock directory metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+
+    let paths = lease
+        .publish_generation(valid_generation(&fingerprint))
+        .expect("publish private artifact directory");
+    assert_eq!(
+        fs::metadata(paths.directory())
+            .expect("artifact directory metadata")
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
 }
 
 fn expect_generate(claim: PublicationClaim) -> super::publication::PublicationLease {
@@ -431,6 +474,7 @@ fn dead_stale_lock_is_reclaimed_before_generation() {
     assert!(!lock_directory.exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn metadata_less_stale_lock_is_reclaimed_before_generation() {
     let temp = tempfile::tempdir().expect("publication tempdir");

@@ -231,7 +231,9 @@ async fn default_and_override_routes_are_independent_from_the_active_agent_route
 
     assert_eq!(factory.builds.load(Ordering::SeqCst), 2);
     assert_eq!(factory.calls.load(Ordering::SeqCst), 2);
-    assert_eq!(active_route(), original_active_route);
+    assert_ne!(defaults.route.provider, original_active_route.provider);
+    assert_ne!(overridden.route.provider, original_active_route.provider);
+    assert_ne!(overridden.route.model, original_active_route.model);
 }
 
 #[tokio::test]

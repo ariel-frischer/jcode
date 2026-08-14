@@ -1,7 +1,7 @@
 feature:
   branch: "007-session-feedback-proposals"
   created: "2026-08-14"
-  status: "Draft"
+  status: "Completed"
   input: |-
     Implement Bead jcode-2ho: a standalone, human-triggered `/session-feedback [session-id]` skill workflow that creates review-only improvement proposals. It must work on first run without the session librarian. Evidence acquisition is pluggable: opportunistically use a compatible librarian `summary.json`, otherwise create a deterministic compact fallback bundle only from already-visible session outcomes, todo assessments, tool and skill invocation receipts, bounded failure excerpts, validation receipts, and relevant paths. Normalize both paths into one versioned bounded evidence contract.
 
@@ -387,7 +387,7 @@ constraints:
   - "The local feedback Beads store must not replicate."
   - "No new jcode feedback CLI may be added."
   - "No automatic session-end or pre-close prompt may be implemented in version 1."
-  - "Core Jcode changes are disallowed unless a narrow public integration boundary is strictly necessary and documented."
+  - "Core Jcode changes are disallowed unless a narrow public integration boundary is strictly necessary and documented; the shipped headless `jcode run` preparation path injects the trusted current session ID only for a bare `/session-feedback`, matching the TUI slash boundary without changing explicit arguments."
   - "The workflow must not depend on Bead jcode-zor."
   - "Rust or Cargo changes should be avoided when skill and helper artifacts can satisfy the accepted behavior."
   - "The default route is native OpenAI OAuth gpt-5.6-sol at medium effort with a maximum of one generation request."

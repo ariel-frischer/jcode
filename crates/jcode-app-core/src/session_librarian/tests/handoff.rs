@@ -78,7 +78,7 @@ fn publish(
     value: Value,
 ) -> Result<(tempfile::TempDir, super::LibrarianArtifactPaths), super::LibrarianFailure> {
     let temp = tempfile::tempdir().expect("handoff tempdir");
-    let store = PublicationStore::new(temp.path().to_path_buf());
+    let store = PublicationStore::new(temp.path().to_path_buf(), 120);
     let lease = match store
         .claim(SESSION_ID, &fingerprint())
         .expect("new fingerprint should acquire publication lease")

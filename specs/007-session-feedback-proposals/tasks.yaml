@@ -125,16 +125,16 @@ phases:
           - "Verify invocation without arguments represents the current session and invocation with a visible session ID forwards that ID unchanged to the skill prompt."
           - "Verify no session-end, pre-close, background, or other automatic trigger is registered."
       - id: "T009"
-        title: "Register the focused session-feedback slash tests"
+        title: "Add the headless current-session forwarding boundary"
         status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
-        file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+        file_path: "src/cli/commands.rs"
         dependencies: ["T008"]
         acceptance_criteria:
-          - "Include the new focused test module using the existing app-test organization and permit only the narrow current-session forwarding behavior required for a bare `/session-feedback` invocation."
-          - "Ensure the narrow exact-name tests compile and run without selecting unrelated stateful TUI tests."
+          - "Use `prepare_run_message` as the narrow production boundary that injects the trusted current session ID only for a bare `/session-feedback` invocation in headless run modes, including structured schema execution."
+          - "Cover the boundary in the CLI crate commands test module while preserving explicit session arguments and ordinary prompts unchanged."
       - id: "T010"
         title: "Implement visible session selection and deterministic fallback acquisition"
         status: "Completed"
@@ -532,7 +532,7 @@ phases:
           - "Validate spec.yaml, plan.yaml, and tasks.yaml with autospec artifact and format Python, JSON, Markdown, YAML, and any focused Rust test edits with repository-standard tools."
           - "Run scripts/check_guardrails.sh --skip-slow for the skill/schema-only delivery path, adding only the focused Cargo checks required by the Rust test changes."
           - "Build the applicable selfdev binary and run the public slash smoke against an isolated private socket and fake generator, recording the resolved executing binary identity rather than testing the shared daemon."
-          - "Review git status and the explicit diff to verify changes are limited to approved skill, schema, fixture, focused test, changelog, Autospec artifacts, and the narrow TUI current-session forwarding integration, with no SDK, hook, CLI, or unrelated changes."
+          - "Review git status and the explicit diff to verify changes are limited to approved skill, schema, fixture, focused test, changelog, Autospec artifacts, and the narrow CLI `prepare_run_message` current-session forwarding integration, with no SDK, hook, dedicated feedback CLI, or unrelated changes."
 
 dependencies:
   user_story_order:
@@ -549,7 +549,7 @@ dependencies:
       depends_on: ["US-003"]
       blocks: ["US-006"]
     - story_id: "US-005"
-      depends_on: []
+      depends_on: ["US-004"]
       blocks: ["US-006"]
     - story_id: "US-006"
       depends_on: ["US-001", "US-003", "US-004", "US-005"]
