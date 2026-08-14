@@ -410,7 +410,7 @@ phases:
           - "Verify diagnostics identify configured and effective non-secret values and their sources without disclosing credentials."
       - id: "T030"
         title: "Implement canonical configuration resolution and limit enforcement"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-005"

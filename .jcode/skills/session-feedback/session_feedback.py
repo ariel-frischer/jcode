@@ -45,12 +45,42 @@ DEFAULT_TOTAL_EXCERPT_BYTES = 32_768
 DEFAULT_GENERATION_CONFIG = {
     "model": "gpt-5.6-sol",
     "effort": "medium",
+    "max_evidence_bytes": 262_144,
+    "max_excerpt_bytes": 32_768,
     "max_input_tokens": 32_768,
     "max_output_tokens": 8_192,
     "max_proposals": 8,
     "max_elapsed_seconds": 120.0,
     "max_estimated_cost_usd": 1.0,
 }
+CONFIG_ENVIRONMENT_NAMES = {
+    "model": "JCODE_SESSION_FEEDBACK_MODEL",
+    "effort": "JCODE_SESSION_FEEDBACK_EFFORT",
+    "max_evidence_bytes": "JCODE_SESSION_FEEDBACK_MAX_EVIDENCE_BYTES",
+    "max_excerpt_bytes": "JCODE_SESSION_FEEDBACK_MAX_EXCERPT_BYTES",
+    "max_input_tokens": "JCODE_SESSION_FEEDBACK_MAX_INPUT_TOKENS",
+    "max_output_tokens": "JCODE_SESSION_FEEDBACK_MAX_OUTPUT_TOKENS",
+    "max_proposals": "JCODE_SESSION_FEEDBACK_MAX_PROPOSALS",
+    "max_elapsed_seconds": "JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS",
+    "max_estimated_cost_usd": "JCODE_SESSION_FEEDBACK_MAX_ESTIMATED_COST_USD",
+}
+INTEGER_CONFIG_FIELDS = frozenset(
+    {
+        "max_evidence_bytes",
+        "max_excerpt_bytes",
+        "max_input_tokens",
+        "max_output_tokens",
+        "max_proposals",
+    }
+)
+FLOAT_CONFIG_FIELDS = frozenset(
+    {"max_elapsed_seconds", "max_estimated_cost_usd"}
+)
+SUPPORTED_EFFORTS = frozenset(
+    {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+)
+SUPPORTED_MODELS = frozenset({"gpt-5.6-sol"})
+MAX_FEEDBACK_CONFIG_BYTES = 65_536
 LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
 EVIDENCE_ITEM_FIELDS = {
     "visible_outcome": frozenset(
@@ -903,6 +933,160 @@ def prepare_feedback_invocation(
     }
 
 
+def _configured_value(value: Any) -> bool:
+    return not (isinstance(value, str) and not value.strip())
+
+
+def _parse_config_value(field: str, value: Any, source: str) -> Any:
+    if field == "model":
+        if not isinstance(value, str) or value.strip() not in SUPPORTED_MODELS:
+            raise ValidationError(f"unsupported model from {source}")
+        return value.strip()
+    if field == "effort":
+        if not isinstance(value, str) or value.strip() not in SUPPORTED_EFFORTS:
+            raise ValidationError(f"unsupported effort from {source}")
+        return value.strip()
+    if field in INTEGER_CONFIG_FIELDS:
+        parsed = value
+        if isinstance(value, str):
+            try:
+                parsed = int(value.strip())
+            except ValueError as error:
+                raise ValidationError(
+                    f"{field} from {source} must be a positive integer"
+                ) from error
+        if not isinstance(parsed, int) or isinstance(parsed, bool) or parsed <= 0:
+            raise ValidationError(f"{field} from {source} must be a positive integer")
+        return parsed
+    if field in FLOAT_CONFIG_FIELDS:
+        parsed = value
+        if isinstance(value, str):
+            try:
+                parsed = float(value.strip())
+            except ValueError as error:
+                raise ValidationError(
+                    f"{field} from {source} must be a positive finite number"
+                ) from error
+        if (
+            not isinstance(parsed, (int, float))
+            or isinstance(parsed, bool)
+            or not math.isfinite(parsed)
+            or parsed <= 0
+        ):
+            raise ValidationError(
+                f"{field} from {source} must be a positive finite number"
+            )
+        return float(parsed)
+    raise ValidationError(f"unsupported session-feedback configuration field: {field}")
+
+
+def _load_persisted_feedback_config(config_path: Path) -> dict[str, Any]:
+    try:
+        if not config_path.exists():
+            return {}
+        if not config_path.is_file():
+            raise ValidationError("persisted feedback configuration is not a file")
+        if config_path.stat().st_size > MAX_FEEDBACK_CONFIG_BYTES:
+            raise ValidationError("persisted feedback configuration is oversized")
+        parsed = json.loads(config_path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise ValidationError(
+            f"persisted feedback configuration could not be read: {_bounded_error(str(error))}"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise ValidationError("persisted feedback configuration is malformed JSON") from error
+    if not isinstance(parsed, dict):
+        raise ValidationError("persisted feedback configuration must be an object")
+    unknown = sorted(set(parsed) - set(DEFAULT_GENERATION_CONFIG))
+    if unknown:
+        raise ValidationError(
+            "persisted feedback configuration has unsupported fields: "
+            + ", ".join(unknown)
+        )
+    return parsed
+
+
+def resolve_feedback_config(
+    *,
+    invocation_overrides: Mapping[str, Any] | None = None,
+    environment: Mapping[str, str] | None = None,
+    config_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Resolve the typed non-secret feedback configuration through one path."""
+    invocation = invocation_overrides or {}
+    if not isinstance(invocation, Mapping):
+        raise ValidationError("invocation configuration must be an object")
+    unknown = sorted(set(invocation) - set(DEFAULT_GENERATION_CONFIG))
+    if unknown:
+        raise ValidationError(
+            "invocation configuration has unsupported fields: " + ", ".join(unknown)
+        )
+    environment_values = os.environ if environment is None else environment
+    if not isinstance(environment_values, Mapping):
+        raise ValidationError("configuration environment must be an object")
+    persisted_path = (
+        Path(config_path).expanduser()
+        if config_path is not None
+        else Path.home() / ".jcode" / "feedback" / "config.json"
+    )
+    persisted = _load_persisted_feedback_config(persisted_path)
+
+    values: dict[str, Any] = {}
+    sources: dict[str, str] = {}
+    diagnostics: dict[str, dict[str, Any]] = {}
+    for field, default in DEFAULT_GENERATION_CONFIG.items():
+        candidates = (
+            ("invocation", invocation.get(field)),
+            ("environment", environment_values.get(CONFIG_ENVIRONMENT_NAMES[field])),
+            ("persisted", persisted.get(field)),
+            ("default", default),
+        )
+        configured = {
+            source: candidate
+            for source, candidate in candidates[:-1]
+            if candidate is not None and _configured_value(candidate)
+        }
+        for source, candidate in candidates:
+            if candidate is None or not _configured_value(candidate):
+                continue
+            values[field] = _parse_config_value(field, candidate, source)
+            sources[field] = source
+            break
+        diagnostics[field] = {
+            "configured": configured,
+            "effective": values[field],
+            "source": sources[field],
+        }
+
+    return {
+        "values": values,
+        "sources": sources,
+        "diagnostics": diagnostics,
+        "route": {
+            "provider": "openai",
+            "authentication": "native-oauth",
+            "max_requests": 1,
+        },
+        "persisted_config_path": str(persisted_path),
+    }
+
+
+def validate_budget_limit(*, field: str, observed: int | float, limit: int | float) -> None:
+    """Fail when a measured non-negative budget contribution exceeds its limit."""
+    if field not in INTEGER_CONFIG_FIELDS | FLOAT_CONFIG_FIELDS:
+        raise ValidationError(f"unsupported budget field: {field}")
+    parsed_limit = _parse_config_value(field, limit, "effective configuration")
+    if (
+        not isinstance(observed, (int, float))
+        or isinstance(observed, bool)
+        or not math.isfinite(observed)
+        or observed < 0
+    ):
+        raise ValidationError(f"observed {field} must be a non-negative finite number")
+    if observed > parsed_limit:
+        raise ValidationError(f"{field} exceeded: observed {observed}, limit {parsed_limit}")
+
+
 def _generation_limit(
     config: Mapping[str, Any], name: str, *, integer: bool = False
 ) -> int | float:
@@ -1496,7 +1680,7 @@ def generate_review_proposals(
     effort = effective_config.get("effort")
     if not isinstance(model, str) or not model.strip() or len(model) > 128:
         raise ValidationError("model must be a bounded non-empty string")
-    if effort not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}:
+    if effort not in SUPPORTED_EFFORTS:
         raise ValidationError("effort must be a supported reasoning effort")
     max_input_tokens = _generation_limit(
         effective_config, "max_input_tokens", integer=True
@@ -1516,8 +1700,11 @@ def generate_review_proposals(
         + request_document
     )
     request_accounting = measure_text("request_input", prompt)
-    if request_accounting["estimated_tokens"] > max_input_tokens:
-        raise ValidationError("generation request input exceeds the token limit")
+    validate_budget_limit(
+        field="max_input_tokens",
+        observed=request_accounting["estimated_tokens"],
+        limit=max_input_tokens,
+    )
     command = [
         "jcode",
         "run",
@@ -1546,22 +1733,28 @@ def generate_review_proposals(
     stdout, elapsed_seconds, estimated_cost_usd = _validated_runner_receipt(
         invoke(command)
     )
-    if elapsed_seconds > max_elapsed:
-        raise ValidationError("generation elapsed-time limit exceeded")
-    if estimated_cost_usd > max_cost:
-        raise ValidationError("generation estimated-cost limit exceeded")
+    validate_budget_limit(
+        field="max_elapsed_seconds", observed=elapsed_seconds, limit=max_elapsed
+    )
+    validate_budget_limit(
+        field="max_estimated_cost_usd", observed=estimated_cost_usd, limit=max_cost
+    )
 
     output_accounting = measure_text("request_output", stdout)
-    if output_accounting["estimated_tokens"] > max_output_tokens:
-        raise ValidationError("generation request output exceeds the token limit")
+    validate_budget_limit(
+        field="max_output_tokens",
+        observed=output_accounting["estimated_tokens"],
+        limit=max_output_tokens,
+    )
     response = parse_contract("generator-response-v1", stdout)
     proposals = _validate_generated_proposals(
         response,
         evidence=evidence,
         shortlisted_targets=shortlisted_targets,
     )
-    if len(proposals) > max_proposals:
-        raise ValidationError("generated proposal count exceeds the configured limit")
+    validate_budget_limit(
+        field="max_proposals", observed=len(proposals), limit=max_proposals
+    )
     rendered_proposals = [render_review_proposal(proposal) for proposal in proposals]
 
     return {
@@ -1645,11 +1838,31 @@ def run_feedback(
     librarian_summary_path: str | Path | None,
     target_root: str | Path = ".",
     effective_config: Mapping[str, Any] | None = None,
+    invocation_config: Mapping[str, Any] | None = None,
+    environment: Mapping[str, str] | None = None,
+    feedback_config_path: str | Path | None = None,
     runner: Any | None = None,
     per_excerpt_byte_limit: int = DEFAULT_PER_EXCERPT_BYTES,
     total_excerpt_byte_limit: int = DEFAULT_TOTAL_EXCERPT_BYTES,
 ) -> dict[str, Any]:
     """Run one bounded acquisition, shortlist, excerpt, and generation workflow."""
+    if effective_config is not None and invocation_config is not None:
+        raise ValidationError(
+            "effective_config and invocation_config cannot be supplied together"
+        )
+    if effective_config is None:
+        resolved_config = resolve_feedback_config(
+            invocation_overrides=invocation_config,
+            environment=environment,
+            config_path=feedback_config_path,
+        )
+        config = resolved_config["values"]
+    else:
+        config = dict(DEFAULT_GENERATION_CONFIG)
+        config.update(effective_config)
+        for field, value in config.items():
+            config[field] = _parse_config_value(field, value, "effective configuration")
+
     invocation = prepare_feedback_invocation(
         requested_session_id=requested_session_id,
         current_session_id=current_session_id,
@@ -1658,16 +1871,24 @@ def run_feedback(
         librarian_summary_path=librarian_summary_path,
     )
     evidence = invocation["evidence"]
+    validate_budget_limit(
+        field="max_evidence_bytes",
+        observed=evidence["accounting"]["serialized_bytes"],
+        limit=config["max_evidence_bytes"],
+    )
     shortlist = shortlist_targets(evidence)
+    excerpt_limit = int(config["max_excerpt_bytes"])
     excerpts = load_shortlisted_excerpts(
         shortlist=shortlist,
         target_root=target_root,
-        per_excerpt_byte_limit=per_excerpt_byte_limit,
-        total_excerpt_byte_limit=total_excerpt_byte_limit,
+        per_excerpt_byte_limit=min(per_excerpt_byte_limit, excerpt_limit),
+        total_excerpt_byte_limit=min(total_excerpt_byte_limit, excerpt_limit),
     )
     excerpt_totals = excerpt_accounting(excerpts)
-    config = dict(
-        DEFAULT_GENERATION_CONFIG if effective_config is None else effective_config
+    validate_budget_limit(
+        field="max_excerpt_bytes",
+        observed=excerpt_totals["serialized_bytes"],
+        limit=excerpt_limit,
     )
     request_input = {
         "session_id": invocation["session_id"],
@@ -1735,8 +1956,10 @@ __all__ = [
     "persist_review_proposal",
     "prepare_feedback_invocation",
     "proposal_fingerprint",
+    "resolve_feedback_config",
     "render_review_proposal",
     "run_feedback",
+    "validate_budget_limit",
     "validate_contract",
     "with_evidence_accounting",
 ]
