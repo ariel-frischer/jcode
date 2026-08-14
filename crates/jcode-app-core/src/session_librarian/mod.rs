@@ -199,6 +199,10 @@ mod admission_tests;
 mod fingerprint_tests;
 
 #[cfg(test)]
+#[path = "tests/handoff.rs"]
+mod handoff_tests;
+
+#[cfg(test)]
 #[path = "tests/publication.rs"]
 mod publication_tests;
 

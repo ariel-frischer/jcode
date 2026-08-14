@@ -267,7 +267,7 @@ phases:
     tasks:
       - id: "T019"
         title: "Write handoff brief and relevant-file projection tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
