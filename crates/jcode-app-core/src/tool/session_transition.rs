@@ -6,7 +6,53 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-const MAX_PROMPT_CHARS: usize = 32 * 1024;
+pub(crate) const MAX_PROMPT_CHARS: usize = 32 * 1024;
+pub(crate) const MAX_RELEVANT_FILES: usize = 32;
+
+pub(crate) fn prepare_handoff_prompt(
+    prompt: Option<String>,
+    bead_id: Option<&str>,
+    relevant_files: &[String],
+) -> Result<Option<String>> {
+    if relevant_files.len() > MAX_RELEVANT_FILES {
+        anyhow::bail!("Handoff relevant_files exceeds the 32-path limit");
+    }
+
+    let mut prompt = prompt.and_then(|prompt| {
+        let prompt = prompt.trim().to_owned();
+        (!prompt.is_empty()).then_some(prompt)
+    });
+    if bead_id.is_some() || !relevant_files.is_empty() {
+        let mut durable = Vec::new();
+        if let Some(bead_id) = bead_id.map(str::trim).filter(|value| !value.is_empty()) {
+            durable.push(format!(
+                "Durable tracker: inspect Bead `{bead_id}` and its comments."
+            ));
+        }
+        if !relevant_files.is_empty() {
+            durable.push(format!(
+                "Relevant files:\n{}",
+                relevant_files
+                    .iter()
+                    .map(|path| format!("- {path}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ));
+        }
+        let durable = durable.join("\n\n");
+        prompt = Some(match prompt {
+            Some(prompt) => format!("{prompt}\n\n{durable}"),
+            None => durable,
+        });
+    }
+    if prompt
+        .as_ref()
+        .is_some_and(|prompt| prompt.len() > MAX_PROMPT_CHARS)
+    {
+        anyhow::bail!("Handoff prompt exceeds the 32 KiB limit");
+    }
+    Ok(prompt)
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct PendingSessionTransition {
@@ -86,48 +132,11 @@ impl Tool for SessionTransitionTool {
         if policy.agent_requires_confirmation && !input.confirmed {
             anyhow::bail!("Agent self-handoff requires confirmed=true for this session");
         }
-        if input.relevant_files.len() > 32 {
-            anyhow::bail!("Handoff relevant_files exceeds the 32-path limit");
-        }
-        let mut prompt = input.prompt.or(input.goal).and_then(|prompt| {
-            let prompt = prompt.trim().to_owned();
-            (!prompt.is_empty()).then_some(prompt)
-        });
-        if input.bead_id.is_some() || !input.relevant_files.is_empty() {
-            let mut durable = Vec::new();
-            if let Some(bead_id) = input
-                .bead_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                durable.push(format!(
-                    "Durable tracker: inspect Bead `{bead_id}` and its comments."
-                ));
-            }
-            if !input.relevant_files.is_empty() {
-                durable.push(format!(
-                    "Relevant files:\n{}",
-                    input
-                        .relevant_files
-                        .iter()
-                        .map(|path| format!("- {path}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ));
-            }
-            let durable = durable.join("\n\n");
-            prompt = Some(match prompt {
-                Some(prompt) => format!("{prompt}\n\n{durable}"),
-                None => durable,
-            });
-        }
-        if prompt
-            .as_ref()
-            .is_some_and(|prompt| prompt.len() > MAX_PROMPT_CHARS)
-        {
-            anyhow::bail!("Handoff prompt exceeds the 32 KiB limit");
-        }
+        let prompt = prepare_handoff_prompt(
+            input.prompt.or(input.goal),
+            input.bead_id.as_deref(),
+            &input.relevant_files,
+        )?;
         let auto_start = input.auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
         PENDING
             .lock()

@@ -280,7 +280,7 @@ phases:
           - "Equivalent handoff information is visible in summary.md."
       - id: "T020"
         title: "Implement handoff-compatible normalization and rendering"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

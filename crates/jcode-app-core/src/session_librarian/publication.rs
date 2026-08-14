@@ -210,22 +210,24 @@ fn validate_generation(
         serde_json::from_str(&generation.response_json).map_err(|error| {
             validation_failure(format!("Provider output is not valid JSON: {error}"))
         })?;
-    let summary: SessionSummary =
+    let mut summary: SessionSummary =
         serde_json::from_value(source_value.clone()).map_err(|error| {
             validation_failure(format!(
                 "Provider output does not match the summary schema: {error}"
             ))
         })?;
-    let normalized = serde_json::to_value(&summary).map_err(|error| {
+    let schema_value = serde_json::to_value(&summary).map_err(|error| {
         validation_failure(format!(
             "The validated summary could not be normalized: {error}"
         ))
     })?;
-    if normalized != source_value {
+    if schema_value != source_value {
         return Err(validation_failure(
             "Provider output contains fields or values outside the summary schema.".into(),
         ));
     }
+
+    super::handoff::normalize_summary_handoff(&mut summary)?;
 
     validate_summary_contract(session_id, fingerprint, &summary, &generation.usage)?;
     reject_recognized_secrets(&summary)?;
