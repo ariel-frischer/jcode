@@ -6,11 +6,10 @@ plan:
 summary: |
   Stabilize the owned-turn event boundary by making event semantics and publication
   disposition exhaustive at the Rust harness authority, then mirroring the public
-  typed contract in the canonical Go SDK. The implementation will first recover the
-  exact event rejected by Locus run-1c2020f67330 from authoritative runtime evidence
-  and reduce it to a payload-free fixture. Repository history makes connection_phase
-  the leading candidate, but the plan deliberately does not promote that inference to
-  a contract until the evidence fixture proves the exact wire kind and Go type.
+  typed contract in the canonical Go SDK. The implementation recovered the exact
+  event rejected by Locus run-1c2020f67330 as the connection_phase wire kind and
+  reduced it to a payload-free fixture. The evidence-first recovery process remains
+  recorded below as historical context for the confirmed contract.
 
   Existing protocol-v1 shapes, Session.Events unknown-event preservation, ReasoningDone,
   ToolExec, terminal outcomes, cancellation, and provider routing remain unchanged.

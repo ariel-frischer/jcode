@@ -67,6 +67,32 @@ func TestEventKindPreservesKnownAndUnknownProvenance(t *testing.T) {
 	if !ok || !strings.Contains(string(fields), "SYNTHETIC_PAYLOAD") {
 		t.Fatalf("unknown fields=%s, want preserved legacy provenance", fields)
 	}
+
+	raw := &RawEvent{Kind: "pointer_raw"}
+	unknownValue := &UnknownEvent{Kind: "pointer_unknown"}
+	if got := EventKind(&HelloOK{}); got != "hello_ok" {
+		t.Fatalf("pointer hello kind=%q, want hello_ok", got)
+	}
+	if got := EventKind(&OK{}); got != "ok" {
+		t.Fatalf("pointer ok kind=%q, want ok", got)
+	}
+	if got := EventKind(&Error{}); got != "error" {
+		t.Fatalf("pointer error kind=%q, want error", got)
+	}
+	if got := EventKind(raw); got != "pointer_raw" {
+		t.Fatalf("pointer raw kind=%q, want pointer_raw", got)
+	}
+	if got := EventKind(unknownValue); got != "pointer_unknown" {
+		t.Fatalf("pointer unknown kind=%q, want pointer_unknown", got)
+	}
+	var nilRaw *RawEvent
+	var nilUnknown *UnknownEvent
+	if got := EventKind(nilRaw); got != "" {
+		t.Fatalf("nil raw kind=%q, want empty", got)
+	}
+	if got := EventKind(nilUnknown); got != "" {
+		t.Fatalf("nil unknown kind=%q, want empty", got)
+	}
 }
 
 func TestHandshakeAndErrorClassification(t *testing.T) {

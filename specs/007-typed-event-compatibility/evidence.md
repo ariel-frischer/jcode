@@ -284,12 +284,15 @@ checking only the source repository's `origin` remote allowed renamed or missing
 `origin` configurations to bypass the reverse-sync protection. The repaired
 script now requires a Git worktree, ignores inherited Git repository selectors,
 and checks every fetch and push URL on every configured remote for the protected
-public jcode-go repository.
+public jcode-go repository. Remote identity normalization covers HTTPS userinfo,
+trailing slashes and `.git`, and the supported scp-like and `ssh://` forms.
 
 The regression fixture covers Git-less sources, ambient `GIT_DIR`, renamed
-public remotes, and public remotes without `origin`. The SDK validation fixture
-now hashes every file and relative path in the SDK tree. The focused repair
-checks passed:
+public remotes, public remotes without `origin`, and each normalized URL form.
+`protocol.EventKind` now preserves provenance for pointer forms of all
+value-backed event types and returns an empty kind for nil raw/unknown pointers.
+The SDK validation fixture now hashes every file and relative path in the SDK
+tree. The focused repair checks passed:
 
 ```text
 scripts/test_sync_jcode_go.sh: PASS

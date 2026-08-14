@@ -123,17 +123,38 @@ func EventKind(event Event) string {
 	switch value := event.(type) {
 	case HelloOK:
 		return "hello_ok"
+	case *HelloOK:
+		if value != nil {
+			return "hello_ok"
+		}
 	case OK:
 		return "ok"
+	case *OK:
+		if value != nil {
+			return "ok"
+		}
 	case Error:
 		return "error"
+	case *Error:
+		if value != nil {
+			return "error"
+		}
 	case RawEvent:
 		return value.Kind
+	case *RawEvent:
+		if value != nil {
+			return value.Kind
+		}
 	case UnknownEvent:
 		return value.Kind
+	case *UnknownEvent:
+		if value != nil {
+			return value.Kind
+		}
 	default:
 		return ""
 	}
+	return ""
 }
 
 var knownEvents = map[string]struct{}{

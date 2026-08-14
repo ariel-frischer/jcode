@@ -94,6 +94,21 @@ make_source "$TMP/missing-origin-source"
 git -C "$TMP/missing-origin-source" remote add upstream https://github.com/ariel-frischer/jcode-go.git
 expect_failure missing-origin-source "$SYNC" preview --source "$TMP/missing-origin-source" --destination "$TMP/destination"
 
+variant_index=0
+while IFS= read -r public_remote; do
+  variant_source="$TMP/url-variant-$variant_index"
+  make_source "$variant_source"
+  git -C "$variant_source" remote add upstream "$public_remote"
+  expect_failure "url-variant-$variant_index" "$SYNC" preview --source "$variant_source" --destination "$TMP/destination"
+  variant_index=$((variant_index + 1))
+done <<'EOF'
+https://github.com/ariel-frischer/jcode-go.git/
+https://mirror@github.com/ariel-frischer/jcode-go/
+git@github.com:ariel-frischer/jcode-go.git/
+ssh://git@github.com/ariel-frischer/jcode-go/
+ssh://deploy@github.com/ariel-frischer/jcode-go.git
+EOF
+
 reverse_before=$(status_of "$TMP/destination")
 expect_failure reverse-sync "$SYNC" preview --source "$TMP/destination" --destination "$TMP/destination"
 test "$reverse_before" = "$(status_of "$TMP/destination")" || fail "reverse-sync rejection mutated destination"

@@ -73,14 +73,39 @@ grep -Eq '^module[[:space:]]+github\.com/ariel-frischer/jcode-go[[:space:]]*$' "
   fail "source go.mod is not github.com/ariel-frischer/jcode-go"
 
 is_public_jcode_go_remote() {
-  case $1 in
-    https://github.com/ariel-frischer/jcode-go|https://github.com/ariel-frischer/jcode-go.git|git@github.com:ariel-frischer/jcode-go|git@github.com:ariel-frischer/jcode-go.git|ssh://git@github.com/ariel-frischer/jcode-go|ssh://git@github.com/ariel-frischer/jcode-go.git)
-      return 0
+  local remote=$1 host path
+  while [[ $remote == */ ]]; do
+    remote=${remote%/}
+  done
+
+  case $remote in
+    https://*)
+      remote=${remote#https://}
+      remote=${remote#*@}
+      host=${remote%%/*}
+      [[ $host == github.com ]] || return 1
+      path=${remote#*/}
+      ;;
+    ssh://*)
+      remote=${remote#ssh://}
+      remote=${remote#*@}
+      host=${remote%%/*}
+      [[ $host == github.com ]] || return 1
+      path=${remote#*/}
+      ;;
+    git@github.com:*)
+      path=${remote#git@github.com:}
       ;;
     *)
       return 1
       ;;
   esac
+
+  while [[ $path == */ ]]; do
+    path=${path%/}
+  done
+  path=${path%.git}
+  [[ $path == ariel-frischer/jcode-go ]]
 }
 
 git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
