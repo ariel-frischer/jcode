@@ -46,7 +46,7 @@ phases:
           - "Credential-bearing fields are absent from the serialized route contract."
       - id: "T003"
         title: "Implement dependency-light versioned librarian artifact contracts"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
