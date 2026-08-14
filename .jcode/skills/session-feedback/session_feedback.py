@@ -551,6 +551,36 @@ def build_review_outcome(
     }
 
 
+def run_feedback(
+    *,
+    requested_session_id: str | None,
+    current_session_id: str | None,
+    visible_session_ids: Sequence[str],
+    visible_items: Sequence[Mapping[str, Any]],
+    librarian_summary_path: str | Path | None,
+) -> dict[str, Any]:
+    """Run the reusable deterministic portion of one session-feedback review.
+
+    Later tasks extend this orchestrator with acquisition, generation, and persistence.
+    Keeping the entry point here lets the slash skill and a future opt-in pre-close caller
+    share one path without registering or enabling that caller.
+    """
+    invocation = prepare_feedback_invocation(
+        requested_session_id=requested_session_id,
+        current_session_id=current_session_id,
+        visible_session_ids=visible_session_ids,
+        visible_items=visible_items,
+        librarian_summary_path=librarian_summary_path,
+    )
+    outcome = build_review_outcome(session_id=invocation["session_id"])
+    evidence = invocation["evidence"]
+    return {
+        **outcome,
+        "evidence_source": evidence["source"],
+        "accounting": evidence["accounting"],
+    }
+
+
 __all__ = [
     "ContractValidationError",
     "ValidationError",
@@ -571,6 +601,7 @@ __all__ = [
     "parse_contract",
     "prepare_feedback_invocation",
     "proposal_fingerprint",
+    "run_feedback",
     "validate_contract",
     "with_evidence_accounting",
 ]

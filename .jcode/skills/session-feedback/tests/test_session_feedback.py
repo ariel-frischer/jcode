@@ -14,6 +14,8 @@ import json
 import os
 import stat
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -21,6 +23,7 @@ from unittest import mock
 
 SKILL_DIR = Path(__file__).resolve().parents[1]
 HELPER_PATH = SKILL_DIR / "session_feedback.py"
+ENTRYPOINT_PATH = SKILL_DIR / "__main__.py"
 SCHEMA_NAMES = (
     "evidence-v1",
     "proposal-v1",
@@ -365,6 +368,78 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["proposal_count"], 0)
         self.assertIn("invalid", failed["failure"].lower())
+
+
+class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
+    def visible_items(self) -> list[dict[str, str]]:
+        return [
+            {
+                "reference": "outcome-1",
+                "category": "visible_outcome",
+                "summary": "The requested synthetic change was completed.",
+            }
+        ]
+
+    def test_reusable_orchestrator_reports_zero_proposals_and_accounting(self) -> None:
+        result = self.feedback.run_feedback(
+            requested_session_id=None,
+            current_session_id="session-current-1",
+            visible_session_ids=("session-current-1",),
+            visible_items=self.visible_items(),
+            librarian_summary_path=None,
+        )
+
+        self.assertEqual(result["status"], "zero_proposals")
+        self.assertEqual(result["session_id"], "session-current-1")
+        self.assertEqual(result["evidence_source"], "fallback")
+        self.assertEqual(result["proposal_count"], 0)
+        self.assertEqual(result["proposal_locations"], [])
+        self.assertGreater(result["accounting"]["serialized_bytes"], 0)
+        self.assertGreater(result["accounting"]["estimated_tokens"], 0)
+
+    def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(self) -> None:
+        input_document = {
+            "current_session_id": "session-current-1",
+            "visible_session_ids": ["session-current-1", "session-visible-2"],
+            "visible_items": self.visible_items(),
+        }
+
+        cases = (([], "session-current-1"), (["session-visible-2"], "session-visible-2"))
+        for arguments, expected_session_id in cases:
+            with self.subTest(arguments=arguments):
+                completed = subprocess.run(
+                    [sys.executable, str(ENTRYPOINT_PATH), *arguments],
+                    input=json.dumps(input_document),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    env=os.environ.copy(),
+                )
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stderr, "")
+                result = json.loads(completed.stdout)
+                self.assertEqual(result["status"], "zero_proposals")
+                self.assertEqual(result["session_id"], expected_session_id)
+                self.assertEqual(result["evidence_source"], "fallback")
+                self.assertEqual(result["proposal_count"], 0)
+                self.assertEqual(result["proposal_locations"], [])
+                self.assertGreater(result["accounting"]["serialized_bytes"], 0)
+
+    def test_entrypoint_rejects_oversized_input_actionably(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(ENTRYPOINT_PATH)],
+            input=" " * (256 * 1024 + 1),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=os.environ.copy(),
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("input", completed.stderr.lower())
+        self.assertIn("limit", completed.stderr.lower())
 
 
 if __name__ == "__main__":

@@ -149,7 +149,7 @@ phases:
           - "Return a bounded structured review outcome that can represent zero proposals, persisted proposals, or a visible failure without conflating those states."
       - id: "T011"
         title: "Expose the reusable local session-feedback entry point"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
