@@ -203,11 +203,17 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
         return Ok(());
     };
 
-    let Some(trailing_prompt) = invocation.prompt else {
-        app.input = raw_input;
-        app.cursor_pos = app.input.len();
-        app.submit_input();
-        return Ok(());
+    let forwarded_prompt = match invocation.prompt {
+        Some(prompt) => prompt.to_string(),
+        None if invocation.name == "session-feedback" => {
+            format!("current_session_id={}", app.session.id)
+        }
+        None => {
+            app.input = raw_input;
+            app.cursor_pos = app.input.len();
+            app.submit_input();
+            return Ok(());
+        }
     };
 
     let skill_name = invocation.name.to_string();
@@ -238,7 +244,7 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
         .current_skills_snapshot()
         .resolve_invocation(&prepared.expanded)
         .and_then(|invocation| invocation.prompt)
-        .unwrap_or(trailing_prompt)
+        .unwrap_or(&forwarded_prompt)
         .to_string();
     submit_prepared_remote_input(
         app,

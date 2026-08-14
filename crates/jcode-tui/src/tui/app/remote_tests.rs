@@ -608,6 +608,69 @@ fn remote_skill_invocation_with_prompt_sends_remote_turn() {
 }
 
 #[test]
+fn remote_bare_session_feedback_sends_trusted_current_session_turn() {
+    use tokio::io::AsyncBufReadExt;
+
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.runtime_mode = crate::tui::app::AppRuntimeMode::RemoteClient;
+    let session_id = app.session.id.clone();
+    let temp = tempfile::tempdir().expect("create skill dir");
+    let skill_dir = temp.path().join(".jcode/skills/session-feedback");
+    std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\nname: session-feedback\ndescription: Current session feedback\n---\nUse it.\n",
+    )
+    .expect("write skill");
+    app.session.working_dir = Some(temp.path().to_string_lossy().to_string());
+
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let line = rt.block_on(async {
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        remote.mark_history_loaded();
+        let peer = remote
+            .take_dummy_peer()
+            .expect("dummy remote should retain peer stream");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        crate::tui::app::remote::submit_remote_slash_input(
+            &mut app,
+            &mut remote,
+            crate::tui::app::input::PreparedInput {
+                raw_input: "/session-feedback".to_string(),
+                expanded: "/session-feedback".to_string(),
+                images: vec![],
+            },
+        )
+        .await
+        .expect("bare session-feedback should send");
+
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("feedback request should be readable by peer");
+        line
+    });
+
+    match serde_json::from_str::<crate::protocol::Request>(&line)
+        .expect("feedback request should deserialize")
+    {
+        crate::protocol::Request::Message { content, .. } => {
+            assert_eq!(content, format!("current_session_id={session_id}"));
+        }
+        other => panic!("expected Message request, got {:?}", other),
+    }
+    assert_eq!(app.active_skill.as_deref(), Some("session-feedback"));
+    assert!(
+        app.is_processing,
+        "bare feedback should start a remote turn"
+    );
+}
+
+#[test]
 fn process_remote_followups_auto_submits_staged_startup_prompt() {
     // Regression for issues #267/#268/#76: a headed swarm spawn stages its
     // initial prompt into `app.input` with `submit_input_on_startup = true`
