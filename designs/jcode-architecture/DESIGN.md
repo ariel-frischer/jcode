@@ -144,24 +144,24 @@ Jcode's current architecture is a local modular monolith: the CLI/TUI, jcode-des
 <p align="center"><sub>Dashed paths show daemon-owned background and swarm work plus self-dev build and exec reload. External runtimes and user-controlled resources remain outside the trusted Jcode boundary; historical desktop designs are explicitly excluded.</sub></p>
 
 ```mermaid
-%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}}}%%
+%%{init: {"htmlLabels": true, "flowchart": {"htmlLabels": true, "nodeSpacing": 100, "rankSpacing": 140}}}%%
 flowchart LR
   subgraph CurrentSystem[Current Jcode system boundary]
     direction LR
-    Clients[Client Surfaces\njcode CLI and TUI\njcode-desktop2\njcode-sdk and harness API]
-    Gateway[Unix-Socket Protocol Gateway\nversioned newline-delimited JSON]
-    Daemon[Shared Multi-Client Daemon\nsingle local authority]
-    Sessions[Session Lifecycle Manager\nidentity, ordering, replay]
-    AppCore[App-Core Agent Orchestrator\nprovider and tool loop]
-    Adapters[Provider Runtime Adapters\nOpenAI, Anthropic, Bedrock\nOpenRouter, Gemini, Copilot\nClaude CLI, Cursor, Antigravity]
-    Tools[Tool and MCP Runtime\npermissions and execution]
-    AsyncCoordinator[Background Task and Swarm Coordinator\nbounded daemon-owned work]
-    Persistence[Persistence, Memory, and Telemetry Services]
-    EventStore[(Session Event Store\nauthoritative ordered history)]
-    MemoryStore[(Memory Store\nscoped and retention-governed)]
-    TelemetryBuffer[(Telemetry Buffer\nnon-authoritative and bounded)]
-    ReloadManager[Self-Dev Build and Reload Manager]
-    BuildStore[(Build Store and Channel Links\nimmutable versions, current, stable, canary)]
+    Clients[Client Surfaces<br/>jcode CLI + TUI<br/>jcode-desktop2<br/>jcode-sdk + harness API]
+    Gateway[Unix-Socket Protocol Gateway<br/>versioned newline-delimited JSON]
+    Daemon[Shared Multi-Client Daemon<br/>single local authority]
+    Sessions[Session Lifecycle Manager<br/>identity, ordering, replay]
+    AppCore[App-Core Agent Orchestrator<br/>provider + tool loop]
+    Adapters[Provider Runtime Adapters<br/>OpenAI, Anthropic, Bedrock<br/>OpenRouter, Gemini, Copilot<br/>Claude CLI, Cursor, Antigravity]
+    Tools[Tool and MCP Runtime<br/>permissions + execution]
+    AsyncCoordinator[Background Task and Swarm<br/>Coordinator<br/>bounded daemon-owned work]
+    Persistence[Persistence, Memory,<br/>and Telemetry Services]
+    EventStore[(Session Event Store<br/>authoritative ordered history)]
+    MemoryStore[(Memory Store<br/>scoped and retention-governed)]
+    TelemetryBuffer[(Telemetry Buffer<br/>non-authoritative and bounded)]
+    ReloadManager[Self-Dev Build and Reload<br/>Manager]
+    BuildStore[(Build Store and Channel Links<br/>immutable versions<br/>current, stable, canary)]
 
     Clients -->|1 FR-001 prompts and controls| Gateway
     Gateway -->|2 validated local frames| Daemon
@@ -190,10 +190,10 @@ flowchart LR
     Daemon -.->|socket restored and sessions replayed| Clients
   end
 
-  Providers[External Provider APIs and CLIs]
+  Providers[External Provider APIs<br/>and CLIs]
   MCPServers[External MCP Servers]
-  Workspace[(User Workspace\nlocal filesystem)]
-  Historical[Historical or optional desktop architecture\nnot current runtime]
+  Workspace[(User Workspace<br/>local filesystem)]
+  Historical[Historical or optional desktop<br/>architecture<br/>not current runtime]
 
   Adapters -->|provider stream, usage, errors| Providers
   Tools -->|MCP calls| MCPServers
@@ -205,7 +205,7 @@ flowchart LR
     LegendCurrent[Implemented Jcode component]
     LegendStore[(Durable or bounded local store)]
     LegendExternal[External trust boundary]
-    LegendAsync[Dashed arrow means async or lifecycle path]
+    LegendAsync[Dashed arrow means async<br/>or lifecycle path]
     LegendHistorical[Historical or optional context]
   end
 
@@ -225,6 +225,7 @@ flowchart LR
   class LegendCurrent current
   style CurrentSystem fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
   style Legend fill:#ffffff,stroke:#64748b,color:#0f172a,stroke-dasharray: 3 3
+
 ```
 
 ## Key Decisions
