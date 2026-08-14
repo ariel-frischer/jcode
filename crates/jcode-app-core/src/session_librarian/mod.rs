@@ -12,6 +12,9 @@ use jcode_base::{config::LibrarianInvocationOverrides, session::Session};
 use jcode_session_types::{BoundedUsage, SourceFingerprint};
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)]
+mod admission;
+
 /// Canonical source selected for one explicit librarian invocation.
 ///
 /// `Current` borrows the server-owned session directly. `Persisted` is only an

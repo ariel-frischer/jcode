@@ -196,7 +196,7 @@ phases:
           - "Empty eligible content fails before any provider request."
       - id: "T014"
         title: "Implement typed local admission, compact change receipts, secret redaction, and bounded reduction"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
