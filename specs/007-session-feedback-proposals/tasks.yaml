@@ -58,7 +58,7 @@ phases:
           - "Represent only visible outcomes, todo assessments, tool or skill invocation receipts, bounded failure excerpts, validation receipts, and relevant paths."
       - id: "T004"
         title: "Define the canonical proposal v1 JSON Schema"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: null
