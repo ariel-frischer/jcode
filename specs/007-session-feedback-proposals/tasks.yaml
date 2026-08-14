@@ -423,7 +423,7 @@ phases:
           - "Keep persisted configuration isolated to ~/.jcode/feedback/config.json and report only effective non-secret values."
       - id: "T031"
         title: "Document operator configuration and accounting semantics"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-005"

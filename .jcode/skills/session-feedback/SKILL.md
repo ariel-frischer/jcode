@@ -80,6 +80,91 @@ python3 <copy-local-session-feedback/__main__.py> [exact-forwarded-session-id] <
 
 The directory is self-contained and must work unchanged in either supported installation location.
 
+## Operator configuration
+
+The slash surface supports one optional positional argument, `session-id`. The copy-local
+`__main__.py` entry point intentionally exposes no configuration flags. Reusable orchestrators
+and tests may supply the same field names below through the helper's `invocation_config` object.
+Operators may otherwise use the matching environment variables or the JSON object at
+`~/.jcode/feedback/config.json`.
+
+Configuration resolves independently for each field in this exact order:
+
+1. non-empty `invocation_config` value
+2. non-empty `JCODE_SESSION_FEEDBACK_*` environment value
+3. non-empty field in `~/.jcode/feedback/config.json`
+4. built-in default
+
+An empty or whitespace-only string means unset, so resolution continues to the next source.
+A present non-empty invalid value fails at that source without falling back. Unknown invocation
+or persisted fields, malformed or non-object persisted JSON, and persisted files larger than
+65,536 bytes also fail before evidence acquisition or model work. Configuration contains no
+credentials, and diagnostics report only configured and effective non-secret values and their
+sources.
+
+| Invocation/persisted field | Environment variable | Default | Accepted range or values | Unit |
+|---|---|---:|---|---|
+| `model` | `JCODE_SESSION_FEEDBACK_MODEL` | `gpt-5.6-sol` | exactly `gpt-5.6-sol` | model ID |
+| `effort` | `JCODE_SESSION_FEEDBACK_EFFORT` | `medium` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` | effort level |
+| `max_evidence_bytes` | `JCODE_SESSION_FEEDBACK_MAX_EVIDENCE_BYTES` | `262144` | positive integer | exact UTF-8 bytes |
+| `max_excerpt_bytes` | `JCODE_SESSION_FEEDBACK_MAX_EXCERPT_BYTES` | `32768` | positive integer | exact UTF-8 bytes |
+| `max_input_tokens` | `JCODE_SESSION_FEEDBACK_MAX_INPUT_TOKENS` | `32768` | positive integer | estimated tokens |
+| `max_output_tokens` | `JCODE_SESSION_FEEDBACK_MAX_OUTPUT_TOKENS` | `8192` | positive integer | estimated tokens |
+| `max_proposals` | `JCODE_SESSION_FEEDBACK_MAX_PROPOSALS` | `8` | positive integer | proposals |
+| `max_elapsed_seconds` | `JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS` | `120.0` | positive finite number | seconds |
+| `max_estimated_cost_usd` | `JCODE_SESSION_FEEDBACK_MAX_ESTIMATED_COST_USD` | `1.0` | positive finite number | estimated USD |
+
+Integer fields reject booleans, zero, negative, fractional, and nonnumeric values. Numeric fields
+reject booleans, zero, negative, nonnumeric, infinite, and NaN values. Limits are inclusive:
+an observed value equal to its configured maximum is accepted, while a larger value fails
+actionably. Where bounded excerpt truncation is permitted it is deterministic; other exceeded
+limits fail without a second request or partial persistence.
+
+The built-in route is native OpenAI OAuth with model `gpt-5.6-sol`, effort `medium`, and a hard
+maximum of one generator request. Model and effort configuration do not select API-key auth or
+another provider. Do not add credentials to `config.json` or `JCODE_SESSION_FEEDBACK_*` values.
+
+### Accounting labels
+
+- `accounting.evidence.serialized_bytes`, `accounting.evidence_bytes`,
+  `accounting.excerpts.serialized_bytes`, and `accounting.excerpt_bytes` are measured exact
+  UTF-8 byte counts of canonical serialized data.
+- Every `estimated_tokens` value, including `accounting.request_input.estimated_tokens` and
+  `accounting.request_output.estimated_tokens`, is a deterministic estimate labeled as such,
+  calculated as the ceiling of UTF-8 bytes divided by four. It is not provider-reported usage.
+- `accounting.elapsed_seconds` is measured runner elapsed time.
+- `accounting.estimated_cost_usd` is an estimate supplied by the bounded runner receipt, not a
+  billed-cost claim.
+- `accounting.proposal_count` is the validated generated proposal count, and
+  `accounting.request_count` is measured locally and must be `0` or `1`.
+
+### Bounded configuration examples
+
+Persist non-secret limits only:
+
+```json
+{
+  "effort": "low",
+  "max_evidence_bytes": 131072,
+  "max_excerpt_bytes": 16384,
+  "max_input_tokens": 16384,
+  "max_output_tokens": 4096,
+  "max_proposals": 4,
+  "max_elapsed_seconds": 90.0,
+  "max_estimated_cost_usd": 0.5
+}
+```
+
+Override one bounded value for a synthetic or injected-fake-generator run:
+
+```text
+JCODE_SESSION_FEEDBACK_MAX_PROPOSALS=2 \
+python3 <copy-local-session-feedback/__main__.py> < bounded-visible-evidence.json
+```
+
+These examples do not require a live or paid validation request. Use the injected fake generator
+in tests; never weaken the one-request, privacy, or persistence boundaries to exercise config.
+
 ## Report the structured outcome
 
 Parse the helper's JSON result and report:
