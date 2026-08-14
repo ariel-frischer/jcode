@@ -5,13 +5,16 @@ plan:
 
 summary: |
   Add the session librarian as a manually invoked, one-shot server-side workflow
-  reached through Jcode's existing slash-skill and model-tool surfaces. The skill
-  activates the focused librarian tool for the current canonical session. The
-  server reads the existing session record, structurally excludes hidden reasoning,
-  startup instruction bodies, complete skill bodies, and bulk successful tool
-  output, applies the existing local secret redactor, admits content under hard
-  budgets, and invokes a separately resolved provider route without mutating the
-  active session provider.
+  reached through Jcode's existing project/global slash-skill and model-tool
+  surfaces. The skill activates the focused librarian tool for the current canonical
+  session by default or one explicitly named persisted session. The server reads the
+  existing canonical record, structurally excludes hidden reasoning, startup
+  instruction bodies, complete skill bodies, raw edits and patches, inline images,
+  binary/base64 content, and bulk successful tool output. It converts file operations
+  to deterministic bounded receipts from already-recorded metadata, without rereading
+  changed files, applies the existing local secret redactor, admits content under hard
+  global and category budgets, and invokes a separately resolved provider route
+  without mutating the active session provider.
 
   A successful provider response must satisfy a versioned structured schema before
   Jcode renders both Markdown and JSON from the same validated value. The artifact
@@ -20,7 +23,7 @@ summary: |
   makes retries idempotent and prevents readers from observing a partial pair. The
   design adds no automatic task, parallel transcript store, protocol expansion, or
   plugin ABI, and remains removable by deleting the focused workflow, config, tool,
-  and bundled skill registration.
+  and project-local skill source.
 
 technical_context:
   language: "Rust 2024 edition"
@@ -57,13 +60,14 @@ technical_context:
   constraints:
     - "The default route is native OpenAI OAuth, model gpt-5.6-luna, effort xhigh."
     - "Librarian route and budgets resolve independently and never mutate the active session route."
-    - "Conservative built-in limits are 24000 admitted input tokens, 4000 output tokens, 1 provider request, USD 1.00 maximum approved exposure, and a 120-second deadline."
+    - "Conservative built-in limits are 12000 admitted input tokens, 2500 output tokens, 1 provider request, USD 0.50 maximum approved exposure, and a 120-second deadline."
+    - "Local admission additionally caps every serialized file/tool receipt at 1 KiB, every admitted item at 768 tokens, every normalized file at 1200 tokens, and each tool category at 2000 tokens; these fixed safety caps reduce prompt growth without expanding configuration surface."
     - "Input accounting must use an existing provider-aware counter when available and otherwise a conservative upper bound that cannot undercount the configured limit."
     - "All exclusions and recognized-secret redaction occur locally before provider transmission and again before persistence."
     - "No partial or malformed provider response may replace or publish an artifact pair."
     - "No parallel session store, automatic scheduler, general plugin ABI, new protocol contract, or duplicate handoff mechanism is introduced."
     - "The existing handoff contract remains authoritative for handoff_brief meaning and relevant-file normalization."
-  scale_scope: "One manually requested current-session summary at a time per session, one provider request per new fingerprint, and bounded local processing of one canonical session transcript"
+  scale_scope: "One manually requested current-or-explicit-persisted-session summary at a time per target session, one provider request per new fingerprint, and bounded local processing whose admitted size is independent of raw edit, patch, image, binary, and successful-tool payload size"
 
 constitution_check:
   constitution_path: ".autospec/constitution.yaml"
@@ -102,21 +106,21 @@ constitution_check:
 research_findings:
   decisions:
     - topic: "Manual trigger and integration surface"
-      decision: "Ship a bundled session-librarian slash skill that invokes one focused server-side librarian tool through the existing skill and tool registration paths."
-      rationale: "Existing slash skills already provide explicit user activation and tool availability. This avoids a new command protocol, background daemon, hook type, or plugin ABI while guaranteeing no work when unused."
+      decision: "Ship a minimal project-local .jcode/skills/session-librarian/SKILL.md source that invokes one focused server-side librarian tool through the existing skill and tool registration paths; the same file can be copied into ~/.jcode/skills for Ariel's global setup."
+      rationale: "Existing slash skills already accept trailing arguments, provide explicit user activation, and can be loaded globally or per project. This avoids a new command protocol, background daemon, hook type, installer mechanism, or plugin ABI while guaranteeing no work when unused."
       alternatives_considered:
         - "Add a dedicated TUI slash command and protocol request, which increases client and wire surface."
         - "Run from a session hook, which risks automatic activity and violates manual-only behavior."
         - "Create a general sidecar plugin system, which is explicitly out of scope."
     - topic: "Canonical session source and ownership"
-      decision: "Run in the authoritative server process and read the current Session object and existing persisted message model without copying the transcript into another store."
-      rationale: "The server already owns sessions, provider state, tools, and persistence, and a current-session tool can identify the source session without terminal parsing."
+      decision: "Run in the authoritative server process; default to ToolContext.session_id and permit one optional validated session_id that is resolved read-only through the existing canonical session persistence model without copying the transcript into another store."
+      rationale: "The server already owns sessions, provider state, tools, and persistence. Default binding is unambiguous, while explicit persisted targeting supports post-session and handoff workflows without switching or mutating the active session."
       alternatives_considered:
         - "Read TUI display history, which is presentation state and may be incomplete."
         - "Create a librarian transcript database, which would establish a conflicting source of truth."
     - topic: "Transcript admission and privacy"
-      decision: "Build a deterministic local admission pipeline from typed session message and content metadata, remove excluded categories structurally, collapse repeated startup material by stable identity, summarize successful tool calls as bounded metadata, retain concise failures when relevant, and apply jcode-base message::redact_secrets before hashing, transmission, rendering, and diagnostics."
-      rationale: "Typed filtering is safer than prompt-only instructions, while the existing redactor already covers known direct tokens and assignment forms and has focused tests."
+      decision: "Build a deterministic local admission pipeline from typed session message and content metadata. Remove excluded categories structurally; collapse repeated startup material by stable identity; replace successful read/write/edit/multiedit/apply_patch and other tool payloads with receipts capped at 1 KiB containing operation, normalized path, status, available byte/line deltas, concise intent, and content/result hashes; deduplicate retries by operation/path/hash; retain only bounded redacted failure excerpts when relevant; never reread repository files; and apply jcode-base message::redact_secrets before hashing, transmission, rendering, and diagnostics."
+      rationale: "Typed filtering is safer than prompt-only instructions. Receipt size is independent of raw patch size, the no-reread rule avoids duplicate I/O and context, and the existing redactor already covers known direct tokens and assignment forms with focused tests."
       alternatives_considered:
         - "Ask the provider to ignore sensitive or low-value content after transmission."
         - "Filter only by text regexes, which is brittle for typed reasoning and tool content."
@@ -129,14 +133,14 @@ research_findings:
         - "Call the OpenAI HTTP API directly, duplicating authentication and provider behavior."
         - "Inherit the active session route by default, which conflicts with the specified default."
     - topic: "Budget enforcement"
-      decision: "Resolve positive finite hard limits for admitted input, output, requests, approved cost exposure, and deadline; calculate worst-case exposure from route pricing metadata before transmission; set provider output and request caps; stop streaming at the output boundary; reject routes without sufficient capability or pricing evidence."
+      decision: "Resolve positive finite hard limits for admitted input, output, requests, approved cost exposure, and deadline; enforce fixed per-item, per-file, per-tool-category, and 1 KiB receipt caps before global admission; calculate worst-case exposure from route pricing metadata before transmission; set provider output and request caps; stop streaming at the output boundary; reject routes without sufficient capability or pricing evidence."
       rationale: "Preflight worst-case cost plus runtime token/request/deadline guards fails closed and prevents an invocation from exceeding user-approved exposure."
       alternatives_considered:
         - "Track cost only after completion, which cannot enforce a hard limit."
         - "Use character limits alone, which do not match provider token and cost accounting."
         - "Allow unknown pricing with a warning, which weakens the approved-cost contract."
     - topic: "Fingerprint and retry behavior"
-      decision: "Hash a canonical serialization containing fingerprint algorithm version, admitted redacted content, prompt/schema version, route identity, effort, and all summary-affecting budgets and options. Reuse an existing validated generation directory for the same fingerprint."
+      decision: "Hash a canonical serialization containing fingerprint algorithm version, compact admitted redacted items and receipts, prompt/schema/filter/receipt versions, route identity, effort, and all summary-affecting budgets and options. Excluded raw transcript, patch, image, binary, and base64 bytes never enter the hash. Reuse an existing validated generation directory for the same fingerprint."
       rationale: "The fingerprint makes idempotency deterministic while changing whenever source eligibility or output semantics can change."
       alternatives_considered:
         - "Hash the raw transcript, which includes excluded and unstable content."
@@ -177,11 +181,11 @@ data_model:
         - name: "max_input_tokens"
           type: "u32"
           description: "Maximum admitted provider input."
-          constraints: "Positive finite value; default 24000."
+          constraints: "Positive finite value; default 12000."
         - name: "max_output_tokens"
           type: "u32"
           description: "Maximum generated provider output."
-          constraints: "Positive finite value; default 4000."
+          constraints: "Positive finite value; default 2500."
         - name: "max_requests"
           type: "u8"
           description: "Maximum provider requests per invocation."
@@ -189,7 +193,7 @@ data_model:
         - name: "max_cost_usd"
           type: "decimal-compatible string or integer micros"
           description: "Maximum worst-case approved provider cost exposure."
-          constraints: "Positive finite value; default USD 1.00; never represented internally as binary floating-point for boundary comparison."
+          constraints: "Positive finite value; default USD 0.50; never represented internally as binary floating-point for boundary comparison."
         - name: "deadline_seconds"
           type: "u32"
           description: "Wall-clock deadline for the attempt."
@@ -204,11 +208,11 @@ data_model:
         - name: "session_id"
           type: "String"
           description: "Canonical source session identifier."
-          constraints: "Must equal the current tool-owning session."
+          constraints: "Defaults to the current tool-owning session and may equal one explicitly requested existing persisted session; resolution is read-only and cannot switch the active session."
         - name: "items"
           type: "Vec<AdmittedItem>"
-          description: "Ordered decisions, user-visible messages, concise failures, tool metadata, and continuation context."
-          constraints: "Contains no hidden reasoning, complete startup instructions, complete skill bodies, bulk successful tool output, or recognized raw secrets."
+          description: "Ordered decisions, user-visible messages, concise failures, compact tool/change receipts, and continuation context."
+          constraints: "Contains no hidden reasoning, complete startup instructions, complete skill bodies, bulk successful tool output, raw edit/patch content, inline images, binary/base64 blobs, or recognized raw secrets; fixed item, file, and category caps apply before the global cap."
         - name: "input_tokens"
           type: "u32"
           description: "Conservatively accounted admitted input size."
@@ -216,11 +220,38 @@ data_model:
         - name: "filter_version"
           type: "String"
           description: "Version of structural exclusion and deterministic reduction rules."
-          constraints: "Included in the source fingerprint."
+          constraints: "Included in the source fingerprint together with the receipt format version."
       relationships:
         - target: "SourceFingerprint"
           type: "one-to-one"
           description: "The admitted canonical serialization is an input to the fingerprint."
+    - name: "ChangeReceipt"
+      description: "Deterministic bounded replacement for a successful file operation or large tool payload."
+      fields:
+        - name: "operation_and_path"
+          type: "String pair"
+          description: "Normalized tool operation and repository/session-visible path when present."
+          constraints: "No file contents; path is normalized, redacted, and bounded."
+        - name: "status_and_counts"
+          type: "structured metadata"
+          description: "Success/failure plus already-available byte counts, line deltas, replacement count, or result size."
+          constraints: "Never computes missing values by opening the target file."
+        - name: "intent"
+          type: "Option<String>"
+          description: "Concise locally redacted tool intent."
+          constraints: "Bounded and omitted if empty or secret-bearing."
+        - name: "input_fingerprint_and_result_fingerprint"
+          type: "SHA-256 digests"
+          description: "Stable identities used for deduplication and change detection."
+          constraints: "Computed from already-recorded tool call/result bytes before those bytes are discarded; raw bytes are not serialized."
+        - name: "serialized_size"
+          type: "u16"
+          description: "Final receipt size after canonical serialization."
+          constraints: "At most 1024 bytes; oversized optional fields are deterministically removed or truncated."
+      relationships:
+        - target: "AdmittedSessionContent"
+          type: "many-to-one"
+          description: "Receipts are deduplicated by operation, normalized path, and input/result fingerprints before admission."
     - name: "SourceFingerprint"
       description: "Idempotent identity for admitted content and all summary-affecting settings."
       fields:
@@ -245,8 +276,8 @@ data_model:
       fields:
         - name: "session_id"
           type: "String"
-          description: "Current canonical session."
-          constraints: "Required and available before provider work."
+          description: "Current-by-default or explicitly requested canonical persisted session."
+          constraints: "Required, validated through existing session persistence, and available before provider work without changing the active session."
         - name: "fingerprint"
           type: "SourceFingerprint"
           description: "Identity used for locking and reuse."
@@ -353,26 +384,26 @@ project_structure:
     - path: "crates/jcode-app-core/src/session_librarian/"
       description: "Focused admission, filtering, budgeting, fingerprinting, provider invocation, response validation, rendering, locking, and atomic publication owner."
     - path: "crates/jcode-app-core/src/tool/session_librarian.rs"
-      description: "Manual current-session tool schema, invocation boundary, and user-facing success or actionable failure result."
+      description: "Manual current-by-default or explicit-persisted-session tool schema, invocation boundary, and user-facing success or actionable failure result."
     - path: "crates/jcode-app-core/src/tool/mod.rs"
       description: "Register the focused tool through the existing tool surface."
     - path: "crates/jcode-app-core/src/provider/ and server provider wiring"
       description: "Reuse existing provider registry, native OAuth credential resolution, capability validation, usage reporting, and independent provider construction."
-    - path: "repository bundled-skill source used by the existing skill installer"
-      description: "Add the session-librarian slash skill with a minimal prompt that invokes the focused tool and does not embed implementation bodies into summaries."
+    - path: ".jcode/skills/session-librarian/SKILL.md"
+      description: "Add the canonical minimal slash-skill source. It passes an optional trailing session identifier to the focused tool, embeds no implementation bodies, works as the repository-local overlay, and can be copied unchanged to ~/.jcode/skills for global use without a new installer contract."
   tests:
     - path: "crates/jcode-base/src/config_tests/"
       description: "Default, persisted, environment, explicit override, invalid, unsupported, and active-route-isolation matrix."
     - path: "crates/jcode-base/src/message/tests.rs"
       description: "Recognized-secret fixture coverage and safe unchanged-text behavior."
     - path: "crates/jcode-app-core/src/session_librarian/tests/"
-      description: "Structural exclusion, deterministic reduction, token/cost/request/deadline budgets, fingerprints, structured response validation, rendering, locking, idempotency, and interrupted publication tests."
+      description: "Structural exclusion, multi-megabyte edit/patch receipt compaction, no-reread enforcement, deduplication, deterministic reduction, item/file/category/global token budgets, fingerprints, structured response validation, rendering, locking, idempotency, and interrupted publication tests."
     - path: "crates/jcode-app-core/src/tool/"
-      description: "Manual-only tool exposure, current-session binding, exact one-attempt behavior, and actionable result tests."
+      description: "Manual-only tool exposure, current-default and explicit-persisted-session binding, exact one-attempt behavior, missing-target failure, and actionable result tests."
     - path: "crates/jcode-app-core/src/provider tests"
       description: "Fake-provider authentication, route support, output-limit, malformed-response, usage, and active-provider non-mutation tests."
     - path: "crates/jcode-tui/src/tui/app/tests/"
-      description: "Bundled slash-skill discovery and invocation tests using the existing skill path."
+      description: "Project-local slash-skill discovery, optional argument forwarding, and invocation tests using the existing skill overlay path."
     - path: "scripts/check_guardrails.sh"
       description: "Repository delivery gate after focused checks and selfdev runtime validation."
 
@@ -390,7 +421,8 @@ implementation_phases:
     dependencies:
       - "Phase 1"
     deliverables:
-      - "Typed exclusion of hidden reasoning, startup/AGENTS content, skill bodies, and bulk successful tool output"
+      - "Typed exclusion of hidden reasoning, startup/AGENTS content, skill bodies, raw edit/patch/image/binary/base64 payloads, and bulk successful tool output"
+      - "Deterministic change receipts capped at 1 KiB, retry deduplication, fixed item/file/tool-category caps, and proof that admission never rereads repository files"
       - "Existing secret-redaction reuse with fixture-complete privacy tests"
       - "Deterministic priority reduction, token accounting, and versioned SHA-256 fingerprint"
   - phase: 3
@@ -417,7 +449,7 @@ implementation_phases:
     dependencies:
       - "Phase 4"
     deliverables:
-      - "Focused current-session librarian tool and bundled session-librarian skill"
+      - "Focused current-default and explicit-persisted-session librarian tool plus project-local session-librarian skill source"
       - "Zero-work-when-unused and exactly-one-attempt invocation tests"
       - "Success response with artifact path and bounded usage, or one actionable non-secret failure"
   - phase: 6
@@ -428,7 +460,7 @@ implementation_phases:
     deliverables:
       - "Requirement-to-test acceptance matrix and focused Rust test evidence"
       - "Formatting, relevant package checks, Clippy, dependency boundaries, and repository guardrails"
-      - "Selfdev build and isolated-socket slash-skill smoke tests proving unused zero activity, fake-provider success, idempotent reuse, and fail-closed publication"
+      - "Selfdev build and isolated-socket slash-skill smoke tests proving unused zero activity, current and persisted targeting, bounded large-edit receipts, fake-provider success, idempotent reuse, and fail-closed publication"
       - "Configuration, proposal, changelog, and removal/stabilization documentation"
 
 open_questions: []
