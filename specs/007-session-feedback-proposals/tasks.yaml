@@ -137,7 +137,7 @@ phases:
           - "Ensure the narrow exact-name tests compile and run without selecting unrelated stateful TUI tests."
       - id: "T010"
         title: "Implement visible session selection and deterministic fallback acquisition"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

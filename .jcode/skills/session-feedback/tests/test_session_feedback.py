@@ -323,6 +323,49 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertFalse(self.invocation_log.exists())
         self.assertFalse((self.home / ".jcode" / "feedback").exists())
 
+    def test_fallback_rejects_non_allowlisted_visible_evidence(self) -> None:
+        prohibited = self.visible_items() + [
+            {
+                "reference": "transcript-1",
+                "category": "transcript",
+                "summary": "A full transcript must never enter fallback evidence.",
+            }
+        ]
+
+        with self.assertRaises(self.feedback.ContractValidationError) as raised:
+            self.feedback.prepare_feedback_invocation(
+                requested_session_id=None,
+                current_session_id="session-current-1",
+                visible_session_ids=("session-current-1",),
+                visible_items=prohibited,
+                librarian_summary_path=None,
+            )
+
+        self.assertIn("allowlisted", str(raised.exception).lower())
+        self.assertFalse((self.home / ".jcode" / "feedback").exists())
+
+    def test_review_outcomes_keep_success_failure_and_persistence_distinct(self) -> None:
+        zero = self.feedback.build_review_outcome(
+            session_id="session-current-1",
+            proposal_locations=(),
+        )
+        persisted = self.feedback.build_review_outcome(
+            session_id="session-current-1",
+            proposal_locations=("~/.jcode/feedback/proposals/proposal-1.json",),
+        )
+        failed = self.feedback.build_review_outcome(
+            session_id="session-current-1",
+            failure="Synthetic generator output was invalid.",
+        )
+
+        self.assertEqual(zero["status"], "zero_proposals")
+        self.assertEqual(zero["proposal_count"], 0)
+        self.assertEqual(persisted["status"], "proposals_persisted")
+        self.assertEqual(persisted["proposal_count"], 1)
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["proposal_count"], 0)
+        self.assertIn("invalid", failed["failure"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()

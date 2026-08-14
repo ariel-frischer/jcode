@@ -31,6 +31,8 @@ SUPPORTED_CATEGORIES = frozenset(
     }
 )
 MAX_ERROR_LENGTH = 768
+MAX_SESSION_ID_LENGTH = 128
+MAX_PROPOSAL_LOCATIONS = 16
 
 
 class ValidationError(ValueError):
@@ -402,11 +404,159 @@ def with_evidence_accounting(document: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _validate_session_id(field: str, value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValidationError(f"{field} must be a string, got {type(value).__name__}")
+    if not value or value != value.strip():
+        raise ValidationError(
+            f"{field} must be a non-empty session id without surrounding whitespace"
+        )
+    if len(value) > MAX_SESSION_ID_LENGTH:
+        raise ValidationError(f"{field} exceeds the {MAX_SESSION_ID_LENGTH} character limit")
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ValidationError(f"{field} contains a control character")
+    return value
+
+
+def _select_visible_session(
+    requested_session_id: str | None,
+    current_session_id: str | None,
+    visible_session_ids: Sequence[str],
+) -> str:
+    if not isinstance(visible_session_ids, Sequence) or isinstance(
+        visible_session_ids, (str, bytes)
+    ):
+        raise ValidationError("visible_session_ids must be a sequence of session ids")
+    visible = {
+        _validate_session_id(f"visible_session_ids[{index}]", session_id)
+        for index, session_id in enumerate(visible_session_ids)
+    }
+
+    if requested_session_id is None:
+        if current_session_id is None:
+            raise ValidationError(
+                "current session is unavailable; supply a visible session id explicitly"
+            )
+        selected = _validate_session_id("current_session_id", current_session_id)
+    else:
+        selected = _validate_session_id("requested_session_id", requested_session_id)
+
+    if selected not in visible:
+        raise ValidationError(
+            _bounded_error(f"session id {selected!r} is not in the supplied visible session ids")
+        )
+    return selected
+
+
+def _fallback_evidence(visible_items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    if not isinstance(visible_items, Sequence) or isinstance(visible_items, (str, bytes)):
+        raise ValidationError("visible_items must be a sequence of allowlisted evidence objects")
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(visible_items):
+        if not isinstance(item, Mapping):
+            raise ValidationError(f"visible_items[{index}] must be an evidence object")
+        items.append(dict(item))
+
+    document = with_evidence_accounting(
+        {
+            "contract_version": "evidence-v1",
+            "source": "fallback",
+            "items": items,
+        }
+    )
+    try:
+        return validate_contract("evidence-v1", document)
+    except ContractValidationError as error:
+        raise ContractValidationError(
+            _bounded_error(f"fallback evidence must contain only allowlisted visible items: {error}")
+        ) from error
+
+
+def prepare_feedback_invocation(
+    *,
+    requested_session_id: str | None,
+    current_session_id: str | None,
+    visible_session_ids: Sequence[str],
+    visible_items: Sequence[Mapping[str, Any]],
+    librarian_summary_path: str | Path | None,
+) -> dict[str, Any]:
+    """Select a visible session and build its deterministic first-run evidence bundle.
+
+    This preparation step is pure apart from loading the copy-local evidence schema. It
+    does not inspect the selected session, scan the filesystem, invoke a provider, or
+    create feedback state. Librarian acquisition is added by its dedicated later task.
+    """
+    session_id = _select_visible_session(
+        requested_session_id,
+        current_session_id,
+        visible_session_ids,
+    )
+    if librarian_summary_path is not None:
+        raise ValidationError(
+            "librarian_summary_path is unsupported during fallback acquisition; "
+            "supply already-visible items instead"
+        )
+    return {
+        "session_id": session_id,
+        "evidence": _fallback_evidence(visible_items),
+    }
+
+
+def build_review_outcome(
+    *,
+    session_id: str,
+    proposal_locations: Sequence[str] = (),
+    failure: str | None = None,
+) -> dict[str, Any]:
+    """Build a bounded result whose success, persistence, and failure states are distinct."""
+    selected = _validate_session_id("session_id", session_id)
+    if not isinstance(proposal_locations, Sequence) or isinstance(
+        proposal_locations, (str, bytes)
+    ):
+        raise ValidationError("proposal_locations must be a sequence of paths")
+    if len(proposal_locations) > MAX_PROPOSAL_LOCATIONS:
+        raise ValidationError(
+            f"proposal_locations exceeds the {MAX_PROPOSAL_LOCATIONS} item limit"
+        )
+
+    locations: list[str] = []
+    for index, location in enumerate(proposal_locations):
+        if not isinstance(location, str) or not location.strip():
+            raise ValidationError(f"proposal_locations[{index}] must be a non-empty path")
+        if len(location) > 512 or any(
+            ord(character) < 32 or ord(character) == 127 for character in location
+        ):
+            raise ValidationError(f"proposal_locations[{index}] is invalid or oversized")
+        locations.append(location)
+
+    if failure is not None:
+        if locations:
+            raise ValidationError("a failed review outcome cannot include persisted proposals")
+        if not isinstance(failure, str) or not failure.strip():
+            raise ValidationError("failure must be a non-empty string")
+        return {
+            "status": "failed",
+            "session_id": selected,
+            "proposal_count": 0,
+            "proposal_locations": [],
+            "failure": _bounded_error(failure.strip()),
+        }
+
+    return {
+        "status": "proposals_persisted" if locations else "zero_proposals",
+        "session_id": selected,
+        "proposal_count": len(locations),
+        "proposal_locations": locations,
+        "failure": None,
+    }
+
+
 __all__ = [
     "ContractValidationError",
     "ValidationError",
     "canonical_bytes",
     "canonical_json",
+    "build_review_outcome",
     "evidence_accounting",
     "fingerprint_material",
     "load_schema",
@@ -419,6 +569,7 @@ __all__ = [
     "normalize_scope",
     "normalize_text",
     "parse_contract",
+    "prepare_feedback_invocation",
     "proposal_fingerprint",
     "validate_contract",
     "with_evidence_accounting",
