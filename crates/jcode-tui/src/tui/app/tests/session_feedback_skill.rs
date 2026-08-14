@@ -152,8 +152,16 @@ fn session_feedback_discovery_is_inert_and_declares_no_automatic_trigger() {
         "the skill prompt must state the required receipt shape used by evidence-v1"
     );
     assert!(
-        skill.contains("Allowed `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`"),
+        skill.contains("Tool and skill `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`"),
         "the skill prompt must enumerate evidence-v1 invocation outcomes"
+    );
+    assert!(
+        skill.contains("Validation `outcome` values are `passed`, `failed`, or `skipped`"),
+        "the skill prompt must distinguish validation outcomes"
+    );
+    assert!(
+        skill.contains("Todo `status` values are `pending`, `in_progress`, `completed`, or `cancelled`"),
+        "the skill prompt must enumerate evidence-v1 todo statuses"
     );
 }
 

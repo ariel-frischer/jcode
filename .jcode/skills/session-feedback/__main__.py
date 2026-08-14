@@ -37,6 +37,17 @@ INPUT_FIELDS = frozenset(
 )
 
 
+class PartialPersistenceError(ValidationError):
+    """Report committed proposal artifacts when a later proposal fails."""
+
+    def __init__(self, message: str, proposal_locations: Sequence[str]) -> None:
+        self.proposal_locations = list(proposal_locations)
+        locations = ", ".join(self.proposal_locations)
+        super().__init__(
+            f"{message}; already committed proposal locations: {locations}"
+        )
+
+
 def _read_input() -> dict[str, Any]:
     raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
     if len(raw) > MAX_INPUT_BYTES:
@@ -115,18 +126,23 @@ def orchestrate_feedback(
         evidence_digest = hashlib.sha256(
             canonical_json(occurrence_material).encode("utf-8")
         ).hexdigest()
-        persistence = persist_review_proposal(
-            proposal=proposal,
-            evidence_occurrence={
-                "occurrence_id": evidence_digest,
-                "session_id": result["session_id"],
-                "observed_at": observed_at,
-                "evidence_references": proposal["evidence_references"],
-                "evidence_digest": evidence_digest,
-            },
-            feedback_root=root,
-            bd_runner=bd_runner,
-        )
+        try:
+            persistence = persist_review_proposal(
+                proposal=proposal,
+                evidence_occurrence={
+                    "occurrence_id": evidence_digest,
+                    "session_id": result["session_id"],
+                    "observed_at": observed_at,
+                    "evidence_references": proposal["evidence_references"],
+                    "evidence_digest": evidence_digest,
+                },
+                feedback_root=root,
+                bd_runner=bd_runner,
+            )
+        except ValidationError as error:
+            if proposal_locations:
+                raise PartialPersistenceError(str(error), proposal_locations) from error
+            raise
         proposal_locations.extend(
             persistence[path]
             for path in ("proposal_json", "proposal_markdown")

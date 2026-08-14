@@ -49,6 +49,20 @@ def load_helper():
     return module
 
 
+def load_entrypoint():
+    """Load the copy-local entry point for reusable orchestration tests."""
+    spec = importlib.util.spec_from_file_location(
+        "session_feedback_entrypoint_under_test", ENTRYPOINT_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError(
+            f"unable to load session-feedback entrypoint: {ENTRYPOINT_PATH}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def valid_evidence() -> dict[str, object]:
     return {
         "contract_version": "evidence-v1",
@@ -180,6 +194,21 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
 
 
 class SchemaContractTests(IsolatedSessionFeedbackTestCase):
+    def test_skill_documentation_uses_exact_evidence_schema_enums(self) -> None:
+        skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "Tool and skill `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`.",
+            skill,
+        )
+        self.assertIn(
+            "Validation `outcome` values are `passed`, `failed`, or `skipped`.",
+            skill,
+        )
+        self.assertIn(
+            "Todo `status` values are `pending`, `in_progress`, `completed`, or `cancelled`.",
+            skill,
+        )
+
     def test_loads_all_versioned_schemas_relative_to_the_skill(self) -> None:
         for name in SCHEMA_NAMES:
             with self.subTest(schema=name):
@@ -616,6 +645,40 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             sum(entry["accounting"]["bytes"] for entry in excerpts),
             self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
         )
+
+    def test_home_relative_targets_are_never_resolved_under_the_project_root(
+        self,
+    ) -> None:
+        target_root = Path(self.temp_dir.name) / "targets"
+        for relative in ("secret.md", "$home/secret.md"):
+            path = target_root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("must not be read", encoding="utf-8")
+        opener = mock.Mock(side_effect=AssertionError("home-relative target was read"))
+
+        excerpts = self.feedback.load_shortlisted_excerpts(
+            shortlist=[
+                {
+                    "category": "skills",
+                    "scope": "personal-global",
+                    "concrete_target": "~/secret.md",
+                    "selection_evidence": ["path-1"],
+                },
+                {
+                    "category": "global-instructions",
+                    "scope": "personal-global",
+                    "concrete_target": "$home/secret.md",
+                    "selection_evidence": ["path-2"],
+                },
+            ],
+            target_root=target_root,
+            per_excerpt_byte_limit=64,
+            total_excerpt_byte_limit=128,
+            opener=opener,
+        )
+
+        self.assertEqual(excerpts, [])
+        opener.assert_not_called()
         evidence = self.acquire(librarian=None)
         request_accounting = {
             "evidence_bytes": evidence["accounting"]["serialized_bytes"],
@@ -804,6 +867,40 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         }
         budget.update(overrides)
         return budget
+
+    def test_isolated_generator_environment_does_not_inherit_unrelated_secrets(
+        self,
+    ) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "UNRELATED_SECRET": "must-not-cross-boundary",
+                "GITHUB_TOKEN": "must-not-cross-boundary",
+                "AWS_SECRET_ACCESS_KEY": "must-not-cross-boundary",
+                "OPENAI_API_KEY": "must-not-cross-boundary",
+                "JCODE_SOCKET": "/tmp/parent.sock",
+                "LANG": "C.UTF-8",
+            },
+            clear=False,
+        ):
+            environment, workspace, socket_path = (
+                self.feedback._isolated_generation_environment(
+                    Path(self.temp_dir.name) / "isolated-generator"
+                )
+            )
+
+        for key in (
+            "UNRELATED_SECRET",
+            "GITHUB_TOKEN",
+            "AWS_SECRET_ACCESS_KEY",
+            "OPENAI_API_KEY",
+            "JCODE_SOCKET",
+        ):
+            if key in environment:
+                self.fail(f"{key} crossed the isolated generator boundary")
+        self.assertEqual(environment["LANG"], "C.UTF-8")
+        self.assertEqual(Path(environment["HOME"]), workspace.parent)
+        self.assertEqual(Path(environment["JCODE_RUNTIME_DIR"]), socket_path.parent)
 
     def runner_for(
         self,
@@ -1880,6 +1977,56 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(result["accounting"]["observed_output_tokens"], 45)
         runner.assert_called_once()
 
+    def test_partial_persistence_failure_reports_already_committed_locations(
+        self,
+    ) -> None:
+        entrypoint = load_entrypoint()
+        proposals = [valid_proposal(), copy.deepcopy(valid_proposal())]
+        proposals[1]["fingerprint"] = "1" * 64
+        first_locations = {
+            "proposal_json": "/feedback/proposals/first.json",
+            "proposal_markdown": "/feedback/proposals/first.md",
+        }
+        persist = mock.Mock(
+            side_effect=[
+                first_locations,
+                entrypoint.ValidationError("second proposal persistence failed"),
+            ]
+        )
+
+        with (
+            mock.patch.object(
+                entrypoint,
+                "resolve_feedback_config",
+                return_value={"values": {}},
+            ),
+            mock.patch.object(entrypoint, "prepare_feedback_invocation"),
+            mock.patch.object(entrypoint, "bootstrap_feedback_store"),
+            mock.patch.object(
+                entrypoint,
+                "run_feedback",
+                return_value={
+                    "session_id": "session-current-1",
+                    "proposals": proposals,
+                },
+            ),
+            mock.patch.object(entrypoint, "persist_review_proposal", persist),
+            self.assertRaises(entrypoint.PartialPersistenceError) as raised,
+        ):
+            entrypoint.orchestrate_feedback(
+                requested_session_id=None,
+                current_session_id="session-current-1",
+                visible_session_ids=("session-current-1",),
+                visible_items=self.visible_items(),
+                feedback_root=Path(self.temp_dir.name) / "feedback",
+            )
+
+        self.assertEqual(
+            raised.exception.proposal_locations,
+            [first_locations["proposal_json"], first_locations["proposal_markdown"]],
+        )
+        self.assertIn(first_locations["proposal_json"], str(raised.exception))
+
     def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(
         self,
     ) -> None:
@@ -2087,10 +2234,9 @@ else:
         report = jcode_json_report(output)
         self.write_executable(
             bin_dir / "jcode",
-            "import os\n"
             "import time\n"
             "from pathlib import Path\n"
-            "Path(os.environ['SESSION_FEEDBACK_JCODE_LOG']).write_text('called', encoding='utf-8')\n"
+            f"Path({str(log_path)!r}).write_text('called', encoding='utf-8')\n"
             f"time.sleep({sleep_seconds!r})\n"
             f"print({report!r})\n",
         )
@@ -2127,9 +2273,6 @@ else:
                 "HOME": str(home),
                 "PATH": str(bin_dir),
                 "SESSION_FEEDBACK_BD_LOG": str(bin_dir.parent / "bd-invocations.jsonl"),
-                "SESSION_FEEDBACK_JCODE_LOG": str(
-                    bin_dir.parent / "jcode-invocations.log"
-                ),
             }
         )
         environment.update(extra_environment or {})
@@ -2332,7 +2475,7 @@ class GenerationIsolationProcessTests(unittest.TestCase):
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
             "from pathlib import Path\n"
-            "observation = Path(os.environ['SESSION_FEEDBACK_OBSERVATION'])\n"
+            f"observation = Path({str(self.observation)!r})\n"
             "record = {\n"
             "  'argv': sys.argv[1:],\n"
             "  'cwd': os.getcwd(),\n"

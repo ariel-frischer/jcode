@@ -79,6 +79,22 @@ SUPPORTED_EFFORTS = frozenset(
 SUPPORTED_MODELS = frozenset({"gpt-5.6-sol"})
 MAX_FEEDBACK_CONFIG_BYTES = 65_536
 MAX_OAUTH_CREDENTIAL_BYTES = 1_048_576
+GENERATION_ENV_ALLOWLIST = (
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "TERM",
+    "COLORTERM",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "NO_PROXY",
+    "no_proxy",
+    "JCODE_NO_TELEMETRY",
+)
 LIBRARIAN_SUMMARY_VERSION = "session-summary.v1"
 LIBRARIAN_SECTION_FIELDS = (
     "goal",
@@ -740,11 +756,11 @@ def load_shortlisted_excerpts(
                 f"shortlist entry {index} concrete_target must be a string"
             )
         normalized_target = normalize_concrete_target(target)
-        target_path = Path(
-            normalized_target[2:]
-            if normalized_target.startswith("~/")
-            else normalized_target
-        )
+        if normalized_target.startswith(
+            "~/"
+        ) or normalized_target.casefold().startswith("$home/"):
+            continue
+        target_path = Path(normalized_target)
         if ".." in target_path.parts:
             continue
         resolved = (
@@ -1309,9 +1325,11 @@ def _isolated_generation_environment(root: Path) -> tuple[dict[str, str], Path, 
     else:
         raise ValidationError("OpenAI OAuth credential was not found")
 
-    environment = dict(os.environ)
-    environment.pop("OPENAI_API_KEY", None)
-    environment.pop("JCODE_SOCKET", None)
+    environment = {
+        key: value
+        for key in GENERATION_ENV_ALLOWLIST
+        if isinstance((value := os.environ.get(key)), str) and value
+    }
     environment.update(
         {
             "HOME": str(isolated_home),
@@ -1324,7 +1342,11 @@ def _isolated_generation_environment(root: Path) -> tuple[dict[str, str], Path, 
             "JCODE_TEMP_SERVER": "1",
             "JCODE_SERVER_OWNER_PID": str(os.getpid()),
             "JCODE_TEMP_SERVER_IDLE_SECS": "5",
-            "PATH": os.pathsep.join(("/usr/bin", "/bin", environment.get("PATH", ""))),
+            "PATH": os.pathsep.join(
+                part
+                for part in ("/usr/bin", "/bin", environment.get("PATH", ""))
+                if part
+            ),
         }
     )
     if allow_legacy:

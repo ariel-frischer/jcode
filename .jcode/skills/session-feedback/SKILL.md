@@ -43,7 +43,10 @@ Use the exact required fields for each category. Do not substitute a prose-only 
 - `validation_receipt` requires `reference`, `category`, `name`, and `outcome`.
 - `relevant_path` requires `reference`, `category`, and `path`.
 
-Allowed `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`. Allowed todo `status` values are `completed`, `pending`, `blocked`, or `cancelled`. Optional `summary`, `relevant_path`, and `content_hash` fields must still satisfy `evidence-v1` when present.
+Tool and skill `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`.
+Validation `outcome` values are `passed`, `failed`, or `skipped`.
+Todo `status` values are `pending`, `in_progress`, `completed`, or `cancelled`.
+Optional `summary`, `relevant_path`, and `content_hash` fields must still satisfy `evidence-v1` when present.
 
 Use concise summaries and stable bundle-local references. Include a relevant path or content hash only when it is already visible. A short failure excerpt may be included, but never bulk output.
 
