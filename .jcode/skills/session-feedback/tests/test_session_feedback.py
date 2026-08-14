@@ -27,6 +27,7 @@ HELPER_PATH = SKILL_DIR / "session_feedback.py"
 ENTRYPOINT_PATH = SKILL_DIR / "__main__.py"
 PRIVACY_FIXTURE_PATH = SKILL_DIR / "fixtures" / "privacy-sentinels.json"
 GENERATOR_FIXTURE_PATH = SKILL_DIR / "fixtures" / "generator-responses.json"
+DEDUP_FIXTURE_PATH = SKILL_DIR / "fixtures" / "dedup-records.json"
 SCHEMA_NAMES = (
     "evidence-v1",
     "proposal-v1",
@@ -1145,6 +1146,262 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             "replicate",
         ):
             self.assertNotIn(forbidden, flattened_command)
+
+
+class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
+    class FakeBdRunner:
+        def __init__(
+            self,
+            records: list[dict[str, object]],
+            *,
+            fail_operation: str | None = None,
+        ) -> None:
+            self.records = copy.deepcopy(records)
+            self.fail_operation = fail_operation
+            self.commands: list[tuple[tuple[str, ...], Path]] = []
+            self.created: list[dict[str, object]] = []
+            self.appended: list[tuple[str, dict[str, object]]] = []
+
+        def __call__(
+            self, command: list[str] | tuple[str, ...], *, cwd: Path
+        ) -> dict[str, object]:
+            argv = tuple(str(part) for part in command)
+            working_directory = Path(cwd)
+            self.commands.append((argv, working_directory))
+            lowered = {part.lower() for part in argv}
+            prohibited = {"remote", "replicate", "sync", "push", "pull", "delete"}
+            if lowered & prohibited:
+                raise AssertionError(f"prohibited bd operation: {argv}")
+
+            operation = self._operation(argv)
+            if operation == self.fail_operation:
+                return {
+                    "returncode": 23,
+                    "stdout": "",
+                    "stderr": f"synthetic {operation} failure",
+                }
+            if operation == "init":
+                (working_directory / ".beads").mkdir(parents=True, exist_ok=True)
+                return {"returncode": 0, "stdout": "", "stderr": ""}
+            if operation == "list":
+                return {
+                    "returncode": 0,
+                    "stdout": json.dumps(self.records),
+                    "stderr": "",
+                }
+            if operation == "create":
+                bead_id = f"feedback-created-{len(self.created) + 1:03d}"
+                self.created.append({"bead_id": bead_id, "command": argv})
+                return {
+                    "returncode": 0,
+                    "stdout": json.dumps({"id": bead_id}),
+                    "stderr": "",
+                }
+            if operation == "append":
+                bead_id = next(
+                    part for part in argv if part.startswith("feedback-")
+                )
+                payload = json.loads(argv[-1])
+                self.appended.append((bead_id, payload))
+                return {"returncode": 0, "stdout": "", "stderr": ""}
+            raise AssertionError(f"unexpected bd command: {argv}")
+
+        @staticmethod
+        def _operation(argv: tuple[str, ...]) -> str:
+            if "init" in argv:
+                return "init"
+            if "list" in argv:
+                return "list"
+            if "create" in argv:
+                return "create"
+            if "comment" in argv or "comments" in argv:
+                return "append"
+            return "unknown"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.fixture = json.loads(DEDUP_FIXTURE_PATH.read_text(encoding="utf-8"))
+        self.feedback_root = self.home / ".jcode" / "feedback"
+
+    def records(self, *fingerprint_names: str) -> list[dict[str, object]]:
+        records_by_fingerprint = self.fixture["records_by_fingerprint"]
+        fingerprints = self.fixture["fingerprints"]
+        return [
+            copy.deepcopy(record)
+            for name in fingerprint_names
+            for record in records_by_fingerprint[fingerprints[name]["value"]]
+        ]
+
+    def proposal(self, fingerprint_name: str) -> dict[str, object]:
+        fingerprint = self.fixture["fingerprints"][fingerprint_name]
+        material = fingerprint["material"]
+        proposal = valid_proposal()
+        proposal.update(
+            {
+                "target": {
+                    "category": material["category"],
+                    "scope": material["scope"],
+                    "concrete_target": material["concrete_target"],
+                },
+                "problem": material["problem"],
+                "expected_benefit": material["intended_outcome"],
+                "fingerprint": fingerprint["value"],
+            }
+        )
+        return proposal
+
+    @staticmethod
+    def occurrence(suffix: str = "new") -> dict[str, object]:
+        return {
+            "occurrence_id": f"occurrence-{suffix}",
+            "session_id": f"session-{suffix}",
+            "observed_at": "2026-08-14T07:00:00Z",
+            "evidence_references": [f"outcome-{suffix}"],
+            "evidence_digest": hashlib.sha256(suffix.encode()).hexdigest(),
+        }
+
+    def persist(
+        self,
+        fingerprint_name: str,
+        runner: "LocalPersistenceAndDeduplicationTests.FakeBdRunner",
+        *,
+        occurrence: dict[str, object] | None = None,
+        atomic_replace=None,
+    ) -> dict[str, object]:
+        kwargs: dict[str, object] = {
+            "proposal": self.proposal(fingerprint_name),
+            "evidence_occurrence": occurrence or self.occurrence(fingerprint_name),
+            "feedback_root": self.feedback_root,
+            "bd_runner": runner,
+        }
+        if atomic_replace is not None:
+            kwargs["atomic_replace"] = atomic_replace
+        return self.feedback.persist_review_proposal(**kwargs)
+
+    def assert_only_local_bd_commands(self, runner: FakeBdRunner) -> None:
+        self.assertTrue(runner.commands)
+        for command, cwd in runner.commands:
+            self.assertEqual(command[0], "bd")
+            self.assertTrue(cwd.is_relative_to(self.feedback_root))
+            self.assertFalse(
+                {"remote", "replicate", "sync", "push", "pull"}
+                & {part.lower() for part in command}
+            )
+
+    def test_bootstrap_is_idempotent_local_and_non_replicated(self) -> None:
+        runner = self.FakeBdRunner([])
+
+        first = self.feedback.bootstrap_feedback_store(
+            feedback_root=self.feedback_root, bd_runner=runner
+        )
+        second = self.feedback.bootstrap_feedback_store(
+            feedback_root=self.feedback_root, bd_runner=runner
+        )
+
+        self.assertEqual(first, second)
+        for path in (
+            self.feedback_root,
+            self.feedback_root / "runs",
+            self.feedback_root / "proposals",
+            self.feedback_root / ".beads",
+        ):
+            self.assertTrue(path.is_dir(), path)
+        init_commands = [command for command, _ in runner.commands if "init" in command]
+        self.assertEqual(len(init_commands), 1)
+        self.assertFalse((self.feedback_root / ".beads" / "remotes.json").exists())
+        self.assert_only_local_bd_commands(runner)
+
+    def test_finds_matches_across_allowed_lifecycle_states_only(self) -> None:
+        for name, expected_bead_id in (
+            ("open", "feedback-open-001"),
+            ("in_progress", "feedback-progress-001"),
+            ("relevant_closed", "feedback-closed-relevant-001"),
+        ):
+            with self.subTest(state=name):
+                runner = self.FakeBdRunner(self.records(name))
+                result = self.persist(name, runner)
+                self.assertEqual(result["action"], "evidence_appended")
+                self.assertEqual(result["bead_id"], expected_bead_id)
+                self.assertEqual(len(runner.appended), 1)
+                self.assertEqual(runner.created, [])
+
+        runner = self.FakeBdRunner(self.records("unrelated_closed"))
+        result = self.persist("unrelated_closed", runner)
+        self.assertEqual(result["action"], "created")
+        self.assertEqual(len(runner.created), 1)
+        self.assertEqual(runner.appended, [])
+
+    def test_appends_only_new_evidence_and_creates_one_needs_approval_record(self) -> None:
+        duplicate = copy.deepcopy(
+            self.fixture["cases"]["duplicate_evidence"]["incoming_occurrence"]
+        )
+        runner = self.FakeBdRunner(self.records("duplicate_evidence"))
+        result = self.persist("duplicate_evidence", runner, occurrence=duplicate)
+        self.assertEqual(result["action"], "duplicate_evidence_ignored")
+        self.assertEqual(runner.appended, [])
+        self.assertEqual(runner.created, [])
+
+        fresh = self.occurrence("fresh-duplicate")
+        result = self.persist("duplicate_evidence", runner, occurrence=fresh)
+        self.assertEqual(result["action"], "evidence_appended")
+        self.assertEqual(runner.appended, [("feedback-duplicate-evidence-001", fresh)])
+        self.assertEqual(runner.created, [])
+
+        unique_runner = self.FakeBdRunner([])
+        result = self.persist("unique", unique_runner)
+        self.assertEqual(result["action"], "created")
+        self.assertEqual(len(unique_runner.created), 1)
+        create_command = " ".join(unique_runner.created[0]["command"])
+        self.assertIn("session-feedback", create_command)
+        self.assertIn("needs-approval", create_command)
+        self.assertEqual(unique_runner.appended, [])
+        self.assert_only_local_bd_commands(unique_runner)
+
+    def test_ambiguous_malformed_and_bootstrap_failures_leave_no_partial_state(self) -> None:
+        target = SKILL_DIR / "SKILL.md"
+        target_before = target.read_bytes()
+        failure_cases = (
+            (
+                "ambiguous matches",
+                self.FakeBdRunner(self.records("ambiguous")),
+                "ambiguous",
+            ),
+            (
+                "malformed records",
+                self.FakeBdRunner([{"status": "open", "labels": ["session-feedback"]}]),
+                "malformed",
+            ),
+            ("bootstrap failure", self.FakeBdRunner([], fail_operation="init"), "init"),
+        )
+        for index, (label, runner, expected_error) in enumerate(failure_cases):
+            self.feedback_root = (
+                self.home / ".jcode" / "feedback" / f"failure-{index}"
+            )
+            with self.subTest(case=label), self.assertRaisesRegex(
+                self.feedback.ValidationError, expected_error
+            ):
+                self.persist("ambiguous", runner)
+            self.assertEqual(runner.created, [])
+            self.assertEqual(runner.appended, [])
+            self.assertEqual(list(self.feedback_root.glob("*.tmp")), [])
+            self.assertEqual(list((self.feedback_root / "proposals").glob("*")), [])
+            self.assertEqual(target.read_bytes(), target_before)
+
+    def test_atomic_write_failure_is_not_reported_as_success(self) -> None:
+        runner = self.FakeBdRunner([])
+
+        def fail_replace(_source: Path, _destination: Path) -> None:
+            raise OSError("synthetic unwritable storage")
+
+        with self.assertRaisesRegex(
+            self.feedback.ValidationError, "unwritable|atomic|persist"
+        ):
+            self.persist("unique", runner, atomic_replace=fail_replace)
+
+        self.assertEqual(runner.created, [])
+        self.assertEqual(runner.appended, [])
+        self.assertEqual(list((self.feedback_root / "proposals").glob("*")), [])
+        self.assertEqual(list(self.feedback_root.rglob("*.tmp")), [])
 
 
 class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):

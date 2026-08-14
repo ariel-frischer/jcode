@@ -340,7 +340,7 @@ phases:
           - "Do not require or encode a remote, replication target, repository Beads path, or external identity."
       - id: "T025"
         title: "Write bootstrap, persistence, and deduplication tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
