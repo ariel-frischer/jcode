@@ -192,7 +192,7 @@ phases:
           - "Keep the fixture deterministic and below repository review limits."
       - id: "T014"
         title: "Write privacy, normalization, shortlist, and excerpt-gating tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"

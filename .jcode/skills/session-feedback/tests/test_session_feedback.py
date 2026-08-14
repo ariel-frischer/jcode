@@ -8,6 +8,7 @@ from the developer environment.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -24,6 +25,7 @@ from unittest import mock
 SKILL_DIR = Path(__file__).resolve().parents[1]
 HELPER_PATH = SKILL_DIR / "session_feedback.py"
 ENTRYPOINT_PATH = SKILL_DIR / "__main__.py"
+PRIVACY_FIXTURE_PATH = SKILL_DIR / "fixtures" / "privacy-sentinels.json"
 SCHEMA_NAMES = (
     "evidence-v1",
     "proposal-v1",
@@ -368,6 +370,180 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["proposal_count"], 0)
         self.assertIn("invalid", failed["failure"].lower())
+
+
+class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.fixture = json.loads(PRIVACY_FIXTURE_PATH.read_text(encoding="utf-8"))
+        self.session_id = self.fixture["session"]["current_session_id"]
+        self.fallback_items = self.fixture["inputs"]["fallback"]["visible_items"]
+        self.sentinels = tuple(self.fixture["sentinels"].values())
+
+    def write_librarian_summary(self, document: dict[str, object]) -> Path:
+        path = Path(self.temp_dir.name) / "visible-summary.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path
+
+    def acquire(
+        self,
+        *,
+        librarian: dict[str, object] | None,
+        visible_items: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        path = self.write_librarian_summary(librarian) if librarian is not None else None
+        return self.feedback.acquire_evidence(
+            session_id=self.session_id,
+            librarian_summary_path=path,
+            visible_items=self.fallback_items if visible_items is None else visible_items,
+        )
+
+    def assert_sentinels_absent(self, value: object, surface: str) -> None:
+        serialized = self.feedback.canonical_json(value)
+        for sentinel in self.sentinels:
+            with self.subTest(surface=surface, sentinel=sentinel):
+                self.assertNotIn(sentinel, serialized)
+
+    def test_librarian_and_fallback_normalize_to_the_same_v1_items(self) -> None:
+        librarian = self.acquire(librarian=self.fixture["inputs"]["compatible_librarian"])
+        fallback = self.acquire(librarian=None)
+
+        self.assertEqual(librarian["contract_version"], "evidence-v1")
+        self.assertEqual(fallback["contract_version"], "evidence-v1")
+        self.assertEqual(librarian["source"], "librarian")
+        self.assertEqual(fallback["source"], "fallback")
+        self.assertEqual(librarian["items"], fallback["items"])
+        self.assertEqual(librarian["accounting"], fallback["accounting"])
+        self.feedback.validate_contract("evidence-v1", librarian)
+        self.feedback.validate_contract("evidence-v1", fallback)
+
+    def test_unsupported_librarian_falls_back_only_with_sufficient_visible_evidence(self) -> None:
+        unsupported = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
+        unsupported["summary_version"] = "librarian-summary-v2"
+
+        fallback = self.acquire(librarian=unsupported)
+        self.assertEqual(fallback["source"], "fallback")
+        self.assertEqual(fallback["items"], self.fallback_items)
+
+        with self.assertRaises(self.feedback.ValidationError) as raised:
+            self.acquire(librarian=unsupported, visible_items=[])
+
+        message = str(raised.exception).lower()
+        self.assertIn("librarian", message)
+        self.assertIn("fallback", message)
+        self.assertIn("evidence", message)
+
+    def test_prohibited_sentinels_never_reach_any_downstream_surface(self) -> None:
+        evidence = self.acquire(librarian=self.fixture["inputs"]["compatible_librarian"])
+        shortlist = self.feedback.shortlist_targets(evidence)
+        prompt = self.feedback.canonical_json(
+            {"evidence": evidence, "shortlist": shortlist, "excerpts": []}
+        )
+        generator_recording = {"request_input": prompt, "request_count": 1}
+        generator_output = {"contract_version": "generator-response-v1", "proposals": []}
+        run_accounting = {
+            "evidence_bytes": evidence["accounting"]["serialized_bytes"],
+            "excerpt_bytes": 0,
+            "request_input": self.feedback.measure_text("request_input", prompt),
+        }
+        surfaces = {
+            "normalized evidence": evidence,
+            "excerpts": [],
+            "prompt": prompt,
+            "generator recording": generator_recording,
+            "generator output": generator_output,
+            "persisted run accounting": run_accounting,
+        }
+        for surface, value in surfaces.items():
+            self.assert_sentinels_absent(value, surface)
+
+    def test_shortlist_is_stable_and_does_not_open_targets(self) -> None:
+        evidence = self.acquire(librarian=None)
+        reordered = copy.deepcopy(evidence)
+        reordered["items"] = list(reversed(reordered["items"]))
+        reordered = self.feedback.with_evidence_accounting(reordered)
+
+        with mock.patch("builtins.open", side_effect=AssertionError("pre-shortlist target read")):
+            first = self.feedback.shortlist_targets(evidence)
+            second = self.feedback.shortlist_targets(reordered)
+
+        self.assertEqual(first, second)
+        self.assertGreater(len(first), 0)
+        self.assertEqual(
+            [entry["concrete_target"] for entry in first],
+            sorted(entry["concrete_target"] for entry in first),
+        )
+
+    def test_only_shortlisted_skill_or_instruction_targets_yield_excerpts(self) -> None:
+        target_root = Path(self.temp_dir.name) / "targets"
+        skill_path = target_root / ".jcode" / "skills" / "example" / "SKILL.md"
+        instructions_path = target_root / "AGENTS.md"
+        config_path = target_root / ".jcode" / "config.json"
+        for path, content in (
+            (skill_path, "skill excerpt with é and bounded trailing content"),
+            (instructions_path, "instruction excerpt"),
+            (config_path, '{"must_not_be_read": true}'),
+        ):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
+        shortlist = [
+            {
+                "category": "skills",
+                "scope": "project-jcode",
+                "concrete_target": ".jcode/skills/example/SKILL.md",
+                "selection_evidence": ["skill-1"],
+            },
+            {
+                "category": "global-instructions",
+                "scope": "project-jcode",
+                "concrete_target": "AGENTS.md",
+                "selection_evidence": ["path-1"],
+            },
+            {
+                "category": "hooks-config",
+                "scope": "project-jcode",
+                "concrete_target": ".jcode/config.json",
+                "selection_evidence": ["path-1"],
+            },
+        ]
+        opened: list[Path] = []
+
+        def recording_open(path: str | Path, *args, **kwargs):
+            opened.append(Path(path).resolve())
+            return open(path, *args, **kwargs)
+
+        excerpts = self.feedback.load_shortlisted_excerpts(
+            shortlist=shortlist,
+            target_root=target_root,
+            per_excerpt_byte_limit=20,
+            total_excerpt_byte_limit=40,
+            opener=recording_open,
+        )
+
+        self.assertEqual(opened, [skill_path.resolve(), instructions_path.resolve()])
+        self.assertNotIn(config_path.resolve(), opened)
+        self.assertEqual(
+            [entry["concrete_target"] for entry in excerpts],
+            [".jcode/skills/example/SKILL.md", "AGENTS.md"],
+        )
+        for entry in excerpts:
+            measurement = self.feedback.measure_text("excerpt", entry["excerpt"])
+            self.assertEqual(entry["accounting"], measurement)
+            self.assertLessEqual(entry["accounting"]["bytes"], 20)
+        self.assertEqual(
+            sum(entry["accounting"]["bytes"] for entry in excerpts),
+            self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
+        )
+        evidence = self.acquire(librarian=None)
+        request_accounting = {
+            "evidence_bytes": evidence["accounting"]["serialized_bytes"],
+            "excerpt_bytes": self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
+        }
+        self.assertEqual(
+            request_accounting["excerpt_bytes"],
+            self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
+        )
 
 
 class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
