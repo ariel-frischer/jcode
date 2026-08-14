@@ -27,7 +27,7 @@ mermaid: |
       end
       ClientHub[Client Surface Router<br/>fan-in / fan-out]
       Gateway[Unix-Socket Protocol Gateway<br/>versioned newline-delimited JSON]
-      Daemon[Shared Multi-Client Daemon<br/>single local authority]
+      Daemon[Jcode Daemon<br/>shared multi-client authority]
       Sessions[Session Lifecycle Manager<br/>identity, ordering, replay]
       AppCore[App-Core Agent Orchestrator<br/>provider + tool loop]
       Adapters[Provider Runtime Adapters<br/>OpenAI, Anthropic, Bedrock<br/>OpenRouter, Gemini, Copilot<br/>Claude CLI, Cursor, Antigravity]
@@ -43,10 +43,10 @@ mermaid: |
       CliTui --> ClientHub
       Desktop --> ClientHub
       Sdk --> ClientHub
-      ClientHub -->|1 FR-001 prompts and controls| Gateway
+      ClientHub -->|1 prompts and controls| Gateway
       Gateway -->|2 validated local frames| Daemon
       Daemon -->|3 route and serialize| Sessions
-      Sessions -->|4 FR-002 accepted turn| AppCore
+      Sessions -->|4 accepted turn| AppCore
       AppCore -->|5 selected runtime request| Adapters
       AppCore -->|6 permissioned tool request| Tools
       Tools -->|7 structured tool result| AppCore
@@ -59,11 +59,11 @@ mermaid: |
       Daemon -->|10 ordered event stream| Gateway
       Gateway -->|11 render or reconnect| ClientHub
 
-      Daemon -.->|FR-003 async accept and schedule| AsyncCoordinator
+      Daemon -.->|async accept and schedule| AsyncCoordinator
       AsyncCoordinator -.->|ordered progress and reconciliation| Sessions
       AsyncCoordinator -.->|durable task state| Persistence
 
-      ClientHub -.->|FR-005 async self-dev build| ReloadManager
+      ClientHub -.->|async self-dev build| ReloadManager
       ReloadManager -.->|validated immutable binary| BuildStore
       BuildStore -.->|atomic channel selection| ReloadManager
       ReloadManager -.->|drain, persist, exec reload| Daemon
@@ -73,21 +73,19 @@ mermaid: |
     Providers[External Provider APIs<br/>and CLIs]
     MCPServers[External MCP Servers]
     Workspace[(User Workspace<br/>local filesystem)]
-    Historical[Historical or optional desktop<br/>architecture<br/>not current runtime]
 
     Adapters -->|provider stream, usage, errors| Providers
     Tools -->|MCP calls| MCPServers
     Tools -->|approved filesystem and process effects| Workspace
-    Historical -.->|excluded from current boundary| ClientHub
 
-    subgraph Legend[Legend]
+    subgraph Legend[Legend / map key]
       direction LR
       LegendCurrent[Implemented Jcode component]
       LegendStore[(Durable or bounded local store)]
       LegendExternal[External trust boundary]
       LegendAsync[Dashed arrow means async<br/>or lifecycle path]
       LegendHistorical[Historical or optional context]
-      LegendCurrent --> LegendStore --> LegendExternal --> LegendAsync --> LegendHistorical
+      LegendCurrent --> LegendStore --> LegendExternal -.-> LegendAsync --> LegendHistorical
     end
 
     classDef current fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
@@ -102,7 +100,7 @@ mermaid: |
     class EventStore,MemoryStore,TelemetryBuffer,BuildStore,LegendStore storage
     class AsyncCoordinator,ReloadManager,LegendAsync async
     class Providers,MCPServers,Workspace,LegendExternal external
-    class Historical,LegendHistorical historical
+    class LegendHistorical historical
     class LegendCurrent current
     style CurrentSystem fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
     style Legend fill:#ffffff,stroke:#64748b,color:#0f172a,stroke-dasharray: 3 3
