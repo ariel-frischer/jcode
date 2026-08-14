@@ -95,7 +95,7 @@ phases:
           - "Invalid, unsupported, missing-authentication, unknown-pricing, and unsafe-cost configurations produce distinct actionable errors before content transmission."
       - id: "T007"
         title: "Define librarian invocation, admission, generation, and publication interfaces"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
