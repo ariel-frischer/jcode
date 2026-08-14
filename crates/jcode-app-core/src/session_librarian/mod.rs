@@ -191,6 +191,10 @@ pub trait SessionLibrarian: Send + Sync {
 mod admission_tests;
 
 #[cfg(test)]
+#[path = "tests/fingerprint.rs"]
+mod fingerprint_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

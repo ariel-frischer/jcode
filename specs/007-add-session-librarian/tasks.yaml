@@ -210,7 +210,7 @@ phases:
           - "Fixed 768-token item, 1200-token file, and 2000-token tool-category caps apply before deterministic reduction to the 12000-token default global limit or rejection before generation."
       - id: "T015"
         title: "Write fingerprint stability and idempotency tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
