@@ -3,10 +3,13 @@
   "date": "2026-08-11",
   "title": "Reliable streams and desktop session overview",
   "highlights": [
-    "Desktop sessions now include a restored Super-key overview with clickable session navigation"
+    "Desktop sessions now include a restored Super-key overview with clickable session navigation",
+    "The session librarian can now be invoked manually through its slash skill to create safe, versioned Markdown and JSON summaries for the current or a named persisted session"
   ],
   "improvements": [
-    "The desktop overview shortcut works safely across compositors"
+    "The desktop overview shortcut works safely across compositors",
+    "Session librarian summaries include a handoff brief and relevant files for reuse by the existing handoff workflow",
+    "The session librarian uses an independently resolved provider route and enforces hard request, token, cost, and deadline budgets"
   ],
   "fixes": [
     "Transient stream_read_error failures are now recognized as retryable transport errors"

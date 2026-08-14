@@ -375,7 +375,7 @@ phases:
           - "Examples contain no live credentials and explain that no cost or work occurs before manual invocation."
       - id: "T027"
         title: "Add the canonical changelog entry for the session librarian"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: true
         story_id: null
