@@ -3724,6 +3724,11 @@ impl App {
                 });
                 if let Some(prompt) = trailing_prompt {
                     input = prompt;
+                } else if skill_name == "session-feedback" {
+                    // This explicit workflow runs immediately for the current
+                    // session. Forward the trusted in-memory ID rather than
+                    // asking the skill to discover sessions from storage.
+                    input = self.session.id.clone();
                 } else {
                     return;
                 }

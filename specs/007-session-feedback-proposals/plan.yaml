@@ -9,8 +9,9 @@ summary: |
   owns deterministic configuration resolution, evidence normalization, target shortlisting,
   budget enforcement, proposal validation, fingerprinting, accounting, and local persistence.
   The same directory is location-independent so it can be copied unchanged from
-  .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback. No production Rust,
-  protocol, SDK, hook, or new CLI surface is planned.
+  .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback. One narrow TUI routing
+  special case forwards the trusted current session ID for a bare `/session-feedback` invocation;
+  no protocol, SDK, hook, Cargo dependency, or new CLI surface is added.
 
   Evidence enters through one versioned allowlisted JSON contract. A compatible librarian
   summary is accepted only when its already-visible path is explicitly cited; otherwise the
@@ -53,7 +54,7 @@ technical_context:
     - "The default generation route is native OpenAI OAuth, model gpt-5.6-sol, medium effort, with one request maximum."
     - "All feedback-specific state and outputs remain under ~/.jcode/feedback/ and Beads replication is never configured."
     - "Proposal creation and evidence append are the only permitted mutations; targets and approval state remain unchanged."
-    - "No production core-Jcode, Cargo dependency, feedback CLI, automatic hook, pre-close prompt, patch application, approval, or implementation behavior is added."
+    - "Beyond the narrow TUI current-session argument forwarding required by bare `/session-feedback`, no production core-Jcode surface, Cargo dependency, feedback CLI, automatic hook, pre-close prompt, patch application, approval, or implementation behavior is added."
     - "The artifact directory must work unchanged from project-local and user-global skill locations."
   scale_scope: "One bounded human-triggered review at a time, a small configurable proposal count per invocation, and a local proposal queue searched by normalized fingerprint across feedback-labeled open, in-progress, and closed records."
 
@@ -62,7 +63,7 @@ constitution_check:
   gates:
     - name: "Surgical, Scope-Bound Changes"
       status: "PASS"
-      notes: "The plan adds one removable skill directory and focused tests, with production Rust changes explicitly excluded unless later evidence proves a narrow boundary unavoidable."
+      notes: "The plan adds one removable skill directory, focused tests, and the five-line TUI current-session forwarding boundary that runtime acceptance proved necessary for bare `/session-feedback`; no broader routing or core refactor is included."
     - name: "Backward-Compatible User and Data Contracts"
       status: "PASS"
       notes: "The slash skill is additive and absent-by-default; normal Jcode behavior and existing persisted contracts remain unchanged when it is absent or unused."

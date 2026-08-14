@@ -70,13 +70,13 @@ fn session_feedback_skill_is_discoverable_and_bare_invocation_selects_current_se
 
     assert_eq!(app.active_skill.as_deref(), Some("session-feedback"));
     assert_eq!(app.session.id, session_id);
-    assert_eq!(
-        app.session.messages.len(),
-        initial_session_messages,
-        "bare invocation must not invent or forward a named-session argument"
-    );
-    assert!(!app.pending_turn);
-    assert!(!app.is_processing);
+    assert_eq!(app.session.messages.len(), initial_session_messages + 1);
+    assert!(matches!(
+        app.session.messages.last().map(|message| message.content.as_slice()),
+        Some([ContentBlock::Text { text, .. }]) if text == &session_id
+    ));
+    assert!(app.pending_turn);
+    assert!(app.is_processing);
 }
 
 #[test]
@@ -155,6 +155,7 @@ fn copied_global_session_feedback_skill_is_discoverable_and_forwards_arguments()
         let workspace = tempfile::tempdir().expect("isolated workspace");
 
         let mut current = app_with_working_dir(workspace.path());
+        let current_session_id = current.session.id.clone();
         let initial_session_messages = current.session.messages.len();
         assert!(
             current
@@ -167,8 +168,17 @@ fn copied_global_session_feedback_skill_is_discoverable_and_forwards_arguments()
         current.cursor_pos = current.input.len();
         current.submit_input();
         assert_eq!(current.active_skill.as_deref(), Some("session-feedback"));
-        assert_eq!(current.session.messages.len(), initial_session_messages);
-        assert!(!current.pending_turn);
+        assert_eq!(current.session.messages.len(), initial_session_messages + 1);
+        assert!(matches!(
+            current
+                .session
+                .messages
+                .last()
+                .map(|message| message.content.as_slice()),
+            Some([ContentBlock::Text { text, .. }]) if text == &current_session_id
+        ));
+        assert!(current.pending_turn);
+        assert!(current.is_processing);
 
         let mut named = app_with_working_dir(workspace.path());
         let visible_session_id = "session-visible_global_01";

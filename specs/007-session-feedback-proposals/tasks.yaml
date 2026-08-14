@@ -24,7 +24,7 @@ phases:
         file_path: ".jcode/skills/session-feedback/fixtures/README.md"
         dependencies: []
         acceptance_criteria:
-          - "Create the project-local session-feedback directory layout without adding a Cargo dependency, production Rust surface, automatic hook, or jcode feedback command."
+          - "Create the project-local session-feedback directory layout without adding a Cargo dependency, automatic hook, or jcode feedback command; reserve any production Rust change for a later proven public-integration boundary."
           - "Document that fixtures must be synthetic, bounded, allowlisted, deterministic, and free of transcripts, raw patches, images, binary/base64 data, credentials, and bulk successful tool output."
           - "Keep every runtime artifact location-independent so the complete skill directory can later be copied unchanged to ~/.jcode/skills/session-feedback."
 
@@ -133,7 +133,7 @@ phases:
         file_path: "crates/jcode-tui/src/tui/app/tests.rs"
         dependencies: ["T008"]
         acceptance_criteria:
-          - "Include the new focused test module using the existing app-test organization without changing production routing behavior."
+          - "Include the new focused test module using the existing app-test organization and permit only the narrow current-session forwarding behavior required for a bare `/session-feedback` invocation."
           - "Ensure the narrow exact-name tests compile and run without selecting unrelated stateful TUI tests."
       - id: "T010"
         title: "Implement visible session selection and deterministic fallback acquisition"
@@ -488,7 +488,7 @@ phases:
         dependencies: ["T033", "T034"]
         acceptance_criteria:
           - "Document unchanged copy from .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback, first-run local bootstrap, output locations, removal behavior, and visible failure recovery."
-          - "State that the skill adds no production core-Jcode requirement, feedback CLI, plugin ABI, session-end trigger, pre-close prompt, replication, approval, patch, or implementation behavior."
+          - "State that the skill requires only the narrow TUI current-session forwarding integration and adds no feedback CLI, plugin ABI, session-end trigger, pre-close prompt, replication, approval, patch, or implementation behavior."
           - "Keep the orchestrator interface reusable while making the v1 human-triggered review-only boundary unambiguous."
 
   - number: 9
@@ -532,7 +532,7 @@ phases:
           - "Validate spec.yaml, plan.yaml, and tasks.yaml with autospec artifact and format Python, JSON, Markdown, YAML, and any focused Rust test edits with repository-standard tools."
           - "Run scripts/check_guardrails.sh --skip-slow for the skill/schema-only delivery path, adding only the focused Cargo checks required by the Rust test changes."
           - "Build the applicable selfdev binary and run the public slash smoke against an isolated private socket and fake generator, recording the resolved executing binary identity rather than testing the shared daemon."
-          - "Review git status and the explicit diff to verify changes are limited to approved skill, schema, fixture, focused test, changelog, and Autospec artifacts with no production core, SDK, hook, CLI, or unrelated changes."
+          - "Review git status and the explicit diff to verify changes are limited to approved skill, schema, fixture, focused test, changelog, Autospec artifacts, and the narrow TUI current-session forwarding integration, with no SDK, hook, CLI, or unrelated changes."
 
 dependencies:
   user_story_order:
