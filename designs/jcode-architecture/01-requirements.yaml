@@ -1,0 +1,86 @@
+schema_version: "1.0"
+problem: >-
+  Document the current Jcode architecture so users and maintainers can understand how its clients, shared local daemon, agent runtime, providers, tools, persistence, background coordination, and self-development lifecycle cooperate without mistaking historical or proposed designs for implemented behavior.
+functional_requirements:
+  - id: FR-001
+    description: >-
+      Users can use the jcode CLI/TUI, jcode-desktop2, jcode-sdk, or harness API clients to create, list, attach to, resume, and control sessions, submit prompts, and receive streamed conversation, tool, status, and completion events.
+  - id: FR-002
+    description: >-
+      Users can run agent turns through a selected supported provider while Jcode orchestrates the provider and tool loop, executes built-in and MCP tools subject to permissions, persists resulting events, and streams progress back to attached clients.
+  - id: FR-003
+    description: >-
+      Users can operate multiple concurrent clients and sessions through one shared daemon, including background tasks and bounded swarm coordination, without one client disconnect terminating other sessions.
+  - id: FR-004
+    description: >-
+      Users can reconnect after a client disconnect or daemon restart and recover the same session identity, transcript, lifecycle state, and inspectable persisted memory while telemetry and retention remain bounded by their configured contracts.
+  - id: FR-005
+    description: >-
+      Maintainers can build and activate a self-development binary, reload the shared daemon onto the selected build channel, and have clients reconnect to their persisted sessions while self-dev capabilities remain scoped to eligible sessions.
+non_functional_requirements:
+  - id: NFR-001
+    category: availability_and_consistency
+    description: >-
+      Read-only presentation may remain available from client-held or persisted state during a transport interruption, but session ownership, prompt acceptance, tool approvals, swarm-plan mutations, and persisted event ordering must be serialized by the authoritative daemon.
+    measurable_target: >-
+      At least 99% of clients reconnect within 5 seconds after the daemon socket becomes ready; zero acknowledged session mutations may be reordered or applied more than once after reconnect.
+  - id: NFR-002
+    category: latency
+    description: >-
+      Local client startup, prompt acknowledgement, event fanout, and reconnect must add little delay beyond provider and tool execution.
+    measurable_target: >-
+      TUI first frame p95 under 25 ms, first-input readiness p95 under 75 ms, local prompt acknowledgement p95 under 100 ms, and daemon-event-to-client-display p95 under 50 ms, excluding external provider and tool latency.
+  - id: NFR-003
+    category: throughput
+    description: >-
+      A single developer-host daemon must absorb bursty streaming fanout and control traffic from concurrent interactive, headless, desktop, SDK, background, and swarm sessions.
+    measurable_target: >-
+      Sustain 25 attached clients, 10 concurrent active agent turns, 100 inbound client requests per second, and bursts of 1000 outbound stream events per second for 60 seconds without dropping ordered session events.
+  - id: NFR-004
+    category: durability
+    description: >-
+      Session transcripts, lifecycle state, memory records, and restart metadata must survive ordinary client exits and daemon reloads, with bounded loss on an abrupt process failure.
+    measurable_target: >-
+      RPO 0 for clean shutdown or reload, RPO at most 1 second for abrupt daemon termination, and zero loss of events that were acknowledged as durably persisted.
+  - id: NFR-005
+    category: scalability
+    description: >-
+      The current modular-monolith daemon must scale concurrent local sessions through shared provider, MCP, memory, telemetry, and background services rather than one full server process per session.
+    measurable_target: >-
+      Support 10 active sessions on one developer host with incremental proportional set size at or below 15 MiB per added session and no second long-lived daemon for self-dev sessions.
+cap_choice:
+  choice: AP for reads, CP for writes
+  rationale: >-
+    During a client-daemon partition, clients may continue showing cached transcript and status that can be stale, then reconcile from persisted history after reconnect. Mutating operations must fail or wait when the authoritative daemon is unavailable because duplicate prompts, conflicting tool approvals, divergent session history, or concurrent swarm-plan ownership are unacceptable; the daemon orders and commits these writes before acknowledgement.
+latency_targets:
+  - operation: TUI process start to first rendered frame
+    target: p95 under 25 ms
+  - operation: TUI process start to editable input
+    target: p95 under 75 ms
+  - operation: local prompt submission to daemon acknowledgement
+    target: p95 under 100 ms excluding provider latency
+  - operation: daemon-emitted stream event to attached client display
+    target: p95 under 50 ms
+  - operation: client reconnect and session resume after daemon socket readiness
+    target: p95 under 5 seconds
+throughput: >-
+  Per local daemon, sustain 25 attached clients, 10 concurrently active agent turns, 100 inbound client requests per second, and 1000 outbound stream events per second in 60-second bursts. Assume normal streaming and status reads outnumber mutating control requests by 20:1 and aggregate prompt, image, tool-output, and event bandwidth remains at or below 10 MiB per second.
+scalability: >-
+  Scale within one developer host by multiplexing clients and sessions over the shared daemon, independently scheduling provider calls, tools, MCP servers, background work, and bounded swarm workers, and sharing caches and long-lived services. The documented current boundary targets 25 attached clients and 10 active sessions with at most 15 MiB incremental PSS per session; horizontal multi-host daemon sharding is not a current requirement.
+durability: >-
+  Persist authoritative session history, lifecycle metadata, memory, and restart state to local storage so clean daemon reloads have RPO 0 and abrupt termination has RPO at most 1 second. An event reported as durably committed must not be lost, duplicated, or reordered on resume; telemetry may be buffered and eventually flushed because it is not authoritative session state.
+out_of_scope:
+  - A hypothetical replacement architecture, cloud-hosted multi-tenant control plane, horizontal daemon sharding, billing, or administrative dashboards.
+  - Low-level crate-by-crate inventory, individual protocol variants, provider HTTP payloads, model internals, and implementation-level function or type specifications.
+  - The removed legacy jcode-desktop host/worker architecture and unimplemented workspace concepts from historical, proposal, or target-state documents.
+  - Redesigning provider selection, tool semantics, MCP, memory algorithms, telemetry policy, swarm policy, or self-dev build and release mechanisms.
+  - Guaranteeing external model-provider response time, availability, token limits, pricing, or third-party MCP and tool behavior.
+assumptions:
+  - The checked-out repository, current tests, generated protocol contracts, and current-state documentation override stale proposals or historical documents when they disagree.
+  - Jcode is a local single-user product whose server is a single multi-client daemon; Unix clients use newline-delimited JSON over local Unix sockets, while other platform transport details are represented only where current source supports them.
+  - jcode-desktop2, jcode-sdk, jcode-harness-api, and its server bridge are implemented current surfaces; the removed legacy desktop architecture is historical and optional future desktop concepts are not current components.
+  - OpenAI, Anthropic, Bedrock, OpenRouter, Gemini, Copilot, Claude CLI, Cursor, and Antigravity adapters are external provider boundaries selected per session; their upstream services dominate first-token and completion latency.
+  - A normal turn produces about 20 streamed text, reasoning, tool, usage, or status events per mutating client request, with short bursts caused by token streaming, concurrent tools, background jobs, and swarm activity.
+  - Legitimate individual harness frames remain within the implemented 16 MiB framing limit, and aggregate local transport bandwidth remains at or below 10 MiB per second; Jcode is not a general large-blob storage or transfer service.
+  - The numeric latency, throughput, scalability, and durability values are architecture evaluation targets inferred from repository benchmarks and operating shape, not claims of an existing public service-level agreement.
+  - Self-dev uses the normal shared server, session-local canary eligibility, immutable versioned binaries and current/stable channel links, daemon exec-based reload, and client reconnection; an isolated socket is used only for non-disruptive validation.

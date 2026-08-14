@@ -1,0 +1,114 @@
+schema_version: "1.0"
+title: Jcode Current Architecture
+intent:
+  purpose: >-
+    Show the current Jcode client-to-daemon architecture, the authoritative
+    session and agent execution flow, durable event streaming, background work,
+    and the self-development reload lifecycle.
+  constraints:
+    - Keep one readable left-to-right flowchart centered on the implemented single shared daemon.
+    - Separate synchronous protocol and turn flow from dashed asynchronous background and self-dev paths.
+    - Show external providers, MCP servers, and the user workspace outside the Jcode system boundary.
+    - Mark removed legacy and optional desktop concepts as context only, not current runtime components.
+description: |
+  Current clients share a versioned Unix-socket protocol to one multi-client daemon. The daemon serializes session mutations, app-core drives provider and permissioned tool loops, and committed events are persisted before fanout or reconnect replay.
+
+  Dashed paths show daemon-owned background and swarm work plus self-dev build and exec reload. External runtimes and user-controlled resources remain outside the trusted Jcode boundary; historical desktop designs are explicitly excluded.
+mermaid: |
+  %%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}}}%%
+  flowchart LR
+    subgraph CurrentSystem[Current Jcode system boundary]
+      direction LR
+      Clients[Client Surfaces\njcode CLI and TUI\njcode-desktop2\njcode-sdk and harness API]
+      Gateway[Unix-Socket Protocol Gateway\nversioned newline-delimited JSON]
+      Daemon[Shared Multi-Client Daemon\nsingle local authority]
+      Sessions[Session Lifecycle Manager\nidentity, ordering, replay]
+      AppCore[App-Core Agent Orchestrator\nprovider and tool loop]
+      Adapters[Provider Runtime Adapters\nOpenAI, Anthropic, Bedrock\nOpenRouter, Gemini, Copilot\nClaude CLI, Cursor, Antigravity]
+      Tools[Tool and MCP Runtime\npermissions and execution]
+      AsyncCoordinator[Background Task and Swarm Coordinator\nbounded daemon-owned work]
+      Persistence[Persistence, Memory, and Telemetry Services]
+      EventStore[(Session Event Store\nauthoritative ordered history)]
+      MemoryStore[(Memory Store\nscoped and retention-governed)]
+      TelemetryBuffer[(Telemetry Buffer\nnon-authoritative and bounded)]
+      ReloadManager[Self-Dev Build and Reload Manager]
+      BuildStore[(Build Store and Channel Links\nimmutable versions, current, stable, canary)]
+
+      Clients -->|1 FR-001 prompts and controls| Gateway
+      Gateway -->|2 validated local frames| Daemon
+      Daemon -->|3 route and serialize| Sessions
+      Sessions -->|4 FR-002 accepted turn| AppCore
+      AppCore -->|5 selected runtime request| Adapters
+      AppCore -->|6 permissioned tool request| Tools
+      Tools -->|7 structured tool result| AppCore
+      AppCore -->|8 normalized turn events| Sessions
+      Sessions -->|commit before acknowledgement| Persistence
+      Persistence -->|ordered durable writes| EventStore
+      Persistence -->|scoped context and retention| MemoryStore
+      Persistence -.->|async telemetry flush| TelemetryBuffer
+      Sessions -->|9 committed fanout and replay| Daemon
+      Daemon -->|10 ordered event stream| Gateway
+      Gateway -->|11 render or reconnect| Clients
+
+      Daemon -.->|FR-003 async accept and schedule| AsyncCoordinator
+      AsyncCoordinator -.->|ordered progress and reconciliation| Sessions
+      AsyncCoordinator -.->|durable task state| Persistence
+
+      Clients -.->|FR-005 async self-dev build| ReloadManager
+      ReloadManager -.->|validated immutable binary| BuildStore
+      BuildStore -.->|atomic channel selection| ReloadManager
+      ReloadManager -.->|drain, persist, exec reload| Daemon
+      Daemon -.->|socket restored and sessions replayed| Clients
+    end
+
+    Providers[External Provider APIs and CLIs]
+    MCPServers[External MCP Servers]
+    Workspace[(User Workspace\nlocal filesystem)]
+    Historical[Historical or optional desktop architecture\nnot current runtime]
+
+    Adapters -->|provider stream, usage, errors| Providers
+    Tools -->|MCP calls| MCPServers
+    Tools -->|approved filesystem and process effects| Workspace
+    Historical -.->|excluded from current boundary| Clients
+
+    subgraph Legend[Legend]
+      direction TB
+      LegendCurrent[Implemented Jcode component]
+      LegendStore[(Durable or bounded local store)]
+      LegendExternal[External trust boundary]
+      LegendAsync[Dashed arrow means async or lifecycle path]
+      LegendHistorical[Historical or optional context]
+    end
+
+    classDef current fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+    classDef authority fill:#dcfce7,stroke:#15803d,color:#052e16
+    classDef storage fill:#fef3c7,stroke:#b45309,color:#451a03
+    classDef async fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef external fill:#f1f5f9,stroke:#475569,color:#0f172a
+    classDef historical fill:#fee2e2,stroke:#b91c1c,color:#450a0a,stroke-dasharray: 5 5
+
+    class Clients,Gateway,AppCore,Adapters,Tools current
+    class Daemon,Sessions,Persistence authority
+    class EventStore,MemoryStore,TelemetryBuffer,BuildStore,LegendStore storage
+    class AsyncCoordinator,ReloadManager,LegendAsync async
+    class Providers,MCPServers,Workspace,LegendExternal external
+    class Historical,LegendHistorical historical
+    class LegendCurrent current
+    style CurrentSystem fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
+    style Legend fill:#ffffff,stroke:#64748b,color:#0f172a,stroke-dasharray: 3 3
+referenced_components:
+  - Client Surfaces
+  - Unix-Socket Protocol Gateway
+  - Shared Multi-Client Daemon
+  - Session Lifecycle Manager
+  - App-Core Agent Orchestrator
+  - Provider Runtime Adapters
+  - Tool and MCP Runtime
+  - Background Task and Swarm Coordinator
+  - Persistence, Memory, and Telemetry Services
+  - Self-Dev Build and Reload Manager
+notes:
+  - Solid arrows form the primary prompt, provider/tool, durable commit, and streamed replay path.
+  - Dashed arrows are asynchronous background coordination, telemetry, or self-dev lifecycle paths.
+  - The Session Event Store is authoritative; client-held state and telemetry never accept or reorder mutations.
+  - Self-dev activation reloads the same shared daemon; isolated sockets are for validation, not a second long-lived authority.
