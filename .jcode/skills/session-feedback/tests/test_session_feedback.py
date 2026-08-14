@@ -845,6 +845,144 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
                     len(rendered["markdown"].encode("utf-8")),
                 )
 
+    def test_complete_taxonomy_reconciles_parity_fingerprints_and_accounting(
+        self,
+    ) -> None:
+        complete = self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        result, runner = self.generate(complete)
+
+        expected_categories = {
+            "global-instructions",
+            "skills",
+            "hooks-config",
+            "model-profile-choices",
+            "context-skill-routing",
+            "harness-setup-contracts",
+            "sdk-public-surfaces",
+            "jcode",
+        }
+        required_fields = {
+            "contract_version",
+            "target",
+            "evidence_references",
+            "problem",
+            "hypothesis",
+            "suggested_behavior",
+            "expected_benefit",
+            "token_context_impact",
+            "risk",
+            "blast_radius",
+            "validation_plan",
+            "confidence",
+            "fingerprint",
+            "non_goals",
+        }
+        self.assertEqual(
+            {proposal["target"]["category"] for proposal in result["proposals"]},
+            expected_categories,
+        )
+        self.assertEqual(
+            {proposal["target"]["scope"] for proposal in result["proposals"]},
+            {"personal-global", "project-jcode"},
+        )
+
+        runner.assert_called_once()
+        prompt = runner.call_args.args[0][-1]
+        output = self.feedback.canonical_json(complete)
+        accounting = result["accounting"]
+        self.assertEqual(accounting["request_count"], 1)
+        self.assertEqual(accounting["proposal_count"], len(result["proposals"]))
+        self.assertEqual(
+            accounting["request_input"], self.feedback.measure_text("request_input", prompt)
+        )
+        self.assertEqual(
+            accounting["request_output"],
+            self.feedback.measure_text("request_output", output),
+        )
+
+        for proposal, rendered in zip(
+            result["proposals"], result["rendered_proposals"], strict=True
+        ):
+            with self.subTest(category=proposal["target"]["category"]):
+                self.assertEqual(set(proposal), required_fields)
+                document = json.loads(rendered["json"])
+                self.assertEqual(document["proposal"], proposal)
+                for value in (
+                    proposal["problem"],
+                    proposal["hypothesis"],
+                    proposal["suggested_behavior"],
+                    proposal["expected_benefit"],
+                    proposal["token_context_impact"],
+                    proposal["blast_radius"],
+                    *proposal["validation_plan"],
+                    *proposal["non_goals"],
+                ):
+                    self.assertIn(value, rendered["markdown"])
+                self.assertEqual(
+                    rendered["accounting"]["json"],
+                    self.feedback.measure_text("proposal_json", rendered["json"]),
+                )
+                self.assertEqual(
+                    rendered["accounting"]["markdown"],
+                    self.feedback.measure_text("proposal_markdown", rendered["markdown"]),
+                )
+
+        common_material = {
+            "category": "skills",
+            "concrete_target": ".jcode/skills/session-feedback/SKILL.md",
+            "problem": "The same synthetic problem appears in two ownership scopes.",
+            "intended_outcome": "Keep personal and project proposals distinct.",
+        }
+        personal = self.feedback.proposal_fingerprint(
+            {**common_material, "scope": "personal-global"}
+        )
+        project = self.feedback.proposal_fingerprint(
+            {**common_material, "scope": "project-jcode"}
+        )
+        self.assertNotEqual(personal, project)
+
+    def test_fake_generator_scenarios_make_exactly_zero_or_one_request(self) -> None:
+        complete = self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        zero = self.fixture["valid_responses"]["zero_proposals"]["response"]
+
+        for name, response, expected_proposals in (
+            ("complete", complete, len(complete["proposals"])),
+            ("zero", zero, 0),
+        ):
+            with self.subTest(case=name):
+                result, runner = self.generate(response)
+                self.assertEqual(result["accounting"]["request_count"], 1)
+                self.assertEqual(result["accounting"]["proposal_count"], expected_proposals)
+                runner.assert_called_once()
+
+        malformed_runner = self.runner_for(self.invalid_response("malformed"))
+        with self.assertRaises(self.feedback.ContractValidationError):
+            self.generate({}, runner=malformed_runner)
+        malformed_runner.assert_called_once()
+
+        timeout_runner = self.runner_for(complete, elapsed_seconds=31.0)
+        with self.assertRaises(self.feedback.ValidationError):
+            self.generate(complete, runner=timeout_runner)
+        timeout_runner.assert_called_once()
+
+        preflight_runner = self.runner_for(complete)
+        with self.assertRaises(self.feedback.ValidationError):
+            self.generate(
+                complete,
+                budget=self.budget(max_input_tokens=1),
+                runner=preflight_runner,
+            )
+        preflight_runner.assert_not_called()
+
+        output_budget_runner = self.runner_for(complete)
+        with self.assertRaises(self.feedback.ValidationError):
+            self.generate(
+                complete,
+                budget=self.budget(max_output_tokens=1),
+                runner=output_budget_runner,
+            )
+        output_budget_runner.assert_called_once()
+
     def test_validates_the_complete_response_before_rendering_any_proposal(self) -> None:
         invalid = copy.deepcopy(
             self.fixture["valid_responses"]["complete_taxonomy"]["response"]
@@ -977,6 +1115,14 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             mock.patch(
                 "subprocess.Popen",
                 side_effect=AssertionError("uninjected process forbidden"),
+            ),
+            mock.patch(
+                "socket.create_connection",
+                side_effect=AssertionError("unapproved network forbidden"),
+            ),
+            mock.patch(
+                "urllib.request.urlopen",
+                side_effect=AssertionError("unapproved network forbidden"),
             ),
         ):
             result, _ = self.generate(zero, runner=runner)

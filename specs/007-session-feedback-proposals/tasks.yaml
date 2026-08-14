@@ -309,7 +309,7 @@ phases:
           - "Return non-success for generation, timeout, schema, or accounting failures and create no unsupported proposal result."
       - id: "T023"
         title: "Validate bounded proposal generation independently"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
