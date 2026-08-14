@@ -1011,13 +1011,26 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
             }
         ]
 
-    def test_reusable_orchestrator_reports_zero_proposals_and_accounting(self) -> None:
+    def test_reusable_orchestrator_runs_generation_and_reports_complete_accounting(self) -> None:
+        runner = mock.Mock(
+            return_value={
+                "returncode": 0,
+                "stdout": self.feedback.canonical_json(
+                    {"contract_version": "generator-response-v1", "proposals": []}
+                ),
+                "stderr": "",
+                "elapsed_seconds": 0.25,
+                "estimated_cost_usd": 0.01,
+            }
+        )
         result = self.feedback.run_feedback(
             requested_session_id=None,
             current_session_id="session-current-1",
             visible_session_ids=("session-current-1",),
             visible_items=self.visible_items(),
             librarian_summary_path=None,
+            target_root=self.temp_dir.name,
+            runner=runner,
         )
 
         self.assertEqual(result["status"], "zero_proposals")
@@ -1025,8 +1038,16 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(result["evidence_source"], "fallback")
         self.assertEqual(result["proposal_count"], 0)
         self.assertEqual(result["proposal_locations"], [])
-        self.assertGreater(result["accounting"]["serialized_bytes"], 0)
-        self.assertGreater(result["accounting"]["estimated_tokens"], 0)
+        self.assertEqual(result["effective_config"]["model"], "gpt-5.6-sol")
+        self.assertEqual(result["effective_config"]["effort"], "medium")
+        self.assertGreater(result["accounting"]["evidence_bytes"], 0)
+        self.assertEqual(result["accounting"]["excerpt_bytes"], 0)
+        self.assertGreater(result["accounting"]["request_input"]["bytes"], 0)
+        self.assertGreater(result["accounting"]["request_output"]["bytes"], 0)
+        self.assertEqual(result["accounting"]["proposal_count"], 0)
+        self.assertEqual(result["accounting"]["elapsed_seconds"], 0.25)
+        self.assertEqual(result["accounting"]["estimated_cost_usd"], 0.01)
+        runner.assert_called_once()
 
     def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(self) -> None:
         input_document = {
@@ -1034,6 +1055,14 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
             "visible_session_ids": ["session-current-1", "session-visible-2"],
             "visible_items": self.visible_items(),
         }
+
+        fake_jcode = self.bin_dir / "jcode"
+        fake_jcode.write_text(
+            f"#!{sys.executable}\n"
+            "print('{\"contract_version\":\"generator-response-v1\",\"proposals\":[]}')\n",
+            encoding="utf-8",
+        )
+        fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
 
         cases = (([], "session-current-1"), (["session-visible-2"], "session-visible-2"))
         for arguments, expected_session_id in cases:
@@ -1055,7 +1084,8 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
                 self.assertEqual(result["evidence_source"], "fallback")
                 self.assertEqual(result["proposal_count"], 0)
                 self.assertEqual(result["proposal_locations"], [])
-                self.assertGreater(result["accounting"]["serialized_bytes"], 0)
+                self.assertGreater(result["accounting"]["evidence_bytes"], 0)
+                self.assertEqual(result["accounting"]["request_count"], 1)
 
     def test_entrypoint_rejects_oversized_input_actionably(self) -> None:
         completed = subprocess.run(
@@ -1071,6 +1101,32 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(completed.stdout, "")
         self.assertIn("input", completed.stderr.lower())
         self.assertIn("limit", completed.stderr.lower())
+
+    def test_entrypoint_returns_non_success_for_generation_schema_failure(self) -> None:
+        fake_jcode = self.bin_dir / "jcode"
+        fake_jcode.write_text(
+            f"#!{sys.executable}\nprint('{{}}')\n",
+            encoding="utf-8",
+        )
+        fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
+        input_document = {
+            "current_session_id": "session-current-1",
+            "visible_session_ids": ["session-current-1"],
+            "visible_items": self.visible_items(),
+        }
+
+        completed = subprocess.run(
+            [sys.executable, str(ENTRYPOINT_PATH)],
+            input=json.dumps(input_document),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=os.environ.copy(),
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("generator-response-v1", completed.stderr)
 
 
 if __name__ == "__main__":

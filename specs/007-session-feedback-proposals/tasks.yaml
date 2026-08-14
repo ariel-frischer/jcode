@@ -297,7 +297,7 @@ phases:
           - "Treat zero proposals as success and reject unsupported output without creating or updating any proposal record."
       - id: "T022"
         title: "Wire proposal generation and complete run accounting into the entry point"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

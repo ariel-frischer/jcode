@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from session_feedback import ValidationError, canonical_json, run_feedback
@@ -52,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             visible_session_ids=document["visible_session_ids"],
             visible_items=document["visible_items"],
             librarian_summary_path=None,
+            target_root=Path.cwd(),
         )
     except ValidationError as error:
         print(f"session-feedback: {error}", file=sys.stderr)

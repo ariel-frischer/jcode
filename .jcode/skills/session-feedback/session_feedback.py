@@ -38,6 +38,17 @@ MAX_PROPOSAL_LOCATIONS = 16
 MAX_RENDERED_PROPOSAL_BYTES = 65_536
 MAX_LIBRARIAN_SUMMARY_BYTES = 262_144
 MAX_SHORTLIST_TARGETS = 16
+DEFAULT_PER_EXCERPT_BYTES = 8_192
+DEFAULT_TOTAL_EXCERPT_BYTES = 32_768
+DEFAULT_GENERATION_CONFIG = {
+    "model": "gpt-5.6-sol",
+    "effort": "medium",
+    "max_input_tokens": 32_768,
+    "max_output_tokens": 8_192,
+    "max_proposals": 8,
+    "max_elapsed_seconds": 120.0,
+    "max_estimated_cost_usd": 1.0,
+}
 LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
 EVIDENCE_ITEM_FIELDS = {
     "visible_outcome": frozenset(
@@ -920,6 +931,10 @@ def _run_generation_command(
             check=False,
             timeout=timeout_seconds,
         )
+    except OSError as error:
+        raise ValidationError(
+            f"generation request could not start: {_bounded_error(str(error))}"
+        ) from error
     except subprocess.TimeoutExpired as error:
         elapsed = time.monotonic() - started
         raise ValidationError(
@@ -1289,13 +1304,13 @@ def run_feedback(
     visible_session_ids: Sequence[str],
     visible_items: Sequence[Mapping[str, Any]],
     librarian_summary_path: str | Path | None,
+    target_root: str | Path = ".",
+    effective_config: Mapping[str, Any] | None = None,
+    runner: Any | None = None,
+    per_excerpt_byte_limit: int = DEFAULT_PER_EXCERPT_BYTES,
+    total_excerpt_byte_limit: int = DEFAULT_TOTAL_EXCERPT_BYTES,
 ) -> dict[str, Any]:
-    """Run the reusable deterministic portion of one session-feedback review.
-
-    Later tasks extend this orchestrator with acquisition, generation, and persistence.
-    Keeping the entry point here lets the slash skill and a future opt-in pre-close caller
-    share one path without registering or enabling that caller.
-    """
+    """Run one bounded acquisition, shortlist, excerpt, and generation workflow."""
     invocation = prepare_feedback_invocation(
         requested_session_id=requested_session_id,
         current_session_id=current_session_id,
@@ -1303,12 +1318,57 @@ def run_feedback(
         visible_items=visible_items,
         librarian_summary_path=librarian_summary_path,
     )
-    outcome = build_review_outcome(session_id=invocation["session_id"])
     evidence = invocation["evidence"]
+    shortlist = shortlist_targets(evidence)
+    excerpts = load_shortlisted_excerpts(
+        shortlist=shortlist,
+        target_root=target_root,
+        per_excerpt_byte_limit=per_excerpt_byte_limit,
+        total_excerpt_byte_limit=total_excerpt_byte_limit,
+    )
+    excerpt_totals = excerpt_accounting(excerpts)
+    config = dict(
+        DEFAULT_GENERATION_CONFIG if effective_config is None else effective_config
+    )
+    request_input = {
+        "session_id": invocation["session_id"],
+        "evidence": evidence,
+        "shortlisted_targets": shortlist,
+        "excerpts": excerpts,
+    }
+    generation = generate_review_proposals(
+        request_input=request_input,
+        evidence=evidence,
+        shortlisted_targets=shortlist,
+        effective_config=config,
+        runner=runner,
+    )
+    generation_accounting = generation["accounting"]
+    proposal_count = generation_accounting["proposal_count"]
     return {
-        **outcome,
+        "status": "proposals_generated" if proposal_count else "zero_proposals",
+        "session_id": invocation["session_id"],
+        "proposal_count": proposal_count,
+        "proposal_locations": [],
+        "failure": None,
         "evidence_source": evidence["source"],
-        "accounting": evidence["accounting"],
+        "effective_config": config,
+        "shortlisted_target_count": len(shortlist),
+        "proposals": generation["proposals"],
+        "rendered_proposals": generation["rendered_proposals"],
+        "accounting": {
+            "evidence": evidence["accounting"],
+            "evidence_bytes": evidence["accounting"]["serialized_bytes"],
+            "excerpts": excerpt_totals,
+            "excerpt_bytes": excerpt_totals["serialized_bytes"],
+            "request_count": generation_accounting["request_count"],
+            "request_input": generation_accounting["request_input"],
+            "request_output": generation_accounting["request_output"],
+            "proposal_count": proposal_count,
+            "elapsed_seconds": generation_accounting["elapsed_seconds"],
+            "estimated_cost_usd": generation_accounting["estimated_cost_usd"],
+            "command": generation_accounting["command"],
+        },
     }
 
 
@@ -1318,6 +1378,7 @@ __all__ = [
     "canonical_bytes",
     "canonical_json",
     "build_review_outcome",
+    "DEFAULT_GENERATION_CONFIG",
     "evidence_accounting",
     "fingerprint_material",
     "generate_review_proposals",
