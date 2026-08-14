@@ -150,7 +150,7 @@ phases:
           - "Existing allowed/disabled tool filtering continues to apply."
       - id: "T011"
         title: "Write project-local slash-skill discovery and argument-forwarding tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
