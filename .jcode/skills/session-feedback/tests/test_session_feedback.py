@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foundational contract tests for the standalone session-feedback skill.
+"""Dependency-free tests for the standalone session-feedback skill.
 
 These tests intentionally define the dependency-free API that T003-T006 must
 implement. They use only synthetic data and isolate HOME and executable lookup
@@ -122,13 +122,13 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
         self.addCleanup(self.environment.stop)
         self.network_connection = mock.patch(
             "socket.create_connection",
-            side_effect=AssertionError("foundational tests must not access the network"),
+            side_effect=AssertionError("session-feedback tests must not access the network"),
         )
         self.network_connection.start()
         self.addCleanup(self.network_connection.stop)
         self.urlopen = mock.patch(
             "urllib.request.urlopen",
-            side_effect=AssertionError("foundational tests must not access the network"),
+            side_effect=AssertionError("session-feedback tests must not access the network"),
         )
         self.urlopen.start()
         self.addCleanup(self.urlopen.stop)
@@ -137,7 +137,7 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.assertFalse(
             self.invocation_log.exists(),
-            "foundational pure tests must not invoke jcode, bd, a provider, or a network path",
+            "pure tests must not invoke jcode, bd, a provider, or a network path",
         )
 
 
@@ -250,6 +250,78 @@ class DeterministicCoreTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("team-shared", message)
         self.assertIn("personal-global", message)
         self.assertIn("project-jcode", message)
+
+
+class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
+    def visible_items(self) -> list[dict[str, str]]:
+        return [
+            {
+                "reference": "outcome-1",
+                "category": "visible_outcome",
+                "summary": "The requested synthetic change was completed.",
+            },
+            {
+                "reference": "tool-1",
+                "category": "tool_invocation_receipt",
+                "name": "functions.read",
+                "outcome": "succeeded",
+                "summary": "Read one already-selected synthetic file.",
+            },
+        ]
+
+    def prepare(self, requested_session_id: str | None = None):
+        return self.feedback.prepare_feedback_invocation(
+            requested_session_id=requested_session_id,
+            current_session_id="session-current-1",
+            visible_session_ids=("session-current-1", "session-visible-2"),
+            visible_items=self.visible_items(),
+            librarian_summary_path=None,
+        )
+
+    def test_current_session_uses_supplied_visible_evidence_on_clean_first_run(self) -> None:
+        self.assertFalse((self.home / ".jcode" / "feedback").exists())
+        self.assertFalse((self.home / ".jcode" / "skills" / "session-librarian").exists())
+        self.assertFalse((self.home / ".jcode" / "skills" / "jcode-zor").exists())
+
+        invocation = self.prepare()
+
+        self.assertEqual(invocation["session_id"], "session-current-1")
+        self.assertEqual(invocation["evidence"]["source"], "fallback")
+        self.assertEqual(invocation["evidence"]["items"], self.visible_items())
+        self.feedback.validate_contract("evidence-v1", invocation["evidence"])
+        self.assertFalse((self.home / ".jcode" / "feedback").exists())
+
+    def test_valid_named_session_is_selected_and_reported(self) -> None:
+        invocation = self.prepare("session-visible-2")
+
+        self.assertEqual(invocation["session_id"], "session-visible-2")
+        self.assertEqual(invocation["evidence"]["source"], "fallback")
+        self.assertEqual(invocation["evidence"]["items"], self.visible_items())
+
+    def test_missing_current_session_fails_actionably_without_creating_a_run(self) -> None:
+        with self.assertRaises(self.feedback.ValidationError) as raised:
+            self.feedback.prepare_feedback_invocation(
+                requested_session_id=None,
+                current_session_id=None,
+                visible_session_ids=("session-visible-2",),
+                visible_items=self.visible_items(),
+                librarian_summary_path=None,
+            )
+
+        message = str(raised.exception).lower()
+        self.assertIn("current session", message)
+        self.assertIn("session id", message)
+        self.assertFalse((self.home / ".jcode" / "feedback").exists())
+
+    def test_invisible_named_session_fails_before_generation_or_persistence(self) -> None:
+        with self.assertRaises(self.feedback.ValidationError) as raised:
+            self.prepare("session-private-9")
+
+        message = str(raised.exception).lower()
+        self.assertIn("session-private-9", message)
+        self.assertIn("visible", message)
+        self.assertFalse(self.invocation_log.exists())
+        self.assertFalse((self.home / ".jcode" / "feedback").exists())
 
 
 if __name__ == "__main__":

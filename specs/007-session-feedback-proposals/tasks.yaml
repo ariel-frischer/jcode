@@ -102,7 +102,7 @@ phases:
     tasks:
       - id: "T007"
         title: "Write first-run fallback and session-selection tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
