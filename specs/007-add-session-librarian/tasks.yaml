@@ -58,7 +58,7 @@ phases:
           - "Relevant files use a bounded collection compatible with the established handoff limit of 32 paths."
       - id: "T004"
         title: "Write librarian configuration default, precedence, and validation tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
