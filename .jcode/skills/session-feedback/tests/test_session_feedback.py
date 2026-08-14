@@ -545,6 +545,119 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
         )
 
+    def test_both_acquisition_paths_reconcile_privacy_reads_and_accounting(self) -> None:
+        target_root = Path(self.temp_dir.name) / "targets"
+        skill_path = target_root / ".jcode" / "skills" / "session-feedback" / "SKILL.md"
+        skill_path.parent.mkdir(parents=True)
+        skill_path.write_text("bounded session feedback excerpt with é", encoding="utf-8")
+
+        acquired = {
+            "librarian": self.acquire(
+                librarian=self.fixture["inputs"]["compatible_librarian"]
+            ),
+            "fallback": self.acquire(librarian=None),
+        }
+        expected_items = acquired["fallback"]["items"]
+        expected_accounting = self.feedback.evidence_accounting(expected_items)
+
+        for source, evidence in acquired.items():
+            with self.subTest(source=source):
+                opened_before_excerpt: list[Path] = []
+
+                def reject_pre_excerpt_open(path: str | Path, *args, **kwargs):
+                    opened_before_excerpt.append(Path(path))
+                    raise AssertionError("target opened before excerpt loading")
+
+                with mock.patch("builtins.open", side_effect=reject_pre_excerpt_open):
+                    shortlist = self.feedback.shortlist_targets(evidence)
+
+                self.assertEqual(opened_before_excerpt, [])
+                self.assertEqual(evidence["contract_version"], "evidence-v1")
+                self.assertEqual(evidence["items"], expected_items)
+                self.assertEqual(evidence["accounting"], expected_accounting)
+                self.assert_sentinels_absent(evidence, f"{source} evidence")
+                self.assert_sentinels_absent(shortlist, f"{source} shortlist")
+
+                excerpts = self.feedback.load_shortlisted_excerpts(
+                    shortlist=shortlist,
+                    target_root=target_root,
+                    per_excerpt_byte_limit=128,
+                    total_excerpt_byte_limit=128,
+                )
+                excerpt_accounting = self.feedback.excerpt_accounting(excerpts)
+                self.assertEqual(
+                    excerpt_accounting["serialized_bytes"],
+                    sum(entry["accounting"]["bytes"] for entry in excerpts),
+                )
+                self.assertEqual(
+                    excerpt_accounting["estimated_tokens"],
+                    sum(entry["accounting"]["estimated_tokens"] for entry in excerpts),
+                )
+                self.assert_sentinels_absent(excerpts, f"{source} excerpts")
+
+    def test_normalization_shortlisting_and_fingerprints_are_byte_stable_100_times(
+        self,
+    ) -> None:
+        fingerprint_input = {
+            "scope": " Project Jcode ",
+            "category": " Skills ",
+            "concrete_target": ".jcode//skills/session-feedback/SKILL.md",
+            "problem": "  Repeated   bounded lookup. ",
+            "intended_outcome": "Reuse the visible receipt.",
+        }
+        baseline: bytes | None = None
+
+        for _ in range(100):
+            evidence = self.acquire(librarian=None)
+            shortlist = self.feedback.shortlist_targets(evidence)
+            result = self.feedback.canonical_bytes(
+                {
+                    "evidence": evidence,
+                    "shortlist": shortlist,
+                    "fingerprint_material": self.feedback.fingerprint_material(
+                        fingerprint_input
+                    ),
+                    "fingerprint": self.feedback.proposal_fingerprint(fingerprint_input),
+                }
+            )
+            if baseline is None:
+                baseline = result
+            self.assertEqual(result, baseline)
+
+    def test_boundary_failures_are_actionable_and_have_no_external_effects(self) -> None:
+        home_before = sorted(path.relative_to(self.home) for path in self.home.rglob("*"))
+        malformed = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
+        malformed["items"] = {"unexpected": "not-an-array"}
+
+        with self.assertRaises(self.feedback.ValidationError) as acquisition_error:
+            self.acquire(librarian=malformed, visible_items=[])
+        self.assertIn("librarian", str(acquisition_error.exception).lower())
+        self.assertIn("fallback", str(acquisition_error.exception).lower())
+
+        opener = mock.Mock(side_effect=AssertionError("invalid shortlist must not read files"))
+        with self.assertRaises(self.feedback.ValidationError) as shortlist_error:
+            self.feedback.load_shortlisted_excerpts(
+                shortlist=[{"category": "skills", "concrete_target": 7}],
+                target_root=Path(self.temp_dir.name),
+                per_excerpt_byte_limit=64,
+                total_excerpt_byte_limit=64,
+                opener=opener,
+            )
+        self.assertIn("concrete_target", str(shortlist_error.exception))
+        opener.assert_not_called()
+
+        with self.assertRaises(self.feedback.ValidationError) as accounting_error:
+            self.feedback.excerpt_accounting(
+                [{"excerpt": "abc", "accounting": {"bytes": 2, "estimated_tokens": 1}}]
+            )
+        self.assertIn("accounting", str(accounting_error.exception).lower())
+
+        self.assertEqual(
+            sorted(path.relative_to(self.home) for path in self.home.rglob("*")),
+            home_before,
+        )
+        self.assertFalse(self.invocation_log.exists())
+
 
 class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
     def visible_items(self) -> list[dict[str, str]]:

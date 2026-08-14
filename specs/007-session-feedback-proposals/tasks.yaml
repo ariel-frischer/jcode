@@ -229,7 +229,7 @@ phases:
           - "Record every excerpt's exact added bytes and deterministic token estimate and enforce per-excerpt and aggregate budgets."
       - id: "T017"
         title: "Validate privacy and deterministic evidence behavior"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
