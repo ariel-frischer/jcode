@@ -5,7 +5,7 @@ use futures::StreamExt;
 use jcode_base::config::{LibrarianRouteIdentity, ResolvedLibrarianConfig};
 use jcode_session_types::BoundedUsage;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const GENERATION_SYSTEM_PROMPT: &str = "Summarize the admitted Jcode session content. Return only the required session librarian JSON object.";
 
@@ -114,38 +114,120 @@ pub(crate) async fn generate_summary(
             "The locally admitted librarian payload was not valid UTF-8.",
         )
     })?;
+    let system_prompt = format!(
+        "{GENERATION_SYSTEM_PROMPT} Do not exceed {} output tokens.",
+        config.budgets.max_output_tokens
+    );
     let started = Instant::now();
-    let mut stream = provider
-        .complete(
-            &[Message::user(payload)],
-            &[],
-            GENERATION_SYSTEM_PROMPT,
-            None,
-        )
-        .await
-        .map_err(|_| provider_failure())?;
-
     let mut response_json = String::new();
     let mut input_tokens = admitted.input_tokens;
     let mut output_tokens = 0_u32;
-    while let Some(event) = stream.next().await {
-        match event.map_err(|_| provider_failure())? {
-            StreamEvent::TextDelta(text) => response_json.push_str(&text),
-            StreamEvent::TokenUsage {
-                input_tokens: reported_input,
-                output_tokens: reported_output,
-                ..
-            } => {
-                if let Some(value) = reported_input {
-                    input_tokens = u32::try_from(value).unwrap_or(u32::MAX);
+    let mut input_usage_reported = false;
+    let mut output_usage_reported = false;
+    let deadline = Duration::from_secs(config.budgets.deadline_seconds);
+    let request = tokio::time::timeout(deadline, async {
+        let mut stream = provider
+            .complete(&[Message::user(payload)], &[], &system_prompt, None)
+            .await
+            .map_err(|_| provider_failure())?;
+
+        while let Some(event) = stream.next().await {
+            match event.map_err(|_| provider_failure())? {
+                StreamEvent::TextDelta(text) => {
+                    let candidate_tokens = conservative_token_count(
+                        response_json.len().saturating_add(text.len()),
+                    );
+                    if candidate_tokens > config.budgets.max_output_tokens {
+                        output_tokens = config.budgets.max_output_tokens;
+                        return Err(failure(
+                            "librarian_output_budget_exceeded",
+                            "The librarian provider response reached the configured output-token budget.",
+                        ));
+                    }
+                    response_json.push_str(&text);
                 }
-                if let Some(value) = reported_output {
-                    output_tokens = u32::try_from(value).unwrap_or(u32::MAX);
+                StreamEvent::TokenUsage {
+                    input_tokens: reported_input,
+                    output_tokens: reported_output,
+                    ..
+                } => {
+                    if let Some(value) = reported_input {
+                        input_tokens = u32::try_from(value).unwrap_or(u32::MAX);
+                        input_usage_reported = true;
+                    }
+                    if let Some(value) = reported_output {
+                        output_tokens = u32::try_from(value).unwrap_or(u32::MAX);
+                        output_usage_reported = true;
+                    }
+                    enforce_usage_limits(
+                        &facts,
+                        config,
+                        input_tokens,
+                        output_tokens,
+                        started.elapsed(),
+                    )?;
                 }
+                _ => {}
             }
-            _ => {}
         }
+        Ok(())
+    })
+    .await;
+
+    match request {
+        Err(_) => {
+            return Err(failure_with_usage(
+                "librarian_deadline_exceeded",
+                "The librarian provider request exceeded the configured wall-clock deadline.",
+                bounded_usage(&facts, config, input_tokens, output_tokens, deadline),
+            ));
+        }
+        Ok(Err(mut error)) => {
+            error.usage = Some(bounded_usage(
+                &facts,
+                config,
+                input_tokens,
+                output_tokens,
+                started.elapsed(),
+            ));
+            return Err(error);
+        }
+        Ok(Ok(())) => {}
     }
+
+    enforce_usage_limits(
+        &facts,
+        config,
+        input_tokens,
+        output_tokens,
+        started.elapsed(),
+    )?;
+    if !input_usage_reported || !output_usage_reported {
+        return Err(failure_with_usage(
+            "librarian_usage_accounting_missing",
+            "The librarian provider did not report complete input and output token usage.",
+            bounded_usage(
+                &facts,
+                config,
+                input_tokens,
+                output_tokens,
+                started.elapsed(),
+            ),
+        ));
+    }
+    serde_json::from_str::<serde_json::Value>(&response_json).map_err(|_| {
+        failure_with_usage(
+            "librarian_response_malformed",
+            "The librarian provider returned malformed JSON.",
+            bounded_usage(
+                &facts,
+                config,
+                input_tokens,
+                output_tokens,
+                started.elapsed(),
+            ),
+        )
+    })?;
 
     let cost_micros_usd = facts
         .worst_case_cost_micros(input_tokens, output_tokens)
@@ -167,6 +249,12 @@ fn preflight(
     config: &ResolvedLibrarianConfig,
     admitted: &AdmittedSessionContent,
 ) -> Result<(), LibrarianFailure> {
+    if config.budgets.max_requests != 1 {
+        return Err(failure(
+            "librarian_request_budget_invalid",
+            "The librarian max_requests budget must be exactly 1.",
+        ));
+    }
     if !facts.supported {
         return Err(failure(
             "librarian_route_unsupported",
@@ -213,11 +301,85 @@ fn token_cost_micros(price_per_million: u64, tokens: u32) -> u64 {
     numerator.saturating_add(999_999) / 1_000_000
 }
 
+fn conservative_token_count(bytes: usize) -> u32 {
+    u32::try_from(bytes).unwrap_or(u32::MAX)
+}
+
+fn enforce_usage_limits(
+    facts: &GenerationRouteFacts,
+    config: &ResolvedLibrarianConfig,
+    input_tokens: u32,
+    output_tokens: u32,
+    elapsed: Duration,
+) -> Result<(), LibrarianFailure> {
+    let cost = facts
+        .worst_case_cost_micros(input_tokens, output_tokens)
+        .unwrap_or(u64::MAX);
+    let (code, message) = if input_tokens > config.budgets.max_input_tokens {
+        (
+            "librarian_input_usage_exceeded",
+            "The provider reported input usage above the configured token budget.",
+        )
+    } else if output_tokens > config.budgets.max_output_tokens {
+        (
+            "librarian_output_budget_exceeded",
+            "The librarian provider response exceeded the configured output-token budget.",
+        )
+    } else if cost > config.budgets.max_cost_micros {
+        (
+            "librarian_cost_usage_exceeded",
+            "The provider usage exceeded the approved librarian cost budget.",
+        )
+    } else if elapsed > Duration::from_secs(config.budgets.deadline_seconds) {
+        (
+            "librarian_deadline_exceeded",
+            "The librarian provider request exceeded the configured wall-clock deadline.",
+        )
+    } else {
+        return Ok(());
+    };
+
+    Err(failure_with_usage(
+        code,
+        message,
+        bounded_usage(facts, config, input_tokens, output_tokens, elapsed),
+    ))
+}
+
+fn bounded_usage(
+    facts: &GenerationRouteFacts,
+    config: &ResolvedLibrarianConfig,
+    input_tokens: u32,
+    output_tokens: u32,
+    elapsed: Duration,
+) -> BoundedUsage {
+    let input_tokens = input_tokens.min(config.budgets.max_input_tokens);
+    let output_tokens = output_tokens.min(config.budgets.max_output_tokens);
+    BoundedUsage {
+        input_tokens,
+        output_tokens,
+        request_count: 1.min(config.budgets.max_requests),
+        elapsed_ms: u64::try_from(elapsed.as_millis())
+            .unwrap_or(u64::MAX)
+            .min(config.budgets.deadline_seconds.saturating_mul(1_000)),
+        cost_micros_usd: facts
+            .worst_case_cost_micros(input_tokens, output_tokens)
+            .unwrap_or(config.budgets.max_cost_micros)
+            .min(config.budgets.max_cost_micros),
+    }
+}
+
 fn provider_failure() -> LibrarianFailure {
     failure(
         "librarian_provider_failed",
         "The librarian provider request failed before producing a valid response.",
     )
+}
+
+fn failure_with_usage(code: &'static str, message: &str, usage: BoundedUsage) -> LibrarianFailure {
+    let mut failure = failure(code, message);
+    failure.usage = Some(usage);
+    failure
 }
 
 fn failure(code: &'static str, message: &str) -> LibrarianFailure {

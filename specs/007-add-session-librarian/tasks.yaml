@@ -324,7 +324,7 @@ phases:
           - "The active session provider object and provider_runtime_state are never mutated."
       - id: "T023"
         title: "Enforce runtime request, output, usage, cost, and deadline boundaries"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"
