@@ -454,7 +454,7 @@ phases:
           - "Inject permission, partial-initialization, missing executable, malformed output, and timeout failures and verify visible non-success with no partial proposal, external effect, or false success."
       - id: "T033"
         title: "Extend public slash tests for global-copy and removal behavior"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-006"
