@@ -299,7 +299,7 @@ phases:
     tasks:
       - id: "T021"
         title: "Write independent provider route and hard-budget integration tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"

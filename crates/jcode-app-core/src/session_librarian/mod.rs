@@ -17,6 +17,8 @@ mod admission;
 #[allow(dead_code)]
 mod fingerprint;
 #[allow(dead_code)]
+mod generation;
+#[allow(dead_code)]
 mod handoff;
 #[allow(dead_code)]
 mod publication;
@@ -199,6 +201,10 @@ mod admission_tests;
 #[cfg(test)]
 #[path = "tests/fingerprint.rs"]
 mod fingerprint_tests;
+
+#[cfg(test)]
+#[path = "tests/generation.rs"]
+mod generation_tests;
 
 #[cfg(test)]
 #[path = "tests/handoff.rs"]
