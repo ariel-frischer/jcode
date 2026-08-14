@@ -1,0 +1,383 @@
+plan:
+  branch: "agent/jcode-2ho-feedback"
+  created: "2026-08-14"
+  spec_path: "specs/007-session-feedback-proposals/spec.yaml"
+
+summary: |
+  Implement session feedback as a removable project-local slash skill whose Markdown
+  orchestrator owns the human-triggered workflow and whose dependency-free Python helper
+  owns deterministic configuration resolution, evidence normalization, target shortlisting,
+  budget enforcement, proposal validation, fingerprinting, accounting, and local persistence.
+  The same directory is location-independent so it can be copied unchanged from
+  .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback. Narrow TUI and headless
+  `jcode run` routing cases forward the trusted current session ID for a bare
+  `/session-feedback` invocation through their existing input and `prepare_run_message` seams;
+  no protocol, SDK, hook, Cargo dependency, or new CLI surface is added.
+
+  Evidence enters through one versioned allowlisted JSON contract. A compatible librarian
+  summary is accepted only when its already-visible path is explicitly cited; otherwise the
+  skill constructs the same contract from bounded visible outcomes and receipts without
+  rereading repository content. After deterministic shortlisting, only bounded excerpts from
+  concrete skill or instruction targets may be read. One isolated `jcode run --json`
+  invocation with a locally embedded and validated schema generates zero or more review-only
+  proposals, which are deduplicated into a local non-replicated Beads store beneath
+  ~/.jcode/feedback/.
+
+technical_context:
+  language: "Python 3 standard library and Markdown skill instructions; Rust 2024 tests only where needed for the public slash surface"
+  framework: "None"
+  primary_dependencies:
+    - name: "Python standard library"
+      version: ">=3.10"
+      purpose: "Provides deterministic JSON, hashing, subprocess, path, time, and unittest support without adding package dependencies."
+    - name: "Jcode CLI"
+      version: "workspace v0.75.3-dev or newer compatible build"
+      purpose: "Provides the existing slash-skill surface and the bounded native OpenAI OAuth `jcode run` generation path."
+    - name: "Beads CLI"
+      version: "installed `bd` with Dolt backend"
+      purpose: "Bootstraps and maintains the local review queue, lifecycle labels, comments, and deduplication records under the feedback root."
+    - name: "JSON Schema"
+      version: "Draft 2020-12"
+      purpose: "Defines versioned evidence, generator-response, proposal, and run-accounting contracts embedded by the helper and validated locally around `jcode run --json`."
+  storage: "Local files only under ~/.jcode/feedback/: config.json, runs/, proposals/, and a non-replicated .beads Dolt store"
+  testing:
+    framework: "Python unittest plus existing Rust built-in test harness for slash-skill discovery and activation"
+    approach: "Pure unit tests cover normalization, privacy filters, ordering, limits, fingerprints, rendering, and accounting; temporary-home integration tests cover first-run bootstrap, dedup states, failure atomicity, and filesystem/network allowlists; bounded public slash-flow tests cover current and named sessions with and without librarian evidence using an injected fake generator instead of a live paid request."
+  target_platform: "Jcode-supported Linux and macOS first, with path and subprocess behavior kept portable for Windows where the existing Python, jcode, and bd executables are available"
+  project_type: "cli"
+  performance_goals: "Every invocation remains within effective evidence, excerpt, request-input, request-output, proposal-count, elapsed-time, and cost limits; deterministic fixtures have zero unaccounted bytes or tokens; generation performs exactly zero or one model request."
+  constraints:
+    - "The only user entry point is the human-triggered /session-feedback [session-id] skill flow."
+    - "The workflow must succeed on first run without a session librarian or Bead jcode-zor."
+    - "Never load or transmit full transcripts, startup instruction repetition, complete skill corpora, raw edit or patch payloads, images, binary/base64 data, or bulk successful tool output."
+    - "Do not read repository files before deterministic target shortlisting; read only bounded excerpts from shortlisted skill or instruction targets."
+    - "Configuration precedence is invocation override, environment override, ~/.jcode/feedback/config.json, then built-in default."
+    - "The default generation route is native OpenAI OAuth, model gpt-5.6-sol, medium effort, with one request maximum."
+    - "All feedback-specific state and outputs remain under ~/.jcode/feedback/ and Beads replication is never configured."
+    - "Proposal creation and evidence append are the only permitted mutations; targets and approval state remain unchanged."
+    - "Beyond the narrow TUI current-session argument forwarding required by bare `/session-feedback`, no production core-Jcode surface, Cargo dependency, feedback CLI, automatic hook, pre-close prompt, patch application, approval, or implementation behavior is added."
+    - "The artifact directory must work unchanged from project-local and user-global skill locations."
+  scale_scope: "One bounded human-triggered review at a time, a small configurable proposal count per invocation, and a local proposal queue searched by normalized fingerprint across feedback-labeled open, in-progress, and closed records."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan adds one removable skill directory, focused tests, and the five-line TUI current-session forwarding boundary that runtime acceptance proved necessary for bare `/session-feedback`; no broader routing or core refactor is included."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "The slash skill is additive and absent-by-default; normal Jcode behavior and existing persisted contracts remain unchanged when it is absent or unused."
+    - name: "Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "One helper resolves invocation, environment, persisted feedback config, and built-in defaults, reports effective non-secret values, treats empty values as unset, and rejects invalid specified values before generation."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "The existing skill and headless-run surfaces remain canonical; no new crate, protocol, SDK, or server ownership path is introduced."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every privacy, budget, deduplication, bootstrap, accounting, no-mutation, and public slash acceptance boundary has a direct fixture or integration check."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Schemas, allowlists, path containment, subprocess allowlists, output validation, and atomic persistence reject malformed or oversized inputs with actionable errors and no unsupported proposal writes."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Delivery requires schema validation, focused Python and Rust tests, formatting, and scripts/check_guardrails.sh --skip-slow unless compiled Rust changes expand the required gate."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The capability uses the existing extension surface, is clearly experimental and removable, avoids a plugin ABI or duplicate CLI, and minimizes upstream drift."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The workflow delivers decision-ready local proposals while preserving explicit human approval and forbidding target, lifecycle, destructive, or publishing actions."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The design measures all evidence, excerpt, prompt, output, time, and cost contributions and validates the public flow through the executing Jcode binary or an isolated private instance."
+
+research_findings:
+  decisions:
+    - topic: "Feature ownership and implementation language"
+      decision: "Keep orchestration in .jcode/skills/session-feedback/SKILL.md and place deterministic mechanics in a dependency-free Python helper beside it."
+      rationale: "Project-local skills are already discovered dynamically and can be copied to the global skill directory unchanged. Python keeps schemas, fixtures, and deterministic transforms small without adding Cargo dependencies or production core code."
+      alternatives_considered:
+        - "Add a `jcode feedback` Rust command, which is explicitly out of scope and increases upstream drift."
+        - "Use a prompt-only skill, which cannot reliably enforce deterministic limits, fingerprints, schemas, and atomic persistence."
+        - "Use shell helpers, which are less portable and less suitable for structured validation and tests."
+    - topic: "Evidence acquisition without transcript loading"
+      decision: "Accept a librarian summary only through an explicitly cited already-visible path and normalize it with a versioned adapter; otherwise have the skill serialize only the enumerated visible evidence categories into the same contract."
+      rationale: "There is no existing repository librarian contract or canonical discovery path. Explicit path injection is pluggable, avoids filesystem scans, and preserves first-run independence."
+      alternatives_considered:
+        - "Search session directories broadly for summary.json, which would violate bounded-read requirements."
+        - "Require the librarian, which violates the standalone first-run outcome."
+        - "Read stored transcripts to reconstruct evidence, which violates the privacy contract."
+    - topic: "Deterministic target shortlisting and excerpts"
+      decision: "Sort candidates by normalized scope, category, concrete target, metadata hash, failure relevance, and stable tie-breakers; only then permit bounded reads of exact skill or instruction targets."
+      rationale: "A pure deterministic stage makes repeated runs reproducible and proves repository content was not used to select targets."
+      alternatives_considered:
+        - "Ask the generator to choose files from repository contents, which would require broad reads and make selection nondeterministic."
+        - "Load every skill or instruction file up front, which violates token and privacy constraints."
+    - topic: "Generation route and request enforcement"
+      decision: "Build exactly one `jcode run --model openai-oauth:gpt-5.6-sol --reasoning-effort medium --tool-profile none --max-turns 1 --token-budget ... --json` command after all local validation. Run it with a private HOME, JCODE_HOME, runtime directory, workspace, socket, and copied owner-only OAuth credential so normal startup instructions and skills are excluded. Embed the bounded generator-response schema in the prompt and validate the returned text locally; do not use `--schema`, whose public SDK bridge may issue corrective retries and rejects run-safety bounds."
+      rationale: "This reuses the native OAuth headless path while preserving the strict one-request ceiling, excluding unrelated startup context, enforcing no-tools and token/deadline boundaries, validating the schema locally, and keeping the command contract observable in tests."
+      alternatives_considered:
+        - "Call an external OpenAI API directly, which would duplicate authentication and provider routing."
+        - "Use swarm or another agent surface, which adds orchestration and request-count ambiguity."
+        - "Allow generator tools, which would violate the review-only mutation boundary."
+    - topic: "Configuration semantics"
+      decision: "Resolve each setting through invocation, JCODE_SESSION_FEEDBACK_* environment variables, ~/.jcode/feedback/config.json, and defaults; empty values are unset, while a present invalid or unsupported value fails before generation."
+      rationale: "This matches the constitution's precedence contract and prevents a mistyped high-precedence safety limit from silently falling through to a looser value."
+      alternatives_considered:
+        - "Silently ignore invalid values and fall back, which can hide operator mistakes."
+        - "Use normal Jcode config.toml, which would couple a removable skill to production config types."
+    - topic: "Local proposal persistence and deduplication"
+      decision: "Initialize `~/.jcode/feedback/.beads` idempotently with no remote, label all records `session-feedback`, store the fingerprint in structured metadata, and search only feedback records in open, in-progress, and closed states before mutation."
+      rationale: "A dedicated root prevents repository Beads contamination, keeps all proposal artifacts local, and makes relevant closed records precisely those owned by this feedback lane."
+      alternatives_considered:
+        - "Use the repository .beads store, which violates output isolation and removability."
+        - "Use filename-only persistence, which loses the requested approval queue and lifecycle semantics."
+        - "Search every closed Bead, which is unnecessary and can produce unrelated matches."
+    - topic: "Atomic review-only writes"
+      decision: "Validate the complete generator response and compute all dedup actions before writing; use temporary files plus atomic rename and bounded `bd` create/comment/label operations only after bootstrap succeeds."
+      rationale: "Invalid output, ambiguous duplicate matches, bootstrap errors, and generation failures must leave no falsely successful or partially persisted proposal result."
+      alternatives_considered:
+        - "Create Beads while parsing proposals, which can leave partial state."
+        - "Repair malformed model output with a second request, which violates the request maximum."
+    - topic: "Testing the slash workflow without paid or external effects"
+      decision: "Inject the generator executable and isolated HOME/JCODE feedback root in tests, record the exact command and request payload, and use sentinels plus filesystem/process/network spies to prove allowed effects."
+      rationale: "This directly tests public behavior, route selection, one-request enforcement, privacy, and persistence deterministically without a live costly request."
+      alternatives_considered:
+        - "Rely only on helper unit tests, which would not prove the slash contract."
+        - "Run live provider requests in routine tests, which is costly and nondeterministic."
+
+data_model:
+  entities:
+    - name: "FeedbackInvocation"
+      description: "One explicit review request for the current or a named session."
+      fields:
+        - name: "invocation_id"
+          type: "string"
+          description: "Stable local identifier for accounting and output paths."
+          constraints: "Unique beneath the feedback root and safe for filenames."
+        - name: "session_id"
+          type: "string"
+          description: "Current or explicitly requested session identity."
+          constraints: "Must be visible and validated before evidence acquisition."
+        - name: "effective_config"
+          type: "GenerationBudget"
+          description: "Resolved non-secret route and bounds."
+          constraints: "Every value records its source and passes range validation."
+        - name: "outcome"
+          type: "zero_proposals | proposals_persisted | failed"
+          description: "Terminal review result."
+          constraints: "Failure cannot be represented as successful persistence."
+      relationships:
+        - target: "NormalizedEvidenceBundle"
+          type: "one-to-one"
+          description: "Each invocation uses one normalized bounded evidence bundle."
+        - target: "ImprovementProposal"
+          type: "one-to-many"
+          description: "An invocation may produce zero or a bounded number of proposals."
+    - name: "GenerationBudget"
+      description: "Effective route, privacy, resource, and proposal bounds for one invocation."
+      fields:
+        - name: "model"
+          type: "string"
+          description: "Generator model identifier."
+          constraints: "Defaults to gpt-5.6-sol and must be supported by the selected native route."
+        - name: "effort"
+          type: "enum"
+          description: "Reasoning effort passed to Jcode."
+          constraints: "Defaults to medium and must be a supported value."
+        - name: "limits"
+          type: "object"
+          description: "Evidence bytes, excerpt bytes, input tokens, output tokens, proposal count, elapsed time, and estimated cost ceilings."
+          constraints: "Positive bounded values; enforced before or during work."
+        - name: "sources"
+          type: "map<string, invocation|environment|persisted|default>"
+          description: "Precedence source for each effective setting."
+          constraints: "Contains no secret values."
+      relationships:
+        - target: "FeedbackInvocation"
+          type: "one-to-one"
+          description: "One resolved budget governs the complete invocation."
+    - name: "NormalizedEvidenceBundle"
+      description: "Versioned allowlisted evidence shared by librarian and fallback paths."
+      fields:
+        - name: "contract_version"
+          type: "string"
+          description: "Evidence schema version."
+          constraints: "Exactly one supported v1 value."
+        - name: "source"
+          type: "librarian | fallback"
+          description: "Acquisition adapter used."
+          constraints: "Librarian input must be explicitly cited and compatible."
+        - name: "items"
+          type: "array<EvidenceItem>"
+          description: "Bounded outcomes, todo assessments, invocation receipts, failure excerpts, validation receipts, and relevant paths."
+          constraints: "Allowlisted categories only; per-item and aggregate bounds apply."
+        - name: "accounting"
+          type: "object"
+          description: "Measured byte and deterministic token totals by evidence category."
+          constraints: "Totals reconcile exactly with serialized request material."
+      relationships:
+        - target: "TargetShortlistEntry"
+          type: "one-to-many"
+          description: "Permitted metadata produces an ordered deterministic shortlist."
+    - name: "TargetShortlistEntry"
+      description: "A concrete candidate chosen before any target file content is read."
+      fields:
+        - name: "category"
+          type: "enum"
+          description: "Proposal taxonomy category."
+          constraints: "One of global instructions, skills, hooks/config, model/profile, context/skill routing, harness/contracts, SDK/public surfaces, or Jcode."
+        - name: "scope"
+          type: "personal-global | project-jcode"
+          description: "Distinguishes personal and project target identity."
+          constraints: "Required and included in fingerprint material."
+        - name: "concrete_target"
+          type: "string"
+          description: "Exact file, skill, configuration key, profile, contract, SDK surface, or Jcode component."
+          constraints: "Normalized, bounded, and path-contained when file-backed."
+        - name: "selection_evidence"
+          type: "array<string>"
+          description: "Evidence references and metadata supporting selection."
+          constraints: "Must not contain repository file content."
+        - name: "excerpt"
+          type: "optional bounded string"
+          description: "Post-shortlist excerpt from a skill or instruction target."
+          constraints: "Only allowed target classes; measured and within excerpt budget."
+      relationships:
+        - target: "ImprovementProposal"
+          type: "one-to-many"
+          description: "Validated proposals must refer to a shortlisted concrete target."
+    - name: "ImprovementProposal"
+      description: "Schema-validated review-only recommendation returned by the generator."
+      fields:
+        - name: "target"
+          type: "object"
+          description: "Category, scope, and concrete target."
+          constraints: "Must match a shortlist entry and supported taxonomy."
+        - name: "evidence_references"
+          type: "array<string>"
+          description: "Stable references into the evidence bundle."
+          constraints: "Non-empty, deduplicated, and resolvable."
+        - name: "review_content"
+          type: "object"
+          description: "Problem, hypothesis, suggested behavior or patch outline, expected benefit, impact, risk/blast radius, validation plan, confidence, and non-goals."
+          constraints: "Every required review field is present and bounded."
+        - name: "fingerprint"
+          type: "sha256 hex string"
+          description: "Hash of normalized scope/category/target, problem, and intended outcome."
+          constraints: "Recomputed locally; generator-supplied mismatches are rejected."
+      relationships:
+        - target: "FeedbackProposalBead"
+          type: "many-to-one"
+          description: "Equivalent fingerprints update one existing record; unique fingerprints create one record."
+    - name: "FeedbackProposalBead"
+      description: "Local approval record and evidence history for one normalized proposal fingerprint."
+      fields:
+        - name: "bead_id"
+          type: "string"
+          description: "Local Beads identity."
+          constraints: "Created only beneath ~/.jcode/feedback/.beads."
+        - name: "fingerprint"
+          type: "sha256 hex string"
+          description: "Deduplication key stored in metadata."
+          constraints: "Unique for normal operation; multiple matches cause a safe ambiguity failure."
+        - name: "lifecycle"
+          type: "Beads status plus labels"
+          description: "Review queue state."
+          constraints: "New records are labeled needs-approval; the workflow never approves, claims, or starts them."
+        - name: "evidence_history"
+          type: "array<EvidenceOccurrence>"
+          description: "Nonduplicate references from repeated reviews."
+          constraints: "Append-only through bounded comments or metadata; exact duplicates are not re-added."
+      relationships:
+        - target: "ImprovementProposal"
+          type: "one-to-many"
+          description: "One persisted record accumulates equivalent review occurrences."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: ".jcode/skills/session-feedback/SKILL.md"
+      description: "Normative slash workflow, safety boundary, visible-evidence acquisition rules, configuration interface, and reusable review orchestrator entry contract."
+    - path: ".jcode/skills/session-feedback/schemas/evidence-v1.schema.json"
+      description: "Versioned bounded normalized evidence contract."
+    - path: ".jcode/skills/session-feedback/schemas/generator-response-v1.schema.json"
+      description: "Schema supplied to the single `jcode run` request."
+    - path: ".jcode/skills/session-feedback/schemas/proposal-v1.schema.json"
+      description: "Canonical review proposal and Markdown/JSON parity contract."
+  source_code:
+    - path: ".jcode/skills/session-feedback/session_feedback.py"
+      description: "Location-independent deterministic orchestrator helper for config, schemas, bounds, shortlisting, invocation, accounting, fingerprints, deduplication, and persistence."
+    - path: ".jcode/skills/session-feedback/__main__.py"
+      description: "Thin reusable local entry point used by the slash skill now and a possible future pre-close caller without registering that caller."
+    - path: ".jcode/skills/session-feedback/fixtures/"
+      description: "Small allowlisted librarian, fallback, generator, dedup, and prohibited-content fixtures."
+  tests:
+    - path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+      description: "Dependency-free unit and temporary-home integration coverage for contracts, privacy, budgets, determinism, bootstrap, dedup, accounting, and no-mutation guarantees."
+    - path: "crates/jcode-tui/src/tui/app/tests/"
+      description: "Focused tests proving the real project-local and copied global skill are discoverable and `/session-feedback` forwards current or named-session arguments without any automatic trigger."
+    - path: "scripts/check_guardrails.sh"
+      description: "Existing delivery gate, run with --skip-slow for the skill/schema-only path unless Rust test changes require the corresponding focused Cargo checks."
+
+implementation_phases:
+  - phase: 1
+    name: "Contracts and deterministic core"
+    goal: "Define versioned contracts and implement pure configuration, normalization, privacy, shortlisting, fingerprinting, and accounting behavior."
+    deliverables:
+      - "Evidence, generator-response, and proposal JSON Schemas"
+      - "Location-independent Python helper with explicit configuration precedence"
+      - "Allowlist, prohibited-content, deterministic ordering, bounds, and fingerprint tests"
+  - phase: 2
+    name: "Standalone slash orchestrator and generation boundary"
+    goal: "Expose the human-triggered current/named-session workflow and enforce one bounded native OAuth generation request."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "/session-feedback skill instructions and reusable orchestrator entry point"
+      - "Librarian adapter and first-run fallback evidence path"
+      - "Post-shortlist bounded excerpt loading with measured input accounting"
+      - "Schema-constrained no-tools `jcode run` invocation with request, time, token, output, and cost controls"
+  - phase: 3
+    name: "Local persistence and deduplication"
+    goal: "Persist only validated review records beneath the feedback root and keep one approval record per normalized finding."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Idempotent non-replicated ~/.jcode/feedback/.beads bootstrap"
+      - "needs-approval proposal creation with Markdown/JSON parity"
+      - "Open, in-progress, and relevant closed fingerprint lookup"
+      - "Nonduplicate evidence append and ambiguous-match safe failure"
+  - phase: 4
+    name: "Public safety and failure validation"
+    goal: "Prove the workflow's public slash behavior, first-run independence, strict side-effect boundary, and complete accounting."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Current and named-session slash tests with and without librarian evidence"
+      - "Clean-home, copied-global-skill, bootstrap failure, malformed output, timeout, and zero-proposal tests"
+      - "One-request, no-target-mutation, no-replication, process/network allowlist, and prohibited-content sentinel checks"
+      - "100-run determinism and exact accounting assertions"
+  - phase: 5
+    name: "Delivery and runtime verification"
+    goal: "Validate the artifact and executing slash workflow while preserving minimal upstream drift."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Autospec artifact/schema validation and focused Python/Rust tests"
+      - "Formatting and repository guardrails with the applicable skip-slow exception"
+      - "Isolated executing-binary slash smoke using a fake generator, with resolved binary identity recorded"
+      - "Changelog or targeted documentation update only if repository delivery conventions require it"
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T02:59:34Z"
+  artifact_type: "plan"

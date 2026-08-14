@@ -3722,10 +3722,22 @@ impl App {
                     title: None,
                     tool_data: None,
                 });
-                let Some(prompt) = trailing_prompt
-                    .or(skill.default_prompt)
+                let prompt = trailing_prompt
                     .filter(|prompt| !prompt.trim().is_empty())
-                else {
+                    .or_else(|| {
+                        (skill_name == "session-feedback").then(|| {
+                            // This explicit workflow runs immediately for the current
+                            // session. Mark the trusted in-memory ID so the skill can
+                            // distinguish this from an explicitly named session.
+                            format!("current_session_id={}", self.session.id)
+                        })
+                    })
+                    .or_else(|| {
+                        skill
+                            .default_prompt
+                            .filter(|prompt| !prompt.trim().is_empty())
+                    });
+                let Some(prompt) = prompt else {
                     return;
                 };
                 input = prompt;

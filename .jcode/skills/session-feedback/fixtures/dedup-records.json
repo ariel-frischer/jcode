@@ -1,0 +1,292 @@
+{
+  "fixture_version": "dedup-records-v1",
+  "description": "Synthetic bounded local Beads lifecycle and fingerprint-deduplication records for session-feedback persistence tests.",
+  "fingerprint_contract": {
+    "algorithm": "sha256",
+    "canonicalization": "sorted compact UTF-8 JSON after helper normalization",
+    "material_fields": [
+      "scope",
+      "category",
+      "concrete_target",
+      "problem",
+      "intended_outcome"
+    ]
+  },
+  "lifecycle_contract": {
+    "required_record_label": "session-feedback",
+    "new_record_labels": [
+      "session-feedback",
+      "needs-approval"
+    ],
+    "searchable_statuses": [
+      "open",
+      "in_progress",
+      "closed"
+    ],
+    "relevant_closed_label": "feedback-relevant",
+    "ignored_closed_label": "feedback-unrelated"
+  },
+  "fingerprints": {
+    "open": {
+      "material": {
+        "scope": "project-jcode",
+        "category": "skills",
+        "concrete_target": ".jcode/skills/session-feedback/SKILL.md",
+        "problem": "The synthetic open case repeats one bounded receipt lookup.",
+        "intended_outcome": "Reuse the cited receipt before another lookup."
+      },
+      "value": "93920234ad7e957fc8c1dd06c1c5a6e018ba8496ce6f743800b8f4841b67714b"
+    },
+    "in_progress": {
+      "material": {
+        "scope": "personal-global",
+        "category": "global-instructions",
+        "concrete_target": "~/AGENTS.md",
+        "problem": "The synthetic in-progress case repeats one routing rule.",
+        "intended_outcome": "Keep one canonical routing rule in global guidance."
+      },
+      "value": "c41daa9114f2d54e113ef3fffb2447f6f1352921f98d93ae2e10de9e8df5f1b4"
+    },
+    "relevant_closed": {
+      "material": {
+        "scope": "project-jcode",
+        "category": "harness-setup-contracts",
+        "concrete_target": "scripts/check_guardrails.sh",
+        "problem": "The synthetic relevant closed case omits one fixture validation.",
+        "intended_outcome": "Validate fixture bounds in the focused guardrail check."
+      },
+      "value": "55a9219cca2a314241eca19a6b95ea888872c44e02cf5dd13ce88dd4026288e1"
+    },
+    "unrelated_closed": {
+      "material": {
+        "scope": "project-jcode",
+        "category": "jcode",
+        "concrete_target": "crates/jcode-app-core/src/server/mod.rs",
+        "problem": "The synthetic unrelated closed case describes an obsolete startup delay.",
+        "intended_outcome": "Preserve the already-completed startup behavior."
+      },
+      "value": "24d7884f7a954071df17a3cc971633d37639837f78681485a05b2dfa1468db40"
+    },
+    "duplicate_evidence": {
+      "material": {
+        "scope": "project-jcode",
+        "category": "context-skill-routing",
+        "concrete_target": ".jcode/skills/session-feedback/SKILL.md#routing",
+        "problem": "The synthetic duplicate-evidence case checks the same target twice.",
+        "intended_outcome": "Deduplicate the local routing candidate list."
+      },
+      "value": "6d0cb49a0079b81d5f8c7693ce201bfa5d4a560db2eb05e71277830e97fa92a4"
+    },
+    "unique": {
+      "material": {
+        "scope": "project-jcode",
+        "category": "sdk-public-surfaces",
+        "concrete_target": "sdk/go/session.go",
+        "problem": "The synthetic unique case lacks one bounded result field.",
+        "intended_outcome": "Expose the bounded result field in the public session surface."
+      },
+      "value": "33875283601f942e5a74f64684bfcb325e03e7d6c86812c059f9abb4628876d7"
+    },
+    "ambiguous": {
+      "material": {
+        "scope": "personal-global",
+        "category": "model-profile-choices",
+        "concrete_target": "~/.jcode/profiles/research.toml",
+        "problem": "The synthetic ambiguous case omits its effort rationale.",
+        "intended_outcome": "Record the bounded effort rationale in profile metadata."
+      },
+      "value": "4963e1e1b5082e7ccd47ff8badb46f1d5903237bc2932a65e64047ed555fbc6a"
+    }
+  },
+  "records_by_fingerprint": {
+    "93920234ad7e957fc8c1dd06c1c5a6e018ba8496ce6f743800b8f4841b67714b": [
+      {
+        "bead_id": "feedback-open-001",
+        "fingerprint": "93920234ad7e957fc8c1dd06c1c5a6e018ba8496ce6f743800b8f4841b67714b",
+        "status": "open",
+        "labels": [
+          "session-feedback",
+          "needs-approval"
+        ],
+        "evidence_history": [
+          {
+            "occurrence_id": "occurrence-open-001",
+            "session_id": "session-synthetic-open",
+            "observed_at": "2026-08-01T10:00:00Z",
+            "evidence_references": [
+              "tool-open-1"
+            ],
+            "evidence_digest": "1010101010101010101010101010101010101010101010101010101010101010"
+          }
+        ]
+      }
+    ],
+    "c41daa9114f2d54e113ef3fffb2447f6f1352921f98d93ae2e10de9e8df5f1b4": [
+      {
+        "bead_id": "feedback-progress-001",
+        "fingerprint": "c41daa9114f2d54e113ef3fffb2447f6f1352921f98d93ae2e10de9e8df5f1b4",
+        "status": "in_progress",
+        "labels": [
+          "session-feedback",
+          "needs-approval"
+        ],
+        "evidence_history": [
+          {
+            "occurrence_id": "occurrence-progress-001",
+            "session_id": "session-synthetic-progress",
+            "observed_at": "2026-08-02T10:00:00Z",
+            "evidence_references": [
+              "outcome-progress-1"
+            ],
+            "evidence_digest": "2020202020202020202020202020202020202020202020202020202020202020"
+          }
+        ]
+      }
+    ],
+    "55a9219cca2a314241eca19a6b95ea888872c44e02cf5dd13ce88dd4026288e1": [
+      {
+        "bead_id": "feedback-closed-relevant-001",
+        "fingerprint": "55a9219cca2a314241eca19a6b95ea888872c44e02cf5dd13ce88dd4026288e1",
+        "status": "closed",
+        "labels": [
+          "session-feedback",
+          "feedback-relevant"
+        ],
+        "evidence_history": [
+          {
+            "occurrence_id": "occurrence-closed-relevant-001",
+            "session_id": "session-synthetic-closed-relevant",
+            "observed_at": "2026-08-03T10:00:00Z",
+            "evidence_references": [
+              "validation-closed-1"
+            ],
+            "evidence_digest": "3030303030303030303030303030303030303030303030303030303030303030"
+          }
+        ]
+      }
+    ],
+    "24d7884f7a954071df17a3cc971633d37639837f78681485a05b2dfa1468db40": [
+      {
+        "bead_id": "feedback-closed-unrelated-001",
+        "fingerprint": "24d7884f7a954071df17a3cc971633d37639837f78681485a05b2dfa1468db40",
+        "status": "closed",
+        "labels": [
+          "session-feedback",
+          "feedback-unrelated"
+        ],
+        "evidence_history": [
+          {
+            "occurrence_id": "occurrence-closed-unrelated-001",
+            "session_id": "session-synthetic-closed-unrelated",
+            "observed_at": "2026-08-04T10:00:00Z",
+            "evidence_references": [
+              "outcome-closed-1"
+            ],
+            "evidence_digest": "4040404040404040404040404040404040404040404040404040404040404040"
+          }
+        ]
+      }
+    ],
+    "6d0cb49a0079b81d5f8c7693ce201bfa5d4a560db2eb05e71277830e97fa92a4": [
+      {
+        "bead_id": "feedback-duplicate-evidence-001",
+        "fingerprint": "6d0cb49a0079b81d5f8c7693ce201bfa5d4a560db2eb05e71277830e97fa92a4",
+        "status": "open",
+        "labels": [
+          "session-feedback",
+          "needs-approval"
+        ],
+        "evidence_history": [
+          {
+            "occurrence_id": "occurrence-duplicate-001",
+            "session_id": "session-synthetic-duplicate",
+            "observed_at": "2026-08-05T10:00:00Z",
+            "evidence_references": [
+              "skill-duplicate-1"
+            ],
+            "evidence_digest": "5050505050505050505050505050505050505050505050505050505050505050"
+          }
+        ]
+      }
+    ],
+    "4963e1e1b5082e7ccd47ff8badb46f1d5903237bc2932a65e64047ed555fbc6a": [
+      {
+        "bead_id": "feedback-ambiguous-001",
+        "fingerprint": "4963e1e1b5082e7ccd47ff8badb46f1d5903237bc2932a65e64047ed555fbc6a",
+        "status": "open",
+        "labels": [
+          "session-feedback",
+          "needs-approval"
+        ],
+        "evidence_history": []
+      },
+      {
+        "bead_id": "feedback-ambiguous-002",
+        "fingerprint": "4963e1e1b5082e7ccd47ff8badb46f1d5903237bc2932a65e64047ed555fbc6a",
+        "status": "in_progress",
+        "labels": [
+          "session-feedback",
+          "needs-approval"
+        ],
+        "evidence_history": []
+      }
+    ]
+  },
+  "cases": {
+    "open_match": {
+      "fingerprint": "93920234ad7e957fc8c1dd06c1c5a6e018ba8496ce6f743800b8f4841b67714b",
+      "expected_bead_ids": [
+        "feedback-open-001"
+      ],
+      "expected_action": "append_new_evidence"
+    },
+    "in_progress_match": {
+      "fingerprint": "c41daa9114f2d54e113ef3fffb2447f6f1352921f98d93ae2e10de9e8df5f1b4",
+      "expected_bead_ids": [
+        "feedback-progress-001"
+      ],
+      "expected_action": "append_new_evidence"
+    },
+    "relevant_closed_match": {
+      "fingerprint": "55a9219cca2a314241eca19a6b95ea888872c44e02cf5dd13ce88dd4026288e1",
+      "expected_bead_ids": [
+        "feedback-closed-relevant-001"
+      ],
+      "expected_action": "append_new_evidence"
+    },
+    "unrelated_closed_ignored": {
+      "fingerprint": "24d7884f7a954071df17a3cc971633d37639837f78681485a05b2dfa1468db40",
+      "expected_bead_ids": [],
+      "expected_action": "create_needs_approval"
+    },
+    "unique_proposal": {
+      "fingerprint": "33875283601f942e5a74f64684bfcb325e03e7d6c86812c059f9abb4628876d7",
+      "expected_bead_ids": [],
+      "expected_action": "create_needs_approval"
+    },
+    "duplicate_evidence": {
+      "fingerprint": "6d0cb49a0079b81d5f8c7693ce201bfa5d4a560db2eb05e71277830e97fa92a4",
+      "incoming_occurrence": {
+        "occurrence_id": "occurrence-duplicate-001",
+        "session_id": "session-synthetic-duplicate",
+        "observed_at": "2026-08-05T10:00:00Z",
+        "evidence_references": [
+          "skill-duplicate-1"
+        ],
+        "evidence_digest": "5050505050505050505050505050505050505050505050505050505050505050"
+      },
+      "expected_bead_ids": [
+        "feedback-duplicate-evidence-001"
+      ],
+      "expected_action": "no_duplicate_append"
+    },
+    "ambiguous_duplicate": {
+      "fingerprint": "4963e1e1b5082e7ccd47ff8badb46f1d5903237bc2932a65e64047ed555fbc6a",
+      "expected_bead_ids": [
+        "feedback-ambiguous-001",
+        "feedback-ambiguous-002"
+      ],
+      "expected_action": "fail_ambiguously_without_mutation"
+    }
+  }
+}

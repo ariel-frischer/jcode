@@ -2544,6 +2544,14 @@ pub(crate) struct RunSingleMessageOptions<'a> {
     pub(crate) invocation_safety: crate::config::RunSafetyConfig,
 }
 
+pub(crate) fn prepare_run_message(message: &str, current_session_id: &str) -> String {
+    if message.trim() == "/session-feedback" {
+        format!("/session-feedback current_session_id={current_session_id}")
+    } else {
+        message.to_string()
+    }
+}
+
 struct RunSingleMessageSchemaOptions<'a> {
     profile_run_options: Option<&'a super::profile::ProfileRunOptions>,
     resume_session: Option<&'a str>,
@@ -2630,15 +2638,16 @@ pub(crate) async fn run_single_message_command(
     };
     restore_agent_session_if_requested(&mut agent, resume_session)?;
     run_safety::install(&mut agent, safety_candidates)?;
+    let message = prepare_run_message(message, agent.session_id());
 
     if emit_json {
-        let text = run_single_message_command_capture_with_auto_poke(&mut agent, message).await?;
+        let text = run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
         let report = run_safety::report(&agent, &provider, text);
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if emit_ndjson {
-        run_single_message_command_ndjson(&mut agent, provider.clone(), message).await?;
+        run_single_message_command_ndjson(&mut agent, provider.clone(), &message).await?;
     } else {
-        run_single_message_command_plain_with_auto_poke(&mut agent, message).await?;
+        run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
         run_safety::print_plain_stop(&agent);
     }
 

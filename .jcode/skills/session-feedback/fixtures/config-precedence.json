@@ -1,0 +1,423 @@
+{
+  "fixture_version": "config-precedence-v1",
+  "description": "Synthetic credential-free cases for deterministic session-feedback configuration precedence and budget-boundary tests.",
+  "precedence_order": [
+    "invocation",
+    "environment",
+    "persisted",
+    "default"
+  ],
+  "empty_value_semantics": "An empty string is unset and resolution continues to the next lower-precedence source.",
+  "invalid_value_semantics": "A present non-empty invalid or unsupported value fails at its source without falling through.",
+  "persisted_config_path": "~/.jcode/feedback/config.json",
+  "fields": {
+    "model": {
+      "default": "gpt-5.6-sol",
+      "environment": "JCODE_SESSION_FEEDBACK_MODEL",
+      "supported_values": [
+        "gpt-5.6-sol"
+      ]
+    },
+    "effort": {
+      "default": "medium",
+      "environment": "JCODE_SESSION_FEEDBACK_EFFORT",
+      "supported_values": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "max_evidence_bytes": {
+      "default": 262144,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_EVIDENCE_BYTES",
+      "unit": "bytes"
+    },
+    "max_excerpt_bytes": {
+      "default": 32768,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_EXCERPT_BYTES",
+      "unit": "bytes"
+    },
+    "max_input_tokens": {
+      "default": 32768,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_INPUT_TOKENS",
+      "unit": "estimated_tokens"
+    },
+    "max_output_tokens": {
+      "default": 8192,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_OUTPUT_TOKENS",
+      "unit": "estimated_tokens"
+    },
+    "max_proposals": {
+      "default": 8,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_PROPOSALS",
+      "unit": "proposals"
+    },
+    "max_elapsed_seconds": {
+      "default": 120.0,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS",
+      "unit": "seconds"
+    },
+    "max_estimated_cost_usd": {
+      "default": 1.0,
+      "environment": "JCODE_SESSION_FEEDBACK_MAX_ESTIMATED_COST_USD",
+      "unit": "usd"
+    }
+  },
+  "precedence_cases": [
+    {
+      "id": "built-in-defaults",
+      "invocation": {},
+      "environment": {},
+      "persisted": {},
+      "expected": {
+        "values": {
+          "model": "gpt-5.6-sol",
+          "effort": "medium",
+          "max_evidence_bytes": 262144,
+          "max_excerpt_bytes": 32768,
+          "max_input_tokens": 32768,
+          "max_output_tokens": 8192,
+          "max_proposals": 8,
+          "max_elapsed_seconds": 120.0,
+          "max_estimated_cost_usd": 1.0
+        },
+        "source_for_all": "default"
+      }
+    },
+    {
+      "id": "persisted-values",
+      "invocation": {},
+      "environment": {},
+      "persisted": {
+        "model": "gpt-5.6-sol",
+        "effort": "low",
+        "max_evidence_bytes": 131072,
+        "max_excerpt_bytes": 16384,
+        "max_input_tokens": 16384,
+        "max_output_tokens": 4096,
+        "max_proposals": 4,
+        "max_elapsed_seconds": 90.0,
+        "max_estimated_cost_usd": 0.75
+      },
+      "expected": {
+        "source_for_all": "persisted"
+      }
+    },
+    {
+      "id": "environment-values",
+      "invocation": {},
+      "environment": {
+        "JCODE_SESSION_FEEDBACK_MODEL": "gpt-5.6-sol",
+        "JCODE_SESSION_FEEDBACK_EFFORT": "high",
+        "JCODE_SESSION_FEEDBACK_MAX_EVIDENCE_BYTES": "98304",
+        "JCODE_SESSION_FEEDBACK_MAX_EXCERPT_BYTES": "12288",
+        "JCODE_SESSION_FEEDBACK_MAX_INPUT_TOKENS": "12288",
+        "JCODE_SESSION_FEEDBACK_MAX_OUTPUT_TOKENS": "3072",
+        "JCODE_SESSION_FEEDBACK_MAX_PROPOSALS": "3",
+        "JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS": "60.5",
+        "JCODE_SESSION_FEEDBACK_MAX_ESTIMATED_COST_USD": "0.50"
+      },
+      "persisted": {},
+      "expected": {
+        "source_for_all": "environment"
+      }
+    },
+    {
+      "id": "invocation-values",
+      "invocation": {
+        "model": "gpt-5.6-sol",
+        "effort": "minimal",
+        "max_evidence_bytes": 65536,
+        "max_excerpt_bytes": 8192,
+        "max_input_tokens": 8192,
+        "max_output_tokens": 2048,
+        "max_proposals": 2,
+        "max_elapsed_seconds": 45.0,
+        "max_estimated_cost_usd": 0.25
+      },
+      "environment": {},
+      "persisted": {},
+      "expected": {
+        "source_for_all": "invocation"
+      }
+    },
+    {
+      "id": "all-sources-conflict",
+      "invocation": {
+        "effort": "low",
+        "max_input_tokens": 8000,
+        "max_proposals": 2
+      },
+      "environment": {
+        "JCODE_SESSION_FEEDBACK_EFFORT": "high",
+        "JCODE_SESSION_FEEDBACK_MAX_INPUT_TOKENS": "12000",
+        "JCODE_SESSION_FEEDBACK_MAX_PROPOSALS": "3"
+      },
+      "persisted": {
+        "effort": "minimal",
+        "max_input_tokens": 16000,
+        "max_proposals": 4
+      },
+      "expected": {
+        "values": {
+          "effort": "low",
+          "max_input_tokens": 8000,
+          "max_proposals": 2
+        },
+        "sources": {
+          "effort": "invocation",
+          "max_input_tokens": "invocation",
+          "max_proposals": "invocation"
+        }
+      }
+    },
+    {
+      "id": "empty-invocation-falls-to-environment",
+      "invocation": {
+        "effort": "",
+        "max_output_tokens": ""
+      },
+      "environment": {
+        "JCODE_SESSION_FEEDBACK_EFFORT": "high",
+        "JCODE_SESSION_FEEDBACK_MAX_OUTPUT_TOKENS": "4096"
+      },
+      "persisted": {
+        "effort": "low",
+        "max_output_tokens": 2048
+      },
+      "expected": {
+        "values": {
+          "effort": "high",
+          "max_output_tokens": 4096
+        },
+        "sources": {
+          "effort": "environment",
+          "max_output_tokens": "environment"
+        }
+      }
+    },
+    {
+      "id": "empty-invocation-and-environment-fall-to-persisted",
+      "invocation": {
+        "max_elapsed_seconds": ""
+      },
+      "environment": {
+        "JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS": ""
+      },
+      "persisted": {
+        "max_elapsed_seconds": 30.0
+      },
+      "expected": {
+        "values": {
+          "max_elapsed_seconds": 30.0
+        },
+        "sources": {
+          "max_elapsed_seconds": "persisted"
+        }
+      }
+    },
+    {
+      "id": "all-empty-fall-to-default",
+      "invocation": {
+        "model": ""
+      },
+      "environment": {
+        "JCODE_SESSION_FEEDBACK_MODEL": ""
+      },
+      "persisted": {
+        "model": ""
+      },
+      "expected": {
+        "values": {
+          "model": "gpt-5.6-sol"
+        },
+        "sources": {
+          "model": "default"
+        }
+      }
+    }
+  ],
+  "invalid_value_cases": [
+    {
+      "id": "unsupported-model",
+      "field": "model",
+      "source": "invocation",
+      "value": "synthetic-unsupported-model",
+      "expected_error": "unsupported model"
+    },
+    {
+      "id": "unsupported-effort",
+      "field": "effort",
+      "source": "environment",
+      "value": "ultra",
+      "expected_error": "unsupported effort"
+    },
+    {
+      "id": "zero-evidence-limit",
+      "field": "max_evidence_bytes",
+      "source": "persisted",
+      "value": 0,
+      "expected_error": "positive integer"
+    },
+    {
+      "id": "negative-excerpt-limit",
+      "field": "max_excerpt_bytes",
+      "source": "invocation",
+      "value": -1,
+      "expected_error": "positive integer"
+    },
+    {
+      "id": "fractional-input-token-limit",
+      "field": "max_input_tokens",
+      "source": "persisted",
+      "value": 1024.5,
+      "expected_error": "positive integer"
+    },
+    {
+      "id": "nonnumeric-output-token-limit",
+      "field": "max_output_tokens",
+      "source": "environment",
+      "value": "many",
+      "expected_error": "positive integer"
+    },
+    {
+      "id": "boolean-proposal-limit",
+      "field": "max_proposals",
+      "source": "invocation",
+      "value": true,
+      "expected_error": "positive integer"
+    },
+    {
+      "id": "zero-elapsed-limit",
+      "field": "max_elapsed_seconds",
+      "source": "environment",
+      "value": "0",
+      "expected_error": "positive finite number"
+    },
+    {
+      "id": "negative-cost-limit",
+      "field": "max_estimated_cost_usd",
+      "source": "persisted",
+      "value": -0.01,
+      "expected_error": "positive finite number"
+    }
+  ],
+  "budget_boundary_cases": [
+    {
+      "field": "max_evidence_bytes",
+      "limit": 262144,
+      "below": {
+        "observed": 262143,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 262144,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 262145,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_excerpt_bytes",
+      "limit": 32768,
+      "below": {
+        "observed": 32767,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 32768,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 32769,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_input_tokens",
+      "limit": 32768,
+      "below": {
+        "observed": 32767,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 32768,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 32769,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_output_tokens",
+      "limit": 8192,
+      "below": {
+        "observed": 8191,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 8192,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 8193,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_proposals",
+      "limit": 8,
+      "below": {
+        "observed": 7,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 8,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 9,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_elapsed_seconds",
+      "limit": 120.0,
+      "below": {
+        "observed": 119.999,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 120.0,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 120.001,
+        "expected": "fail"
+      }
+    },
+    {
+      "field": "max_estimated_cost_usd",
+      "limit": 1.0,
+      "below": {
+        "observed": 0.99,
+        "expected": "pass"
+      },
+      "at": {
+        "observed": 1.0,
+        "expected": "pass"
+      },
+      "above": {
+        "observed": 1.01,
+        "expected": "fail"
+      }
+    }
+  ]
+}

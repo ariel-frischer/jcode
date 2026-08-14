@@ -1,0 +1,631 @@
+tasks:
+  branch: "agent/jcode-2ho-feedback"
+  created: "2026-08-14"
+  spec_path: "specs/007-session-feedback-proposals/spec.yaml"
+  plan_path: "specs/007-session-feedback-proposals/plan.yaml"
+
+summary:
+  total_tasks: 38
+  total_phases: 9
+  parallel_opportunities: 9
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Establish the removable skill artifact layout and deterministic fixture rules"
+    tasks:
+      - id: "T001"
+        title: "Create the standalone session-feedback fixture manifest"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/fixtures/README.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Create the project-local session-feedback directory layout without adding a Cargo dependency, automatic hook, or jcode feedback command; reserve any production Rust change for a later proven public-integration boundary."
+          - "Document that fixtures must be synthetic, bounded, allowlisted, deterministic, and free of transcripts, raw patches, images, binary/base64 data, credentials, and bulk successful tool output."
+          - "Keep every runtime artifact location-independent so the complete skill directory can later be copied unchanged to ~/.jcode/skills/session-feedback."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Define the shared contracts and deterministic core required by every user story"
+    tasks:
+      - id: "T002"
+        title: "Write foundational contract and deterministic-core tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Add dependency-free unittest coverage that loads all three schemas, rejects unsupported contract versions and unknown fields, and verifies stable canonical JSON serialization."
+          - "Define failing tests for normalized target scope/category identity, deterministic token or byte estimates, SHA-256 fingerprint material, and actionable validation errors."
+          - "Keep tests isolated with temporary HOME and injected executables so no developer feedback state, live provider, repository Beads store, or network service is touched."
+      - id: "T003"
+        title: "Define the bounded evidence v1 JSON Schema"
+        status: "Completed"
+        type: "implementation"
+        parallel: true
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/schemas/evidence-v1.schema.json"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Define one Draft 2020-12 contract for librarian and fallback evidence with an exact v1 version, explicit source, allowlisted item categories, stable references, relevant paths or hashes, and reconciled accounting."
+          - "Apply per-field and aggregate bounds and reject additional properties, prohibited payload fields, unsupported versions, malformed paths, and oversized values."
+          - "Represent only visible outcomes, todo assessments, tool or skill invocation receipts, bounded failure excerpts, validation receipts, and relevant paths."
+      - id: "T004"
+        title: "Define the canonical proposal v1 JSON Schema"
+        status: "Completed"
+        type: "implementation"
+        parallel: true
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/schemas/proposal-v1.schema.json"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Require target category, personal-global or project-jcode scope, concrete target, evidence references, problem, hypothesis, suggested behavior or patch outline, expected benefit, token or context impact, risk and blast radius, validation plan, confidence, fingerprint, and non-goals."
+          - "Enumerate all approved proposal taxonomy categories and reject unknown categories and additional properties."
+          - "Bound every string and collection and define the same canonical data needed for Markdown and JSON parity."
+      - id: "T005"
+        title: "Define the generator response v1 JSON Schema"
+        status: "Completed"
+        type: "implementation"
+        parallel: true
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/schemas/generator-response-v1.schema.json"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Define a bounded response containing zero or more proposal-v1-compatible records and no tool, patch, approval, implementation, or lifecycle-transition instructions."
+          - "Allow a valid zero-proposal result and cap proposal count and output structure for enforcement by the helper."
+          - "Reject malformed, oversized, unknown-version, and additional-property output before any persistence action."
+      - id: "T006"
+        title: "Implement shared schema, normalization, accounting, and fingerprint primitives"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T003", "T004", "T005"]
+        acceptance_criteria:
+          - "Implement dependency-free loading and validation for the versioned contracts with bounded actionable errors at every trust boundary."
+          - "Implement canonical normalization for scope, category, concrete target, problem, intended outcome, evidence references, and stable SHA-256 fingerprints."
+          - "Implement exact byte accounting and deterministic labeled token estimates without reading repository content or exposing secrets."
+          - "Pass T002 while retaining a small location-independent API usable from project-local and user-global skill directories."
+
+  - number: 3
+    title: "User Story 1 - Request session feedback on demand"
+    purpose: "Provide the explicit current-session and named-session slash workflow with a first-run fallback path"
+    story_reference: "US-001"
+    independent_test: "Invoke /session-feedback for the current session and /session-feedback <visible-session-id> with no librarian installed, then verify a bounded result or explicit zero-proposal result and no automatic invocation."
+    tasks:
+      - id: "T007"
+        title: "Write first-run fallback and session-selection tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Add failing temporary-home tests for current-session invocation, valid named-session invocation, missing or invisible session identifiers, and first run without librarian or jcode-zor resources."
+          - "Verify fallback evidence uses only supplied visible outcomes and receipts and reports the selected session identity and fallback source."
+          - "Verify an invalid session fails actionably before generation and creates no proposal record or falsely successful run result."
+      - id: "T008"
+        title: "Add public slash discovery and argument-forwarding tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/session_feedback_skill.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Test discovery and activation of the real project-local session-feedback skill through the existing slash-skill surface."
+          - "Verify invocation without arguments represents the current session and invocation with a visible session ID forwards that ID unchanged to the skill prompt."
+          - "Verify no session-end, pre-close, background, or other automatic trigger is registered."
+      - id: "T009"
+        title: "Register the focused session-feedback slash tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Include the new focused test module using the existing app-test organization and permit only the narrow current-session forwarding behavior required for a bare `/session-feedback` invocation."
+          - "Ensure the narrow exact-name tests compile and run without selecting unrelated stateful TUI tests."
+      - id: "T010"
+        title: "Implement visible session selection and deterministic fallback acquisition"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Accept the current session or one explicitly supplied visible session identifier and reject unknown or invisible identifiers before model work."
+          - "Build the v1 fallback bundle solely from already-visible allowed evidence categories without transcript loading, filesystem scans, or repository rereads."
+          - "Return a bounded structured review outcome that can represent zero proposals, persisted proposals, or a visible failure without conflating those states."
+      - id: "T011"
+        title: "Expose the reusable local session-feedback entry point"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: ".jcode/skills/session-feedback/__main__.py"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "Provide a thin noninteractive entry point for the slash workflow that accepts an optional session ID and bounded visible-evidence input."
+          - "Call one reusable orchestrator function rather than embedding slash-only logic, leaving a future pre-close caller possible without registering or enabling it."
+          - "Emit an actionable bounded result with session identity, evidence source, proposal count, accounting summary, and proposal locations or explicit zero-proposal status."
+      - id: "T012"
+        title: "Define the human-triggered slash workflow contract"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: ".jcode/skills/session-feedback/SKILL.md"
+        dependencies: ["T009", "T011"]
+        acceptance_criteria:
+          - "Define /session-feedback [session-id] as the only v1 user entry point and document current-session, named-session, invalid-session, and zero-proposal behavior."
+          - "Require use of already-visible evidence and explicitly prohibit transcript loading, broad repository reads, automatic triggering, target edits, patch application, approvals, or implementation."
+          - "Invoke the location-independent Python entry point with bounded structured inputs and no dependency on a librarian or jcode-zor."
+
+  - number: 4
+    title: "User Story 2 - Use bounded privacy-safe evidence"
+    purpose: "Normalize librarian or fallback evidence through one allowlisted contract and gate all target excerpts behind deterministic shortlisting"
+    story_reference: "US-002"
+    independent_test: "Feed allowed receipts plus sentinel transcript, patch, image, binary, base64, startup-instruction, and bulk-output content through both evidence paths and verify only bounded allowlisted data reaches the recorded request."
+    tasks:
+      - id: "T013"
+        title: "Create prohibited-content and evidence-path fixtures"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Provide small synthetic librarian and fallback inputs containing each allowed evidence category and unique sentinels for every prohibited content class."
+          - "Include compatible, unsupported-version, malformed, oversized, missing-target, and unreadable-target cases without embedding real session or repository content."
+          - "Keep the fixture deterministic and below repository review limits."
+      - id: "T014"
+        title: "Write privacy, normalization, shortlist, and excerpt-gating tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T012", "T013"]
+        acceptance_criteria:
+          - "Verify compatible explicitly cited librarian summaries and fallback evidence normalize to the same v1 contract while unsupported librarian input falls back only when permitted visible evidence is sufficient."
+          - "Verify all prohibited sentinels are absent from normalized evidence, excerpts, prompts, generator recordings, outputs, and persisted run accounting."
+          - "Verify identical metadata produces the same ordered shortlist and that no target file opens before shortlisting."
+          - "Verify only exact shortlisted skill or instruction targets may yield bounded excerpts and each excerpt's measured added input size reconciles with request accounting."
+      - id: "T015"
+        title: "Implement librarian adaptation and strict evidence allowlisting"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Accept a librarian summary only from an explicitly supplied already-visible path, validate compatibility and bounds, and never scan for summary.json."
+          - "Normalize librarian and fallback inputs through the same v1 allowlist while excluding full transcripts, repeated startup instructions, complete skill corpora, patch payloads, images, binary/base64 data, and bulk successful output."
+          - "Fail safely when neither the librarian nor fallback path can produce valid permitted evidence."
+      - id: "T016"
+        title: "Implement deterministic target shortlisting and bounded excerpt loading"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "Order candidates deterministically from normalized scope, category, concrete target, metadata hashes, invocation outcomes, cited hiccups, and stable tie-breakers without repository file content."
+          - "Permit contained bounded reads only for exact shortlisted skill or instruction files and never broaden reads when a target is missing, unreadable, or oversized."
+          - "Record every excerpt's exact added bytes and deterministic token estimate and enforce per-excerpt and aggregate budgets."
+      - id: "T017"
+        title: "Validate privacy and deterministic evidence behavior"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Run both acquisition paths and confirm contract-version parity, zero prohibited sentinel leakage, zero pre-shortlist repository reads, and exact evidence plus excerpt accounting."
+          - "Repeat deterministic normalization, shortlisting, and fingerprint fixtures 100 times with byte-identical results."
+          - "Confirm boundary failures are actionable and cause no generation request or unauthorized filesystem effect."
+
+  - number: 5
+    title: "User Story 3 - Generate bounded review-only proposals"
+    purpose: "Perform at most one isolated, locally schema-validated no-tools generation request and return complete decision-ready proposals without mutating targets"
+    story_reference: "US-003"
+    independent_test: "Use an injected fake jcode generator to verify the exact native OpenAI OAuth route, one-request maximum, proposal completeness, valid zero-proposal handling, accounting, and absence of target or lifecycle mutation."
+    tasks:
+      - id: "T018"
+        title: "Create bounded generator response fixtures"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/fixtures/generator-responses.json"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Provide valid zero-proposal and complete proposal responses plus malformed, oversized, unknown-category, fingerprint-mismatch, unshortlisted-target, and extra-property responses."
+          - "Cover every approved proposal taxonomy category and both personal-global and project-jcode target scopes with synthetic bounded data."
+          - "Keep the fixture independent of live model output and safe for exact request-recording tests."
+      - id: "T019"
+        title: "Write generation-boundary and review-only safety tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T017", "T018"]
+        acceptance_criteria:
+          - "Record the injected generator command and require native OpenAI OAuth, gpt-5.6-sol, medium effort, tool profile none, max turns one, a token budget, JSON output, local response-schema validation, and exactly zero or one request."
+          - "Prove the default runner uses a private HOME, JCODE_HOME, runtime directory, workspace, socket, and owner-only copied OAuth credential while excluding ambient AGENTS.md, skill directories, API-key authentication, and shared-server ownership."
+          - "Verify request input, output, proposal count, elapsed time, and estimated cost bounds at, below, and above each limit with no retry after failure or timeout."
+          - "Reject malformed, oversized, unknown-category, fingerprint-mismatch, unresolved-evidence, and unshortlisted-target output before persistence."
+          - "Instrument paths, processes, network, and proposal lifecycle to prove the generator cannot edit targets, apply patches, approve, start, delete, replace, publish, replicate, or perform external actions."
+      - id: "T020"
+        title: "Implement the single isolated and locally schema-validated generation request"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "After all local validation, construct exactly one injectable jcode run command using native OpenAI OAuth, the effective model and effort, tool-profile none, max-turns one, a token budget, and JSON output; embed the generator-response schema in the prompt and validate the returned text locally without retries."
+          - "Run the default command from a private temporary startup context with only an owner-only copy of native or explicitly permitted legacy OAuth material, a unique socket, an owned temporary server, and deterministic server cleanup."
+          - "Enforce input, output, elapsed-time, proposal-count, and estimated-cost ceilings before or during work and never issue a repair or retry request."
+          - "Capture bounded non-secret command, timing, usage, and failure receipts without exposing credentials or bulk provider output."
+      - id: "T021"
+        title: "Validate, fingerprint, and render review-only proposals"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Validate the complete response before writes, resolve every evidence reference, require shortlisted targets, and recompute each fingerprint locally."
+          - "Render semantically equivalent bounded JSON and Markdown containing every required proposal field, taxonomy classification, target scope, review-only state, and non-goals."
+          - "Treat zero proposals as success and reject unsupported output without creating or updating any proposal record."
+      - id: "T022"
+        title: "Wire proposal generation and complete run accounting into the entry point"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/__main__.py"
+        dependencies: ["T021"]
+        acceptance_criteria:
+          - "Run acquisition, shortlisting, optional excerpts, one generation request, validation, and result reporting through the shared orchestrator."
+          - "Report effective non-secret configuration, evidence bytes, excerpt bytes, request input and output sizes, proposal count, elapsed time, and measured or bounded estimated cost."
+          - "Return non-success for generation, timeout, schema, or accounting failures and create no unsupported proposal result."
+      - id: "T023"
+        title: "Validate bounded proposal generation independently"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T021", "T022"]
+        acceptance_criteria:
+          - "Pass complete, zero-proposal, malformed-output, timeout, and over-budget fake-generator scenarios with exactly the expected zero-or-one request count."
+          - "Verify JSON and Markdown parity, all required review fields, all taxonomy categories, distinct personal and project fingerprints, and exact accounting reconciliation."
+          - "Verify no target mutation, approval, implementation start, destructive action, replication, or unapproved network call occurs."
+
+  - number: 6
+    title: "User Story 4 - Deduplicate improvement proposals"
+    purpose: "Maintain one local needs-approval record per normalized fingerprint while preserving new nonduplicate evidence"
+    story_reference: "US-004"
+    independent_test: "Run equivalent proposals against isolated open, in-progress, and relevant closed feedback Beads and verify one identity remains, new evidence appends once, unique findings create one needs-approval record, and ambiguous matches fail safely."
+    tasks:
+      - id: "T024"
+        title: "Create local Beads lifecycle and deduplication fixtures"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: ".jcode/skills/session-feedback/fixtures/dedup-records.json"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Define synthetic open, in-progress, relevant closed, unrelated closed, unique, duplicate-evidence, and ambiguous duplicate records keyed by normalized fingerprints."
+          - "Represent only feedback-labeled local records and bounded evidence occurrence metadata."
+          - "Do not require or encode a remote, replication target, repository Beads path, or external identity."
+      - id: "T025"
+        title: "Write bootstrap, persistence, and deduplication tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T023", "T024"]
+        acceptance_criteria:
+          - "Use temporary HOME and injected bd to verify idempotent ~/.jcode/feedback/.beads initialization with no remote, replication, or network activity."
+          - "Verify matching feedback fingerprints are found across open, in-progress, and relevant closed states while unrelated closed records are ignored."
+          - "Verify equivalent findings append only new evidence to one existing record, exact duplicate evidence is not re-added, and unique findings create exactly one local needs-approval record."
+          - "Verify multiple matches, bootstrap failure, malformed records, or unwritable storage fail without partial files, false success, destructive consolidation, or target mutation."
+      - id: "T026"
+        title: "Implement atomic local feedback persistence and fingerprint deduplication"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T025"]
+        acceptance_criteria:
+          - "Bootstrap ~/.jcode/feedback, runs, proposals, and .beads idempotently using only contained paths and local non-replicated bd operations."
+          - "Search only session-feedback records in required lifecycle states, fail on ambiguous matches, append bounded nonduplicate evidence to one match, and create unique records with needs-approval status."
+          - "Validate all actions before mutation and use temporary files plus atomic rename so failures never leave falsely successful or partially persisted proposal artifacts."
+          - "Allow only proposal creation and evidence append mutations and never approve, claim, start, close, delete, publish, or replicate records."
+      - id: "T027"
+        title: "Validate local proposal deduplication independently"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T026"]
+        acceptance_criteria:
+          - "Pass clean bootstrap, repeated invocation, every required lifecycle state, exact duplicate evidence, unique proposal, ambiguous match, and injected atomic-write failure scenarios."
+          - "Verify every state and output remains beneath the isolated feedback root and no repository .beads store, remote, replication config, or unauthorized network path is touched."
+          - "Verify persisted Markdown, JSON, Bead metadata, fingerprint, and evidence history remain mutually consistent."
+
+  - number: 7
+    title: "User Story 5 - Configure generation budgets predictably"
+    purpose: "Resolve route and resource settings through one explicit precedence path and enforce every effective bound"
+    story_reference: "US-005"
+    independent_test: "Exercise defaults, persisted config, JCODE_SESSION_FEEDBACK_* variables, invocation overrides, empty values, invalid values, and limit boundaries, then verify effective non-secret configuration and zero-or-one request enforcement."
+    tasks:
+      - id: "T028"
+        title: "Create configuration precedence and boundary fixtures"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: ".jcode/skills/session-feedback/fixtures/config-precedence.json"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Cover built-in defaults, persisted ~/.jcode/feedback/config.json values, JCODE_SESSION_FEEDBACK_* environment values, invocation values, empty-as-unset values, conflicts, invalid ranges, and unsupported model or effort values."
+          - "Include evidence, excerpt, request-input, request-output, proposal-count, elapsed-time, and cost cases at, below, and above each boundary."
+          - "Contain no credentials or secret values."
+      - id: "T029"
+        title: "Write configuration precedence and budget enforcement tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T027", "T028"]
+        acceptance_criteria:
+          - "Verify precedence is invocation, environment, persisted feedback config, then built-in default independently for every configurable field."
+          - "Verify empty values are unset, while present invalid, unsafe, or unsupported values fail before evidence reads or generation rather than falling through."
+          - "Verify defaults select native OpenAI OAuth, gpt-5.6-sol, medium effort, and maximum one request."
+          - "Verify diagnostics identify configured and effective non-secret values and their sources without disclosing credentials."
+      - id: "T030"
+        title: "Implement canonical configuration resolution and limit enforcement"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: ".jcode/skills/session-feedback/session_feedback.py"
+        dependencies: ["T029"]
+        acceptance_criteria:
+          - "Resolve every route and limit through one typed resolver with invocation, environment, persisted, and default sources recorded per field."
+          - "Validate model, effort, evidence bytes, excerpt bytes, input tokens, output tokens, proposal count, elapsed time, and estimated cost before affected work begins."
+          - "Apply deterministic truncation only where the contract permits it and otherwise fail actionably without a second request or partial persistence."
+          - "Keep persisted configuration isolated to ~/.jcode/feedback/config.json and report only effective non-secret values."
+      - id: "T031"
+        title: "Document operator configuration and accounting semantics"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: "US-005"
+        file_path: ".jcode/skills/session-feedback/SKILL.md"
+        dependencies: ["T030"]
+        acceptance_criteria:
+          - "Document every supported invocation option, JCODE_SESSION_FEEDBACK_* environment variable, persisted config field, built-in default, range, unit, empty-value meaning, invalid-value behavior, and exact precedence."
+          - "Document the native OAuth gpt-5.6-sol medium default, one-request maximum, and accounting labels for measured versus estimated values."
+          - "Provide bounded examples that do not expose secrets or imply live paid validation is required."
+
+  - number: 8
+    title: "User Story 6 - Operate as a removable standalone skill"
+    purpose: "Prove unchanged project-local and user-global copies bootstrap safely and leave normal Jcode behavior untouched when absent"
+    story_reference: "US-006"
+    independent_test: "Copy .jcode/skills/session-feedback unchanged into an isolated ~/.jcode/skills/session-feedback, invoke it with a clean HOME and fake generator, inject bootstrap failures, then remove it and verify existing slash behavior is unchanged."
+    tasks:
+      - id: "T032"
+        title: "Write copied-skill, clean-home, and failure-atomicity tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-006"
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T031"]
+        acceptance_criteria:
+          - "Copy the complete skill directory unchanged to an isolated user-global skill root and run the same current and named-session fake-generator scenarios from both locations."
+          - "Verify first-run directory and local Beads bootstrap, no replication, no dependency on repository-relative paths, and all outputs beneath the isolated feedback root."
+          - "Inject permission, partial-initialization, missing executable, malformed output, and timeout failures and verify visible non-success with no partial proposal, external effect, or false success."
+      - id: "T033"
+        title: "Extend public slash tests for global-copy and removal behavior"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-006"
+        file_path: "crates/jcode-tui/src/tui/app/tests/session_feedback_skill.rs"
+        dependencies: ["T031"]
+        acceptance_criteria:
+          - "Verify the unchanged copied user-global skill is discoverable and forwards current or named-session arguments through the existing public slash surface."
+          - "Verify project-local precedence follows existing skill behavior without adding a feedback-specific production code path."
+          - "Verify removing both copies removes only the session-feedback command and leaves existing slash commands and normal session behavior unchanged."
+      - id: "T034"
+        title: "Harden location-independent orchestration and bootstrap failure behavior"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-006"
+        file_path: ".jcode/skills/session-feedback/__main__.py"
+        dependencies: ["T032"]
+        acceptance_criteria:
+          - "Resolve schemas, helper code, and fixtures relative to the installed skill directory while resolving state only beneath the configured isolated feedback root."
+          - "Perform bootstrap and validation before generator or persistence mutations and surface bounded actionable failures with a non-success exit status."
+          - "Expose the same reusable orchestrator callable for the slash flow and a possible future caller without registering a pre-close prompt or automatic hook."
+      - id: "T035"
+        title: "Finalize standalone installation, removability, and safety guidance"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: "US-006"
+        file_path: ".jcode/skills/session-feedback/SKILL.md"
+        dependencies: ["T033", "T034"]
+        acceptance_criteria:
+          - "Document unchanged copy from .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback, first-run local bootstrap, output locations, removal behavior, and visible failure recovery."
+          - "State that the skill requires only the narrow TUI current-session forwarding integration and adds no feedback CLI, plugin ABI, session-end trigger, pre-close prompt, replication, approval, patch, or implementation behavior."
+          - "Keep the orchestrator interface reusable while making the v1 human-triggered review-only boundary unambiguous."
+
+  - number: 9
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Record the experimental feature and prove its contracts, public workflow, safety boundaries, and repository delivery gates"
+    tasks:
+      - id: "T036"
+        title: "Add the session-feedback proposal workflow changelog entry"
+        status: "Completed"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "changelog/v0.76.0.json"
+        dependencies: ["T035"]
+        acceptance_criteria:
+          - "Record the human-triggered removable review-only session-feedback skill, bounded evidence contract, local needs-approval proposal queue, and configurable one-request generation boundary."
+          - "State that there is no automatic trigger, target mutation, dedicated feedback CLI, replication, approval, or implementation behavior."
+          - "Keep the entry concise and valid under the repository changelog tooling."
+      - id: "T037"
+        title: "Run focused Python and public slash-flow validation"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
+        dependencies: ["T035"]
+        acceptance_criteria:
+          - "Run the complete dependency-free unittest suite with isolated HOME, fake jcode, fake bd, process and network spies, and no live paid request."
+          - "Run the exact focused Rust tests for project-local and copied-global skill discovery, current and named-session forwarding, removal behavior, and absence of automatic triggers."
+          - "Confirm every FR-001 through FR-028 and NFR-001 through NFR-008 maps to a passing automated assertion or explicit artifact validation."
+          - "Confirm 100-run determinism, exact evidence and prompt accounting, zero prohibited-content leakage, zero unauthorized mutations, and zero or one generation requests."
+      - id: "T038"
+        title: "Run artifact, format, guardrail, and isolated runtime delivery gates"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/007-session-feedback-proposals/tasks.yaml"
+        dependencies: ["T036", "T037"]
+        acceptance_criteria:
+          - "Validate spec.yaml, plan.yaml, and tasks.yaml with autospec artifact and format Python, JSON, Markdown, YAML, and any focused Rust test edits with repository-standard tools."
+          - "Run scripts/check_guardrails.sh --skip-slow for the skill/schema-only delivery path, adding only the focused Cargo checks required by the Rust test changes."
+          - "Build the applicable selfdev binary and run the public slash smoke against an isolated private socket and fake generator, recording the resolved executing binary identity rather than testing the shared daemon."
+          - "Review git status and the explicit diff to verify changes are limited to approved skill, schema, fixture, focused test, changelog, Autospec artifacts, and the narrow TUI current-session forwarding integration, with no SDK, hook, CLI, or unrelated changes."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-003", "US-006"]
+    - story_id: "US-002"
+      depends_on: []
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-001", "US-002"]
+      blocks: ["US-004", "US-006"]
+    - story_id: "US-004"
+      depends_on: ["US-003"]
+      blocks: ["US-006"]
+    - story_id: "US-005"
+      depends_on: []
+      blocks: ["US-006"]
+    - story_id: "US-006"
+      depends_on: ["US-001", "US-003", "US-004", "US-005"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3, 4]
+    - phase: 3
+      blocks: [5]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7, 8]
+    - phase: 7
+      blocks: [8]
+    - phase: 8
+      blocks: [9]
+    - phase: 9
+      blocks: []
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T003", "T004", "T005"]
+        rationale: "The evidence, proposal, and generator-response schemas are separate files after the shared failing contract tests define their boundaries."
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T007", "T008"]
+        rationale: "Python first-run behavior tests and Rust public slash-surface tests occupy separate files and share only the completed deterministic core."
+  - phase: 5
+    parallel_groups: []
+  - phase: 6
+    parallel_groups: []
+  - phase: 7
+    parallel_groups: []
+  - phase: 8
+    parallel_groups:
+      - tasks: ["T032", "T033"]
+        rationale: "Python copied-skill integration tests and Rust public removal/discovery tests use separate files after configuration behavior is fixed."
+  - phase: 9
+    parallel_groups:
+      - tasks: ["T036", "T037"]
+        rationale: "The changelog entry and focused validation use separate files after the standalone behavior is complete."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4, 5]
+    description: "Setup plus the foundational contracts and all three P0 stories: explicit invocation, privacy-safe bounded evidence, and one review-only generation request."
+    validation: "Run T023 with isolated current and named-session fixtures, both evidence paths, prohibited-content sentinels, valid zero and complete proposal responses, exact accounting, one-request enforcement, and no target or lifecycle mutation."
+  incremental_delivery:
+    - milestone: "Contracts and Deterministic Core Ready"
+      phases: [1, 2]
+      deliverable: "Versioned bounded schemas and dependency-free normalization, accounting, and fingerprint primitives are test-defined and usable."
+    - milestone: "Human-Triggered Fallback Ready"
+      phases: [1, 2, 3]
+      deliverable: "The public slash flow accepts current or named sessions and succeeds without a librarian through bounded visible fallback evidence."
+    - milestone: "MVP Review Generation Complete"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Both evidence paths feed one privacy-safe schema-constrained request that returns zero or complete review-only proposals with exact accounting."
+    - milestone: "Local Approval Queue Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Validated proposals persist only under the feedback root and deduplicate across required local Bead lifecycle states."
+    - milestone: "Predictable Standalone Workflow Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7, 8]
+      deliverable: "Configuration precedence and all budgets are explicit, and the unchanged skill works project-locally or user-globally with safe first-run bootstrap and removal."
+    - milestone: "Delivery Gates Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      deliverable: "Focused tests, artifact validation, formatting, guardrails, isolated executing-binary smoke, changelog, and scope-to-diff review all pass."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T03:03:47Z"
+  artifact_type: "tasks"
