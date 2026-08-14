@@ -35,6 +35,7 @@ SUPPORTED_CATEGORIES = frozenset(
 MAX_ERROR_LENGTH = 768
 MAX_SESSION_ID_LENGTH = 128
 MAX_PROPOSAL_LOCATIONS = 16
+MAX_RENDERED_PROPOSAL_BYTES = 65_536
 MAX_LIBRARIAN_SUMMARY_BYTES = 262_144
 MAX_SHORTLIST_TARGETS = 16
 LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
@@ -1009,8 +1010,113 @@ def _validate_generated_proposals(
             raise ValidationError(
                 f"generated proposal {index} fingerprint does not match normalized material"
             )
-        proposals.append(dict(proposal))
+        canonical_proposal = json.loads(canonical_json(proposal))
+        canonical_proposal["target"] = {
+            "category": target_identity[0],
+            "scope": target_identity[1],
+            "concrete_target": target_identity[2],
+        }
+        canonical_proposal["evidence_references"] = normalize_evidence_references(
+            proposal["evidence_references"]
+        )
+        canonical_proposal["fingerprint"] = expected_fingerprint
+        validate_contract("proposal-v1", canonical_proposal)
+        proposals.append(canonical_proposal)
     return proposals
+
+
+def _markdown_block(value: str) -> str:
+    return "\n".join(f"> {line}" if line else ">" for line in value.splitlines())
+
+
+def _markdown_list(values: Sequence[str]) -> str:
+    return "\n".join(f"{index}. {value}" for index, value in enumerate(values, 1))
+
+
+def render_review_proposal(proposal: Mapping[str, Any]) -> dict[str, Any]:
+    """Render one validated proposal without mutating or persisting its target."""
+    if not isinstance(proposal, Mapping):
+        raise ValidationError("proposal must be an object")
+    validate_contract("proposal-v1", proposal)
+    canonical_proposal = json.loads(canonical_json(proposal))
+    target = canonical_proposal["target"]
+    expected_fingerprint = proposal_fingerprint(
+        {
+            "category": target["category"],
+            "scope": target["scope"],
+            "concrete_target": target["concrete_target"],
+            "problem": canonical_proposal["problem"],
+            "intended_outcome": canonical_proposal["expected_benefit"],
+        }
+    )
+    if canonical_proposal["fingerprint"] != expected_fingerprint:
+        raise ValidationError("proposal fingerprint does not match normalized material")
+
+    document = {
+        "proposal": canonical_proposal,
+        "review_only": True,
+        "review_state": "needs-approval",
+    }
+    json_rendering = canonical_json(document)
+    markdown_rendering = "\n".join(
+        [
+            "# Session Feedback Proposal",
+            "",
+            "**State:** review-only",
+            "**Review state:** needs-approval",
+            f"**Category:** {target['category']}",
+            f"**Scope:** {target['scope']}",
+            f"**Concrete target:** {target['concrete_target']}",
+            f"**Evidence references:** {', '.join(canonical_proposal['evidence_references'])}",
+            f"**Risk:** {canonical_proposal['risk']}",
+            f"**Confidence:** {canonical_proposal['confidence']}",
+            f"**Fingerprint:** {canonical_proposal['fingerprint']}",
+            "",
+            "## Problem",
+            _markdown_block(canonical_proposal["problem"]),
+            "",
+            "## Hypothesis",
+            _markdown_block(canonical_proposal["hypothesis"]),
+            "",
+            "## Suggested behavior or patch outline",
+            _markdown_block(canonical_proposal["suggested_behavior"]),
+            "",
+            "## Expected benefit",
+            _markdown_block(canonical_proposal["expected_benefit"]),
+            "",
+            "## Token or context impact",
+            _markdown_block(canonical_proposal["token_context_impact"]),
+            "",
+            "## Blast radius",
+            _markdown_block(canonical_proposal["blast_radius"]),
+            "",
+            "## Validation plan",
+            _markdown_list(canonical_proposal["validation_plan"]),
+            "",
+            "## Non-goals",
+            _markdown_list(canonical_proposal["non_goals"]),
+            "",
+            "## Canonical review JSON",
+            "",
+            "    " + json_rendering,
+            "",
+        ]
+    )
+    accounting = {
+        "json": measure_text("proposal_json", json_rendering),
+        "markdown": measure_text("proposal_markdown", markdown_rendering),
+    }
+    for format_name, measurement in accounting.items():
+        if measurement["bytes"] > MAX_RENDERED_PROPOSAL_BYTES:
+            raise ValidationError(
+                f"rendered proposal {format_name} exceeds the "
+                f"{MAX_RENDERED_PROPOSAL_BYTES} byte limit"
+            )
+    return {
+        "json": json_rendering,
+        "markdown": markdown_rendering,
+        "accounting": accounting,
+    }
 
 
 def generate_review_proposals(
@@ -1102,10 +1208,12 @@ def generate_review_proposals(
     )
     if len(proposals) > max_proposals:
         raise ValidationError("generated proposal count exceeds the configured limit")
+    rendered_proposals = [render_review_proposal(proposal) for proposal in proposals]
 
     return {
         "contract_version": "generator-response-v1",
         "proposals": proposals,
+        "rendered_proposals": rendered_proposals,
         "accounting": {
             "request_count": 1,
             "request_input": request_accounting,
@@ -1225,6 +1333,7 @@ __all__ = [
     "parse_contract",
     "prepare_feedback_invocation",
     "proposal_fingerprint",
+    "render_review_proposal",
     "run_feedback",
     "validate_contract",
     "with_evidence_accounting",

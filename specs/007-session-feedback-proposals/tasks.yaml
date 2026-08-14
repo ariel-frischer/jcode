@@ -285,7 +285,7 @@ phases:
           - "Capture bounded non-secret command, timing, usage, and failure receipts without exposing credentials or bulk provider output."
       - id: "T021"
         title: "Validate, fingerprint, and render review-only proposals"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

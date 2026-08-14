@@ -783,6 +783,7 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         result, runner = self.generate(zero)
 
         self.assertEqual(result["proposals"], [])
+        self.assertEqual(result["rendered_proposals"], [])
         self.assertEqual(result["accounting"]["request_count"], 1)
         runner.assert_called_once()
         command = runner.call_args.args[0]
@@ -807,6 +808,55 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(schema_path.name, "generator-response-v1.schema.json")
         self.assertTrue(schema_path.is_file())
         self.assertNotIn("--tools", command)
+
+    def test_renders_validated_proposals_as_bounded_review_only_json_and_markdown(
+        self,
+    ) -> None:
+        complete = self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        result, runner = self.generate(complete)
+
+        self.assertEqual(len(result["rendered_proposals"]), len(complete["proposals"]))
+        runner.assert_called_once()
+        for proposal, rendered in zip(
+            result["proposals"], result["rendered_proposals"], strict=True
+        ):
+            with self.subTest(category=proposal["target"]["category"]):
+                document = json.loads(rendered["json"])
+                self.assertEqual(document["proposal"], proposal)
+                self.assertTrue(document["review_only"])
+                self.assertEqual(document["review_state"], "needs-approval")
+                self.assertIn("**State:** review-only", rendered["markdown"])
+                self.assertIn("**Review state:** needs-approval", rendered["markdown"])
+                self.assertIn(
+                    f"**Category:** {proposal['target']['category']}",
+                    rendered["markdown"],
+                )
+                self.assertIn(
+                    f"**Scope:** {proposal['target']['scope']}", rendered["markdown"]
+                )
+                self.assertIn(proposal["fingerprint"], rendered["markdown"])
+                self.assertIn(rendered["json"], rendered["markdown"])
+                self.assertEqual(
+                    rendered["accounting"]["json"]["bytes"],
+                    len(rendered["json"].encode("utf-8")),
+                )
+                self.assertEqual(
+                    rendered["accounting"]["markdown"]["bytes"],
+                    len(rendered["markdown"].encode("utf-8")),
+                )
+
+    def test_validates_the_complete_response_before_rendering_any_proposal(self) -> None:
+        invalid = copy.deepcopy(
+            self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        )
+        invalid["proposals"][-1]["evidence_references"] = ["missing-evidence"]
+
+        renderer = mock.Mock(wraps=self.feedback.render_review_proposal)
+        with mock.patch.object(self.feedback, "render_review_proposal", renderer):
+            with self.assertRaises(self.feedback.ValidationError):
+                self.generate(invalid)
+
+        renderer.assert_not_called()
 
     def test_enforces_every_generation_budget_at_below_and_above_the_limit(
         self,
