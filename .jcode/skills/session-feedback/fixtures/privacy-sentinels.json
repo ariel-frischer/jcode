@@ -204,7 +204,7 @@
       "relevant_path"
     ],
     "prohibited_sentinels_absent_from_outputs": true,
-    "librarian_and_fallback_items_equal": true,
+    "librarian_and_fallback_items_are_independently_valid": true,
     "maximum_repository_reads_before_shortlist": 0
   }
 }

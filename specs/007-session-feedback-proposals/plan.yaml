@@ -9,8 +9,9 @@ summary: |
   owns deterministic configuration resolution, evidence normalization, target shortlisting,
   budget enforcement, proposal validation, fingerprinting, accounting, and local persistence.
   The same directory is location-independent so it can be copied unchanged from
-  .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback. One narrow TUI routing
-  special case forwards the trusted current session ID for a bare `/session-feedback` invocation;
+  .jcode/skills/session-feedback to ~/.jcode/skills/session-feedback. Narrow TUI and headless
+  `jcode run` routing cases forward the trusted current session ID for a bare
+  `/session-feedback` invocation through their existing input and `prepare_run_message` seams;
   no protocol, SDK, hook, Cargo dependency, or new CLI surface is added.
 
   Evidence enters through one versioned allowlisted JSON contract. A compatible librarian

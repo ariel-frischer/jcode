@@ -227,7 +227,9 @@ Parse the helper's JSON result and report:
 - `evidence_source`
 - `status`
 - `proposal_count`
-- `accounting.serialized_bytes` and `accounting.estimated_tokens`
+- `accounting.evidence.serialized_bytes` and `accounting.evidence_bytes`
+- `accounting.excerpts.serialized_bytes` and `accounting.excerpt_bytes`
+- `accounting.request_input.estimated_tokens` and `accounting.request_output.estimated_tokens`
 - `proposal_locations`, when present
 - the bounded validation failure, when the helper exits unsuccessfully
 

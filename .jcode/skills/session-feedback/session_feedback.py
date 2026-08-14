@@ -372,7 +372,7 @@ def _validate_node(
                 f"length {len(value)} exceeds maximum {schema['maxLength']}",
             )
         pattern = schema.get("pattern")
-        if pattern is not None and re.search(pattern, value) is None:
+        if pattern is not None and re.fullmatch(pattern, value) is None:
             _fail(schema_name, path, "value does not match the required format")
 
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -1419,23 +1419,26 @@ def _run_generation_command(
                 f"generation elapsed-time limit exceeded after {elapsed:.3f} seconds"
             ) from error
         finally:
-            subprocess.run(
-                [
-                    executable,
-                    "--socket",
-                    str(socket_path),
-                    "server",
-                    "stop",
-                    "--force",
-                    "--json",
-                ],
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=5.0,
-                cwd=workspace,
-                env=environment,
-            )
+            try:
+                subprocess.run(
+                    [
+                        executable,
+                        "--socket",
+                        str(socket_path),
+                        "server",
+                        "stop",
+                        "--force",
+                        "--json",
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=5.0,
+                    cwd=workspace,
+                    env=environment,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
         stdout = completed.stdout
         observed_input_tokens = None
         observed_output_tokens = None
@@ -1974,14 +1977,17 @@ def persist_review_proposal(
             cwd=root,
             operation="create",
         )
-        created = json.loads(create_stdout)
-        bead_id = created.get("id") if isinstance(created, Mapping) else None
-        if not isinstance(bead_id, str) or not bead_id:
-            raise ValidationError("bd create returned a malformed record identity")
-    except (ValidationError, json.JSONDecodeError):
+    except ValidationError:
         json_path.unlink(missing_ok=True)
         markdown_path.unlink(missing_ok=True)
         raise
+    try:
+        created = json.loads(create_stdout)
+    except json.JSONDecodeError as error:
+        raise ValidationError("bd create returned malformed JSON") from error
+    bead_id = created.get("id") if isinstance(created, Mapping) else None
+    if not isinstance(bead_id, str) or not bead_id:
+        raise ValidationError("bd create returned a malformed record identity")
     return {
         "action": "created",
         "bead_id": bead_id,

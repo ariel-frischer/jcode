@@ -315,7 +315,7 @@
       "replace": {
         "/proposals/1/fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
       },
-      "expected_rejection": "local-fingerprint-verification"
+      "expected_behavior": "local-fingerprint-recomputation"
     },
     "unshortlisted_target": {
       "description": "The third proposal has a locally correct fingerprint but names a target absent from shortlisted_targets.",
@@ -358,7 +358,6 @@
       "malformed",
       "oversized",
       "unknown_category",
-      "fingerprint_mismatch",
       "unshortlisted_target",
       "extra_property"
     ],

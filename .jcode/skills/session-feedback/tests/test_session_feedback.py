@@ -194,6 +194,12 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
 
 
 class SchemaContractTests(IsolatedSessionFeedbackTestCase):
+    def test_schema_patterns_reject_trailing_newlines(self) -> None:
+        proposal = valid_proposal()
+        proposal["target"]["concrete_target"] = ".jcode/skills/example/SKILL.md\n"
+        with self.assertRaises(self.feedback.ContractValidationError):
+            self.feedback.validate_contract("proposal-v1", proposal)
+
     def test_skill_documentation_uses_exact_evidence_schema_enums(self) -> None:
         skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn(
@@ -1241,15 +1247,21 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
                 runner.assert_called_once()
             with self.subTest(setting=setting, position="above"):
                 runner = self.runner_for(complete)
+                below_measured = (
+                    measured - 1 if isinstance(measured, int) else measured / 2
+                )
+                self.assertGreater(below_measured, 0)
                 with self.assertRaises(self.feedback.ValidationError) as raised:
                     self.generate(
                         complete,
-                        budget=self.budget(**{setting: max(0, measured - 1)}),
+                        budget=self.budget(**{setting: below_measured}),
                         runner=runner,
                     )
-                self.assertIn("limit", str(raised.exception).lower())
-                self.assertLessEqual(
-                    runner.call_count, 1, "budget failure must never retry"
+                self.assertIn("exceeded", str(raised.exception).lower())
+                self.assertEqual(
+                    runner.call_count,
+                    0 if setting == "max_input_tokens" else 1,
+                    "budget checks must occur at the intended generation boundary",
                 )
 
         timeout_runner = self.runner_for(complete, elapsed_seconds=31.0)
@@ -1389,9 +1401,11 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
             records: list[dict[str, object]],
             *,
             fail_operation: str | None = None,
+            create_stdout: str | None = None,
         ) -> None:
             self.records = copy.deepcopy(records)
             self.fail_operation = fail_operation
+            self.create_stdout = create_stdout
             self.commands: list[tuple[tuple[str, ...], Path]] = []
             self.created: list[dict[str, object]] = []
             self.appended: list[tuple[str, dict[str, object]]] = []
@@ -1428,7 +1442,7 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
                 self.created.append({"bead_id": bead_id, "command": argv})
                 return {
                     "returncode": 0,
-                    "stdout": json.dumps({"id": bead_id}),
+                    "stdout": self.create_stdout or json.dumps({"id": bead_id}),
                     "stderr": "",
                 }
             if operation == "append":
@@ -1655,6 +1669,19 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assert_only_local_bd_commands(runner)
         self.assert_only_local_bd_commands(repeated_runner)
         self.assertEqual(repository_beads.exists(), repository_beads_existed)
+
+    def test_successful_bd_create_with_malformed_receipt_keeps_review_artifacts(
+        self,
+    ) -> None:
+        runner = self.FakeBdRunner([], create_stdout="not-json")
+
+        with self.assertRaisesRegex(self.feedback.ValidationError, "malformed JSON"):
+            self.persist("unique", runner)
+
+        self.assertEqual(len(runner.created), 1)
+        artifacts = sorted((self.feedback_root / "proposals").glob("*"))
+        self.assertEqual(len(artifacts), 2)
+        self.assertTrue(all(path.is_file() for path in artifacts))
 
     def test_ambiguous_malformed_and_bootstrap_failures_leave_no_partial_state(
         self,
@@ -2557,6 +2584,18 @@ class GenerationIsolationProcessTests(unittest.TestCase):
         self.assertEqual(
             stat.S_IMODE((self.home / ".codex/auth.json").stat().st_mode), 0o600
         )
+
+    def test_cleanup_failure_never_replaces_primary_generation_timeout(self) -> None:
+        timeout = subprocess.TimeoutExpired(cmd=["jcode", "run"], timeout=0.01)
+        with mock.patch("subprocess.run", side_effect=[timeout, timeout]):
+            with self.assertRaisesRegex(
+                self.feedback.ValidationError, "elapsed-time limit exceeded"
+            ):
+                self.feedback._run_generation_command(
+                    ["jcode", "run", "bounded prompt"],
+                    timeout_seconds=0.01,
+                    estimated_cost_usd=0.0,
+                )
 
 
 if __name__ == "__main__":
