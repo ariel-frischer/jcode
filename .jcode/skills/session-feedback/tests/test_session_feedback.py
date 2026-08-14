@@ -434,7 +434,7 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             with self.subTest(surface=surface, sentinel=sentinel):
                 self.assertNotIn(sentinel, serialized)
 
-    def test_librarian_and_fallback_normalize_to_the_same_v1_items(self) -> None:
+    def test_real_librarian_artifact_normalizes_to_bounded_v1_items(self) -> None:
         librarian = self.acquire(
             librarian=self.fixture["inputs"]["compatible_librarian"]
         )
@@ -444,8 +444,25 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(fallback["contract_version"], "evidence-v1")
         self.assertEqual(librarian["source"], "librarian")
         self.assertEqual(fallback["source"], "fallback")
-        self.assertEqual(librarian["items"], fallback["items"])
-        self.assertEqual(librarian["accounting"], fallback["accounting"])
+        self.assertEqual(
+            [item["reference"] for item in librarian["items"]],
+            [
+                "librarian-goal",
+                "librarian-outcome-1",
+                "librarian-decision-1",
+                "librarian-unresolved-1",
+                "librarian-risk-1",
+                "librarian-next-step-1",
+                "librarian-path-1",
+                "librarian-path-2",
+            ],
+        )
+        self.assertEqual(librarian["items"][3]["status"], "pending")
+        self.assertEqual(librarian["items"][5]["status"], "pending")
+        rendered = self.feedback.canonical_json(librarian)
+        self.assertNotIn("gpt-5.6-luna", rendered)
+        self.assertNotIn("handoff_brief", rendered)
+        self.assertNotIn("source_fingerprint", rendered)
         self.feedback.validate_contract("evidence-v1", librarian)
         self.feedback.validate_contract("evidence-v1", fallback)
 
@@ -453,7 +470,7 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         self,
     ) -> None:
         unsupported = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
-        unsupported["summary_version"] = "librarian-summary-v2"
+        unsupported["format_version"] = "session-summary.v2"
 
         fallback = self.acquire(librarian=unsupported)
         self.assertEqual(fallback["source"], "fallback")
@@ -604,9 +621,6 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             ),
             "fallback": self.acquire(librarian=None),
         }
-        expected_items = acquired["fallback"]["items"]
-        expected_accounting = self.feedback.evidence_accounting(expected_items)
-
         for source, evidence in acquired.items():
             with self.subTest(source=source):
                 opened_before_excerpt: list[Path] = []
@@ -620,8 +634,10 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
 
                 self.assertEqual(opened_before_excerpt, [])
                 self.assertEqual(evidence["contract_version"], "evidence-v1")
-                self.assertEqual(evidence["items"], expected_items)
-                self.assertEqual(evidence["accounting"], expected_accounting)
+                self.assertEqual(
+                    evidence["accounting"],
+                    self.feedback.evidence_accounting(evidence["items"]),
+                )
                 self.assert_sentinels_absent(evidence, f"{source} evidence")
                 self.assert_sentinels_absent(shortlist, f"{source} shortlist")
 
@@ -680,7 +696,7 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             path.relative_to(self.home) for path in self.home.rglob("*")
         )
         malformed = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
-        malformed["items"] = {"unexpected": "not-an-array"}
+        malformed["summary"] = {"unexpected": "not-a-summary"}
 
         with self.assertRaises(self.feedback.ValidationError) as acquisition_error:
             self.acquire(librarian=malformed, visible_items=[])
@@ -1840,6 +1856,43 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
                 self.assertEqual(result["proposal_locations"], [])
                 self.assertGreater(result["accounting"]["evidence_bytes"], 0)
                 self.assertEqual(result["accounting"]["request_count"], 1)
+
+    def test_entrypoint_forwards_an_explicit_real_librarian_summary_path(self) -> None:
+        self.install_fake_bd()
+        fixture = json.loads(PRIVACY_FIXTURE_PATH.read_text(encoding="utf-8"))
+        summary_path = Path(self.temp_dir.name) / "summary.json"
+        summary_path.write_text(
+            json.dumps(fixture["inputs"]["compatible_librarian"]),
+            encoding="utf-8",
+        )
+        fake_jcode = self.bin_dir / "jcode"
+        fake_jcode.write_text(
+            f"#!{sys.executable}\n"
+            'print(\'{"contract_version":"generator-response-v1","proposals":[]}\')\n',
+            encoding="utf-8",
+        )
+        fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
+        input_document = {
+            "current_session_id": "session-synthetic-001",
+            "visible_session_ids": ["session-synthetic-001"],
+            "visible_items": self.visible_items(),
+            "librarian_summary_path": str(summary_path),
+        }
+
+        completed = subprocess.run(
+            [sys.executable, str(ENTRYPOINT_PATH)],
+            input=json.dumps(input_document),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=os.environ.copy(),
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["evidence_source"], "librarian")
+        self.assertEqual(result["session_id"], "session-synthetic-001")
+        self.assertEqual(result["accounting"]["request_count"], 1)
 
     def test_entrypoint_rejects_oversized_input_actionably(self) -> None:
         completed = subprocess.run(

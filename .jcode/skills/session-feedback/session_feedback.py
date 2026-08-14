@@ -77,7 +77,15 @@ SUPPORTED_EFFORTS = frozenset(
 )
 SUPPORTED_MODELS = frozenset({"gpt-5.6-sol"})
 MAX_FEEDBACK_CONFIG_BYTES = 65_536
-LIBRARIAN_SUMMARY_VERSION = "librarian-summary-v1"
+LIBRARIAN_SUMMARY_VERSION = "session-summary.v1"
+LIBRARIAN_SECTION_FIELDS = (
+    "goal",
+    "outcomes",
+    "decisions",
+    "unresolved_work",
+    "risks",
+    "next_steps",
+)
 EVIDENCE_ITEM_FIELDS = {
     "visible_outcome": frozenset(
         {"reference", "category", "summary", "relevant_path", "content_hash"}
@@ -908,7 +916,7 @@ def _librarian_evidence(
     *, session_id: str, librarian_summary_path: str | Path
 ) -> dict[str, Any]:
     summary = _read_librarian_summary(librarian_summary_path)
-    version = summary.get("summary_version")
+    version = summary.get("format_version")
     if version != LIBRARIAN_SUMMARY_VERSION:
         raise ValidationError(
             _bounded_error(
@@ -926,10 +934,85 @@ def _librarian_evidence(
                 f"selected session {session_id!r}"
             )
         )
+    sections = summary.get("summary")
+    if not isinstance(sections, Mapping) or set(sections) != set(
+        LIBRARIAN_SECTION_FIELDS
+    ):
+        raise ValidationError(
+            "librarian summary must contain exactly the supported structured sections"
+        )
+
+    items: list[dict[str, Any]] = []
+
+    def append_text(
+        reference: str,
+        category: str,
+        value: Any,
+        *,
+        status: str | None = None,
+    ) -> None:
+        if not isinstance(value, str):
+            raise ValidationError(f"librarian summary {reference} must be a string")
+        normalized = " ".join(unicodedata.normalize("NFKC", value).split())
+        if not normalized:
+            raise ValidationError(f"librarian summary {reference} must not be empty")
+        item = {
+            "reference": reference,
+            "category": category,
+            "summary": normalized,
+        }
+        if status is not None:
+            item["status"] = status
+        items.append(item)
+
+    def append_list(
+        field: str,
+        reference_prefix: str,
+        category: str,
+        *,
+        status: str | None = None,
+    ) -> None:
+        values = sections[field]
+        if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+            raise ValidationError(f"librarian summary {field} must be an array")
+        for index, value in enumerate(values, 1):
+            append_text(f"{reference_prefix}-{index}", category, value, status=status)
+
+    append_text("librarian-goal", "visible_outcome", sections["goal"])
+    append_list("outcomes", "librarian-outcome", "visible_outcome")
+    append_list("decisions", "librarian-decision", "visible_outcome")
+    append_list(
+        "unresolved_work",
+        "librarian-unresolved",
+        "todo_assessment",
+        status="pending",
+    )
+    append_list("risks", "librarian-risk", "visible_outcome")
+    append_list(
+        "next_steps",
+        "librarian-next-step",
+        "todo_assessment",
+        status="pending",
+    )
+
+    relevant_files = summary.get("relevant_files")
+    if not isinstance(relevant_files, Sequence) or isinstance(
+        relevant_files, (str, bytes)
+    ):
+        raise ValidationError("librarian summary relevant_files must be an array")
+    for index, path in enumerate(relevant_files, 1):
+        items.append(
+            {
+                "reference": f"librarian-path-{index}",
+                "category": "relevant_path",
+                "path": path,
+            }
+        )
+
     return _normalized_evidence(
         source="librarian",
-        items=summary.get("items"),
-        source_label="librarian summary items",
+        items=items,
+        source_label="librarian structured summary",
     )
 
 

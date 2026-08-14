@@ -27,7 +27,14 @@ from session_feedback import (  # noqa: E402 - import after copy-local path setu
 
 
 MAX_INPUT_BYTES = 256 * 1024
-INPUT_FIELDS = frozenset({"current_session_id", "visible_session_ids", "visible_items"})
+INPUT_FIELDS = frozenset(
+    {
+        "current_session_id",
+        "visible_session_ids",
+        "visible_items",
+        "librarian_summary_path",
+    }
+)
 
 
 def _read_input() -> dict[str, Any]:
@@ -144,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             current_session_id=document.get("current_session_id"),
             visible_session_ids=document["visible_session_ids"],
             visible_items=document["visible_items"],
-            librarian_summary_path=None,
+            librarian_summary_path=document.get("librarian_summary_path"),
             target_root=Path.cwd(),
         )
     except ValidationError as error:

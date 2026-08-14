@@ -45,7 +45,7 @@ Do not load, reconstruct, summarize, or transmit:
 - complete skill or instruction corpora
 - repository content read merely to enrich the evidence
 
-Do not perform broad repository reads or filesystem scans. Do not require or invoke a session librarian or `jcode-zor`. The deterministic fallback input is sufficient on first run.
+Do not perform broad repository reads or filesystem scans. Do not require or invoke a session librarian or `jcode-zor`. The deterministic fallback input is sufficient on first run. When an exact `summary.json` path from a completed `session-summary.v1` librarian invocation is already visible, you may forward that one path as `librarian_summary_path`. Never search for, infer, or auto-generate it.
 
 ## Invoke the copy-local entry point
 
@@ -60,6 +60,7 @@ Invoke the selected helper with Python 3. Send exactly one UTF-8 JSON object on 
 {
   "current_session_id": "already-visible-current-session-id",
   "visible_session_ids": ["already-visible-current-session-id"],
+  "librarian_summary_path": "/exact/already-visible/path/to/summary.json",
   "visible_items": [
     {
       "reference": "outcome-1",
@@ -77,6 +78,8 @@ Conceptual invocation:
 ```text
 python3 <copy-local-session-feedback/__main__.py> [exact-forwarded-session-id] < bounded-visible-evidence.json
 ```
+
+Omit `librarian_summary_path` when no exact compatible path is already visible. When supplied, the helper reads only that bounded file, verifies its selected session and `session-summary.v1` format, and converts only structured goal, outcome, decision, unresolved-work, risk, next-step, and relevant-file fields into allowlisted evidence. It intentionally excludes route, usage, fingerprint, generation metadata, and duplicate handoff prose. If the supplied summary is incompatible, the helper uses valid bounded `visible_items`; it fails if neither source is usable.
 
 The directory is self-contained and must work unchanged in either supported installation location.
 

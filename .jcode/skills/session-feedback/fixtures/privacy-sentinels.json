@@ -21,64 +21,39 @@
   },
   "inputs": {
     "compatible_librarian": {
-      "summary_version": "librarian-summary-v1",
+      "format_version": "session-summary.v1",
       "session_id": "session-synthetic-001",
-      "items": [
-        {
-          "reference": "outcome-1",
-          "category": "visible_outcome",
-          "summary": "The synthetic review completed with one bounded follow-up.",
-          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
-          "content_hash": "1111111111111111111111111111111111111111111111111111111111111111"
-        },
-        {
-          "reference": "todo-1",
-          "category": "todo_assessment",
-          "summary": "The synthetic privacy check remains pending.",
-          "status": "pending"
-        },
-        {
-          "reference": "tool-1",
-          "category": "tool_invocation_receipt",
-          "name": "read",
-          "outcome": "succeeded",
-          "summary": "Read one already-shortlisted synthetic target.",
-          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
-          "content_hash": "2222222222222222222222222222222222222222222222222222222222222222"
-        },
-        {
-          "reference": "skill-1",
-          "category": "skill_invocation_receipt",
-          "name": "session-feedback",
-          "outcome": "succeeded",
-          "summary": "The synthetic slash skill returned a bounded result.",
-          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
-          "content_hash": "3333333333333333333333333333333333333333333333333333333333333333"
-        },
-        {
-          "reference": "failure-1",
-          "category": "failure_excerpt",
-          "name": "fixture-check",
-          "excerpt": "Synthetic validation stopped at the configured byte limit.",
-          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
-          "content_hash": "4444444444444444444444444444444444444444444444444444444444444444"
-        },
-        {
-          "reference": "validation-1",
-          "category": "validation_receipt",
-          "name": "privacy-fixture",
-          "outcome": "passed",
-          "summary": "All prohibited sentinel classes were excluded.",
-          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
-          "content_hash": "5555555555555555555555555555555555555555555555555555555555555555"
-        },
-        {
-          "reference": "path-1",
-          "category": "relevant_path",
-          "path": ".jcode/skills/session-feedback/SKILL.md",
-          "content_hash": "6666666666666666666666666666666666666666666666666666666666666666",
-          "summary": "Exact synthetic skill target eligible for shortlisting."
-        }
+      "source_fingerprint": {
+        "algorithm_version": "librarian-source.v1",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "configuration_identity": {}
+      },
+      "generated_at": "2026-08-14T00:00:00Z",
+      "effective_route": {
+        "provider": "openai",
+        "api_method": "openai-oauth",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "xhigh"
+      },
+      "usage": {
+        "input_tokens": 500,
+        "output_tokens": 200,
+        "request_count": 1,
+        "elapsed_ms": 5000,
+        "cost_micros_usd": 400
+      },
+      "summary": {
+        "goal": "The synthetic review completed with one bounded follow-up.",
+        "outcomes": ["The bounded evidence adapter was implemented."],
+        "decisions": ["Keep the feedback workflow review-only."],
+        "unresolved_work": ["The synthetic privacy check remains pending."],
+        "risks": ["A broad input could waste context if bounds regress."],
+        "next_steps": ["Validate the explicit librarian summary path."]
+      },
+      "handoff_brief": "Continue from the bounded structured summary without rereading the transcript.",
+      "relevant_files": [
+        ".jcode/skills/session-feedback/SKILL.md",
+        ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json"
       ],
       "prohibited_content": {
         "full_transcript": "SENTINEL_PROHIBITED_FULL_TRANSCRIPT",
@@ -170,14 +145,14 @@
     "unsupported_librarian_version": {
       "base": "compatible_librarian",
       "replace": {
-        "/summary_version": "librarian-summary-v2"
+        "/format_version": "session-summary.v2"
       },
       "expected": "reject_librarian_then_use_valid_fallback"
     },
     "malformed_librarian": {
       "base": "compatible_librarian",
       "replace": {
-        "/items": {
+        "/summary": {
           "unexpected": "SENTINEL_MALFORMED_ITEMS_OBJECT"
         }
       },
@@ -186,7 +161,7 @@
     "oversized_librarian": {
       "base": "compatible_librarian",
       "replace_recipe": {
-        "pointer": "/items/0/summary",
+        "pointer": "/summary/goal",
         "character": "x",
         "repeat": 1025
       },
