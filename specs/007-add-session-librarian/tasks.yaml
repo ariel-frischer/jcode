@@ -71,7 +71,7 @@ phases:
           - "Cost values are tested using an exact decimal-compatible or integer-micros representation rather than binary floating point."
       - id: "T005"
         title: "Add additive persisted librarian configuration records"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
