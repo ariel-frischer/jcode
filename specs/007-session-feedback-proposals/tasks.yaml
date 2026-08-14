@@ -466,7 +466,7 @@ phases:
           - "Verify removing both copies removes only the session-feedback command and leaves existing slash commands and normal session behavior unchanged."
       - id: "T034"
         title: "Harden location-independent orchestration and bootstrap failure behavior"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-006"

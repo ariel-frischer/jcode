@@ -1684,6 +1684,18 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
             }
         ]
 
+    def install_fake_bd(self) -> None:
+        fake_bd = self.bin_dir / "bd"
+        fake_bd.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "if 'init' in sys.argv:\n"
+            "    (Path.cwd() / '.beads').mkdir(parents=True, exist_ok=True)\n",
+            encoding="utf-8",
+        )
+        fake_bd.chmod(fake_bd.stat().st_mode | stat.S_IXUSR)
+
     def test_reusable_orchestrator_runs_generation_and_reports_complete_accounting(self) -> None:
         runner = mock.Mock(
             return_value={
@@ -1723,6 +1735,7 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         runner.assert_called_once()
 
     def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(self) -> None:
+        self.install_fake_bd()
         input_document = {
             "current_session_id": "session-current-1",
             "visible_session_ids": ["session-current-1", "session-visible-2"],
@@ -1776,6 +1789,7 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("limit", completed.stderr.lower())
 
     def test_entrypoint_returns_non_success_for_generation_schema_failure(self) -> None:
+        self.install_fake_bd()
         fake_jcode = self.bin_dir / "jcode"
         fake_jcode.write_text(
             f"#!{sys.executable}\nprint('{{}}')\n",
