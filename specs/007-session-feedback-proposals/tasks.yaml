@@ -114,7 +114,7 @@ phases:
           - "Verify an invalid session fails actionably before generation and creates no proposal record or falsely successful run result."
       - id: "T008"
         title: "Add public slash discovery and argument-forwarding tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
