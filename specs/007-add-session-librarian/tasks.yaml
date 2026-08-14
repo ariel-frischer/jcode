@@ -364,7 +364,7 @@ phases:
           - "The document includes stabilization and complete removal steps demonstrating minimal upstream drift."
       - id: "T026"
         title: "Document librarian configuration, defaults, precedence, and failures"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: true
         story_id: null
