@@ -507,7 +507,7 @@ phases:
           - "Keep the entry concise and valid under the repository changelog tooling."
       - id: "T037"
         title: "Run focused Python and public slash-flow validation"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
