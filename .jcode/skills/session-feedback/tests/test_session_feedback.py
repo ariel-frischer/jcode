@@ -26,6 +26,7 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 HELPER_PATH = SKILL_DIR / "session_feedback.py"
 ENTRYPOINT_PATH = SKILL_DIR / "__main__.py"
 PRIVACY_FIXTURE_PATH = SKILL_DIR / "fixtures" / "privacy-sentinels.json"
+GENERATOR_FIXTURE_PATH = SKILL_DIR / "fixtures" / "generator-responses.json"
 SCHEMA_NAMES = (
     "evidence-v1",
     "proposal-v1",
@@ -657,6 +658,293 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
             home_before,
         )
         self.assertFalse(self.invocation_log.exists())
+
+
+class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.fixture = json.loads(GENERATOR_FIXTURE_PATH.read_text(encoding="utf-8"))
+        complete = self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        references = sorted(
+            {
+                reference
+                for proposal in complete["proposals"]
+                for reference in proposal["evidence_references"]
+            }
+        )
+        self.evidence = self.feedback.with_evidence_accounting(
+            {
+                "contract_version": "evidence-v1",
+                "source": "fallback",
+                "items": [
+                    {
+                        "reference": reference,
+                        "category": "visible_outcome",
+                        "summary": f"Synthetic visible outcome for {reference}.",
+                    }
+                    for reference in references
+                ],
+                "accounting": {
+                    "serialized_bytes": 0,
+                    "estimated_tokens": 0,
+                    "by_category": {},
+                },
+            }
+        )
+        self.shortlist = copy.deepcopy(self.fixture["shortlisted_targets"])
+        self.request_input = {
+            "session_id": "session-generation-1",
+            "evidence": self.evidence,
+            "shortlisted_targets": self.shortlist,
+            "excerpts": [],
+        }
+
+    def budget(self, **overrides: object) -> dict[str, object]:
+        budget: dict[str, object] = {
+            "model": "gpt-5.6-sol",
+            "effort": "medium",
+            "max_input_tokens": 100_000,
+            "max_output_tokens": 100_000,
+            "max_proposals": 8,
+            "max_elapsed_seconds": 30.0,
+            "max_estimated_cost_usd": 1.0,
+        }
+        budget.update(overrides)
+        return budget
+
+    def runner_for(
+        self,
+        response: dict[str, object],
+        *,
+        elapsed_seconds: float = 0.25,
+        estimated_cost_usd: float = 0.01,
+    ) -> mock.Mock:
+        return mock.Mock(
+            return_value={
+                "returncode": 0,
+                "stdout": self.feedback.canonical_json(response),
+                "stderr": "",
+                "elapsed_seconds": elapsed_seconds,
+                "estimated_cost_usd": estimated_cost_usd,
+            }
+        )
+
+    def generate(
+        self,
+        response: dict[str, object],
+        *,
+        budget: dict[str, object] | None = None,
+        runner: mock.Mock | None = None,
+    ) -> tuple[dict[str, object], mock.Mock]:
+        injected_runner = runner or self.runner_for(response)
+        result = self.feedback.generate_review_proposals(
+            request_input=self.request_input,
+            evidence=self.evidence,
+            shortlisted_targets=self.shortlist,
+            effective_config=budget or self.budget(),
+            runner=injected_runner,
+        )
+        return result, injected_runner
+
+    def invalid_response(self, name: str) -> dict[str, object]:
+        case = self.fixture["invalid_responses"][name]
+        response = copy.deepcopy(
+            self.fixture["valid_responses"][case["base"]]["response"]
+        )
+
+        def resolve(pointer: str) -> tuple[object, str | int]:
+            parts = [
+                part.replace("~1", "/").replace("~0", "~")
+                for part in pointer.split("/")[1:]
+            ]
+            current: object = response
+            for part in parts[:-1]:
+                current = (
+                    current[int(part)] if isinstance(current, list) else current[part]
+                )
+            final = int(parts[-1]) if isinstance(current, list) else parts[-1]
+            return current, final
+
+        for pointer, value in case.get("replace", {}).items():
+            parent, key = resolve(pointer)
+            parent[key] = copy.deepcopy(value)
+        for pointer, value in case.get("add", {}).items():
+            parent, key = resolve(pointer)
+            parent[key] = copy.deepcopy(value)
+        append_copy = case.get("append_copy")
+        if append_copy:
+            destination, destination_key = resolve(append_copy["pointer"])
+            source, source_key = resolve(append_copy["source_pointer"])
+            destination[destination_key].append(copy.deepcopy(source[source_key]))
+        return response
+
+    def test_records_exact_native_oauth_no_tools_single_turn_command(self) -> None:
+        zero = self.fixture["valid_responses"]["zero_proposals"]["response"]
+        result, runner = self.generate(zero)
+
+        self.assertEqual(result["proposals"], [])
+        self.assertEqual(result["accounting"]["request_count"], 1)
+        runner.assert_called_once()
+        command = runner.call_args.args[0]
+        self.assertEqual(command[0:2], ["jcode", "run"])
+        required_pairs = {
+            "--provider": "openai",
+            "--model": "gpt-5.6-sol",
+            "--reasoning-effort": "medium",
+            "--tool-profile": "none",
+            "--max-turns": "1",
+        }
+        for flag, value in required_pairs.items():
+            self.assertIn(flag, command)
+            self.assertEqual(command[command.index(flag) + 1], value)
+        self.assertIn("--json", command)
+        self.assertIn("--schema", command)
+        schema_path = Path(command[command.index("--schema") + 1])
+        self.assertEqual(schema_path.name, "generator-response-v1.schema.json")
+        self.assertTrue(schema_path.is_file())
+        self.assertNotIn("--tools", command)
+
+    def test_enforces_every_generation_budget_at_below_and_above_the_limit(
+        self,
+    ) -> None:
+        complete = self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        baseline, _ = self.generate(complete)
+        accounting = baseline["accounting"]
+        dimensions = (
+            ("max_input_tokens", accounting["request_input"]["estimated_tokens"]),
+            ("max_output_tokens", accounting["request_output"]["estimated_tokens"]),
+            ("max_proposals", accounting["proposal_count"]),
+            ("max_elapsed_seconds", accounting["elapsed_seconds"]),
+            ("max_estimated_cost_usd", accounting["estimated_cost_usd"]),
+        )
+
+        for setting, measured in dimensions:
+            with self.subTest(setting=setting, position="below"):
+                result, runner = self.generate(
+                    complete, budget=self.budget(**{setting: measured + 1})
+                )
+                self.assertEqual(result["accounting"]["request_count"], 1)
+                runner.assert_called_once()
+            with self.subTest(setting=setting, position="at"):
+                result, runner = self.generate(
+                    complete, budget=self.budget(**{setting: measured})
+                )
+                self.assertEqual(result["accounting"]["request_count"], 1)
+                runner.assert_called_once()
+            with self.subTest(setting=setting, position="above"):
+                runner = self.runner_for(complete)
+                with self.assertRaises(self.feedback.ValidationError) as raised:
+                    self.generate(
+                        complete,
+                        budget=self.budget(**{setting: max(0, measured - 1)}),
+                        runner=runner,
+                    )
+                self.assertIn("limit", str(raised.exception).lower())
+                self.assertLessEqual(
+                    runner.call_count, 1, "budget failure must never retry"
+                )
+
+        timeout_runner = self.runner_for(complete, elapsed_seconds=31.0)
+        with self.assertRaises(self.feedback.ValidationError):
+            self.generate(complete, runner=timeout_runner)
+        timeout_runner.assert_called_once()
+
+    def test_rejects_untrusted_output_before_persistence_without_retry(self) -> None:
+        unresolved = copy.deepcopy(
+            self.fixture["valid_responses"]["complete_taxonomy"]["response"]
+        )
+        unresolved["proposals"][0]["evidence_references"] = ["missing-evidence"]
+        invalid_cases = {
+            name: self.invalid_response(name)
+            for name in (
+                "malformed",
+                "oversized",
+                "unknown_category",
+                "fingerprint_mismatch",
+                "unshortlisted_target",
+                "extra_property",
+            )
+        }
+        invalid_cases["unresolved_evidence"] = unresolved
+
+        for name, response in invalid_cases.items():
+            with self.subTest(case=name):
+                home_before = sorted(
+                    path.relative_to(self.home) for path in self.home.rglob("*")
+                )
+                runner = self.runner_for(response)
+                with self.assertRaises(
+                    (
+                        self.feedback.ValidationError,
+                        self.feedback.ContractValidationError,
+                    )
+                ) as raised:
+                    self.generate(response, runner=runner)
+                self.assertTrue(str(raised.exception).strip())
+                runner.assert_called_once()
+                self.assertEqual(
+                    sorted(
+                        path.relative_to(self.home) for path in self.home.rglob("*")
+                    ),
+                    home_before,
+                    "invalid generator output must be rejected before persistence",
+                )
+
+    def test_generation_boundary_cannot_mutate_targets_or_lifecycle(self) -> None:
+        target_root = Path(self.temp_dir.name) / "targets"
+        target_root.mkdir()
+        target = target_root / "SKILL.md"
+        target.write_text("synthetic immutable target\n", encoding="utf-8")
+        target_before = target.read_bytes()
+        home_before = sorted(
+            path.relative_to(self.home) for path in self.home.rglob("*")
+        )
+        zero = self.fixture["valid_responses"]["zero_proposals"]["response"]
+        runner = self.runner_for(zero)
+
+        with (
+            mock.patch.object(
+                Path, "write_text", side_effect=AssertionError("target write forbidden")
+            ),
+            mock.patch.object(
+                Path,
+                "write_bytes",
+                side_effect=AssertionError("target write forbidden"),
+            ),
+            mock.patch.object(
+                Path, "unlink", side_effect=AssertionError("delete forbidden")
+            ),
+            mock.patch("os.remove", side_effect=AssertionError("delete forbidden")),
+            mock.patch("os.replace", side_effect=AssertionError("replace forbidden")),
+            mock.patch(
+                "subprocess.run",
+                side_effect=AssertionError("uninjected process forbidden"),
+            ),
+            mock.patch(
+                "subprocess.Popen",
+                side_effect=AssertionError("uninjected process forbidden"),
+            ),
+        ):
+            result, _ = self.generate(zero, runner=runner)
+
+        self.assertEqual(result["proposals"], [])
+        runner.assert_called_once()
+        self.assertEqual(target.read_bytes(), target_before)
+        self.assertEqual(
+            sorted(path.relative_to(self.home) for path in self.home.rglob("*")),
+            home_before,
+        )
+        flattened_command = " ".join(runner.call_args.args[0]).lower()
+        for forbidden in (
+            "apply",
+            "approve",
+            "start",
+            "delete",
+            "replace",
+            "publish",
+            "replicate",
+        ):
+            self.assertNotIn(forbidden, flattened_command)
 
 
 class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):

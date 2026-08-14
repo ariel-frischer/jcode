@@ -260,7 +260,7 @@ phases:
           - "Keep the fixture independent of live model output and safe for exact request-recording tests."
       - id: "T019"
         title: "Write generation-boundary and review-only safety tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
