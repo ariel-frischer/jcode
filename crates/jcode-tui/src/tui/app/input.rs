@@ -3726,9 +3726,9 @@ impl App {
                     input = prompt;
                 } else if skill_name == "session-feedback" {
                     // This explicit workflow runs immediately for the current
-                    // session. Forward the trusted in-memory ID rather than
-                    // asking the skill to discover sessions from storage.
-                    input = self.session.id.clone();
+                    // session. Mark the trusted in-memory ID so the skill can
+                    // distinguish this from an explicitly named session.
+                    input = format!("current_session_id={}", self.session.id);
                 } else {
                     return;
                 }

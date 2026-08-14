@@ -73,7 +73,8 @@ fn session_feedback_skill_is_discoverable_and_bare_invocation_selects_current_se
     assert_eq!(app.session.messages.len(), initial_session_messages + 1);
     assert!(matches!(
         app.session.messages.last().map(|message| message.content.as_slice()),
-        Some([ContentBlock::Text { text, .. }]) if text == &session_id
+        Some([ContentBlock::Text { text, .. }])
+            if text == &format!("current_session_id={session_id}")
     ));
     assert!(app.pending_turn);
     assert!(app.is_processing);
@@ -175,7 +176,8 @@ fn copied_global_session_feedback_skill_is_discoverable_and_forwards_arguments()
                 .messages
                 .last()
                 .map(|message| message.content.as_slice()),
-            Some([ContentBlock::Text { text, .. }]) if text == &current_session_id
+            Some([ContentBlock::Text { text, .. }])
+                if text == &format!("current_session_id={current_session_id}")
         ));
         assert!(current.pending_turn);
         assert!(current.is_processing);

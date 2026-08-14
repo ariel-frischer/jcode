@@ -16,7 +16,7 @@ This slash skill is the only v1 user entry point. Do not register or simulate a 
 
 ## Session selection
 
-- With no argument, review the current session. Supply its already-visible ID as `current_session_id` and include it in `visible_session_ids`.
+- A bare Jcode invocation forwards the trusted in-memory ID as `current_session_id=<id>`. Treat that marker as the current session, pass `<id>` as `current_session_id`, and include it in `visible_session_ids`.
 - With one argument, treat the complete forwarded value as the requested session ID. Pass it unchanged as the entry point's single positional argument.
 - Include only session IDs already visible in the current interaction or trusted session metadata. Never discover sessions by scanning files, databases, logs, or transcripts.
 - If the current session ID is unavailable, or a named ID is unknown or not visible, run no model work and report the entry point's actionable validation error.
@@ -169,6 +169,9 @@ another provider. Do not add credentials to `config.json` or `JCODE_SESSION_FEED
   `accounting.request_output.estimated_tokens`, is a deterministic estimate labeled as such,
   calculated as the ceiling of UTF-8 bytes divided by four. It is not provider-reported usage.
 - `accounting.elapsed_seconds` is measured runner elapsed time.
+- `accounting.observed_input_tokens` and `accounting.observed_output_tokens` are provider-reported
+  usage when the default `jcode run --json` boundary supplies it; injected runners may report
+  `null` when no provider was called.
 - `accounting.estimated_cost_usd` is an estimate supplied by the bounded runner receipt, not a
   billed-cost claim.
 - `accounting.proposal_count` is the validated generated proposal count, and
