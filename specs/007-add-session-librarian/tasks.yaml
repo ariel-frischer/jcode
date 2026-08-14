@@ -222,7 +222,7 @@ phases:
           - "Credentials, generated_at, excluded raw transcript/edit/patch/image/binary/base64 bytes, and unstable map ordering do not affect the digest; receipt format version does."
       - id: "T016"
         title: "Implement canonical versioned source fingerprinting"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
