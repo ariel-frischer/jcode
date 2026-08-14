@@ -312,7 +312,7 @@ phases:
           - "Every rejected preflight transmits no session content and publishes no partial artifacts."
       - id: "T022"
         title: "Implement independent provider construction and cost preflight"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"
