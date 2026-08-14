@@ -442,7 +442,7 @@ phases:
     tasks:
       - id: "T032"
         title: "Write copied-skill, clean-home, and failure-atomicity tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-006"

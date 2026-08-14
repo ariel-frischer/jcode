@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import stat
 from pathlib import Path
 import subprocess
@@ -1799,6 +1800,289 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertEqual(completed.stdout, "")
         self.assertIn("generator-response-v1", completed.stderr)
+
+
+class StandaloneCopiedSkillTests(IsolatedSessionFeedbackTestCase):
+    def visible_items(self) -> list[dict[str, str]]:
+        return [
+            {
+                "reference": "outcome-1",
+                "category": "visible_outcome",
+                "summary": "The copied synthetic workflow completed with one review candidate.",
+                "relevant_path": ".jcode/skills/example/SKILL.md",
+            }
+        ]
+
+    def generator_response(self) -> dict[str, object]:
+        proposal = valid_proposal()
+        proposal["fingerprint"] = self.feedback.proposal_fingerprint(
+            {
+                "category": proposal["target"]["category"],
+                "scope": proposal["target"]["scope"],
+                "concrete_target": proposal["target"]["concrete_target"],
+                "problem": proposal["problem"],
+                "intended_outcome": proposal["expected_benefit"],
+            }
+        )
+        return {
+            "contract_version": "generator-response-v1",
+            "proposals": [proposal],
+        }
+
+    @staticmethod
+    def write_executable(path: Path, body: str) -> None:
+        path.write_text(f"#!{sys.executable}\n{body}", encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+    def install_fake_bd(self, bin_dir: Path) -> Path:
+        log_path = bin_dir.parent / "bd-invocations.jsonl"
+        self.write_executable(
+            bin_dir / "bd",
+            """import json
+import os
+import sys
+from pathlib import Path
+
+cwd = Path.cwd()
+with Path(os.environ["SESSION_FEEDBACK_BD_LOG"]).open("a", encoding="utf-8") as log:
+    log.write(json.dumps({"argv": sys.argv[1:], "cwd": str(cwd)}) + "\\n")
+mode = os.environ.get("SESSION_FEEDBACK_BD_MODE", "success")
+if "init" in sys.argv:
+    if mode == "permission":
+        print("synthetic permission denied", file=sys.stderr)
+        raise SystemExit(13)
+    if mode == "partial":
+        (cwd / ".beads").mkdir(parents=True, exist_ok=True)
+        (cwd / ".beads" / "partial-init").write_text("incomplete", encoding="utf-8")
+        print("synthetic partial initialization", file=sys.stderr)
+        raise SystemExit(23)
+    (cwd / ".beads").mkdir(parents=True, exist_ok=True)
+elif "list" in sys.argv:
+    print("[]")
+elif "create" in sys.argv:
+    print('{"id":"feedback-test-001"}')
+else:
+    print("unexpected fake bd command", file=sys.stderr)
+    raise SystemExit(91)
+""",
+        )
+        return log_path
+
+    def install_fake_jcode(
+        self,
+        bin_dir: Path,
+        *,
+        response: dict[str, object] | None = None,
+        malformed: bool = False,
+        sleep_seconds: float = 0.0,
+    ) -> Path:
+        log_path = bin_dir.parent / "jcode-invocations.log"
+        output = (
+            "{}"
+            if malformed
+            else self.feedback.canonical_json(response or self.generator_response())
+        )
+        self.write_executable(
+            bin_dir / "jcode",
+            "import os\n"
+            "import time\n"
+            "from pathlib import Path\n"
+            "Path(os.environ['SESSION_FEEDBACK_JCODE_LOG']).write_text('called', encoding='utf-8')\n"
+            f"time.sleep({sleep_seconds!r})\n"
+            f"print({output!r})\n",
+        )
+        return log_path
+
+    @staticmethod
+    def file_manifest(root: Path) -> dict[str, str]:
+        return {
+            str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*"))
+            if path.is_file()
+        }
+
+    def run_entrypoint(
+        self,
+        *,
+        entrypoint: Path,
+        home: Path,
+        bin_dir: Path,
+        working_directory: Path,
+        session_arguments: list[str],
+        extra_environment: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "HOME": str(home),
+                "PATH": str(bin_dir),
+                "SESSION_FEEDBACK_BD_LOG": str(bin_dir.parent / "bd-invocations.jsonl"),
+                "SESSION_FEEDBACK_JCODE_LOG": str(
+                    bin_dir.parent / "jcode-invocations.log"
+                ),
+            }
+        )
+        environment.update(extra_environment or {})
+        return subprocess.run(
+            [sys.executable, str(entrypoint), *session_arguments],
+            input=json.dumps(
+                {
+                    "current_session_id": "session-current-1",
+                    "visible_session_ids": [
+                        "session-current-1",
+                        "session-visible-2",
+                    ],
+                    "visible_items": self.visible_items(),
+                }
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+            cwd=working_directory,
+            env=environment,
+        )
+
+    def test_project_and_unchanged_global_copies_bootstrap_clean_homes(self) -> None:
+        for location, session_arguments, expected_session_id in (
+            ("project", [], "session-current-1"),
+            ("project", ["session-visible-2"], "session-visible-2"),
+            ("global", [], "session-current-1"),
+            ("global", ["session-visible-2"], "session-visible-2"),
+        ):
+            with self.subTest(location=location, session_arguments=session_arguments):
+                case_root = Path(self.temp_dir.name) / (
+                    f"success-{location}-{'named' if session_arguments else 'current'}"
+                )
+                home = case_root / "home"
+                bin_dir = case_root / "bin"
+                working_directory = case_root / "work"
+                home.mkdir(parents=True)
+                bin_dir.mkdir()
+                target = (
+                    working_directory / ".jcode" / "skills" / "example" / "SKILL.md"
+                )
+                target.parent.mkdir(parents=True)
+                target.write_text("# Synthetic target\n", encoding="utf-8")
+                target_before = target.read_bytes()
+
+                if location == "global":
+                    skill_root = home / ".jcode" / "skills" / "session-feedback"
+                    shutil.copytree(SKILL_DIR, skill_root)
+                    self.assertEqual(
+                        self.file_manifest(skill_root), self.file_manifest(SKILL_DIR)
+                    )
+                    entrypoint = skill_root / "__main__.py"
+                else:
+                    entrypoint = ENTRYPOINT_PATH
+
+                bd_log = self.install_fake_bd(bin_dir)
+                self.install_fake_jcode(bin_dir)
+                completed = self.run_entrypoint(
+                    entrypoint=entrypoint,
+                    home=home,
+                    bin_dir=bin_dir,
+                    working_directory=working_directory,
+                    session_arguments=session_arguments,
+                )
+
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stderr, "")
+                result = json.loads(completed.stdout)
+                self.assertEqual(result["status"], "proposals_generated")
+                self.assertEqual(result["session_id"], expected_session_id)
+                self.assertEqual(result["proposal_count"], 1)
+                feedback_root = home / ".jcode" / "feedback"
+                for path in (
+                    feedback_root,
+                    feedback_root / "runs",
+                    feedback_root / "proposals",
+                    feedback_root / ".beads",
+                ):
+                    self.assertTrue(path.is_dir(), path)
+                self.assertFalse((feedback_root / ".beads" / "remotes.json").exists())
+                self.assertTrue(result["proposal_locations"])
+                for location_path in result["proposal_locations"]:
+                    self.assertTrue(Path(location_path).is_relative_to(feedback_root))
+                for generated in feedback_root.rglob("*"):
+                    self.assertTrue(generated.is_relative_to(feedback_root))
+                commands = [
+                    json.loads(line)
+                    for line in bd_log.read_text(encoding="utf-8").splitlines()
+                ]
+                self.assertTrue(commands)
+                for command in commands:
+                    self.assertTrue(Path(command["cwd"]).is_relative_to(feedback_root))
+                    self.assertFalse(
+                        {"remote", "replicate", "sync", "push", "pull"}
+                        & {part.lower() for part in command["argv"]}
+                    )
+                self.assertEqual(target.read_bytes(), target_before)
+
+    def test_bootstrap_and_generation_failures_are_atomic_and_visible(self) -> None:
+        cases = (
+            ("permission", True, False, 0.0, {}, "permission"),
+            ("partial", True, False, 0.0, {}, "partial"),
+            ("missing-jcode", False, False, 0.0, {}, "could not start"),
+            ("malformed", True, True, 0.0, {}, "generator-response-v1"),
+            (
+                "timeout",
+                True,
+                False,
+                0.25,
+                {"JCODE_SESSION_FEEDBACK_MAX_ELAPSED_SECONDS": "0.05"},
+                "elapsed-time",
+            ),
+        )
+        for (
+            mode,
+            install_jcode,
+            malformed,
+            sleep_seconds,
+            extra_env,
+            error_text,
+        ) in cases:
+            with self.subTest(mode=mode):
+                case_root = Path(self.temp_dir.name) / f"failure-{mode}"
+                home = case_root / "home"
+                bin_dir = case_root / "bin"
+                working_directory = case_root / "work"
+                home.mkdir(parents=True)
+                bin_dir.mkdir()
+                working_directory.mkdir()
+                target = working_directory / "target-sentinel.txt"
+                target.write_text("must remain unchanged", encoding="utf-8")
+                self.install_fake_bd(bin_dir)
+                if install_jcode:
+                    self.install_fake_jcode(
+                        bin_dir,
+                        malformed=malformed,
+                        sleep_seconds=sleep_seconds,
+                    )
+
+                completed = self.run_entrypoint(
+                    entrypoint=ENTRYPOINT_PATH,
+                    home=home,
+                    bin_dir=bin_dir,
+                    working_directory=working_directory,
+                    session_arguments=[],
+                    extra_environment={
+                        "SESSION_FEEDBACK_BD_MODE": mode,
+                        **extra_env,
+                    },
+                )
+
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertEqual(completed.stdout, "")
+                self.assertIn(error_text, completed.stderr.lower())
+                self.assertEqual(
+                    target.read_text(encoding="utf-8"), "must remain unchanged"
+                )
+                feedback_root = home / ".jcode" / "feedback"
+                if feedback_root.exists():
+                    self.assertEqual(list(feedback_root.rglob("*.json")), [])
+                    self.assertEqual(list(feedback_root.rglob("*.md")), [])
+                    self.assertEqual(list(feedback_root.rglob("*.tmp")), [])
+                self.assertFalse((working_directory / ".beads").exists())
 
 
 if __name__ == "__main__":
