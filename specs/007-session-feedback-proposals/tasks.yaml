@@ -520,8 +520,7 @@ phases:
           - "Confirm 100-run determinism, exact evidence and prompt accounting, zero prohibited-content leakage, zero unauthorized mutations, and zero or one generation requests."
       - id: "T038"
         title: "Run artifact, format, guardrail, and isolated runtime delivery gates"
-        status: "Blocked"
-        blocked_reason: "Delivery guardrails remain red on pre-existing base-commit ratchet drift outside this feature: code-size, test-size, panic-prone, and swallowed-error baselines. The feature-attributable tests.rs growth was repaired to net-zero; focused tests, formatting, artifacts, selfdev build, and isolated fake-provider slash smoke pass. Updating unrelated ratchet baselines is outside T038's approved scope."
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
