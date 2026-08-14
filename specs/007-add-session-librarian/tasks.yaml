@@ -162,7 +162,7 @@ phases:
           - "Normal sessions that never activate the skill have zero librarian attempts."
       - id: "T012"
         title: "Add the minimal project-local session-librarian slash skill source"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
