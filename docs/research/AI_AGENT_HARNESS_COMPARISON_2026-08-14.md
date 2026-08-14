@@ -2,7 +2,7 @@
 
 **Prepared:** 2026-08-14  
 **Scope:** Feature and workflow comparison, with recommendations for Jcode  
-**Jcode baseline:** Local custom checkout, `v0.75.3-dev` at `b6848dec8`  
+**Jcode baseline:** Local custom checkout, `v0.75.3-dev` at `b6848dec8535ea361b67ff78d5ba9e6beeb07d16`  
 **External sources checked:** 2026-08-14
 
 ## Executive summary
@@ -47,6 +47,8 @@ Reported results:
 | OpenCode | 18/25 | 72% | 270.5s | 299 | $0.72 |
 | Jcode | Not tested | Not tested | Not tested | Not tested | Not tested |
 
+*Pass rate uses the full 25-task comparison. Token and cost metrics use the shared 24-task usage slice because one task lacked complete usage data. Cost per success is total estimated cost divided by successful tasks within that applicable slice.*
+
 Interpretation:
 
 - The benchmark is useful evidence that the harness layer can materially change outcomes even when the model and tools are held constant.
@@ -65,14 +67,14 @@ Legend: **Yes** means directly documented in the reviewed sources. **Partial** m
 | Persistent daemon and many sessions | **Yes** | Partial | Partial | Partial | Jcode is a clear architectural strength |
 | Named session profiles | **Yes** | Partial | Partial | Partial | Keep and continue making profiles ergonomic |
 | Cross-harness session resume | **Yes** | Not found | Not found | Not found | Strong Jcode differentiator |
-| Native multi-agent swarm | **Yes** | **Yes** | **Yes** | Partial | Jcode has the richer coordination substrate |
+| Native multi-agent swarm | **Yes** | **Yes** | Partial | Partial | Jcode has the richer coordination substrate |
 | Task graph and dependency scheduling | **Yes, evolving** | Partial | Partial | Partial | Finish typed artifacts and verification gates |
 | Per-worker observability and steering | Yes, swarm widgets and events | **Yes, Agent Hub** | Partial | Partial | Oh My Pi's UX is worth studying |
 | Schema-validated subagent result | Partial, task artifacts evolving | **Yes** | Partial | Not found | High-value Jcode improvement |
 | LSP diagnostics | Not found as a first-class loop | **Yes** | **Yes** | Not found | Highest-value coding-loop gap |
 | DAP debugger control | Not found | **Yes** | Not found | Not found | Valuable, but should follow LSP |
 | Browser automation | **Yes**, Firefox Agent Bridge | **Yes** | Via MCP/plugins | Via MCP | Jcode already has a direct path |
-| Persistent Python/Bun execution kernels | Not found | **Yes** | Shell and plugins | Shell mode | Interesting, but not a first-wave priority |
+| Persistent Python/Bun execution kernels | Not found | **Yes** | Partial | Not found | Oh My Pi runs persistent Python/Bun kernels. OpenCode has shell and plugin execution. Kimi Code has shell mode, but no persistent kernel was found in the reviewed sources. |
 | MCP over local stdio | **Yes** | Yes | **Yes** | **Yes** | Jcode already has the local foundation |
 | Remote MCP and OAuth | Not found in current Jcode docs | Partial | **Yes** | **Yes** | Strong ecosystem gap with security implications |
 | File-backed skills | **Yes** | **Yes** | **Yes** | **Yes** | Jcode already has dynamic project-local skill behavior |
