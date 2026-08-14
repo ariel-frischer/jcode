@@ -115,10 +115,9 @@ fn session_feedback_discovery_is_inert_and_declares_no_automatic_trigger() {
     assert!(!app.pending_turn);
     assert!(!app.is_processing);
 
-    let skill = std::fs::read_to_string(
-        project_root.join(".jcode/skills/session-feedback/SKILL.md"),
-    )
-    .expect("read real project-local session-feedback skill");
+    let skill =
+        std::fs::read_to_string(project_root.join(".jcode/skills/session-feedback/SKILL.md"))
+            .expect("read real project-local session-feedback skill");
     let frontmatter = skill
         .strip_prefix("---\n")
         .and_then(|rest| rest.split_once("\n---\n"))
@@ -196,9 +195,7 @@ fn project_session_feedback_copy_precedes_global_copy_without_specific_runtime_b
         copy_session_feedback_skill(&global_skill);
 
         let workspace = tempfile::tempdir().expect("isolated workspace");
-        let project_skill = workspace
-            .path()
-            .join(".jcode/skills/session-feedback");
+        let project_skill = workspace.path().join(".jcode/skills/session-feedback");
         copy_session_feedback_skill(&project_skill);
 
         let app = app_with_working_dir(workspace.path());
@@ -229,9 +226,7 @@ fn removing_both_session_feedback_copies_preserves_other_commands_and_normal_inp
         copy_session_feedback_skill(&global_skill);
 
         let workspace = tempfile::tempdir().expect("isolated workspace");
-        let project_skill = workspace
-            .path()
-            .join(".jcode/skills/session-feedback");
+        let project_skill = workspace.path().join(".jcode/skills/session-feedback");
         copy_session_feedback_skill(&project_skill);
 
         let mut app = app_with_working_dir(workspace.path());

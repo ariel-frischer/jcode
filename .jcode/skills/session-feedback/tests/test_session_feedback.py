@@ -39,7 +39,9 @@ SCHEMA_NAMES = (
 
 def load_helper():
     """Load the copy-local helper without relying on repository import paths."""
-    spec = importlib.util.spec_from_file_location("session_feedback_under_test", HELPER_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "session_feedback_under_test", HELPER_PATH
+    )
     if spec is None or spec.loader is None:
         raise AssertionError(f"unable to load session-feedback helper: {HELPER_PATH}")
     module = importlib.util.module_from_spec(spec)
@@ -131,13 +133,17 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
         self.addCleanup(self.environment.stop)
         self.network_connection = mock.patch(
             "socket.create_connection",
-            side_effect=AssertionError("session-feedback tests must not access the network"),
+            side_effect=AssertionError(
+                "session-feedback tests must not access the network"
+            ),
         )
         self.network_connection.start()
         self.addCleanup(self.network_connection.stop)
         self.urlopen = mock.patch(
             "urllib.request.urlopen",
-            side_effect=AssertionError("session-feedback tests must not access the network"),
+            side_effect=AssertionError(
+                "session-feedback tests must not access the network"
+            ),
         )
         self.urlopen.start()
         self.addCleanup(self.urlopen.stop)
@@ -155,7 +161,9 @@ class SchemaContractTests(IsolatedSessionFeedbackTestCase):
         for name in SCHEMA_NAMES:
             with self.subTest(schema=name):
                 schema = self.feedback.load_schema(name)
-                self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
+                self.assertEqual(
+                    schema["$schema"], "https://json-schema.org/draft/2020-12/schema"
+                )
                 self.assertFalse(schema["additionalProperties"])
 
     def test_rejects_unsupported_contract_versions_for_every_schema(self) -> None:
@@ -202,13 +210,17 @@ class SchemaContractTests(IsolatedSessionFeedbackTestCase):
 
 class DeterministicCoreTests(IsolatedSessionFeedbackTestCase):
     def test_normalizes_scope_category_and_concrete_target_identity(self) -> None:
-        self.assertEqual(self.feedback.normalize_scope(" Project_Jcode "), "project-jcode")
+        self.assertEqual(
+            self.feedback.normalize_scope(" Project_Jcode "), "project-jcode"
+        )
         self.assertEqual(
             self.feedback.normalize_category(" SDK / Public Surfaces "),
             "sdk-public-surfaces",
         )
         self.assertEqual(
-            self.feedback.normalize_concrete_target("  .jcode//skills/example/SKILL.md  "),
+            self.feedback.normalize_concrete_target(
+                "  .jcode//skills/example/SKILL.md  "
+            ),
             ".jcode/skills/example/SKILL.md",
         )
 
@@ -287,9 +299,13 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
             librarian_summary_path=None,
         )
 
-    def test_current_session_uses_supplied_visible_evidence_on_clean_first_run(self) -> None:
+    def test_current_session_uses_supplied_visible_evidence_on_clean_first_run(
+        self,
+    ) -> None:
         self.assertFalse((self.home / ".jcode" / "feedback").exists())
-        self.assertFalse((self.home / ".jcode" / "skills" / "session-librarian").exists())
+        self.assertFalse(
+            (self.home / ".jcode" / "skills" / "session-librarian").exists()
+        )
         self.assertFalse((self.home / ".jcode" / "skills" / "jcode-zor").exists())
 
         invocation = self.prepare()
@@ -307,7 +323,9 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(invocation["evidence"]["source"], "fallback")
         self.assertEqual(invocation["evidence"]["items"], self.visible_items())
 
-    def test_missing_current_session_fails_actionably_without_creating_a_run(self) -> None:
+    def test_missing_current_session_fails_actionably_without_creating_a_run(
+        self,
+    ) -> None:
         with self.assertRaises(self.feedback.ValidationError) as raised:
             self.feedback.prepare_feedback_invocation(
                 requested_session_id=None,
@@ -322,7 +340,9 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("session id", message)
         self.assertFalse((self.home / ".jcode" / "feedback").exists())
 
-    def test_invisible_named_session_fails_before_generation_or_persistence(self) -> None:
+    def test_invisible_named_session_fails_before_generation_or_persistence(
+        self,
+    ) -> None:
         with self.assertRaises(self.feedback.ValidationError) as raised:
             self.prepare("session-private-9")
 
@@ -353,7 +373,9 @@ class FirstRunFallbackTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("allowlisted", str(raised.exception).lower())
         self.assertFalse((self.home / ".jcode" / "feedback").exists())
 
-    def test_review_outcomes_keep_success_failure_and_persistence_distinct(self) -> None:
+    def test_review_outcomes_keep_success_failure_and_persistence_distinct(
+        self,
+    ) -> None:
         zero = self.feedback.build_review_outcome(
             session_id="session-current-1",
             proposal_locations=(),
@@ -395,11 +417,15 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         librarian: dict[str, object] | None,
         visible_items: list[dict[str, object]] | None = None,
     ) -> dict[str, object]:
-        path = self.write_librarian_summary(librarian) if librarian is not None else None
+        path = (
+            self.write_librarian_summary(librarian) if librarian is not None else None
+        )
         return self.feedback.acquire_evidence(
             session_id=self.session_id,
             librarian_summary_path=path,
-            visible_items=self.fallback_items if visible_items is None else visible_items,
+            visible_items=self.fallback_items
+            if visible_items is None
+            else visible_items,
         )
 
     def assert_sentinels_absent(self, value: object, surface: str) -> None:
@@ -409,7 +435,9 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
                 self.assertNotIn(sentinel, serialized)
 
     def test_librarian_and_fallback_normalize_to_the_same_v1_items(self) -> None:
-        librarian = self.acquire(librarian=self.fixture["inputs"]["compatible_librarian"])
+        librarian = self.acquire(
+            librarian=self.fixture["inputs"]["compatible_librarian"]
+        )
         fallback = self.acquire(librarian=None)
 
         self.assertEqual(librarian["contract_version"], "evidence-v1")
@@ -421,7 +449,9 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         self.feedback.validate_contract("evidence-v1", librarian)
         self.feedback.validate_contract("evidence-v1", fallback)
 
-    def test_unsupported_librarian_falls_back_only_with_sufficient_visible_evidence(self) -> None:
+    def test_unsupported_librarian_falls_back_only_with_sufficient_visible_evidence(
+        self,
+    ) -> None:
         unsupported = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
         unsupported["summary_version"] = "librarian-summary-v2"
 
@@ -438,13 +468,18 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("evidence", message)
 
     def test_prohibited_sentinels_never_reach_any_downstream_surface(self) -> None:
-        evidence = self.acquire(librarian=self.fixture["inputs"]["compatible_librarian"])
+        evidence = self.acquire(
+            librarian=self.fixture["inputs"]["compatible_librarian"]
+        )
         shortlist = self.feedback.shortlist_targets(evidence)
         prompt = self.feedback.canonical_json(
             {"evidence": evidence, "shortlist": shortlist, "excerpts": []}
         )
         generator_recording = {"request_input": prompt, "request_count": 1}
-        generator_output = {"contract_version": "generator-response-v1", "proposals": []}
+        generator_output = {
+            "contract_version": "generator-response-v1",
+            "proposals": [],
+        }
         run_accounting = {
             "evidence_bytes": evidence["accounting"]["serialized_bytes"],
             "excerpt_bytes": 0,
@@ -467,7 +502,9 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         reordered["items"] = list(reversed(reordered["items"]))
         reordered = self.feedback.with_evidence_accounting(reordered)
 
-        with mock.patch("builtins.open", side_effect=AssertionError("pre-shortlist target read")):
+        with mock.patch(
+            "builtins.open", side_effect=AssertionError("pre-shortlist target read")
+        ):
             first = self.feedback.shortlist_targets(evidence)
             second = self.feedback.shortlist_targets(reordered)
 
@@ -542,18 +579,24 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         evidence = self.acquire(librarian=None)
         request_accounting = {
             "evidence_bytes": evidence["accounting"]["serialized_bytes"],
-            "excerpt_bytes": self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
+            "excerpt_bytes": self.feedback.excerpt_accounting(excerpts)[
+                "serialized_bytes"
+            ],
         }
         self.assertEqual(
             request_accounting["excerpt_bytes"],
             self.feedback.excerpt_accounting(excerpts)["serialized_bytes"],
         )
 
-    def test_both_acquisition_paths_reconcile_privacy_reads_and_accounting(self) -> None:
+    def test_both_acquisition_paths_reconcile_privacy_reads_and_accounting(
+        self,
+    ) -> None:
         target_root = Path(self.temp_dir.name) / "targets"
         skill_path = target_root / ".jcode" / "skills" / "session-feedback" / "SKILL.md"
         skill_path.parent.mkdir(parents=True)
-        skill_path.write_text("bounded session feedback excerpt with é", encoding="utf-8")
+        skill_path.write_text(
+            "bounded session feedback excerpt with é", encoding="utf-8"
+        )
 
         acquired = {
             "librarian": self.acquire(
@@ -621,15 +664,21 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
                     "fingerprint_material": self.feedback.fingerprint_material(
                         fingerprint_input
                     ),
-                    "fingerprint": self.feedback.proposal_fingerprint(fingerprint_input),
+                    "fingerprint": self.feedback.proposal_fingerprint(
+                        fingerprint_input
+                    ),
                 }
             )
             if baseline is None:
                 baseline = result
             self.assertEqual(result, baseline)
 
-    def test_boundary_failures_are_actionable_and_have_no_external_effects(self) -> None:
-        home_before = sorted(path.relative_to(self.home) for path in self.home.rglob("*"))
+    def test_boundary_failures_are_actionable_and_have_no_external_effects(
+        self,
+    ) -> None:
+        home_before = sorted(
+            path.relative_to(self.home) for path in self.home.rglob("*")
+        )
         malformed = copy.deepcopy(self.fixture["inputs"]["compatible_librarian"])
         malformed["items"] = {"unexpected": "not-an-array"}
 
@@ -638,7 +687,9 @@ class PrivacyNormalizationAndExcerptTests(IsolatedSessionFeedbackTestCase):
         self.assertIn("librarian", str(acquisition_error.exception).lower())
         self.assertIn("fallback", str(acquisition_error.exception).lower())
 
-        opener = mock.Mock(side_effect=AssertionError("invalid shortlist must not read files"))
+        opener = mock.Mock(
+            side_effect=AssertionError("invalid shortlist must not read files")
+        )
         with self.assertRaises(self.feedback.ValidationError) as shortlist_error:
             self.feedback.load_shortlisted_excerpts(
                 shortlist=[{"category": "skills", "concrete_target": 7}],
@@ -896,7 +947,8 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(accounting["request_count"], 1)
         self.assertEqual(accounting["proposal_count"], len(result["proposals"]))
         self.assertEqual(
-            accounting["request_input"], self.feedback.measure_text("request_input", prompt)
+            accounting["request_input"],
+            self.feedback.measure_text("request_input", prompt),
         )
         self.assertEqual(
             accounting["request_output"],
@@ -927,7 +979,9 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
                 )
                 self.assertEqual(
                     rendered["accounting"]["markdown"],
-                    self.feedback.measure_text("proposal_markdown", rendered["markdown"]),
+                    self.feedback.measure_text(
+                        "proposal_markdown", rendered["markdown"]
+                    ),
                 )
 
         common_material = {
@@ -955,7 +1009,9 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             with self.subTest(case=name):
                 result, runner = self.generate(response)
                 self.assertEqual(result["accounting"]["request_count"], 1)
-                self.assertEqual(result["accounting"]["proposal_count"], expected_proposals)
+                self.assertEqual(
+                    result["accounting"]["proposal_count"], expected_proposals
+                )
                 runner.assert_called_once()
 
         malformed_runner = self.runner_for(self.invalid_response("malformed"))
@@ -986,7 +1042,9 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             )
         output_budget_runner.assert_called_once()
 
-    def test_validates_the_complete_response_before_rendering_any_proposal(self) -> None:
+    def test_validates_the_complete_response_before_rendering_any_proposal(
+        self,
+    ) -> None:
         invalid = copy.deepcopy(
             self.fixture["valid_responses"]["complete_taxonomy"]["response"]
         )
@@ -1200,9 +1258,7 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
                     "stderr": "",
                 }
             if operation == "append":
-                bead_id = next(
-                    part for part in argv if part.startswith("feedback-")
-                )
+                bead_id = next(part for part in argv if part.startswith("feedback-"))
                 payload = json.loads(argv[-1])
                 self.appended.append((bead_id, payload))
                 return {"returncode": 0, "stdout": "", "stderr": ""}
@@ -1333,7 +1389,9 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(len(runner.created), 1)
         self.assertEqual(runner.appended, [])
 
-    def test_appends_only_new_evidence_and_creates_one_needs_approval_record(self) -> None:
+    def test_appends_only_new_evidence_and_creates_one_needs_approval_record(
+        self,
+    ) -> None:
         duplicate = copy.deepcopy(
             self.fixture["cases"]["duplicate_evidence"]["incoming_occurrence"]
         )
@@ -1359,7 +1417,9 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(unique_runner.appended, [])
         self.assert_only_local_bd_commands(unique_runner)
 
-    def test_repeated_creation_artifacts_and_bead_metadata_remain_consistent(self) -> None:
+    def test_repeated_creation_artifacts_and_bead_metadata_remain_consistent(
+        self,
+    ) -> None:
         repository_beads = SKILL_DIR.parents[2] / ".beads"
         repository_beads_existed = repository_beads.exists()
         occurrence = self.occurrence("consistent")
@@ -1420,7 +1480,9 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assert_only_local_bd_commands(repeated_runner)
         self.assertEqual(repository_beads.exists(), repository_beads_existed)
 
-    def test_ambiguous_malformed_and_bootstrap_failures_leave_no_partial_state(self) -> None:
+    def test_ambiguous_malformed_and_bootstrap_failures_leave_no_partial_state(
+        self,
+    ) -> None:
         target = SKILL_DIR / "SKILL.md"
         target_before = target.read_bytes()
         failure_cases = (
@@ -1437,11 +1499,10 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
             ("bootstrap failure", self.FakeBdRunner([], fail_operation="init"), "init"),
         )
         for index, (label, runner, expected_error) in enumerate(failure_cases):
-            self.feedback_root = (
-                self.home / ".jcode" / "feedback" / f"failure-{index}"
-            )
-            with self.subTest(case=label), self.assertRaisesRegex(
-                self.feedback.ValidationError, expected_error
+            self.feedback_root = self.home / ".jcode" / "feedback" / f"failure-{index}"
+            with (
+                self.subTest(case=label),
+                self.assertRaisesRegex(self.feedback.ValidationError, expected_error),
             ):
                 self.persist("ambiguous", runner)
             self.assertEqual(runner.created, [])
@@ -1696,7 +1757,9 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         )
         fake_bd.chmod(fake_bd.stat().st_mode | stat.S_IXUSR)
 
-    def test_reusable_orchestrator_runs_generation_and_reports_complete_accounting(self) -> None:
+    def test_reusable_orchestrator_runs_generation_and_reports_complete_accounting(
+        self,
+    ) -> None:
         runner = mock.Mock(
             return_value={
                 "returncode": 0,
@@ -1734,7 +1797,9 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(result["accounting"]["estimated_cost_usd"], 0.01)
         runner.assert_called_once()
 
-    def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(self) -> None:
+    def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(
+        self,
+    ) -> None:
         self.install_fake_bd()
         input_document = {
             "current_session_id": "session-current-1",
@@ -1745,12 +1810,15 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         fake_jcode = self.bin_dir / "jcode"
         fake_jcode.write_text(
             f"#!{sys.executable}\n"
-            "print('{\"contract_version\":\"generator-response-v1\",\"proposals\":[]}')\n",
+            'print(\'{"contract_version":"generator-response-v1","proposals":[]}\')\n',
             encoding="utf-8",
         )
         fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
 
-        cases = (([], "session-current-1"), (["session-visible-2"], "session-visible-2"))
+        cases = (
+            ([], "session-current-1"),
+            (["session-visible-2"], "session-visible-2"),
+        )
         for arguments, expected_session_id in cases:
             with self.subTest(arguments=arguments):
                 completed = subprocess.run(

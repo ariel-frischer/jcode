@@ -18,9 +18,7 @@ from typing import Any, Mapping, Sequence
 
 SKILL_DIR = Path(__file__).resolve().parent
 SCHEMA_DIR = SKILL_DIR / "schemas"
-SUPPORTED_SCHEMAS = frozenset(
-    {"evidence-v1", "proposal-v1", "generator-response-v1"}
-)
+SUPPORTED_SCHEMAS = frozenset({"evidence-v1", "proposal-v1", "generator-response-v1"})
 SUPPORTED_SCOPES = frozenset({"personal-global", "project-jcode"})
 SUPPORTED_CATEGORIES = frozenset(
     {
@@ -73,9 +71,7 @@ INTEGER_CONFIG_FIELDS = frozenset(
         "max_proposals",
     }
 )
-FLOAT_CONFIG_FIELDS = frozenset(
-    {"max_elapsed_seconds", "max_estimated_cost_usd"}
-)
+FLOAT_CONFIG_FIELDS = frozenset({"max_elapsed_seconds", "max_estimated_cost_usd"})
 SUPPORTED_EFFORTS = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 )
@@ -154,7 +150,9 @@ def canonical_json(value: Any) -> str:
             allow_nan=False,
         )
     except (TypeError, ValueError) as error:
-        raise ValidationError(_bounded_error(f"value is not canonical JSON: {error}")) from error
+        raise ValidationError(
+            _bounded_error(f"value is not canonical JSON: {error}")
+        ) from error
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -167,7 +165,9 @@ def load_schema(name: str) -> dict[str, Any]:
     if name not in SUPPORTED_SCHEMAS:
         supported = ", ".join(sorted(SUPPORTED_SCHEMAS))
         raise ValidationError(
-            _bounded_error(f"unsupported schema {name!r}; supported schemas: {supported}")
+            _bounded_error(
+                f"unsupported schema {name!r}; supported schemas: {supported}"
+            )
         )
     path = SCHEMA_DIR / f"{name}.schema.json"
     try:
@@ -201,7 +201,9 @@ def _fail(schema_name: str, path: Sequence[str | int], detail: str) -> None:
     )
 
 
-def _resolve_ref(schema_name: str, root: Mapping[str, Any], reference: str) -> Mapping[str, Any]:
+def _resolve_ref(
+    schema_name: str, root: Mapping[str, Any], reference: str
+) -> Mapping[str, Any]:
     if not reference.startswith("#/"):
         _fail(schema_name, (), f"unsupported schema reference {reference!r}")
     current: Any = root
@@ -267,13 +269,23 @@ def _validate_node(
         _fail(schema_name, path, detail)
 
     if "enum" in schema and value not in schema["enum"]:
-        _fail(schema_name, path, f"unsupported value {value!r}; supported values: {schema['enum']}")
+        _fail(
+            schema_name,
+            path,
+            f"unsupported value {value!r}; supported values: {schema['enum']}",
+        )
 
     expected_type = schema.get("type")
     if expected_type is not None:
-        allowed_types = [expected_type] if isinstance(expected_type, str) else expected_type
+        allowed_types = (
+            [expected_type] if isinstance(expected_type, str) else expected_type
+        )
         if not any(_matches_type(value, item) for item in allowed_types):
-            _fail(schema_name, path, f"expected {expected_type}, got {type(value).__name__}")
+            _fail(
+                schema_name,
+                path,
+                f"expected {expected_type}, got {type(value).__name__}",
+            )
 
     if isinstance(value, dict):
         properties = schema.get("properties", {})
@@ -285,7 +297,11 @@ def _validate_node(
                 if key not in properties:
                     _fail(schema_name, path + (key,), "unknown field is not allowed")
         if "maxProperties" in schema and len(value) > schema["maxProperties"]:
-            _fail(schema_name, path, f"contains {len(value)} fields; maximum is {schema['maxProperties']}")
+            _fail(
+                schema_name,
+                path,
+                f"contains {len(value)} fields; maximum is {schema['maxProperties']}",
+            )
         for key, child in value.items():
             child_schema = properties.get(key)
             if child_schema is not None:
@@ -293,9 +309,17 @@ def _validate_node(
 
     if isinstance(value, list):
         if "minItems" in schema and len(value) < schema["minItems"]:
-            _fail(schema_name, path, f"contains {len(value)} items; minimum is {schema['minItems']}")
+            _fail(
+                schema_name,
+                path,
+                f"contains {len(value)} items; minimum is {schema['minItems']}",
+            )
         if "maxItems" in schema and len(value) > schema["maxItems"]:
-            _fail(schema_name, path, f"contains {len(value)} items; maximum is {schema['maxItems']}")
+            _fail(
+                schema_name,
+                path,
+                f"contains {len(value)} items; maximum is {schema['maxItems']}",
+            )
         if schema.get("uniqueItems"):
             seen: set[str] = set()
             for index, item in enumerate(value):
@@ -310,18 +334,30 @@ def _validate_node(
 
     if isinstance(value, str):
         if "minLength" in schema and len(value) < schema["minLength"]:
-            _fail(schema_name, path, f"length {len(value)} is below minimum {schema['minLength']}")
+            _fail(
+                schema_name,
+                path,
+                f"length {len(value)} is below minimum {schema['minLength']}",
+            )
         if "maxLength" in schema and len(value) > schema["maxLength"]:
-            _fail(schema_name, path, f"length {len(value)} exceeds maximum {schema['maxLength']}")
+            _fail(
+                schema_name,
+                path,
+                f"length {len(value)} exceeds maximum {schema['maxLength']}",
+            )
         pattern = schema.get("pattern")
         if pattern is not None and re.search(pattern, value) is None:
             _fail(schema_name, path, "value does not match the required format")
 
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < schema["minimum"]:
-            _fail(schema_name, path, f"value {value} is below minimum {schema['minimum']}")
+            _fail(
+                schema_name, path, f"value {value} is below minimum {schema['minimum']}"
+            )
         if "maximum" in schema and value > schema["maximum"]:
-            _fail(schema_name, path, f"value {value} exceeds maximum {schema['maximum']}")
+            _fail(
+                schema_name, path, f"value {value} exceeds maximum {schema['maximum']}"
+            )
 
 
 def validate_contract(schema_name: str, document: Any) -> Any:
@@ -364,7 +400,9 @@ def _normalize_identity(field: str, value: str, allowed: frozenset[str]) -> str:
     if normalized not in allowed:
         supported = ", ".join(sorted(allowed))
         raise ValidationError(
-            _bounded_error(f"invalid {field} value {value!r}; supported values: {supported}")
+            _bounded_error(
+                f"invalid {field} value {value!r}; supported values: {supported}"
+            )
         )
     return normalized
 
@@ -379,7 +417,9 @@ def normalize_category(value: str) -> str:
 
 def normalize_concrete_target(value: str) -> str:
     if not isinstance(value, str):
-        raise ValidationError(f"concrete_target must be a string, got {type(value).__name__}")
+        raise ValidationError(
+            f"concrete_target must be a string, got {type(value).__name__}"
+        )
     normalized = unicodedata.normalize("NFKC", value).strip().replace("\\", "/")
     normalized = re.sub(r"/{2,}", "/", normalized)
     if not normalized:
@@ -402,7 +442,9 @@ def normalize_text(field: str, value: str) -> str:
 
 def normalize_evidence_reference(value: str) -> str:
     if not isinstance(value, str):
-        raise ValidationError(f"evidence reference must be a string, got {type(value).__name__}")
+        raise ValidationError(
+            f"evidence reference must be a string, got {type(value).__name__}"
+        )
     normalized = unicodedata.normalize("NFKC", value).strip().lower()
     normalized = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
     if not normalized or len(normalized) > 96:
@@ -421,11 +463,15 @@ def fingerprint_material(material: Mapping[str, Any]) -> dict[str, str]:
     required = ("scope", "category", "concrete_target", "problem", "intended_outcome")
     missing = [field for field in required if field not in material]
     if missing:
-        raise ValidationError(f"fingerprint material is missing required fields: {', '.join(missing)}")
+        raise ValidationError(
+            f"fingerprint material is missing required fields: {', '.join(missing)}"
+        )
     return {
         "category": normalize_category(material["category"]),
         "concrete_target": normalize_concrete_target(material["concrete_target"]),
-        "intended_outcome": normalize_text("intended_outcome", material["intended_outcome"]),
+        "intended_outcome": normalize_text(
+            "intended_outcome", material["intended_outcome"]
+        ),
         "problem": normalize_text("problem", material["problem"]),
         "scope": normalize_scope(material["scope"]),
     }
@@ -440,7 +486,9 @@ def measure_text(label: str, text: str) -> dict[str, int | str]:
     if not isinstance(label, str) or not label.strip():
         raise ValidationError("measurement label must be a non-empty string")
     if not isinstance(text, str):
-        raise ValidationError(f"measurement text must be a string, got {type(text).__name__}")
+        raise ValidationError(
+            f"measurement text must be a string, got {type(text).__name__}"
+        )
     byte_count = len(text.encode("utf-8"))
     return {
         "label": label,
@@ -467,7 +515,9 @@ def evidence_accounting(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         if not isinstance(category, str) or not category:
             raise ValidationError(f"evidence item {index} must have a category")
         category_counts[category] = category_counts.get(category, 0) + 1
-        category_bytes[category] = category_bytes.get(category, 0) + len(canonical_bytes(item))
+        category_bytes[category] = category_bytes.get(category, 0) + len(
+            canonical_bytes(item)
+        )
 
     by_category: dict[str, dict[str, int]] = {}
     for category in sorted(category_counts):
@@ -729,7 +779,9 @@ def _validate_session_id(field: str, value: Any) -> str:
             f"{field} must be a non-empty session id without surrounding whitespace"
         )
     if len(value) > MAX_SESSION_ID_LENGTH:
-        raise ValidationError(f"{field} exceeds the {MAX_SESSION_ID_LENGTH} character limit")
+        raise ValidationError(
+            f"{field} exceeds the {MAX_SESSION_ID_LENGTH} character limit"
+        )
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise ValidationError(f"{field} contains a control character")
     return value
@@ -760,7 +812,9 @@ def _select_visible_session(
 
     if selected not in visible:
         raise ValidationError(
-            _bounded_error(f"session id {selected!r} is not in the supplied visible session ids")
+            _bounded_error(
+                f"session id {selected!r} is not in the supplied visible session ids"
+            )
         )
     return selected
 
@@ -769,7 +823,9 @@ def _allowlist_evidence_items(
     items: Sequence[Mapping[str, Any]], *, source_label: str
 ) -> list[dict[str, Any]]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
-        raise ValidationError(f"{source_label} must be a sequence of allowlisted evidence objects")
+        raise ValidationError(
+            f"{source_label} must be a sequence of allowlisted evidence objects"
+        )
     if not items:
         raise ValidationError(f"{source_label} did not contain any permitted evidence")
 
@@ -805,7 +861,9 @@ def _normalized_evidence(
         return validate_contract("evidence-v1", document)
     except ContractValidationError as error:
         raise ContractValidationError(
-            _bounded_error(f"{source_label} must contain only valid allowlisted evidence: {error}")
+            _bounded_error(
+                f"{source_label} must contain only valid allowlisted evidence: {error}"
+            )
         ) from error
 
 
@@ -819,7 +877,9 @@ def _fallback_evidence(visible_items: Sequence[Mapping[str, Any]]) -> dict[str, 
 
 def _read_librarian_summary(path_value: str | Path) -> Mapping[str, Any]:
     if not isinstance(path_value, (str, Path)):
-        raise ValidationError("librarian_summary_path must be an explicitly supplied path")
+        raise ValidationError(
+            "librarian_summary_path must be an explicitly supplied path"
+        )
     path = Path(path_value).expanduser()
     try:
         with path.open("rb") as summary_file:
@@ -994,7 +1054,9 @@ def _load_persisted_feedback_config(config_path: Path) -> dict[str, Any]:
             f"persisted feedback configuration could not be read: {_bounded_error(str(error))}"
         ) from error
     except json.JSONDecodeError as error:
-        raise ValidationError("persisted feedback configuration is malformed JSON") from error
+        raise ValidationError(
+            "persisted feedback configuration is malformed JSON"
+        ) from error
     if not isinstance(parsed, dict):
         raise ValidationError("persisted feedback configuration must be an object")
     unknown = sorted(set(parsed) - set(DEFAULT_GENERATION_CONFIG))
@@ -1071,7 +1133,9 @@ def resolve_feedback_config(
     }
 
 
-def validate_budget_limit(*, field: str, observed: int | float, limit: int | float) -> None:
+def validate_budget_limit(
+    *, field: str, observed: int | float, limit: int | float
+) -> None:
     """Fail when a measured non-negative budget contribution exceeds its limit."""
     if field not in INTEGER_CONFIG_FIELDS | FLOAT_CONFIG_FIELDS:
         raise ValidationError(f"unsupported budget field: {field}")
@@ -1084,7 +1148,9 @@ def validate_budget_limit(*, field: str, observed: int | float, limit: int | flo
     ):
         raise ValidationError(f"observed {field} must be a non-negative finite number")
     if observed > parsed_limit:
-        raise ValidationError(f"{field} exceeded: observed {observed}, limit {parsed_limit}")
+        raise ValidationError(
+            f"{field} exceeded: observed {observed}, limit {parsed_limit}"
+        )
 
 
 def _generation_limit(
@@ -1800,16 +1866,22 @@ def build_review_outcome(
     locations: list[str] = []
     for index, location in enumerate(proposal_locations):
         if not isinstance(location, str) or not location.strip():
-            raise ValidationError(f"proposal_locations[{index}] must be a non-empty path")
+            raise ValidationError(
+                f"proposal_locations[{index}] must be a non-empty path"
+            )
         if len(location) > 512 or any(
             ord(character) < 32 or ord(character) == 127 for character in location
         ):
-            raise ValidationError(f"proposal_locations[{index}] is invalid or oversized")
+            raise ValidationError(
+                f"proposal_locations[{index}] is invalid or oversized"
+            )
         locations.append(location)
 
     if failure is not None:
         if locations:
-            raise ValidationError("a failed review outcome cannot include persisted proposals")
+            raise ValidationError(
+                "a failed review outcome cannot include persisted proposals"
+            )
         if not isinstance(failure, str) or not failure.strip():
             raise ValidationError("failure must be a non-empty string")
         return {

@@ -15,7 +15,7 @@ SKILL_DIR = Path(__file__).resolve().parent
 if str(SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(SKILL_DIR))
 
-from session_feedback import (
+from session_feedback import (  # noqa: E402 - import after copy-local path setup
     ValidationError,
     bootstrap_feedback_store,
     canonical_json,
@@ -27,28 +27,34 @@ from session_feedback import (
 
 
 MAX_INPUT_BYTES = 256 * 1024
-INPUT_FIELDS = frozenset(
-    {"current_session_id", "visible_session_ids", "visible_items"}
-)
+INPUT_FIELDS = frozenset({"current_session_id", "visible_session_ids", "visible_items"})
 
 
 def _read_input() -> dict[str, Any]:
     raw = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
     if len(raw) > MAX_INPUT_BYTES:
-        raise ValidationError(f"visible-evidence input exceeds the {MAX_INPUT_BYTES} byte limit")
+        raise ValidationError(
+            f"visible-evidence input exceeds the {MAX_INPUT_BYTES} byte limit"
+        )
     try:
         document = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValidationError(f"visible-evidence input must be one UTF-8 JSON object: {error}") from error
+        raise ValidationError(
+            f"visible-evidence input must be one UTF-8 JSON object: {error}"
+        ) from error
     if not isinstance(document, dict):
         raise ValidationError("visible-evidence input must be one JSON object")
 
     unknown = sorted(set(document) - INPUT_FIELDS)
     if unknown:
-        raise ValidationError(f"visible-evidence input contains unknown fields: {unknown}")
+        raise ValidationError(
+            f"visible-evidence input contains unknown fields: {unknown}"
+        )
     missing = sorted({"visible_session_ids", "visible_items"} - set(document))
     if missing:
-        raise ValidationError(f"visible-evidence input is missing required fields: {missing}")
+        raise ValidationError(
+            f"visible-evidence input is missing required fields: {missing}"
+        )
     return document
 
 
