@@ -1,5 +1,6 @@
 use super::*;
 use crate::auth::{AuthState, AuthStatus, ProviderAuth};
+use crate::cli::commands;
 use crate::message::{Message, StreamEvent, ToolDefinition};
 use crate::provider::ModelRoute;
 use crate::provider::{EventStream, Provider};
@@ -10,6 +11,22 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+
+#[test]
+fn bare_session_feedback_run_forwards_trusted_current_session_id() {
+    assert_eq!(
+        commands::prepare_run_message("/session-feedback", "session-current-1"),
+        "/session-feedback current_session_id=session-current-1"
+    );
+    assert_eq!(
+        commands::prepare_run_message("/session-feedback session-visible-2", "session-current-1"),
+        "/session-feedback session-visible-2"
+    );
+    assert_eq!(
+        commands::prepare_run_message("ordinary prompt", "session-current-1"),
+        "ordinary prompt"
+    );
+}
 
 struct SavedEnv {
     vars: Vec<(String, Option<String>)>,
