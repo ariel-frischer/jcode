@@ -17,7 +17,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Create the standalone session-feedback fixture manifest"
-        status: "Pending"
+        status: "Completed"
         type: "setup"
         parallel: false
         story_id: null
