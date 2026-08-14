@@ -135,6 +135,7 @@ pub(crate) fn admit_session(
     budgets: &LibrarianBudgets,
     caps: &LibrarianAdmissionCaps,
 ) -> Result<AdmittedSessionContent, LibrarianFailure> {
+    let working_directory = session.working_dir.as_deref().map(Path::new);
     let mut pending_tools = HashMap::<String, PendingToolUse>::new();
     let mut receipt_identities = HashSet::<String>::new();
     let mut candidates = Vec::<AdmissionItem>::new();
@@ -154,7 +155,7 @@ pub(crate) fn admit_session(
                 ContentBlock::ToolUse {
                     id, name, input, ..
                 } => {
-                    pending_tools.insert(id.clone(), pending_tool(name, input)?);
+                    pending_tools.insert(id.clone(), pending_tool(name, input, working_directory)?);
                 }
                 ContentBlock::ToolResult {
                     tool_use_id,
@@ -257,11 +258,16 @@ fn looks_like_base64_blob(text: &str) -> bool {
     total > 0 && eligible.saturating_mul(100) / total >= 98
 }
 
-fn pending_tool(operation: &str, input: &Value) -> Result<PendingToolUse, LibrarianFailure> {
+fn pending_tool(
+    operation: &str,
+    input: &Value,
+    working_directory: Option<&Path>,
+) -> Result<PendingToolUse, LibrarianFailure> {
     let redacted_input = redact_json(input);
     let canonical_input = serde_json::to_vec(&canonical_json(&redacted_input))
         .map_err(admission_serialization_failure)?;
-    let path = first_string(input, &["file_path", "path", "file"]).map(normalize_recorded_path);
+    let path = first_string(input, &["file_path", "path", "file"])
+        .and_then(|path| normalize_recorded_path(path, working_directory));
     let intent = first_string(input, &["intent"])
         .map(redact_secrets)
         .map(|value| truncate_utf8(&value, ERROR_EXCERPT_BYTES));
@@ -309,22 +315,28 @@ fn canonical_json(value: &Value) -> Value {
     }
 }
 
-fn normalize_recorded_path(raw: &str) -> String {
+fn normalize_recorded_path(raw: &str, working_directory: Option<&Path>) -> Option<String> {
+    let path = Path::new(raw);
+    let path = if path.is_absolute() {
+        let root = working_directory.filter(|root| root.is_absolute())?;
+        path.strip_prefix(root).ok()?
+    } else {
+        path
+    };
     let mut normalized = PathBuf::new();
-    for component in Path::new(raw).components() {
+    for component in path.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
                 if !normalized.pop() {
-                    normalized.push("..");
+                    return None;
                 }
             }
             Component::Normal(part) => normalized.push(part),
-            Component::RootDir => normalized.push(Path::new("/")),
-            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir | Component::Prefix(_) => return None,
         }
     }
-    normalized.to_string_lossy().replace('\\', "/")
+    (!normalized.as_os_str().is_empty()).then(|| normalized.to_string_lossy().replace('\\', "/"))
 }
 
 fn extract_counts(result: &str) -> BTreeMap<String, u64> {

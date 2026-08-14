@@ -242,6 +242,48 @@ fn recognized_secrets_are_redacted_before_canonicalization_and_safe_text_is_unch
 }
 
 #[test]
+fn absolute_tool_paths_are_project_relative_or_omitted_before_provider_admission() {
+    let mut fixture = session();
+    fixture.working_dir = Some("/home/private-user/project".into());
+    add_text(&mut fixture, Role::User, SAFE_DECISION);
+    add_tool_attempt(
+        &mut fixture,
+        "inside-project",
+        "read",
+        json!({
+            "file_path": "/home/private-user/project/src/lib.rs",
+            "intent": "Inspect the project source"
+        }),
+        "status=ok bytes=42",
+        false,
+    );
+    add_tool_attempt(
+        &mut fixture,
+        "outside-project",
+        "read",
+        json!({
+            "file_path": "/home/private-user/.config/secret.toml",
+            "intent": "Inspect an unrelated path"
+        }),
+        "status=ok bytes=17",
+        false,
+    );
+
+    let admitted = admit(&fixture, 12_000);
+    let parsed = payload(&admitted);
+    let receipts = receipt_items(&parsed);
+    let paths = receipts
+        .iter()
+        .filter_map(|receipt| receipt["path"].as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(paths, vec!["src/lib.rs"]);
+    let provider_content = payload_text(&admitted);
+    assert!(!provider_content.contains("/home/private-user"));
+    assert!(!provider_content.contains("secret.toml"));
+}
+
+#[test]
 fn huge_file_and_tool_payloads_become_deterministic_one_kib_receipts() {
     let operations = ["edit", "multiedit", "apply_patch", "read", "write", "bash"];
     let payload_sizes = [

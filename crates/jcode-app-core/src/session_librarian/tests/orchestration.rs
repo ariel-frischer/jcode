@@ -10,6 +10,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use std::time::{Duration, Instant};
 
 const RESPONSE: &str = r#"{
   "summary": {
@@ -151,4 +152,28 @@ async fn equivalent_invocations_reuse_one_generation_and_changed_content_publish
     assert_ne!(first.artifacts.directory(), changed.artifacts.directory());
     assert!(changed.artifacts.markdown().is_file());
     assert!(changed.artifacts.json().is_file());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn publication_filesystem_work_does_not_block_the_async_worker() {
+    let started = Instant::now();
+    let operation = tokio::spawn(super::run_publication_io(|| {
+        std::thread::sleep(Duration::from_millis(100));
+        Ok::<_, super::LibrarianFailure>(())
+    }));
+
+    tokio::time::timeout(
+        Duration::from_millis(25),
+        tokio::time::sleep(Duration::from_millis(1)),
+    )
+    .await
+    .expect("the async worker should remain responsive during publication I/O");
+    assert!(
+        started.elapsed() < Duration::from_millis(50),
+        "publication filesystem work ran on the async worker"
+    );
+    operation
+        .await
+        .expect("publication task should join")
+        .expect("publication operation should succeed");
 }

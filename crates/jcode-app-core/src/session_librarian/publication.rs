@@ -1,18 +1,26 @@
 use super::{LibrarianArtifactPaths, LibrarianFailure, LibrarianFailureStage, LibrarianGeneration};
 use jcode_base::message::redact_secrets;
 use jcode_session_types::{SessionSummary, SourceFingerprint, StructuredSummarySections};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Write},
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 const LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 const LOCK_RETRY_DELAY: Duration = Duration::from_millis(5);
+const LOCK_METADATA_FILE: &str = "owner.json";
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct PublicationLockMetadata {
+    owner_pid: u32,
+    created_at_unix_ms: u64,
+}
 
 pub(crate) struct PublicationStore {
     root: PathBuf,
@@ -52,7 +60,7 @@ impl PublicationStore {
         loop {
             match fs::create_dir(&lock_directory) {
                 Ok(()) => {
-                    let lock = PublicationLock { lock_directory };
+                    let lock = PublicationLock::initialize(lock_directory)?;
                     if destination.exists() {
                         validate_published_pair(&paths, session_id, fingerprint)?;
                         return Ok(PublicationClaim::Reused(paths));
@@ -69,6 +77,9 @@ impl PublicationStore {
                     if destination.exists() {
                         validate_published_pair(&paths, session_id, fingerprint)?;
                         return Ok(PublicationClaim::Reused(paths));
+                    }
+                    if reclaim_dead_stale_lock(&lock_directory)? {
+                        continue;
                     }
                     if started.elapsed() >= LOCK_WAIT_TIMEOUT {
                         return Err(failure(
@@ -168,10 +179,183 @@ struct PublicationLock {
     lock_directory: PathBuf,
 }
 
+impl PublicationLock {
+    fn initialize(lock_directory: PathBuf) -> Result<Self, LibrarianFailure> {
+        let metadata = PublicationLockMetadata {
+            owner_pid: std::process::id(),
+            created_at_unix_ms: unix_time_millis()?,
+        };
+        if let Err(error) = write_lock_metadata(&lock_directory, &metadata) {
+            drop(fs::remove_dir_all(&lock_directory));
+            return Err(error);
+        }
+        Ok(Self { lock_directory })
+    }
+}
+
 impl Drop for PublicationLock {
     fn drop(&mut self) {
+        drop(fs::remove_file(
+            self.lock_directory.join(LOCK_METADATA_FILE),
+        ));
         drop(fs::remove_dir(&self.lock_directory));
     }
+}
+
+fn write_lock_metadata(
+    lock_directory: &Path,
+    metadata: &PublicationLockMetadata,
+) -> Result<(), LibrarianFailure> {
+    set_private_lock_permissions(lock_directory)?;
+    let bytes = serde_json::to_vec(metadata).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_metadata_failed",
+            format!("Could not serialize publication lock metadata: {error}"),
+        )
+    })?;
+    let path = lock_directory.join(LOCK_METADATA_FILE);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&path).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_metadata_failed",
+            format!("Could not create publication lock metadata: {error}"),
+        )
+    })?;
+    file.write_all(&bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| {
+            failure(
+                LibrarianFailureStage::Locking,
+                "librarian_lock_metadata_failed",
+                format!("Could not persist publication lock metadata: {error}"),
+            )
+        })
+}
+
+fn reclaim_dead_stale_lock(lock_directory: &Path) -> Result<bool, LibrarianFailure> {
+    let Some(observed) = read_lock_metadata(lock_directory)? else {
+        return Ok(false);
+    };
+    let age_ms = unix_time_millis()?.saturating_sub(observed.created_at_unix_ms);
+    if age_ms < LOCK_WAIT_TIMEOUT.as_millis() as u64 || lock_owner_is_running(observed.owner_pid) {
+        return Ok(false);
+    }
+
+    let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let stale_directory = lock_directory.with_file_name(format!(
+        "{}.stale.{}.{}",
+        lock_directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("publication-lock"),
+        std::process::id(),
+        sequence
+    ));
+    match fs::rename(lock_directory, &stale_directory) {
+        Ok(()) => {
+            let moved = read_lock_metadata(&stale_directory)?;
+            if moved.as_ref() != Some(&observed) {
+                fs::rename(&stale_directory, lock_directory).map_err(|error| {
+                    failure(
+                        LibrarianFailureStage::Locking,
+                        "librarian_lock_reclaim_raced",
+                        format!(
+                            "Publication lock ownership changed during stale recovery: {error}"
+                        ),
+                    )
+                })?;
+                return Ok(false);
+            }
+            fs::remove_dir_all(&stale_directory).map_err(|error| {
+                failure(
+                    LibrarianFailureStage::Locking,
+                    "librarian_lock_reclaim_failed",
+                    format!("Could not remove a dead stale publication lock: {error}"),
+                )
+            })?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_reclaim_failed",
+            format!("Could not isolate a dead stale publication lock: {error}"),
+        )),
+    }
+}
+
+fn lock_owner_is_running(owner_pid: u32) -> bool {
+    owner_pid > 0
+        && owner_pid <= i32::MAX as u32
+        && jcode_base::platform::is_process_running(owner_pid)
+}
+
+fn read_lock_metadata(
+    lock_directory: &Path,
+) -> Result<Option<PublicationLockMetadata>, LibrarianFailure> {
+    let path = lock_directory.join(LOCK_METADATA_FILE);
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(failure(
+                LibrarianFailureStage::Locking,
+                "librarian_lock_metadata_failed",
+                format!("Could not read publication lock metadata: {error}"),
+            ));
+        }
+    };
+    serde_json::from_slice(&bytes).map(Some).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_metadata_failed",
+            format!("Publication lock metadata is invalid: {error}"),
+        )
+    })
+}
+
+fn unix_time_millis() -> Result<u64, LibrarianFailure> {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| {
+            failure(
+                LibrarianFailureStage::Locking,
+                "librarian_lock_clock_failed",
+                format!("Could not read the system clock for publication locking: {error}"),
+            )
+        })?;
+    u64::try_from(elapsed.as_millis()).map_err(|_| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_clock_failed",
+            "The system clock is outside the supported publication-lock range.".into(),
+        )
+    })
+}
+
+#[cfg(unix)]
+fn set_private_lock_permissions(path: &Path) -> Result<(), LibrarianFailure> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_permissions_failed",
+            format!("Could not make the publication lock private: {error}"),
+        )
+    })
+}
+
+#[cfg(not(unix))]
+fn set_private_lock_permissions(_path: &Path) -> Result<(), LibrarianFailure> {
+    Ok(())
 }
 
 struct StagingCleanup {

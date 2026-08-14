@@ -37,7 +37,7 @@ mod handoff;
 mod publication;
 
 const SUMMARY_FORMAT_VERSION: &str = "session-summary.v1";
-const FILTER_VERSION: &str = "session-librarian-filter.v1";
+const FILTER_VERSION: &str = "session-librarian-filter.v2";
 const PROMPT_VERSION: &str = "session-librarian-prompt.v1";
 const RECEIPT_VERSION: &str = "session-librarian-receipt.v1";
 
@@ -285,8 +285,11 @@ impl DefaultSessionLibrarian {
         let fingerprint =
             fingerprint::build_source_fingerprint(&admitted, &configuration_identity)?;
         let store = publication::PublicationStore::new(self.publication_root()?);
+        let claim_session_id = session.id.clone();
+        let claim_fingerprint = fingerprint.clone();
 
-        match store.claim(&session.id, &fingerprint)? {
+        match run_publication_io(move || store.claim(&claim_session_id, &claim_fingerprint)).await?
+        {
             publication::PublicationClaim::Reused(artifacts) => {
                 Ok(LibrarianResult::Reused(LibrarianCompletion {
                     session_id: session.id.clone(),
@@ -309,8 +312,8 @@ impl DefaultSessionLibrarian {
                     &configuration_identity.route,
                 )?;
                 let usage = generation.usage.clone();
-                let artifacts = lease
-                    .publish_generation(generation)
+                let artifacts = run_publication_io(move || lease.publish_generation(generation))
+                    .await
                     .map_err(|mut failure| {
                         failure.usage.get_or_insert_with(|| usage.clone());
                         failure
@@ -324,6 +327,21 @@ impl DefaultSessionLibrarian {
             }
         }
     }
+}
+
+async fn run_publication_io<T, F>(operation: F) -> Result<T, LibrarianFailure>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, LibrarianFailure> + Send + 'static,
+{
+    tokio::task::spawn_blocking(operation)
+        .await
+        .map_err(|error| LibrarianFailure {
+            stage: LibrarianFailureStage::Publication,
+            code: "librarian_publication_task_failed",
+            message: format!("Session librarian publication task failed to join: {error}"),
+            usage: None,
+        })?
 }
 
 #[async_trait]

@@ -13,7 +13,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const SESSION_ID: &str = "publication-session";
@@ -399,4 +399,32 @@ fn completed_generation_is_reused_without_another_rename() {
     };
 
     assert_eq!(reused, published);
+}
+
+#[test]
+fn dead_stale_lock_is_reclaimed_before_generation() {
+    let temp = tempfile::tempdir().expect("publication tempdir");
+    let fingerprint = fingerprint();
+    let session_directory = temp.path().join(SESSION_ID);
+    let lock_directory = session_directory.join(format!(".{}.lock", fingerprint.digest));
+    fs::create_dir_all(&lock_directory).expect("create stale lock directory");
+    fs::write(
+        lock_directory.join("owner.json"),
+        serde_json::to_vec(&json!({
+            "owner_pid": u32::MAX,
+            "created_at_unix_ms": 0_u64
+        }))
+        .expect("serialize stale lock metadata"),
+    )
+    .expect("write stale lock metadata");
+
+    let started = Instant::now();
+    let lease = claim_new(&store(temp.path()), &fingerprint);
+
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "a dead stale lock should be reclaimed without waiting for the contention timeout"
+    );
+    drop(lease);
+    assert!(!lock_directory.exists());
 }
