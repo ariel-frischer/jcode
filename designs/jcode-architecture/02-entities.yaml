@@ -1,0 +1,216 @@
+schema_version: "1.0"
+entities:
+  - name: User
+    description: >-
+      Local operator who owns sessions, persisted memory, and self-development
+      actions within the single-user Jcode installation.
+    id_field: user_id
+    fields:
+      - name: user_id
+        type: string
+        description: Stable identifier for the local operator.
+      - name: display_name
+        type: string
+        description: Human-readable operator name shown by client surfaces.
+
+  - name: Session
+    description: >-
+      Durable agent workspace that clients create, attach to, resume, and control
+      through the authoritative shared daemon.
+    id_field: session_id
+    fields:
+      - name: session_id
+        type: string
+        description: Stable session identifier preserved across reconnects and daemon reloads.
+      - name: user_id
+        type: string
+        description: Identifier of the User who owns the session.
+      - name: title
+        type: string
+        description: User-visible session name or generated summary.
+      - name: lifecycle_state
+        type: string
+        description: Current session state, such as active, idle, stopped, or completed.
+      - name: provider
+        type: string
+        description: Provider adapter selected as the default for agent turns in this session.
+      - name: working_directory
+        type: string
+        description: Filesystem scope in which the agent and its tools operate.
+      - name: self_dev_eligible
+        type: boolean
+        description: Whether self-development capabilities are enabled for this session.
+      - name: created_at
+        type: timestamp
+        description: Time the session was created.
+      - name: updated_at
+        type: timestamp
+        description: Time the durable session state last changed.
+
+  - name: Turn
+    description: >-
+      One idempotently accepted user prompt and its provider-and-tool execution
+      lifecycle within a Session.
+    id_field: turn_id
+    fields:
+      - name: turn_id
+        type: string
+        description: Stable identifier for the accepted agent turn.
+      - name: session_id
+        type: string
+        description: Identifier of the Session that owns the turn.
+      - name: idempotency_key
+        type: string
+        description: Client-supplied key that prevents duplicate prompt acceptance after retries.
+      - name: prompt
+        type: string
+        description: User input submitted to start the turn.
+      - name: provider
+        type: string
+        description: Provider adapter actually selected for this turn.
+      - name: status
+        type: string
+        description: Execution state, such as queued, running, waiting_for_approval, completed, failed, or cancelled.
+      - name: started_at
+        type: timestamp
+        description: Time execution began, when available.
+      - name: completed_at
+        type: timestamp
+        description: Time execution reached a terminal state, when available.
+
+  - name: Event
+    description: >-
+      Ordered durable fact in a Session transcript, streamed to attached clients
+      and replayed to reconnecting clients.
+    id_field: event_id
+    fields:
+      - name: event_id
+        type: string
+        description: Stable identifier for the persisted event.
+      - name: session_id
+        type: string
+        description: Identifier of the Session whose history contains the event.
+      - name: turn_id
+        type: string
+        description: Identifier of the related Turn, when the event belongs to a turn.
+      - name: sequence
+        type: integer
+        description: Daemon-assigned monotonic position that defines ordering within the session.
+      - name: event_type
+        type: string
+        description: Kind of conversation, reasoning, tool, usage, status, or completion event.
+      - name: payload
+        type: object
+        description: Contract-shaped event content interpreted according to event_type.
+      - name: committed_at
+        type: timestamp
+        description: Time the authoritative daemon durably committed the event.
+
+  - name: ToolExecution
+    description: >-
+      Built-in or MCP tool invocation requested during a Turn, including its
+      permission decision and observable result.
+    id_field: tool_execution_id
+    fields:
+      - name: tool_execution_id
+        type: string
+        description: Stable identifier for the tool invocation.
+      - name: turn_id
+        type: string
+        description: Identifier of the Turn that requested the tool.
+      - name: tool_name
+        type: string
+        description: Registered built-in or MCP tool name.
+      - name: arguments
+        type: object
+        description: Validated arguments supplied to the tool.
+      - name: approval_state
+        type: string
+        description: Permission state, such as not_required, pending, approved, or denied.
+      - name: status
+        type: string
+        description: Execution state, such as requested, running, succeeded, failed, or cancelled.
+      - name: result
+        type: object
+        description: Tool output or structured failure returned to the agent loop, when available.
+
+  - name: BackgroundTask
+    description: >-
+      Independently progressing background or swarm unit associated with a
+      Session and observable or controllable by clients.
+    id_field: background_task_id
+    fields:
+      - name: background_task_id
+        type: string
+        description: Stable identifier for the background unit of work.
+      - name: session_id
+        type: string
+        description: Identifier of the Session that owns the task.
+      - name: parent_task_id
+        type: string
+        description: Identifier of the coordinating BackgroundTask for bounded swarm work, when present.
+      - name: task_type
+        type: string
+        description: Kind of background or swarm work being performed.
+      - name: status
+        type: string
+        description: Lifecycle state, such as pending, running, completed, failed, or cancelled.
+      - name: progress
+        type: object
+        description: Current user-visible progress or completion summary.
+      - name: created_at
+        type: timestamp
+        description: Time the task was accepted by the daemon.
+
+  - name: MemoryRecord
+    description: >-
+      Inspectable, deletable, retention-governed memory persisted for later use by
+      the User or a specific Session.
+    id_field: memory_record_id
+    fields:
+      - name: memory_record_id
+        type: string
+        description: Stable identifier for the memory record.
+      - name: user_id
+        type: string
+        description: Identifier of the User who owns the memory.
+      - name: session_id
+        type: string
+        description: Identifier of the originating or scoped Session, when applicable.
+      - name: content
+        type: string
+        description: Persisted memory content after applicable sensitivity filtering.
+      - name: scope
+        type: string
+        description: Visibility scope controlling where the memory may be reused.
+      - name: expires_at
+        type: timestamp
+        description: Retention deadline after which the record may no longer be used, when configured.
+      - name: created_at
+        type: timestamp
+        description: Time the memory record was created.
+
+  - name: Build
+    description: >-
+      Immutable Jcode executable build that can be selected by a stable, current,
+      or self-development channel and activated by daemon reload.
+    id_field: build_id
+    fields:
+      - name: build_id
+        type: string
+        description: Stable identifier for the immutable build.
+      - name: version
+        type: string
+        description: Human-readable build or product version.
+      - name: channel
+        type: string
+        description: Activation channel referencing the build, such as stable, current, or canary.
+      - name: executable_path
+        type: string
+        description: Local path of the immutable executable selected for activation.
+      - name: status
+        type: string
+        description: Build lifecycle state, such as building, ready, active, or failed.
+      - name: created_at
+        type: timestamp
+        description: Time the build artifact was produced.

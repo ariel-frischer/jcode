@@ -1,0 +1,62 @@
+prompt: 'Create a current architecture design for the Jcode coding agent repository. Treat the checked-out repository as the source of truth, not a hypothetical redesign. Cover the Rust workspace and executable surfaces: jcode CLI/TUI client, jcode-desktop2 client, jcode-sdk and harness API clients, Unix-socket transport/protocol, single multi-client daemon/server, session lifecycle and persistence, app-core orchestration, provider runtime adapters (OpenAI, Anthropic, Bedrock, OpenRouter, Gemini, Copilot, Claude CLI, Cursor, Antigravity), tool and MCP execution, background tasks and swarm coordination, memory/telemetry/storage, and self-dev build/reload channels. Show the primary request/streaming flow from a client prompt through server session, provider/tool loop, persisted events, and streamed events back to clients. Distinguish current implemented components from optional or historical desktop architecture. Include a compact system boundary and a clear self-dev/reload path. Exclude low-level crate inventory that would make the diagram unreadable, and do not invent components unsupported by repository code or docs. Produce an Excalidraw-friendly diagram with labeled arrows and a legend.'
+slug: current-architecture-jcode-7362a1e4
+created: 2026-08-14T02:43:52.392577209Z
+tool_version: v0.1.5
+agent:
+    preset: opencode
+    name: codex
+    command: codex
+    model: gpt-5.6-sol
+    max_steps: 50
+stages:
+    - name: manifest
+      status: complete
+      artifact: arc.yaml
+      validation_result:
+        status: pass
+    - name: requirements
+      status: complete
+      artifact: 01-requirements.yaml
+      dependencies:
+        - manifest
+      validation_result:
+        status: pass
+        artifact: 01-requirements.yaml
+    - name: entities
+      status: complete
+      artifact: 02-entities.yaml
+      dependencies:
+        - requirements
+      validation_result:
+        status: pass
+        artifact: 02-entities.yaml
+    - name: api
+      status: complete
+      artifact: 03-api.yaml
+      dependencies:
+        - requirements
+        - entities
+      validation_result:
+        status: pass
+        artifact: 03-api.yaml
+    - name: high-level-design
+      status: complete
+      artifact: 04-high-level-design.yaml
+      dependencies:
+        - requirements
+        - entities
+        - api
+      validation_result:
+        status: pass
+        artifact: 04-high-level-design.yaml
+    - name: diagram
+      status: complete
+      artifact: 06-diagram.yaml
+      dependencies:
+        - requirements
+        - entities
+        - api
+        - high-level-design
+      validation_result:
+        status: pass
+        artifact: 06-diagram.yaml

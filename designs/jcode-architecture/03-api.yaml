@@ -1,0 +1,301 @@
+schema_version: "1.0"
+interface_style: REST
+endpoint_groups:
+  - name: Session clients and streaming
+    requirement_ids:
+      - FR-001
+    endpoints:
+      - method: POST
+        path: /v1/sessions
+        description: >-
+          Create a durable session through the shared daemon; ownership comes
+          from the authenticated local client rather than the request body.
+        request: CreateSessionRequest
+        response: Session
+        status_codes:
+          - 201
+          - 400
+          - 409
+      - method: GET
+        path: /v1/sessions
+        description: >-
+          List sessions visible to the local client in stable updated-at order,
+          continuing from an opaque cursor.
+        response: SessionPage
+        pagination: cursor
+        status_codes:
+          - 200
+      - method: GET
+        path: /v1/sessions/{session_id}
+        description: >-
+          Read the durable lifecycle state and current configuration of a
+          session, with an ETag and 304 support for efficient polling.
+        response: Session
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: POST
+        path: /v1/sessions/{session_id}/attachments
+        description: >-
+          Attach this client to an existing session and return a state token
+          and last committed event cursor for ordered catch-up before live
+          streaming.
+        request: AttachSessionRequest
+        response: SessionAttachmentResponse
+        status_codes:
+          - 200
+          - 404
+          - 409
+      - method: POST
+        path: /v1/sessions/{session_id}/resume
+        description: >-
+          Resume a stopped or disconnected session under daemon-serialized
+          lifecycle control; repeated requests use the supplied idempotency key.
+        request: ResumeSessionRequest
+        response: Session
+        status_codes:
+          - 200
+          - 404
+          - 409
+      - method: PATCH
+        path: /v1/sessions/{session_id}
+        description: >-
+          Apply a daemon-serialized user-visible session control change, such as
+          title, provider selection, or lifecycle state, using the current ETag.
+        request: UpdateSessionRequest
+        response: Session
+        status_codes:
+          - 200
+          - 404
+          - 409
+          - 412
+      - method: POST
+        path: /v1/sessions/{session_id}/turns
+        description: >-
+          Idempotently accept a prompt into the authoritative session order and
+          return immediately while provider and tool execution continues.
+        request: CreateTurnRequest
+        response: Turn
+        status_codes:
+          - 202
+          - 400
+          - 404
+          - 409
+        async:
+          accepted_status: 202
+          status_path: /v1/sessions/{session_id}/turns/{turn_id}
+      - method: GET
+        path: /v1/sessions/{session_id}/turns/{turn_id}
+        description: >-
+          Read the current state of an accepted turn with an ETag and 304
+          support; terminal state is committed before it is returned.
+        response: Turn
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: GET
+        path: /v1/sessions/{session_id}/events/stream
+        description: >-
+          Stream versioned newline-delimited protocol events from an exclusive
+          sequence cursor; events are ordered by session sequence, reconnects
+          replay committed gaps, and heartbeats carry no transcript ordering.
+        response: SessionEventStreamResponse
+        status_codes:
+          - 200
+          - 404
+          - 409
+
+  - name: Agent turns and tool approvals
+    requirement_ids:
+      - FR-002
+    endpoints:
+      - method: POST
+        path: /v1/sessions/{session_id}/turns/{turn_id}/cancel
+        description: >-
+          Idempotently request cancellation of the provider-and-tool loop; the
+          daemon commits the resulting terminal or cancellation event in
+          session order.
+        request: CancelTurnRequest
+        response: Turn
+        status_codes:
+          - 200
+          - 404
+          - 409
+      - method: GET
+        path: /v1/sessions/{session_id}/turns/{turn_id}/tool-executions/{tool_execution_id}
+        description: >-
+          Read the observable built-in or MCP tool execution state, permission
+          decision, and result with an ETag and 304 support.
+        response: ToolExecution
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: POST
+        path: /v1/sessions/{session_id}/turns/{turn_id}/tool-executions/{tool_execution_id}/approval
+        description: >-
+          Idempotently approve or deny a pending tool execution; the daemon
+          serializes the decision and rejects stale approval state tokens.
+        request: DecideToolApprovalRequest
+        response: ToolExecution
+        status_codes:
+          - 200
+          - 400
+          - 404
+          - 409
+
+  - name: Concurrent background and swarm work
+    requirement_ids:
+      - FR-003
+    endpoints:
+      - method: POST
+        path: /v1/sessions/{session_id}/background-tasks
+        description: >-
+          Idempotently accept daemon-owned background or bounded swarm work and
+          return without coupling its lifetime to the requesting client.
+        request: CreateBackgroundTaskRequest
+        response: BackgroundTask
+        status_codes:
+          - 202
+          - 400
+          - 404
+          - 409
+          - 429
+        async:
+          accepted_status: 202
+          status_path: /v1/sessions/{session_id}/background-tasks/{background_task_id}
+      - method: GET
+        path: /v1/sessions/{session_id}/background-tasks
+        description: >-
+          List background and swarm tasks in stable creation order using an
+          opaque cursor, including parent coordination and visible progress.
+        response: BackgroundTaskPage
+        pagination: cursor
+        status_codes:
+          - 200
+          - 404
+      - method: GET
+        path: /v1/sessions/{session_id}/background-tasks/{background_task_id}
+        description: >-
+          Read task progress and terminal state with an ETag and 304 support;
+          state remains available after the initiating client disconnects.
+        response: BackgroundTask
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: POST
+        path: /v1/sessions/{session_id}/background-tasks/{background_task_id}/cancel
+        description: >-
+          Idempotently request cancellation while preserving committed progress
+          and allowing the daemon to reconcile already-running child work.
+        request: CancelBackgroundTaskRequest
+        response: BackgroundTask
+        status_codes:
+          - 200
+          - 404
+          - 409
+
+  - name: Recovery history and memory
+    requirement_ids:
+      - FR-004
+    endpoints:
+      - method: GET
+        path: /v1/sessions/{session_id}/events
+        description: >-
+          Replay durably committed transcript and lifecycle events in ascending
+          session sequence from an opaque cursor for reconnect reconciliation.
+        response: EventPage
+        pagination: cursor
+        status_codes:
+          - 200
+          - 404
+      - method: GET
+        path: /v1/memory-records
+        description: >-
+          List the local user's inspectable, retention-governed memory records
+          in stable creation order using an opaque cursor.
+        response: MemoryRecordPage
+        pagination: cursor
+        status_codes:
+          - 200
+      - method: GET
+        path: /v1/memory-records/{memory_record_id}
+        description: >-
+          Read one memory record with an ETag and 304 support, subject to its
+          configured scope and retention deadline.
+        response: MemoryRecord
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: DELETE
+        path: /v1/memory-records/{memory_record_id}
+        description: >-
+          Delete an inspectable memory record idempotently so it is no longer
+          eligible for reuse after the daemon commits the deletion.
+        response: MemoryDeletionResponse
+        status_codes:
+          - 200
+          - 404
+
+  - name: Self-development builds and reload
+    requirement_ids:
+      - FR-005
+    endpoints:
+      - method: POST
+        path: /v1/sessions/{session_id}/self-dev/builds
+        description: >-
+          Start an immutable self-development build for an eligible session and
+          return immediately while compilation and validation run outside the
+          request path.
+        request: CreateSelfDevBuildRequest
+        response: Build
+        status_codes:
+          - 202
+          - 400
+          - 403
+          - 404
+          - 409
+        async:
+          accepted_status: 202
+          status_path: /v1/builds/{build_id}
+      - method: GET
+        path: /v1/builds/{build_id}
+        description: >-
+          Read immutable build status and selected channel with an ETag and 304
+          support; executable content is not transferred through this API.
+        response: Build
+        status_codes:
+          - 200
+          - 304
+          - 404
+      - method: POST
+        path: /v1/builds/{build_id}/activate
+        description: >-
+          Idempotently select a ready build for the self-development channel and
+          initiate shared-daemon exec reload; persisted sessions remain the
+          reconnect authority while the socket is temporarily unavailable.
+        request: ActivateBuildRequest
+        response: DaemonReloadResponse
+        status_codes:
+          - 202
+          - 400
+          - 404
+          - 409
+        async:
+          accepted_status: 202
+          status_path: /v1/builds/{build_id}/activation
+      - method: GET
+        path: /v1/builds/{build_id}/activation
+        description: >-
+          Report the versioned activation and daemon-reload state, including
+          active build identity and a reconnect state token, with an ETag and
+          304 support.
+        response: DaemonReloadResponse
+        status_codes:
+          - 200
+          - 304
+          - 404
