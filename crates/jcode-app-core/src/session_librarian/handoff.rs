@@ -25,9 +25,9 @@ pub(super) fn normalize_summary_handoff(
         }
     }
     if paths.len() > MAX_RELEVANT_FILES {
-        return Err(validation_failure(
-            "Handoff relevant_files exceeds the 32-path limit.",
-        ));
+        return Err(validation_failure(&format!(
+            "Handoff relevant_files exceeds the {MAX_RELEVANT_FILES}-path limit."
+        )));
     }
     summary.relevant_files =
         LibrarianRelevantFiles::new(paths).map_err(|message| validation_failure(&message))?;

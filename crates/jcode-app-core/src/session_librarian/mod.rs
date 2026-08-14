@@ -25,21 +25,17 @@ use std::{
     sync::Arc,
 };
 
-#[allow(dead_code)]
 mod admission;
-#[allow(dead_code)]
 mod fingerprint;
-#[allow(dead_code)]
 mod generation;
-#[allow(dead_code)]
 mod handoff;
-#[allow(dead_code)]
 mod publication;
 
 const SUMMARY_FORMAT_VERSION: &str = "session-summary.v1";
 const FILTER_VERSION: &str = "session-librarian-filter.v2";
 const PROMPT_VERSION: &str = "session-librarian-prompt.v1";
 const RECEIPT_VERSION: &str = "session-librarian-receipt.v1";
+const RENDERER_VERSION: &str = "session-librarian-markdown.v1";
 
 /// Canonical source selected for one explicit librarian invocation.
 ///
@@ -102,15 +98,6 @@ pub(crate) struct AdmittedSessionContent {
 pub(crate) struct LibrarianGeneration {
     pub(crate) response_json: String,
     pub(crate) usage: BoundedUsage,
-}
-
-/// Matching renderings created from one validated
-/// [`SessionSummary`](jcode_session_types::SessionSummary).
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) struct RenderedArtifactPair {
-    pub(crate) markdown: Vec<u8>,
-    pub(crate) json: Vec<u8>,
 }
 
 /// Immutable location of a published Markdown/JSON artifact pair.
@@ -270,15 +257,19 @@ impl DefaultSessionLibrarian {
         overrides: &LibrarianInvocationOverrides,
     ) -> Result<LibrarianResult, LibrarianFailure> {
         let active_route = active_route(session);
-        let config = resolve_librarian_config(self.config(), overrides, &active_route, |route| {
-            let facts = self.provider_factory.inspect(route);
-            LibrarianRouteValidation {
-                supported: facts.supported,
-                authentication_available: facts.authentication_available,
-                worst_case_cost_micros: facts.worst_case_cost_micros(12_000, 2_500),
-            }
-        })
-        .map_err(configuration_failure)?;
+        let config =
+            resolve_librarian_config(self.config(), overrides, &active_route, |route, budgets| {
+                let facts = self.provider_factory.inspect(route);
+                LibrarianRouteValidation {
+                    supported: facts.supported,
+                    authentication_available: facts.authentication_available,
+                    worst_case_cost_micros: facts.worst_case_cost_micros(
+                        budgets.max_input_tokens,
+                        budgets.max_output_tokens,
+                    ),
+                }
+            })
+            .map_err(configuration_failure)?;
 
         let admitted = admission::admit_session(session, &config.budgets, &config.admission_caps)?;
         let configuration_identity = configuration_identity(&config);
@@ -452,6 +443,7 @@ fn configuration_identity(config: &ResolvedLibrarianConfig) -> LibrarianConfigur
         filter_version: FILTER_VERSION.into(),
         prompt_version: PROMPT_VERSION.into(),
         receipt_version: RECEIPT_VERSION.into(),
+        renderer_version: RENDERER_VERSION.into(),
         route: RouteIdentity {
             provider: "openai".into(),
             api_method: config.route.provider.clone(),

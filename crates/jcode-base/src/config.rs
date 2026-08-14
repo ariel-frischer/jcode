@@ -617,7 +617,7 @@ pub fn resolve_librarian_config<F>(
     validate_route: F,
 ) -> Result<ResolvedLibrarianConfig, LibrarianConfigError>
 where
-    F: FnOnce(&LibrarianRouteIdentity) -> LibrarianRouteValidation,
+    F: FnOnce(&LibrarianRouteIdentity, &LibrarianBudgets) -> LibrarianRouteValidation,
 {
     let persisted = &config.session_librarian;
     let route = LibrarianRouteIdentity {
@@ -678,7 +678,7 @@ where
         )?,
     };
 
-    let validation = validate_route(&route);
+    let validation = validate_route(&route, &budgets);
     if !validation.supported {
         return Err(LibrarianConfigError::UnsupportedRoute {
             provider: route.provider.clone(),

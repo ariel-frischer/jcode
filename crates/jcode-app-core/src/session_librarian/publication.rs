@@ -13,6 +13,8 @@ use std::{
 
 const LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 const LOCK_RETRY_DELAY: Duration = Duration::from_millis(5);
+const LOCK_STALE_AFTER: Duration = Duration::from_secs(5);
+const LEGACY_LOCK_STALE_AFTER: Duration = Duration::from_secs(300);
 const LOCK_METADATA_FILE: &str = "owner.json";
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -241,12 +243,18 @@ fn write_lock_metadata(
 }
 
 fn reclaim_dead_stale_lock(lock_directory: &Path) -> Result<bool, LibrarianFailure> {
-    let Some(observed) = read_lock_metadata(lock_directory)? else {
-        return Ok(false);
-    };
-    let age_ms = unix_time_millis()?.saturating_sub(observed.created_at_unix_ms);
-    if age_ms < LOCK_WAIT_TIMEOUT.as_millis() as u64 || lock_owner_is_running(observed.owner_pid) {
-        return Ok(false);
+    let observed = read_lock_metadata(lock_directory)?;
+    match observed.as_ref() {
+        Some(metadata) => {
+            let age_ms = unix_time_millis()?.saturating_sub(metadata.created_at_unix_ms);
+            if age_ms < LOCK_STALE_AFTER.as_millis() as u64
+                || lock_owner_is_running(metadata.owner_pid)
+            {
+                return Ok(false);
+            }
+        }
+        None if directory_age(lock_directory)? < LEGACY_LOCK_STALE_AFTER => return Ok(false),
+        None => {}
     }
 
     let sequence = STAGING_SEQUENCE.fetch_add(1, Ordering::Relaxed);
@@ -262,7 +270,13 @@ fn reclaim_dead_stale_lock(lock_directory: &Path) -> Result<bool, LibrarianFailu
     match fs::rename(lock_directory, &stale_directory) {
         Ok(()) => {
             let moved = read_lock_metadata(&stale_directory)?;
-            if moved.as_ref() != Some(&observed) {
+            let ownership_changed = match observed.as_ref() {
+                Some(expected) => moved.as_ref() != Some(expected),
+                None => {
+                    moved.is_some() || directory_age(&stale_directory)? < LEGACY_LOCK_STALE_AFTER
+                }
+            };
+            if ownership_changed {
                 fs::rename(&stale_directory, lock_directory).map_err(|error| {
                     failure(
                         LibrarianFailureStage::Locking,
@@ -290,6 +304,25 @@ fn reclaim_dead_stale_lock(lock_directory: &Path) -> Result<bool, LibrarianFailu
             format!("Could not isolate a dead stale publication lock: {error}"),
         )),
     }
+}
+
+fn directory_age(path: &Path) -> Result<Duration, LibrarianFailure> {
+    let modified = fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .map_err(|error| {
+            failure(
+                LibrarianFailureStage::Locking,
+                "librarian_lock_metadata_failed",
+                format!("Could not inspect publication lock age: {error}"),
+            )
+        })?;
+    SystemTime::now().duration_since(modified).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Locking,
+            "librarian_lock_clock_failed",
+            format!("Publication lock modification time is in the future: {error}"),
+        )
+    })
 }
 
 fn lock_owner_is_running(owner_pid: u32) -> bool {

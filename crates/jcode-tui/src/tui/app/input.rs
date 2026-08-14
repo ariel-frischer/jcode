@@ -3722,7 +3722,10 @@ impl App {
                     title: None,
                     tool_data: None,
                 });
-                let Some(prompt) = trailing_prompt.or(skill.default_prompt) else {
+                let Some(prompt) = trailing_prompt
+                    .or(skill.default_prompt)
+                    .filter(|prompt| !prompt.trim().is_empty())
+                else {
                     return;
                 };
                 input = prompt;

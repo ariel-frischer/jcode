@@ -177,14 +177,20 @@ fn resolve(
     overrides: LibrarianInvocationOverrides,
     factory: &FakeFactory,
 ) -> Result<ResolvedLibrarianConfig, jcode_base::config::LibrarianConfigError> {
-    resolve_librarian_config(&Config::default(), &overrides, &active_route(), |route| {
-        let facts = factory.inspect(route);
-        LibrarianRouteValidation {
-            supported: facts.supported,
-            authentication_available: facts.authentication_available,
-            worst_case_cost_micros: facts.worst_case_cost_micros(12_000, 2_500),
-        }
-    })
+    resolve_librarian_config(
+        &Config::default(),
+        &overrides,
+        &active_route(),
+        |route, budgets| {
+            let facts = factory.inspect(route);
+            LibrarianRouteValidation {
+                supported: facts.supported,
+                authentication_available: facts.authentication_available,
+                worst_case_cost_micros: facts
+                    .worst_case_cost_micros(budgets.max_input_tokens, budgets.max_output_tokens),
+            }
+        },
+    )
 }
 
 fn valid_behavior() -> FakeBehavior {

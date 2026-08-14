@@ -457,8 +457,8 @@ parallel_execution:
 
 implementation_strategy:
   mvp_scope:
-    phases: [1, 2, 3, 4, 6]
-    description: "Setup, shared contracts/configuration, manual trigger, safe artifact generation, and independent hard-bounded provider execution; handoff projection and delivery polish follow as incremental completion."
+    phases: [1, 2, 3, 4, 5, 6]
+    description: "Setup, shared contracts/configuration, manual trigger, safe artifact generation, handoff projection, and independent hard-bounded provider execution; delivery polish follows as incremental completion."
     validation: "Use focused fake-provider tests plus a newly built private-socket run to prove zero work when unused, current-default and explicit persisted targeting, one manual bounded attempt, excluded-data removal, multi-megabyte edit compaction to a receipt at most 1 KiB with zero rereads, matching atomic artifacts, route isolation, and fail-closed limits."
   incremental_delivery:
     - milestone: "Foundation Ready"
@@ -468,8 +468,8 @@ implementation_strategy:
       phases: [1, 2, 3]
       deliverable: "The existing slash-skill and tool surfaces can start exactly one current-default or named-persisted-session librarian attempt while unused sessions remain inert."
     - milestone: "Safe Artifact MVP"
-      phases: [1, 2, 3, 4, 6]
-      deliverable: "Manual invocations produce or reuse locally filtered, receipt-compacted, hard-bounded, atomically published Markdown/JSON summaries through an independent provider route."
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Manual invocations produce or reuse locally filtered, receipt-compacted, hard-bounded, atomically published Markdown/JSON summaries with normalized handoff fields through an independent provider route."
     - milestone: "Handoff Complete"
       phases: [1, 2, 3, 4, 5, 6]
       deliverable: "Summaries expose normalized handoff_brief and relevant_files compatible with the existing transition contract."

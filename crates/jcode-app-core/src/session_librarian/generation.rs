@@ -137,7 +137,7 @@ pub(crate) async fn generate_summary(
         while let Some(event) = stream.next().await {
             match event.map_err(|_| provider_failure())? {
                 StreamEvent::TextDelta(text) => {
-                    let candidate_tokens = conservative_token_count(
+                    let candidate_tokens = conservative_output_token_upper_bound(
                         response_json.len().saturating_add(text.len()),
                     );
                     if candidate_tokens > config.budgets.max_output_tokens {
@@ -304,7 +304,9 @@ fn token_cost_micros(price_per_million: u64, tokens: u32) -> u64 {
     numerator.saturating_add(999_999) / 1_000_000
 }
 
-fn conservative_token_count(bytes: usize) -> u32 {
+/// A UTF-8 token cannot encode fewer than one byte, so byte length is a safe
+/// upper bound while the provider has not yet reported authoritative usage.
+fn conservative_output_token_upper_bound(bytes: usize) -> u32 {
     u32::try_from(bytes).unwrap_or(u32::MAX)
 }
 

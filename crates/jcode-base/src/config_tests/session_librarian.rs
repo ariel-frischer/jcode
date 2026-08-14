@@ -1,8 +1,9 @@
 use super::*;
 use crate::config::{
     LIBRARIAN_MAX_ITEM_TOKENS, LIBRARIAN_MAX_NORMALIZED_FILE_TOKENS, LIBRARIAN_MAX_RECEIPT_BYTES,
-    LIBRARIAN_MAX_TOOL_CATEGORY_TOKENS, LibrarianConfigError, LibrarianInvocationOverrides,
-    LibrarianRouteIdentity, LibrarianRouteValidation, resolve_librarian_config,
+    LIBRARIAN_MAX_TOOL_CATEGORY_TOKENS, LibrarianBudgets, LibrarianConfigError,
+    LibrarianInvocationOverrides, LibrarianRouteIdentity, LibrarianRouteValidation,
+    resolve_librarian_config,
 };
 
 const LIBRARIAN_ENV_KEYS: &[&str] = &[
@@ -46,7 +47,10 @@ impl Drop for LibrarianEnvGuard {
     }
 }
 
-fn supported(route: &LibrarianRouteIdentity) -> LibrarianRouteValidation {
+fn supported(
+    route: &LibrarianRouteIdentity,
+    _budgets: &LibrarianBudgets,
+) -> LibrarianRouteValidation {
     LibrarianRouteValidation {
         supported: matches!(
             (route.provider.as_str(), route.model.as_str()),
@@ -87,6 +91,33 @@ fn librarian_defaults_are_conservative_and_exact() {
     assert_eq!(resolved.budgets.max_requests, 1);
     assert_eq!(resolved.budgets.max_cost_micros, 500_000);
     assert_eq!(resolved.budgets.deadline_seconds, 120);
+}
+
+#[test]
+fn librarian_route_validation_receives_resolved_invocation_budgets() {
+    let invocation = LibrarianInvocationOverrides {
+        max_input_tokens: Some("4321".into()),
+        max_output_tokens: Some("876".into()),
+        ..Default::default()
+    };
+    let resolved = resolve_librarian_config(
+        &Config::default(),
+        &invocation,
+        &active_route(),
+        |_, budgets| {
+            assert_eq!(budgets.max_input_tokens, 4_321);
+            assert_eq!(budgets.max_output_tokens, 876);
+            LibrarianRouteValidation {
+                supported: true,
+                authentication_available: true,
+                worst_case_cost_micros: Some(1),
+            }
+        },
+    )
+    .expect("resolved budgets should be available to route validation");
+
+    assert_eq!(resolved.budgets.max_input_tokens, 4_321);
+    assert_eq!(resolved.budgets.max_output_tokens, 876);
 }
 
 #[test]
@@ -283,7 +314,7 @@ fn librarian_route_boundaries_fail_with_distinct_actionable_errors() {
     let invocation = LibrarianInvocationOverrides::default();
     let active = active_route();
 
-    let missing_auth = resolve_librarian_config(&config, &invocation, &active, |_| {
+    let missing_auth = resolve_librarian_config(&config, &invocation, &active, |_, _| {
         LibrarianRouteValidation {
             supported: true,
             authentication_available: false,
@@ -296,7 +327,7 @@ fn librarian_route_boundaries_fail_with_distinct_actionable_errors() {
         LibrarianConfigError::MissingAuthentication { .. }
     ));
 
-    let unknown_pricing = resolve_librarian_config(&config, &invocation, &active, |_| {
+    let unknown_pricing = resolve_librarian_config(&config, &invocation, &active, |_, _| {
         LibrarianRouteValidation {
             supported: true,
             authentication_available: true,
@@ -309,7 +340,7 @@ fn librarian_route_boundaries_fail_with_distinct_actionable_errors() {
         LibrarianConfigError::UnknownPricing { .. }
     ));
 
-    let unsafe_cost = resolve_librarian_config(&config, &invocation, &active, |_| {
+    let unsafe_cost = resolve_librarian_config(&config, &invocation, &active, |_, _| {
         LibrarianRouteValidation {
             supported: true,
             authentication_available: true,

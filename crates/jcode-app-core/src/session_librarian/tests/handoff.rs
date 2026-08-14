@@ -46,6 +46,7 @@ fn fingerprint() -> SourceFingerprint {
             filter_version: "session-librarian-filter.v1".into(),
             prompt_version: "session-librarian-prompt.v1".into(),
             receipt_version: "session-librarian-receipt.v1".into(),
+            renderer_version: "session-librarian-markdown.v1".into(),
             route: route(),
             schema_version: FORMAT_VERSION.into(),
         },

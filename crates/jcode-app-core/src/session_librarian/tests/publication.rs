@@ -6,14 +6,15 @@ use jcode_session_types::{
 };
 use serde_json::{Value, json};
 use std::{
-    fs, io,
+    fs::{self, File, FileTimes},
+    io,
     path::Path,
     sync::{
         Arc, Barrier,
         atomic::{AtomicUsize, Ordering},
     },
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
 const SESSION_ID: &str = "publication-session";
@@ -45,6 +46,7 @@ fn fingerprint_with_digest(digest: &str) -> SourceFingerprint {
             filter_version: "session-librarian-filter.v1".into(),
             prompt_version: "session-librarian-prompt.v1".into(),
             receipt_version: "session-librarian-receipt.v1".into(),
+            renderer_version: "session-librarian-markdown.v1".into(),
             route: route(),
             schema_version: FORMAT_VERSION.into(),
         },
@@ -425,6 +427,26 @@ fn dead_stale_lock_is_reclaimed_before_generation() {
         started.elapsed() < Duration::from_secs(1),
         "a dead stale lock should be reclaimed without waiting for the contention timeout"
     );
+    drop(lease);
+    assert!(!lock_directory.exists());
+}
+
+#[test]
+fn metadata_less_stale_lock_is_reclaimed_before_generation() {
+    let temp = tempfile::tempdir().expect("publication tempdir");
+    let fingerprint = fingerprint();
+    let session_directory = temp.path().join(SESSION_ID);
+    let lock_directory = session_directory.join(format!(".{}.lock", fingerprint.digest));
+    fs::create_dir_all(&lock_directory).expect("create legacy stale lock directory");
+    File::open(&lock_directory)
+        .expect("open legacy stale lock directory")
+        .set_times(FileTimes::new().set_modified(UNIX_EPOCH))
+        .expect("age legacy stale lock directory");
+
+    let started = Instant::now();
+    let lease = claim_new(&store(temp.path()), &fingerprint);
+
+    assert!(started.elapsed() < Duration::from_secs(1));
     drop(lease);
     assert!(!lock_directory.exists());
 }

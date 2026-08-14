@@ -44,6 +44,7 @@ fn configuration() -> LibrarianConfigurationIdentity {
         filter_version: "session-librarian-filter.v1".into(),
         prompt_version: "session-librarian-prompt.v1".into(),
         receipt_version: "session-librarian-receipt.v1".into(),
+        renderer_version: "session-librarian-markdown.v1".into(),
         route: RouteIdentity {
             provider: "openai".into(),
             api_method: "openai-oauth".into(),
@@ -166,6 +167,10 @@ fn every_summary_affecting_content_or_configuration_change_changes_the_digest() 
     variants.push(("schema", changed));
 
     let mut changed = base_configuration.clone();
+    changed.renderer_version = "session-librarian-markdown.v2".into();
+    variants.push(("renderer", changed));
+
+    let mut changed = base_configuration.clone();
     changed.route.model = "gpt-5.6-sol".into();
     variants.push(("route", changed));
 
@@ -207,7 +212,7 @@ fn every_summary_affecting_content_or_configuration_change_changes_the_digest() 
 }
 
 #[test]
-fn generated_time_and_unstable_object_key_order_do_not_change_the_digest() {
+fn unstable_object_key_order_does_not_change_the_digest() {
     let ordered = super::AdmittedSessionContent {
         session_id: "fingerprint-session".into(),
         canonical_payload: br#"{"version":1,"session_id":"fingerprint-session","items":[{"kind":"receipt","operation":"edit","status":"success","counts":{"bytes":42,"lines":3},"estimated_tokens":20}]}"#.to_vec(),
@@ -219,14 +224,10 @@ fn generated_time_and_unstable_object_key_order_do_not_change_the_digest() {
         input_tokens: 20,
     };
 
-    let generated_at_before = "2026-08-14T03:00:00Z";
-    let generated_at_after = "2026-08-14T04:00:00Z";
-    assert_ne!(generated_at_before, generated_at_after);
-
     assert_eq!(
         fingerprint(&ordered, &configuration()).digest,
         fingerprint(&reordered, &configuration()).digest,
-        "canonical key ordering must be stable and generated_at is not a fingerprint input"
+        "canonical key ordering must not affect the digest"
     );
 }
 

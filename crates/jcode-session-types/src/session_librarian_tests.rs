@@ -26,6 +26,7 @@ fn summary_json(relevant_files: Vec<Value>) -> Value {
                 "filter_version": "session-librarian-filter.v1",
                 "prompt_version": "session-librarian-prompt.v1",
                 "receipt_version": "session-librarian-receipt.v1",
+                "renderer_version": "session-librarian-markdown.v1",
                 "route": {
                     "provider": "openai",
                     "api_method": "openai-oauth",

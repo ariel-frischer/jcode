@@ -12,6 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 const ADMISSION_FORMAT_VERSION: u32 = 1;
 const ERROR_EXCERPT_BYTES: usize = 256;
+const MAX_RECEIPT_COUNTS: usize = 16;
 
 #[derive(Clone, Debug)]
 struct PendingToolUse {
@@ -89,8 +90,13 @@ impl AdmissionItem {
 
     fn refresh_estimate(&mut self) {
         self.estimated_tokens = 0;
-        self.estimated_tokens = serialized_len(self) as u32;
-        self.estimated_tokens = serialized_len(self) as u32;
+        for _ in 0..4 {
+            let measured = u32::try_from(serialized_len(self)).unwrap_or(u32::MAX);
+            if measured == self.estimated_tokens {
+                break;
+            }
+            self.estimated_tokens = measured;
+        }
     }
 
     fn fit_item_cap(&mut self, cap: u32) -> bool {
@@ -355,6 +361,7 @@ fn extract_counts(result: &str) -> BTreeMap<String, u64> {
             && let Ok(value) = value
                 .trim_matches(|character: char| !character.is_ascii_digit())
                 .parse()
+            && (counts.len() < MAX_RECEIPT_COUNTS || counts.contains_key(key))
         {
             counts.insert(key.to_string(), value);
         }
@@ -412,15 +419,19 @@ fn apply_global_cap(
     max_input_tokens: u32,
 ) -> Result<Vec<AdmissionItem>, LibrarianFailure> {
     let mut selected = Vec::<AdmissionItem>::new();
+    let mut serialized_bytes = serialize_payload(session_id, &[])?.len();
     for item in items.into_iter().rev() {
-        let mut candidate = Vec::with_capacity(selected.len() + 1);
-        candidate.push(item.clone());
-        candidate.extend(selected.iter().cloned());
-        if conservative_token_count(&serialize_payload(session_id, &candidate)?) <= max_input_tokens
-        {
-            selected = candidate;
+        let item_bytes = serialized_len(&item);
+        let separator_bytes = usize::from(!selected.is_empty());
+        let candidate_bytes = serialized_bytes
+            .saturating_add(item_bytes)
+            .saturating_add(separator_bytes);
+        if u32::try_from(candidate_bytes).unwrap_or(u32::MAX) <= max_input_tokens {
+            serialized_bytes = candidate_bytes;
+            selected.push(item);
         }
     }
+    selected.reverse();
     Ok(selected)
 }
 

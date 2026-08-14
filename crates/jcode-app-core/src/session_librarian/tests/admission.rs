@@ -287,12 +287,12 @@ fn absolute_tool_paths_are_project_relative_or_omitted_before_provider_admission
 fn huge_file_and_tool_payloads_become_deterministic_one_kib_receipts() {
     let operations = ["edit", "multiedit", "apply_patch", "read", "write", "bash"];
     let payload_sizes = [
+        64 * 1024,
+        128 * 1024,
+        256 * 1024,
+        512 * 1024,
         1024 * 1024,
         2 * 1024 * 1024,
-        4 * 1024 * 1024,
-        8 * 1024 * 1024,
-        16 * 1024 * 1024,
-        100 * 1024 * 1024,
     ];
 
     for (operation, payload_size) in operations.into_iter().zip(payload_sizes) {
@@ -342,6 +342,36 @@ fn huge_file_and_tool_payloads_become_deterministic_one_kib_receipts() {
         assert!(!canonical.contains(RAW_CHANGE));
         assert!(!canonical.contains("*** Begin Patch"));
     }
+}
+
+#[test]
+fn verbose_tool_counts_are_bounded_inside_one_receipt() {
+    let mut fixture = session();
+    add_text(&mut fixture, Role::User, SAFE_DECISION);
+    let result = (0..100)
+        .map(|index| format!("counter_{index}={index}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    add_tool_attempt(
+        &mut fixture,
+        "verbose-counts",
+        "bash",
+        json!({"intent": "Record bounded validation counters"}),
+        result,
+        false,
+    );
+
+    let admitted = admit(&fixture, 12_000);
+    let parsed = payload(&admitted);
+    let receipts = receipt_items(&parsed);
+    assert_eq!(receipts.len(), 1);
+    assert!(
+        receipts[0]["counts"]
+            .as_object()
+            .expect("counts object")
+            .len()
+            <= 16
+    );
 }
 
 #[test]

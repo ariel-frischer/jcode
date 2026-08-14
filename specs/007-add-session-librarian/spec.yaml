@@ -244,7 +244,7 @@ edge_cases:
 
 assumptions:
   - "Manual invocation applies to the currently active canonical session when no argument is provided and accepts one optional persisted session identifier through the slash-skill argument and tool input contracts."
-  - "Versioning means both artifacts expose an explicit format version and fingerprint; changed eligible content may replace the canonical filenames atomically while remaining distinguishable by version metadata."
+  - "Versioning means both artifacts expose an explicit format version and fingerprint; changed eligible content publishes a new immutable fingerprint directory atomically and never replaces a previously published pair."
   - "Hard budget values are independently configurable, validated as positive finite limits, and have conservative built-in defaults documented during planning."
   - "Recognized sensitive data includes credentials and secret-like values detectable by existing local redaction contracts; users remain responsible for content that cannot reasonably be recognized as sensitive."
   - "Successful file and tool operations are represented by concise deterministic metadata receipts; raw payloads are never eligible, while failures may contribute only locally redacted bounded excerpts when relevant."

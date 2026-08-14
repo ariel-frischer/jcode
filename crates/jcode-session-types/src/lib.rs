@@ -33,6 +33,7 @@ pub struct LibrarianConfigurationIdentity {
     pub filter_version: String,
     pub prompt_version: String,
     pub receipt_version: String,
+    pub renderer_version: String,
     pub route: RouteIdentity,
     pub schema_version: String,
 }
