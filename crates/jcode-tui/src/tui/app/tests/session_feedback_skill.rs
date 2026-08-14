@@ -144,6 +144,17 @@ fn session_feedback_discovery_is_inert_and_declares_no_automatic_trigger() {
             "session-feedback must remain human-triggered; found `{forbidden_key}` in frontmatter"
         );
     }
+
+    assert!(
+        skill.contains(
+            "`skill_invocation_receipt` requires `reference`, `category`, `name`, and `outcome`"
+        ),
+        "the skill prompt must state the required receipt shape used by evidence-v1"
+    );
+    assert!(
+        skill.contains("Allowed `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`"),
+        "the skill prompt must enumerate evidence-v1 invocation outcomes"
+    );
 }
 
 #[test]

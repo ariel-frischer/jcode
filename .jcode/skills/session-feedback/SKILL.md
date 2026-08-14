@@ -33,6 +33,18 @@ Build `visible_items` only from information already present in the active contex
 - `validation_receipt`
 - `relevant_path`
 
+Use the exact required fields for each category. Do not substitute a prose-only receipt for a structured receipt:
+
+- `visible_outcome` requires `reference`, `category`, and `summary`.
+- `todo_assessment` requires `reference`, `category`, `summary`, and `status`.
+- `tool_invocation_receipt` requires `reference`, `category`, `name`, and `outcome`.
+- `skill_invocation_receipt` requires `reference`, `category`, `name`, and `outcome`.
+- `failure_excerpt` requires `reference`, `category`, and `excerpt`.
+- `validation_receipt` requires `reference`, `category`, `name`, and `outcome`.
+- `relevant_path` requires `reference`, `category`, and `path`.
+
+Allowed `outcome` values are `succeeded`, `failed`, `blocked`, or `cancelled`. Allowed todo `status` values are `completed`, `pending`, `blocked`, or `cancelled`. Optional `summary`, `relevant_path`, and `content_hash` fields must still satisfy `evidence-v1` when present.
+
 Use concise summaries and stable bundle-local references. Include a relevant path or content hash only when it is already visible. A short failure excerpt may be included, but never bulk output.
 
 Do not load, reconstruct, summarize, or transmit:
