@@ -1,0 +1,368 @@
+{
+  "fixture_version": "generator-responses-v1",
+  "description": "Synthetic bounded generator outputs for schema, taxonomy, fingerprint, shortlist, and review-only boundary tests.",
+  "fingerprint_contract": {
+    "algorithm": "sha256",
+    "canonicalization": "sorted compact UTF-8 JSON after helper normalization",
+    "intended_outcome_source": "expected_benefit"
+  },
+  "shortlisted_targets": [
+    {
+      "category": "global-instructions",
+      "scope": "personal-global",
+      "concrete_target": "~/AGENTS.md"
+    },
+    {
+      "category": "skills",
+      "scope": "project-jcode",
+      "concrete_target": ".jcode/skills/session-feedback/SKILL.md"
+    },
+    {
+      "category": "hooks-config",
+      "scope": "personal-global",
+      "concrete_target": "~/.jcode/config.toml#hooks"
+    },
+    {
+      "category": "model-profile-choices",
+      "scope": "personal-global",
+      "concrete_target": "~/.jcode/profiles/research.toml"
+    },
+    {
+      "category": "context-skill-routing",
+      "scope": "project-jcode",
+      "concrete_target": ".jcode/skills/session-feedback/SKILL.md#routing"
+    },
+    {
+      "category": "harness-setup-contracts",
+      "scope": "project-jcode",
+      "concrete_target": "scripts/check_guardrails.sh"
+    },
+    {
+      "category": "sdk-public-surfaces",
+      "scope": "project-jcode",
+      "concrete_target": "sdk/go/session.go"
+    },
+    {
+      "category": "jcode",
+      "scope": "project-jcode",
+      "concrete_target": "crates/jcode-app-core/src/server/mod.rs"
+    }
+  ],
+  "valid_responses": {
+    "zero_proposals": {
+      "description": "Valid success response with no supported improvement.",
+      "response": {
+        "contract_version": "generator-response-v1",
+        "proposals": []
+      }
+    },
+    "complete_taxonomy": {
+      "description": "Eight complete proposals covering every approved category and both target scopes.",
+      "response": {
+        "contract_version": "generator-response-v1",
+        "proposals": [
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "global-instructions",
+              "scope": "personal-global",
+              "concrete_target": "~/AGENTS.md"
+            },
+            "evidence_references": [
+              "outcome-1"
+            ],
+            "problem": "Global guidance repeats a synthetic routing rule.",
+            "hypothesis": "The bounded change for synthetic case 1 will remove the observed friction.",
+            "suggested_behavior": "Keep one canonical routing rule in global guidance.",
+            "expected_benefit": "Keep one canonical routing rule in global guidance.",
+            "token_context_impact": "Estimated input decreases by 8 tokens per affected invocation.",
+            "risk": "low",
+            "blast_radius": "Only the synthetic global-instructions target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 1."
+            ],
+            "confidence": "high",
+            "fingerprint": "ecfba0c5a9746fd3fb7b6e08602c3e2f62eff5c83720e623d3f0d924aba46544",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "skills",
+              "scope": "project-jcode",
+              "concrete_target": ".jcode/skills/session-feedback/SKILL.md"
+            },
+            "evidence_references": [
+              "outcome-2"
+            ],
+            "problem": "The synthetic skill performs one redundant receipt lookup.",
+            "hypothesis": "The bounded change for synthetic case 2 will remove the observed friction.",
+            "suggested_behavior": "Reuse the cited receipt before another lookup.",
+            "expected_benefit": "Reuse the cited receipt before another lookup.",
+            "token_context_impact": "Estimated input decreases by 16 tokens per affected invocation.",
+            "risk": "low",
+            "blast_radius": "Only the synthetic skills target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 2."
+            ],
+            "confidence": "high",
+            "fingerprint": "6eb12cf9c30144c979ad867ad63462bdc6079465fff5623e1d432d48dc958634",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "hooks-config",
+              "scope": "personal-global",
+              "concrete_target": "~/.jcode/config.toml#hooks"
+            },
+            "evidence_references": [
+              "outcome-3"
+            ],
+            "problem": "A synthetic hook setting has no visible precedence note.",
+            "hypothesis": "The bounded change for synthetic case 3 will remove the observed friction.",
+            "suggested_behavior": "Document the existing precedence beside the hook setting.",
+            "expected_benefit": "Document the existing precedence beside the hook setting.",
+            "token_context_impact": "Estimated input decreases by 24 tokens per affected invocation.",
+            "risk": "low",
+            "blast_radius": "Only the synthetic hooks-config target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 3."
+            ],
+            "confidence": "high",
+            "fingerprint": "02739004bc16fb202c9798f344bc994ea6d113fbb99227b627a7f9e3182c13a0",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "model-profile-choices",
+              "scope": "personal-global",
+              "concrete_target": "~/.jcode/profiles/research.toml"
+            },
+            "evidence_references": [
+              "outcome-4"
+            ],
+            "problem": "A synthetic profile omits its intended effort rationale.",
+            "hypothesis": "The bounded change for synthetic case 4 will remove the observed friction.",
+            "suggested_behavior": "Record the bounded effort rationale in the profile metadata.",
+            "expected_benefit": "Record the bounded effort rationale in the profile metadata.",
+            "token_context_impact": "Estimated input decreases by 32 tokens per affected invocation.",
+            "risk": "low",
+            "blast_radius": "Only the synthetic model-profile-choices target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 4."
+            ],
+            "confidence": "high",
+            "fingerprint": "d4c293ed5209d148bd6be64c6dcb23dfda82dc1ba0c73400f831bf4c9e9f822e",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "context-skill-routing",
+              "scope": "project-jcode",
+              "concrete_target": ".jcode/skills/session-feedback/SKILL.md#routing"
+            },
+            "evidence_references": [
+              "outcome-5"
+            ],
+            "problem": "Synthetic routing checks the same skill name twice.",
+            "hypothesis": "The bounded change for synthetic case 5 will remove the observed friction.",
+            "suggested_behavior": "Deduplicate the local routing candidate list.",
+            "expected_benefit": "Deduplicate the local routing candidate list.",
+            "token_context_impact": "Estimated input decreases by 40 tokens per affected invocation.",
+            "risk": "medium",
+            "blast_radius": "Only the synthetic context-skill-routing target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 5."
+            ],
+            "confidence": "high",
+            "fingerprint": "b92e829282afb2392a49f52a5432c9215c5e731e1c8bf483838bcb5fc18ad4cd",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "harness-setup-contracts",
+              "scope": "project-jcode",
+              "concrete_target": "scripts/check_guardrails.sh"
+            },
+            "evidence_references": [
+              "outcome-6"
+            ],
+            "problem": "A synthetic fixture contract lacks one focused receipt.",
+            "hypothesis": "The bounded change for synthetic case 6 will remove the observed friction.",
+            "suggested_behavior": "Add one deterministic fixture receipt to the harness contract.",
+            "expected_benefit": "Add one deterministic fixture receipt to the harness contract.",
+            "token_context_impact": "Estimated input decreases by 48 tokens per affected invocation.",
+            "risk": "medium",
+            "blast_radius": "Only the synthetic harness-setup-contracts target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 6."
+            ],
+            "confidence": "high",
+            "fingerprint": "02a37d489a952240465ead061dba652fbb3ac5027c3c8aa39b7325152d8840b0",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "sdk-public-surfaces",
+              "scope": "project-jcode",
+              "concrete_target": "sdk/go/session.go"
+            },
+            "evidence_references": [
+              "outcome-7"
+            ],
+            "problem": "A synthetic SDK example names an outdated response field.",
+            "hypothesis": "The bounded change for synthetic case 7 will remove the observed friction.",
+            "suggested_behavior": "Align the example with the canonical response field name.",
+            "expected_benefit": "Align the example with the canonical response field name.",
+            "token_context_impact": "Estimated input decreases by 56 tokens per affected invocation.",
+            "risk": "medium",
+            "blast_radius": "Only the synthetic sdk-public-surfaces target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 7."
+            ],
+            "confidence": "medium",
+            "fingerprint": "bb40e57d5c545328e7ad969495c40e569e1bfcf739f6ef833db859e05c2a2b19",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          },
+          {
+            "contract_version": "proposal-v1",
+            "target": {
+              "category": "jcode",
+              "scope": "project-jcode",
+              "concrete_target": "crates/jcode-app-core/src/server/mod.rs"
+            },
+            "evidence_references": [
+              "outcome-8"
+            ],
+            "problem": "A synthetic diagnostic omits the selected evidence source.",
+            "hypothesis": "The bounded change for synthetic case 8 will remove the observed friction.",
+            "suggested_behavior": "Include the non-secret evidence source in the diagnostic summary.",
+            "expected_benefit": "Include the non-secret evidence source in the diagnostic summary.",
+            "token_context_impact": "Estimated input decreases by 64 tokens per affected invocation.",
+            "risk": "medium",
+            "blast_radius": "Only the synthetic jcode target.",
+            "validation_plan": [
+              "Run deterministic taxonomy fixture case 8."
+            ],
+            "confidence": "medium",
+            "fingerprint": "9be6cd0e0388dfe70e8e15da9e301d08fb2405e4f613ce13bf1835b788d94e37",
+            "non_goals": [
+              "Do not modify the target automatically.",
+              "Do not approve or start implementation."
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "invalid_responses": {
+    "malformed": {
+      "description": "The proposals field is an object instead of an array.",
+      "base": "complete_taxonomy",
+      "replace": {
+        "/proposals": {
+          "unexpected": "not-an-array"
+        }
+      },
+      "expected_rejection": "schema"
+    },
+    "oversized": {
+      "description": "Appending one proposal creates nine and exceeds the response maximum of eight.",
+      "base": "complete_taxonomy",
+      "append_copy": {
+        "pointer": "/proposals",
+        "source_pointer": "/proposals/0"
+      },
+      "expected_rejection": "schema-proposal-count"
+    },
+    "unknown_category": {
+      "description": "The first proposal uses a category outside the approved taxonomy.",
+      "base": "complete_taxonomy",
+      "replace": {
+        "/proposals/0/target/category": "automatic-hooks"
+      },
+      "expected_rejection": "schema-category"
+    },
+    "fingerprint_mismatch": {
+      "description": "The second proposal is schema-valid but its fingerprint does not match normalized local material.",
+      "base": "complete_taxonomy",
+      "replace": {
+        "/proposals/1/fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected_rejection": "local-fingerprint-verification"
+    },
+    "unshortlisted_target": {
+      "description": "The third proposal has a locally correct fingerprint but names a target absent from shortlisted_targets.",
+      "base": "complete_taxonomy",
+      "replace": {
+        "/proposals/2/target/concrete_target": "~/.jcode/config.toml#unlisted-hook",
+        "/proposals/2/fingerprint": "172dd4b11e453aeaae8b7e08b8414c17918d0991f45c1a9769619fe11abd52fa"
+      },
+      "expected_rejection": "local-shortlist-verification"
+    },
+    "extra_property": {
+      "description": "The fourth proposal contains one unknown property.",
+      "base": "complete_taxonomy",
+      "add": {
+        "/proposals/3/unexpected_field": "synthetic-extra-property"
+      },
+      "expected_rejection": "schema-additional-property"
+    }
+  },
+  "expected": {
+    "approved_categories": [
+      "global-instructions",
+      "skills",
+      "hooks-config",
+      "model-profile-choices",
+      "context-skill-routing",
+      "harness-setup-contracts",
+      "sdk-public-surfaces",
+      "jcode"
+    ],
+    "approved_scopes": [
+      "personal-global",
+      "project-jcode"
+    ],
+    "valid_response_names": [
+      "zero_proposals",
+      "complete_taxonomy"
+    ],
+    "invalid_response_names": [
+      "malformed",
+      "oversized",
+      "unknown_category",
+      "fingerprint_mismatch",
+      "unshortlisted_target",
+      "extra_property"
+    ],
+    "live_model_requests": 0,
+    "target_mutations": 0
+  }
+}
