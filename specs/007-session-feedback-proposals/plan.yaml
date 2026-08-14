@@ -16,9 +16,10 @@ summary: |
   summary is accepted only when its already-visible path is explicitly cited; otherwise the
   skill constructs the same contract from bounded visible outcomes and receipts without
   rereading repository content. After deterministic shortlisting, only bounded excerpts from
-  concrete skill or instruction targets may be read. One schema-constrained `jcode run`
-  invocation generates zero or more review-only proposals, which are validated and then
-  deduplicated into a local non-replicated Beads store beneath ~/.jcode/feedback/.
+  concrete skill or instruction targets may be read. One isolated `jcode run --json`
+  invocation with a locally embedded and validated schema generates zero or more review-only
+  proposals, which are deduplicated into a local non-replicated Beads store beneath
+  ~/.jcode/feedback/.
 
 technical_context:
   language: "Python 3 standard library and Markdown skill instructions; Rust 2024 tests only where needed for the public slash surface"
@@ -35,7 +36,7 @@ technical_context:
       purpose: "Bootstraps and maintains the local review queue, lifecycle labels, comments, and deduplication records under the feedback root."
     - name: "JSON Schema"
       version: "Draft 2020-12"
-      purpose: "Defines versioned evidence, generator-response, proposal, and run-accounting contracts consumed by the helper and `jcode run --schema`."
+      purpose: "Defines versioned evidence, generator-response, proposal, and run-accounting contracts embedded by the helper and validated locally around `jcode run --json`."
   storage: "Local files only under ~/.jcode/feedback/: config.json, runs/, proposals/, and a non-replicated .beads Dolt store"
   testing:
     framework: "Python unittest plus existing Rust built-in test harness for slash-skill discovery and activation"
@@ -113,8 +114,8 @@ research_findings:
         - "Ask the generator to choose files from repository contents, which would require broad reads and make selection nondeterministic."
         - "Load every skill or instruction file up front, which violates token and privacy constraints."
     - topic: "Generation route and request enforcement"
-      decision: "Build exactly one `jcode run --provider openai --model gpt-5.6-sol --reasoning-effort medium --tool-profile none --max-turns 1 --schema ... --json` command after all local validation, adding token-budget and deadline controls from effective configuration."
-      rationale: "This reuses the existing native OAuth headless path, prevents generator-side tool mutation, validates structured output, and makes the one-request boundary observable and injectable in tests."
+      decision: "Build exactly one `jcode run --model openai-oauth:gpt-5.6-sol --reasoning-effort medium --tool-profile none --max-turns 1 --token-budget ... --json` command after all local validation. Run it with a private HOME, JCODE_HOME, runtime directory, workspace, socket, and copied owner-only OAuth credential so normal startup instructions and skills are excluded. Embed the bounded generator-response schema in the prompt and validate the returned text locally; do not use `--schema`, whose public SDK bridge may issue corrective retries and rejects run-safety bounds."
+      rationale: "This reuses the native OAuth headless path while preserving the strict one-request ceiling, excluding unrelated startup context, enforcing no-tools and token/deadline boundaries, validating the schema locally, and keeping the command contract observable in tests."
       alternatives_considered:
         - "Call an external OpenAI API directly, which would duplicate authentication and provider routing."
         - "Use swarm or another agent surface, which adds orchestration and request-count ambiguity."

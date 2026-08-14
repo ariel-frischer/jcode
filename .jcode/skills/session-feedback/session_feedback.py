@@ -8,6 +8,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -77,6 +78,7 @@ SUPPORTED_EFFORTS = frozenset(
 )
 SUPPORTED_MODELS = frozenset({"gpt-5.6-sol"})
 MAX_FEEDBACK_CONFIG_BYTES = 65_536
+MAX_OAUTH_CREDENTIAL_BYTES = 1_048_576
 LIBRARIAN_SUMMARY_VERSION = "session-summary.v1"
 LIBRARIAN_SECTION_FIELDS = (
     "goal",
@@ -1254,39 +1256,185 @@ def _generation_limit(
     return int(value) if integer else float(value)
 
 
+def _copy_oauth_credential(source: Path, destination: Path) -> None:
+    try:
+        metadata = source.lstat()
+        if source.is_symlink() or not source.is_file():
+            raise ValidationError("OpenAI OAuth credential must be a regular file")
+        if metadata.st_size <= 0 or metadata.st_size > MAX_OAUTH_CREDENTIAL_BYTES:
+            raise ValidationError("OpenAI OAuth credential has an invalid size")
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        shutil.copyfile(source, destination)
+        destination.chmod(0o600)
+    except ValidationError:
+        raise
+    except OSError as error:
+        raise ValidationError(
+            f"OpenAI OAuth credential could not be isolated: {_bounded_error(str(error))}"
+        ) from error
+
+
+def _isolated_generation_environment(root: Path) -> tuple[dict[str, str], Path, Path]:
+    source_home = Path(os.environ.get("HOME", str(Path.home()))).expanduser()
+    source_jcode_home = Path(
+        os.environ.get("JCODE_HOME", str(source_home / ".jcode"))
+    ).expanduser()
+    isolated_home = root / "home"
+    isolated_jcode_home = root / "jcode-home"
+    runtime = root / "runtime"
+    workspace = isolated_home / "workspace"
+    for directory in (
+        isolated_home,
+        isolated_jcode_home,
+        runtime,
+        workspace,
+        root / "xdg-config",
+        root / "xdg-cache",
+        root / "xdg-data",
+        root / "xdg-state",
+    ):
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+    native_auth = source_jcode_home / "openai-auth.json"
+    legacy_auth = source_home / ".codex" / "auth.json"
+    allow_legacy = False
+    if native_auth.is_file() and not native_auth.is_symlink():
+        _copy_oauth_credential(native_auth, isolated_jcode_home / "openai-auth.json")
+    elif legacy_auth.is_file() and not legacy_auth.is_symlink():
+        _copy_oauth_credential(
+            legacy_auth,
+            isolated_jcode_home / "external" / ".codex" / "auth.json",
+        )
+        allow_legacy = True
+    else:
+        raise ValidationError("OpenAI OAuth credential was not found")
+
+    environment = dict(os.environ)
+    environment.pop("OPENAI_API_KEY", None)
+    environment.pop("JCODE_SOCKET", None)
+    environment.update(
+        {
+            "HOME": str(isolated_home),
+            "JCODE_HOME": str(isolated_jcode_home),
+            "JCODE_RUNTIME_DIR": str(runtime),
+            "XDG_CONFIG_HOME": str(root / "xdg-config"),
+            "XDG_CACHE_HOME": str(root / "xdg-cache"),
+            "XDG_DATA_HOME": str(root / "xdg-data"),
+            "XDG_STATE_HOME": str(root / "xdg-state"),
+            "JCODE_TEMP_SERVER": "1",
+            "JCODE_SERVER_OWNER_PID": str(os.getpid()),
+            "JCODE_TEMP_SERVER_IDLE_SECS": "5",
+            "PATH": os.pathsep.join(("/usr/bin", "/bin", environment.get("PATH", ""))),
+        }
+    )
+    if allow_legacy:
+        environment["JCODE_ALLOW_CODEX_LEGACY_AUTH"] = "1"
+    else:
+        environment.pop("JCODE_ALLOW_CODEX_LEGACY_AUTH", None)
+    return environment, workspace, runtime / "session-feedback.sock"
+
+
+def _parse_jcode_json_report(payload: str) -> tuple[str, int, int]:
+    try:
+        report = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise ValidationError(
+            "generation runner returned malformed Jcode JSON"
+        ) from error
+    if not isinstance(report, Mapping) or not isinstance(report.get("text"), str):
+        raise ValidationError("generation runner returned an invalid Jcode JSON report")
+    usage = report.get("usage")
+    if not isinstance(usage, Mapping):
+        raise ValidationError("generation runner omitted Jcode usage accounting")
+    observed: list[int] = []
+    for field in ("input_tokens", "output_tokens"):
+        value = usage.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValidationError(f"generation runner returned invalid {field}")
+        observed.append(value)
+    return report["text"], observed[0], observed[1]
+
+
 def _run_generation_command(
     command: Sequence[str], *, timeout_seconds: float, estimated_cost_usd: float
 ) -> dict[str, Any]:
-    started = time.monotonic()
-    try:
-        completed = subprocess.run(
-            list(command),
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=timeout_seconds,
+    if len(command) < 2 or command[1] != "run":
+        raise ValidationError("generation command must invoke jcode run")
+    executable = shutil.which(command[0], path=os.environ.get("PATH"))
+    if executable is None:
+        raise ValidationError(
+            "generation request could not start: executable not found"
         )
-    except OSError as error:
-        raise ValidationError(
-            f"generation request could not start: {_bounded_error(str(error))}"
-        ) from error
-    except subprocess.TimeoutExpired as error:
-        elapsed = time.monotonic() - started
-        raise ValidationError(
-            f"generation elapsed-time limit exceeded after {elapsed:.3f} seconds"
-        ) from error
-    return {
-        "returncode": completed.returncode,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
-        "elapsed_seconds": time.monotonic() - started,
-        # Schema mode does not expose provider pricing, so the default runner
-        # records the configured cost reservation as its conservative estimate.
-        "estimated_cost_usd": estimated_cost_usd,
-    }
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="jcode-session-feedback-") as directory:
+        root = Path(directory)
+        environment, workspace, socket_path = _isolated_generation_environment(root)
+        run_command = [
+            executable,
+            "run",
+            "--no-update",
+            "--socket",
+            str(socket_path),
+            *command[2:],
+        ]
+        try:
+            completed = subprocess.run(
+                run_command,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout_seconds,
+                cwd=workspace,
+                env=environment,
+            )
+        except OSError as error:
+            raise ValidationError(
+                f"generation request could not start: {_bounded_error(str(error))}"
+            ) from error
+        except subprocess.TimeoutExpired as error:
+            elapsed = time.monotonic() - started
+            raise ValidationError(
+                f"generation elapsed-time limit exceeded after {elapsed:.3f} seconds"
+            ) from error
+        finally:
+            subprocess.run(
+                [
+                    executable,
+                    "--socket",
+                    str(socket_path),
+                    "server",
+                    "stop",
+                    "--force",
+                    "--json",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=5.0,
+                cwd=workspace,
+                env=environment,
+            )
+        stdout = completed.stdout
+        observed_input_tokens = None
+        observed_output_tokens = None
+        if completed.returncode == 0:
+            stdout, observed_input_tokens, observed_output_tokens = (
+                _parse_jcode_json_report(completed.stdout)
+            )
+        return {
+            "returncode": completed.returncode,
+            "stdout": stdout,
+            "stderr": completed.stderr,
+            "elapsed_seconds": time.monotonic() - started,
+            "estimated_cost_usd": estimated_cost_usd,
+            "observed_input_tokens": observed_input_tokens,
+            "observed_output_tokens": observed_output_tokens,
+        }
 
 
-def _validated_runner_receipt(receipt: Any) -> tuple[str, float, float]:
+def _validated_runner_receipt(
+    receipt: Any,
+) -> tuple[str, float, float, int | None, int | None]:
     if not isinstance(receipt, Mapping):
         raise ValidationError("generation runner returned an invalid receipt")
     returncode = receipt.get("returncode")
@@ -1311,7 +1459,15 @@ def _validated_runner_receipt(receipt: Any) -> tuple[str, float, float]:
         raise ValidationError(
             f"generation request failed with exit {returncode}: {detail}"
         )
-    return stdout, float(elapsed), float(cost)
+    observed_tokens: list[int | None] = []
+    for field in ("observed_input_tokens", "observed_output_tokens"):
+        value = receipt.get(field)
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+        ):
+            raise ValidationError(f"generation runner receipt has invalid {field}")
+        observed_tokens.append(value)
+    return stdout, float(elapsed), float(cost), observed_tokens[0], observed_tokens[1]
 
 
 def _validate_generated_proposals(
@@ -1542,6 +1698,9 @@ def bootstrap_feedback_store(
         root.mkdir(parents=True, exist_ok=True)
         runs.mkdir(exist_ok=True)
         proposals.mkdir(exist_ok=True)
+        if os.name != "nt":
+            for directory in (root, runs, proposals):
+                directory.chmod(0o700)
     except OSError as error:
         raise ValidationError(
             _bounded_error(f"unable to bootstrap feedback storage: {error}")
@@ -1552,6 +1711,13 @@ def bootstrap_feedback_store(
         _run_bd(runner, ["bd", "init", "--quiet"], cwd=root, operation="init")
     if not beads.is_dir():
         raise ValidationError("bd init did not create the local .beads directory")
+    if os.name != "nt":
+        try:
+            beads.chmod(0o700)
+        except OSError as error:
+            raise ValidationError(
+                _bounded_error(f"unable to secure feedback storage: {error}")
+            ) from error
     return {
         "feedback_root": str(root),
         "runs": str(runs),
@@ -1840,12 +2006,17 @@ def generate_review_proposals(
     max_proposals = _generation_limit(effective_config, "max_proposals", integer=True)
     max_elapsed = _generation_limit(effective_config, "max_elapsed_seconds")
     max_cost = _generation_limit(effective_config, "max_estimated_cost_usd")
+    model_route = f"openai-oauth:{model.strip()}"
 
     schema_path = SCHEMA_DIR / "generator-response-v1.schema.json"
+    schema_document = json.loads(schema_path.read_text(encoding="utf-8"))
     request_document = canonical_json(request_input)
     prompt = (
-        "Return only a generator-response-v1 review result for this bounded session "
-        "feedback input. Use no tools and perform no side effects. Input: "
+        "Return exactly one JSON object matching the generator-response-v1 schema. "
+        "Do not wrap it in markdown or explanatory text. Use no tools and perform no "
+        "side effects. Schema: "
+        + canonical_json(schema_document)
+        + " Input: "
         + request_document
     )
     request_accounting = measure_text("request_input", prompt)
@@ -1857,18 +2028,17 @@ def generate_review_proposals(
     command = [
         "jcode",
         "run",
-        "--provider",
-        "openai",
         "--model",
-        model.strip(),
+        model_route,
         "--reasoning-effort",
         effort,
         "--tool-profile",
         "none",
         "--max-turns",
         "1",
-        "--schema",
-        str(schema_path),
+        "--token-budget",
+        str(max_input_tokens + max_output_tokens),
+        "--json",
         prompt,
     ]
 
@@ -1879,15 +2049,31 @@ def generate_review_proposals(
             timeout_seconds=max_elapsed,
             estimated_cost_usd=max_cost,
         )
-    stdout, elapsed_seconds, estimated_cost_usd = _validated_runner_receipt(
-        invoke(command)
-    )
+    (
+        stdout,
+        elapsed_seconds,
+        estimated_cost_usd,
+        observed_input_tokens,
+        observed_output_tokens,
+    ) = _validated_runner_receipt(invoke(command))
     validate_budget_limit(
         field="max_elapsed_seconds", observed=elapsed_seconds, limit=max_elapsed
     )
     validate_budget_limit(
         field="max_estimated_cost_usd", observed=estimated_cost_usd, limit=max_cost
     )
+    if observed_input_tokens is not None:
+        validate_budget_limit(
+            field="max_input_tokens",
+            observed=observed_input_tokens,
+            limit=max_input_tokens,
+        )
+    if observed_output_tokens is not None:
+        validate_budget_limit(
+            field="max_output_tokens",
+            observed=observed_output_tokens,
+            limit=max_output_tokens,
+        )
 
     output_accounting = measure_text("request_output", stdout)
     validate_budget_limit(
@@ -1919,12 +2105,16 @@ def generate_review_proposals(
             "estimated_cost_usd": estimated_cost_usd,
             "command": {
                 "provider": "openai",
-                "model": model.strip(),
+                "model": model_route,
                 "effort": effort,
                 "tool_profile": "none",
+                "request_count_limit": 1,
                 "max_turns": 1,
+                "output_mode": "json",
                 "schema": schema_path.name,
             },
+            "observed_input_tokens": observed_input_tokens,
+            "observed_output_tokens": observed_output_tokens,
         },
     }
 

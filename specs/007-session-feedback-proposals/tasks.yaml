@@ -242,7 +242,7 @@ phases:
 
   - number: 5
     title: "User Story 3 - Generate bounded review-only proposals"
-    purpose: "Perform at most one schema-constrained no-tools generation request and return complete decision-ready proposals without mutating targets"
+    purpose: "Perform at most one isolated, locally schema-validated no-tools generation request and return complete decision-ready proposals without mutating targets"
     story_reference: "US-003"
     independent_test: "Use an injected fake jcode generator to verify the exact native OpenAI OAuth route, one-request maximum, proposal completeness, valid zero-proposal handling, accounting, and absence of target or lifecycle mutation."
     tasks:
@@ -267,12 +267,13 @@ phases:
         file_path: ".jcode/skills/session-feedback/tests/test_session_feedback.py"
         dependencies: ["T017", "T018"]
         acceptance_criteria:
-          - "Record the injected generator command and require native OpenAI OAuth, gpt-5.6-sol, medium effort, tool profile none, max turns one, the response schema, and exactly zero or one request."
+          - "Record the injected generator command and require native OpenAI OAuth, gpt-5.6-sol, medium effort, tool profile none, max turns one, a token budget, JSON output, local response-schema validation, and exactly zero or one request."
+          - "Prove the default runner uses a private HOME, JCODE_HOME, runtime directory, workspace, socket, and owner-only copied OAuth credential while excluding ambient AGENTS.md, skill directories, API-key authentication, and shared-server ownership."
           - "Verify request input, output, proposal count, elapsed time, and estimated cost bounds at, below, and above each limit with no retry after failure or timeout."
           - "Reject malformed, oversized, unknown-category, fingerprint-mismatch, unresolved-evidence, and unshortlisted-target output before persistence."
           - "Instrument paths, processes, network, and proposal lifecycle to prove the generator cannot edit targets, apply patches, approve, start, delete, replace, publish, replicate, or perform external actions."
       - id: "T020"
-        title: "Implement the single schema-constrained generation request"
+        title: "Implement the single isolated and locally schema-validated generation request"
         status: "Completed"
         type: "implementation"
         parallel: false
@@ -280,7 +281,8 @@ phases:
         file_path: ".jcode/skills/session-feedback/session_feedback.py"
         dependencies: ["T019"]
         acceptance_criteria:
-          - "After all local validation, construct exactly one injectable jcode run command using native OpenAI OAuth, the effective model and effort, tool-profile none, max-turns one, JSON output, and generator-response schema."
+          - "After all local validation, construct exactly one injectable jcode run command using native OpenAI OAuth, the effective model and effort, tool-profile none, max-turns one, a token budget, and JSON output; embed the generator-response schema in the prompt and validate the returned text locally without retries."
+          - "Run the default command from a private temporary startup context with only an owner-only copy of native or explicitly permitted legacy OAuth material, a unique socket, an owned temporary server, and deterministic server cleanup."
           - "Enforce input, output, elapsed-time, proposal-count, and estimated-cost ceilings before or during work and never issue a repair or retry request."
           - "Capture bounded non-secret command, timing, usage, and failure receipts without exposing credentials or bulk provider output."
       - id: "T021"

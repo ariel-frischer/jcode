@@ -98,6 +98,22 @@ def valid_generator_response() -> dict[str, object]:
     }
 
 
+def jcode_json_report(
+    text: str, *, input_tokens: int = 321, output_tokens: int = 17
+) -> str:
+    return json.dumps(
+        {
+            "text": text,
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cache_read_input_tokens": 0,
+            },
+        },
+        separators=(",", ":"),
+    )
+
+
 class IsolatedSessionFeedbackTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -106,6 +122,13 @@ class IsolatedSessionFeedbackTestCase(unittest.TestCase):
         self.bin_dir = Path(self.temp_dir.name) / "bin"
         self.home.mkdir()
         self.bin_dir.mkdir()
+        legacy_auth = self.home / ".codex" / "auth.json"
+        legacy_auth.parent.mkdir()
+        legacy_auth.write_text(
+            json.dumps({"tokens": {"access_token": "synthetic-test-token"}}),
+            encoding="utf-8",
+        )
+        legacy_auth.chmod(0o600)
         self.invocation_log = Path(self.temp_dir.name) / "unexpected-invocation.log"
 
         for executable in ("jcode", "bd"):
@@ -788,16 +811,21 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         *,
         elapsed_seconds: float = 0.25,
         estimated_cost_usd: float = 0.01,
+        observed_input_tokens: int | None = None,
+        observed_output_tokens: int | None = None,
     ) -> mock.Mock:
-        return mock.Mock(
-            return_value={
-                "returncode": 0,
-                "stdout": self.feedback.canonical_json(response),
-                "stderr": "",
-                "elapsed_seconds": elapsed_seconds,
-                "estimated_cost_usd": estimated_cost_usd,
-            }
-        )
+        receipt = {
+            "returncode": 0,
+            "stdout": self.feedback.canonical_json(response),
+            "stderr": "",
+            "elapsed_seconds": elapsed_seconds,
+            "estimated_cost_usd": estimated_cost_usd,
+        }
+        if observed_input_tokens is not None:
+            receipt["observed_input_tokens"] = observed_input_tokens
+        if observed_output_tokens is not None:
+            receipt["observed_output_tokens"] = observed_output_tokens
+        return mock.Mock(return_value=receipt)
 
     def generate(
         self,
@@ -848,7 +876,7 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
             destination[destination_key].append(copy.deepcopy(source[source_key]))
         return response
 
-    def test_records_exact_native_oauth_no_tools_single_turn_command(self) -> None:
+    def test_records_one_request_native_oauth_no_tools_json_command(self) -> None:
         zero = self.fixture["valid_responses"]["zero_proposals"]["response"]
         result, runner = self.generate(zero)
 
@@ -859,25 +887,39 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         command = runner.call_args.args[0]
         self.assertEqual(command[0:2], ["jcode", "run"])
         required_pairs = {
-            "--provider": "openai",
-            "--model": "gpt-5.6-sol",
+            "--model": "openai-oauth:gpt-5.6-sol",
             "--reasoning-effort": "medium",
             "--tool-profile": "none",
             "--max-turns": "1",
+            "--token-budget": "200000",
         }
         for flag, value in required_pairs.items():
             self.assertIn(flag, command)
             self.assertEqual(command[command.index(flag) + 1], value)
-        self.assertIn("--schema", command)
-        self.assertNotIn(
-            "--json",
-            command,
-            "schema mode already returns JSON and the public CLI rejects --json with --schema",
-        )
-        schema_path = Path(command[command.index("--schema") + 1])
-        self.assertEqual(schema_path.name, "generator-response-v1.schema.json")
-        self.assertTrue(schema_path.is_file())
+        self.assertIn("--json", command)
+        self.assertNotIn("--schema", command)
+        self.assertNotIn("--provider", command)
         self.assertNotIn("--tools", command)
+        self.assertIn('"contract_version"', command[-1])
+        self.assertIn('"generator-response-v1"', command[-1])
+        self.assertEqual(
+            result["accounting"]["command"]["model"],
+            "openai-oauth:gpt-5.6-sol",
+        )
+        self.assertEqual(result["accounting"]["command"]["output_mode"], "json")
+
+    def test_enforces_observed_provider_token_usage_without_retry(self) -> None:
+        zero = self.fixture["valid_responses"]["zero_proposals"]["response"]
+        cases = (
+            ("max_input_tokens", {"observed_input_tokens": 100_001}),
+            ("max_output_tokens", {"observed_output_tokens": 100_001}),
+        )
+        for field, observed in cases:
+            with self.subTest(field=field):
+                runner = self.runner_for(zero, **observed)
+                with self.assertRaisesRegex(self.feedback.ValidationError, field):
+                    self.generate(zero, runner=runner)
+                runner.assert_called_once()
 
     def test_renders_validated_proposals_as_bounded_review_only_json_and_markdown(
         self,
@@ -1380,6 +1422,8 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
             self.feedback_root / ".beads",
         ):
             self.assertTrue(path.is_dir(), path)
+            if os.name != "nt":
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o700, path)
         init_commands = [command for command, _ in runner.commands if "init" in command]
         self.assertEqual(len(init_commands), 1)
         self.assertFalse((self.feedback_root / ".beads" / "remotes.json").exists())
@@ -1826,7 +1870,7 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         fake_jcode = self.bin_dir / "jcode"
         fake_jcode.write_text(
             f"#!{sys.executable}\n"
-            'print(\'{"contract_version":"generator-response-v1","proposals":[]}\')\n',
+            f"print({jcode_json_report(self.feedback.canonical_json({'contract_version': 'generator-response-v1', 'proposals': []}))!r})\n",
             encoding="utf-8",
         )
         fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
@@ -1868,7 +1912,7 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         fake_jcode = self.bin_dir / "jcode"
         fake_jcode.write_text(
             f"#!{sys.executable}\n"
-            'print(\'{"contract_version":"generator-response-v1","proposals":[]}\')\n',
+            f"print({jcode_json_report(self.feedback.canonical_json({'contract_version': 'generator-response-v1', 'proposals': []}))!r})\n",
             encoding="utf-8",
         )
         fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
@@ -1913,7 +1957,7 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.install_fake_bd()
         fake_jcode = self.bin_dir / "jcode"
         fake_jcode.write_text(
-            f"#!{sys.executable}\nprint('{{}}')\n",
+            f"#!{sys.executable}\nprint({jcode_json_report('{}')!r})\n",
             encoding="utf-8",
         )
         fake_jcode.chmod(fake_jcode.stat().st_mode | stat.S_IXUSR)
@@ -2017,6 +2061,7 @@ else:
             if malformed
             else self.feedback.canonical_json(response or self.generator_response())
         )
+        report = jcode_json_report(output)
         self.write_executable(
             bin_dir / "jcode",
             "import os\n"
@@ -2024,7 +2069,7 @@ else:
             "from pathlib import Path\n"
             "Path(os.environ['SESSION_FEEDBACK_JCODE_LOG']).write_text('called', encoding='utf-8')\n"
             f"time.sleep({sleep_seconds!r})\n"
-            f"print({output!r})\n",
+            f"print({report!r})\n",
         )
         return log_path
 
@@ -2046,6 +2091,13 @@ else:
         session_arguments: list[str],
         extra_environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        legacy_auth = home / ".codex" / "auth.json"
+        legacy_auth.parent.mkdir(parents=True, exist_ok=True)
+        legacy_auth.write_text(
+            json.dumps({"tokens": {"access_token": "synthetic-test-token"}}),
+            encoding="utf-8",
+        )
+        legacy_auth.chmod(0o600)
         environment = os.environ.copy()
         environment.update(
             {
@@ -2218,6 +2270,127 @@ else:
                     self.assertEqual(list(feedback_root.rglob("*.md")), [])
                     self.assertEqual(list(feedback_root.rglob("*.tmp")), [])
                 self.assertFalse((working_directory / ".beads").exists())
+
+
+class GenerationIsolationProcessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.home = self.root / "source-home"
+        self.bin_dir = self.root / "bin"
+        self.observation = self.root / "observation.jsonl"
+        self.home.mkdir()
+        self.bin_dir.mkdir()
+        legacy_auth = self.home / ".codex" / "auth.json"
+        legacy_auth.parent.mkdir()
+        legacy_auth.write_text(
+            json.dumps(
+                {
+                    "tokens": {
+                        "access_token": "test-access-secret",
+                        "refresh_token": "test-refresh-secret",
+                        "id_token": "test-id-secret",
+                        "account_id": "test-account-secret",
+                    },
+                    "OPENAI_API_KEY": None,
+                }
+            ),
+            encoding="utf-8",
+        )
+        legacy_auth.chmod(0o600)
+        (self.home / "AGENTS.md").write_text("must not load", encoding="utf-8")
+        skill = self.home / ".jcode" / "skills" / "must-not-load" / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("must not load", encoding="utf-8")
+
+        fake_jcode = self.bin_dir / "jcode"
+        fake_jcode.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "from pathlib import Path\n"
+            "observation = Path(os.environ['SESSION_FEEDBACK_OBSERVATION'])\n"
+            "record = {\n"
+            "  'argv': sys.argv[1:],\n"
+            "  'cwd': os.getcwd(),\n"
+            "  'home': os.environ.get('HOME'),\n"
+            "  'jcode_home': os.environ.get('JCODE_HOME'),\n"
+            "  'runtime': os.environ.get('JCODE_RUNTIME_DIR'),\n"
+            "  'temp_server': os.environ.get('JCODE_TEMP_SERVER'),\n"
+            "  'owner_pid': os.environ.get('JCODE_SERVER_OWNER_PID'),\n"
+            "  'api_key_present': bool(os.environ.get('OPENAI_API_KEY')),\n"
+            "  'legacy_auth_present': (Path(os.environ['JCODE_HOME']) / 'external/.codex/auth.json').is_file(),\n"
+            "  'global_agents_present': (Path(os.environ['HOME']) / 'AGENTS.md').exists(),\n"
+            "  'global_skill_present': (Path(os.environ['JCODE_HOME']) / 'skills/must-not-load/SKILL.md').exists(),\n"
+            "}\n"
+            "with observation.open('a', encoding='utf-8') as handle:\n"
+            "  handle.write(json.dumps(record, sort_keys=True) + '\\n')\n"
+            "if 'run' in sys.argv:\n"
+            "  response = {'contract_version': 'generator-response-v1', 'proposals': []}\n"
+            "  print(json.dumps({\n"
+            "    'text': json.dumps(response, separators=(',', ':')),\n"
+            "    'usage': {'input_tokens': 321, 'output_tokens': 17, 'cache_read_input_tokens': 0},\n"
+            "  }))\n",
+            encoding="utf-8",
+        )
+        fake_jcode.chmod(0o700)
+        self.environment = mock.patch.dict(
+            os.environ,
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.bin_dir}:{os.environ.get('PATH', '')}",
+                "SESSION_FEEDBACK_OBSERVATION": str(self.observation),
+                "OPENAI_API_KEY": "must-not-reach-child",
+            },
+            clear=False,
+        )
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+        self.feedback = load_helper()
+
+    def test_default_runner_isolates_startup_context_and_stops_owned_server(
+        self,
+    ) -> None:
+        receipt = self.feedback._run_generation_command(
+            [
+                "jcode",
+                "run",
+                "--model",
+                "openai-oauth:gpt-5.6-sol",
+                "--json",
+                "prompt",
+            ],
+            timeout_seconds=5.0,
+            estimated_cost_usd=0.1,
+        )
+
+        self.assertEqual(
+            json.loads(receipt["stdout"]),
+            {"contract_version": "generator-response-v1", "proposals": []},
+        )
+        self.assertEqual(receipt["observed_input_tokens"], 321)
+        self.assertEqual(receipt["observed_output_tokens"], 17)
+        records = [
+            json.loads(line)
+            for line in self.observation.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertEqual(len(records), 2)
+        run_record, stop_record = records
+        self.assertIn("run", run_record["argv"])
+        self.assertIn("server", stop_record["argv"])
+        self.assertIn("stop", stop_record["argv"])
+        self.assertEqual(run_record["temp_server"], "1")
+        self.assertEqual(run_record["owner_pid"], str(os.getpid()))
+        self.assertFalse(run_record["api_key_present"])
+        self.assertTrue(run_record["legacy_auth_present"])
+        self.assertFalse(run_record["global_agents_present"])
+        self.assertFalse(run_record["global_skill_present"])
+        self.assertNotEqual(run_record["home"], str(self.home))
+        self.assertNotEqual(run_record["jcode_home"], str(self.home / ".jcode"))
+        self.assertEqual(run_record["cwd"], str(Path(run_record["home"]) / "workspace"))
+        self.assertEqual(
+            stat.S_IMODE((self.home / ".codex/auth.json").stat().st_mode), 0o600
+        )
 
 
 if __name__ == "__main__":
