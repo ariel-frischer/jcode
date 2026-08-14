@@ -463,4 +463,6 @@ async fn successful_generation_records_bounded_usage_and_only_admitted_content()
     let transmitted = factory.transmitted.lock().expect("transmission lock");
     assert_eq!(transmitted.len(), 1);
     assert!(transmitted[0].contains("safe decision"));
+    assert!(transmitted[0].contains("handoff_brief"));
+    assert!(transmitted[0].contains("relevant_files"));
 }

@@ -336,7 +336,7 @@ phases:
           - "Provider, timeout, malformed, over-budget, and usage-accounting failures are actionable, non-secret, and do not call publication."
       - id: "T024"
         title: "Integrate bounded generation into the one-shot librarian orchestrator"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"

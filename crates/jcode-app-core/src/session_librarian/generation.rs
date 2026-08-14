@@ -7,7 +7,7 @@ use jcode_session_types::BoundedUsage;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const GENERATION_SYSTEM_PROMPT: &str = "Summarize the admitted Jcode session content. Return only the required session librarian JSON object.";
+const GENERATION_SYSTEM_PROMPT: &str = "Summarize the admitted Jcode session content. Return only one JSON object with exactly these fields: summary (an object containing goal, outcomes, decisions, unresolved_work, risks, and next_steps), handoff_brief (a string), and relevant_files (an array of project-relative path strings).";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GenerationRouteFacts {

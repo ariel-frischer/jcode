@@ -8,9 +8,22 @@
 //! rendering the response, and atomically publishing the artifact pair.
 
 use async_trait::async_trait;
-use jcode_base::{config::LibrarianInvocationOverrides, session::Session};
-use jcode_session_types::{BoundedUsage, SourceFingerprint};
-use std::path::{Path, PathBuf};
+use jcode_base::{
+    config::{
+        Config, LibrarianConfigError, LibrarianInvocationOverrides, LibrarianRouteIdentity,
+        LibrarianRouteValidation, ResolvedLibrarianConfig, resolve_librarian_config,
+    },
+    session::Session,
+};
+use jcode_session_types::{
+    BoundedUsage, LibrarianBudgetIdentity, LibrarianConfigurationIdentity, LibrarianRelevantFiles,
+    RouteIdentity, SessionSummary, SourceFingerprint, StructuredSummarySections,
+};
+use serde::Deserialize;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 #[allow(dead_code)]
 mod admission;
@@ -22,6 +35,11 @@ mod generation;
 mod handoff;
 #[allow(dead_code)]
 mod publication;
+
+const SUMMARY_FORMAT_VERSION: &str = "session-summary.v1";
+const FILTER_VERSION: &str = "session-librarian-filter.v1";
+const PROMPT_VERSION: &str = "session-librarian-prompt.v1";
+const RECEIPT_VERSION: &str = "session-librarian-receipt.v1";
 
 /// Canonical source selected for one explicit librarian invocation.
 ///
@@ -194,6 +212,268 @@ pub trait SessionLibrarian: Send + Sync {
     async fn invoke(&self, invocation: LibrarianInvocation<'_>) -> LibrarianResult;
 }
 
+/// Production one-shot librarian assembled from the existing config, session,
+/// provider-runtime, and storage owners.
+pub struct DefaultSessionLibrarian {
+    provider_factory: Arc<dyn generation::GenerationProviderFactory>,
+    config_override: Option<Config>,
+    publication_root_override: Option<PathBuf>,
+}
+
+impl Default for DefaultSessionLibrarian {
+    fn default() -> Self {
+        Self {
+            provider_factory: Arc::new(generation::NativeGenerationProviderFactory),
+            config_override: None,
+            publication_root_override: None,
+        }
+    }
+}
+
+impl DefaultSessionLibrarian {
+    #[cfg(test)]
+    fn with_components(
+        config: Config,
+        provider_factory: Arc<dyn generation::GenerationProviderFactory>,
+        publication_root: PathBuf,
+    ) -> Self {
+        Self {
+            provider_factory,
+            config_override: Some(config),
+            publication_root_override: Some(publication_root),
+        }
+    }
+
+    fn config(&self) -> &Config {
+        self.config_override
+            .as_ref()
+            .unwrap_or_else(|| jcode_base::config::config())
+    }
+
+    fn publication_root(&self) -> Result<PathBuf, LibrarianFailure> {
+        if let Some(root) = &self.publication_root_override {
+            return Ok(root.clone());
+        }
+        jcode_base::storage::jcode_dir()
+            .map(|root| root.join("feedback").join("sessions"))
+            .map_err(|_| LibrarianFailure {
+                stage: LibrarianFailureStage::Publication,
+                code: "librarian_feedback_directory_unavailable",
+                message: "The session librarian feedback directory could not be resolved.".into(),
+                usage: None,
+            })
+    }
+
+    async fn invoke_session(
+        &self,
+        session: &Session,
+        overrides: &LibrarianInvocationOverrides,
+    ) -> Result<LibrarianResult, LibrarianFailure> {
+        let active_route = active_route(session);
+        let config = resolve_librarian_config(self.config(), overrides, &active_route, |route| {
+            let facts = self.provider_factory.inspect(route);
+            LibrarianRouteValidation {
+                supported: facts.supported,
+                authentication_available: facts.authentication_available,
+                worst_case_cost_micros: facts.worst_case_cost_micros(12_000, 2_500),
+            }
+        })
+        .map_err(configuration_failure)?;
+
+        let admitted = admission::admit_session(session, &config.budgets, &config.admission_caps)?;
+        let configuration_identity = configuration_identity(&config);
+        let fingerprint =
+            fingerprint::build_source_fingerprint(&admitted, &configuration_identity)?;
+        let store = publication::PublicationStore::new(self.publication_root()?);
+
+        match store.claim(&session.id, &fingerprint)? {
+            publication::PublicationClaim::Reused(artifacts) => {
+                Ok(LibrarianResult::Reused(LibrarianCompletion {
+                    session_id: session.id.clone(),
+                    source_fingerprint: fingerprint,
+                    artifacts,
+                    usage: zero_usage(),
+                }))
+            }
+            publication::PublicationClaim::Generate(lease) => {
+                let generation = generation::generate_summary(
+                    self.provider_factory.as_ref(),
+                    &config,
+                    &admitted,
+                )
+                .await?;
+                let generation = project_generation(
+                    generation,
+                    &session.id,
+                    &fingerprint,
+                    &configuration_identity.route,
+                )?;
+                let usage = generation.usage.clone();
+                let artifacts = lease
+                    .publish_generation(generation)
+                    .map_err(|mut failure| {
+                        failure.usage.get_or_insert_with(|| usage.clone());
+                        failure
+                    })?;
+                Ok(LibrarianResult::Succeeded(LibrarianCompletion {
+                    session_id: session.id.clone(),
+                    source_fingerprint: fingerprint,
+                    artifacts,
+                    usage,
+                }))
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl SessionLibrarian for DefaultSessionLibrarian {
+    async fn invoke(&self, invocation: LibrarianInvocation<'_>) -> LibrarianResult {
+        let result = match invocation.target {
+            LibrarianSessionTarget::Current(session) => {
+                self.invoke_session(session, &invocation.overrides).await
+            }
+            LibrarianSessionTarget::Persisted { session_id } => match Session::load(session_id) {
+                Ok(session) => self.invoke_session(&session, &invocation.overrides).await,
+                Err(_) => Err(LibrarianFailure {
+                    stage: LibrarianFailureStage::Resolution,
+                    code: "source_session_not_found",
+                    message: "No persisted session exists for the requested identifier.".into(),
+                    usage: None,
+                }),
+            },
+        };
+        result.unwrap_or_else(LibrarianResult::Failed)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderSummary {
+    summary: StructuredSummarySections,
+    handoff_brief: String,
+    relevant_files: LibrarianRelevantFiles,
+}
+
+fn project_generation(
+    generation: LibrarianGeneration,
+    session_id: &str,
+    fingerprint: &SourceFingerprint,
+    route: &RouteIdentity,
+) -> Result<LibrarianGeneration, LibrarianFailure> {
+    let provider: ProviderSummary =
+        serde_json::from_str(&generation.response_json).map_err(|_| LibrarianFailure {
+            stage: LibrarianFailureStage::Validation,
+            code: "librarian_response_invalid",
+            message:
+                "The librarian provider response did not match the required summary content schema."
+                    .into(),
+            usage: Some(generation.usage.clone()),
+        })?;
+    let summary = SessionSummary {
+        format_version: SUMMARY_FORMAT_VERSION.into(),
+        session_id: session_id.into(),
+        source_fingerprint: fingerprint.clone(),
+        generated_at: chrono::Utc::now(),
+        effective_route: route.clone(),
+        usage: generation.usage.clone(),
+        summary: provider.summary,
+        handoff_brief: provider.handoff_brief,
+        relevant_files: provider.relevant_files,
+    };
+    let response_json = serde_json::to_string(&summary).map_err(|_| LibrarianFailure {
+        stage: LibrarianFailureStage::Validation,
+        code: "librarian_response_projection_failed",
+        message:
+            "The validated librarian response could not be projected into the artifact schema."
+                .into(),
+        usage: Some(generation.usage.clone()),
+    })?;
+    Ok(LibrarianGeneration {
+        response_json,
+        usage: generation.usage,
+    })
+}
+
+fn active_route(session: &Session) -> LibrarianRouteIdentity {
+    LibrarianRouteIdentity {
+        provider: session
+            .route_api_method
+            .clone()
+            .or_else(|| session.provider_key.clone())
+            .unwrap_or_default(),
+        model: session.model.clone().unwrap_or_default(),
+        reasoning_effort: session.reasoning_effort.clone().unwrap_or_default(),
+    }
+}
+
+fn configuration_identity(config: &ResolvedLibrarianConfig) -> LibrarianConfigurationIdentity {
+    LibrarianConfigurationIdentity {
+        budgets: LibrarianBudgetIdentity {
+            deadline_seconds: config.budgets.deadline_seconds,
+            max_cost_micros_usd: config.budgets.max_cost_micros,
+            max_input_tokens: config.budgets.max_input_tokens,
+            max_output_tokens: config.budgets.max_output_tokens,
+            max_requests: config.budgets.max_requests,
+        },
+        filter_version: FILTER_VERSION.into(),
+        prompt_version: PROMPT_VERSION.into(),
+        receipt_version: RECEIPT_VERSION.into(),
+        route: RouteIdentity {
+            provider: "openai".into(),
+            api_method: config.route.provider.clone(),
+            model: config.route.model.clone(),
+            reasoning_effort: config.route.reasoning_effort.clone(),
+        },
+        schema_version: SUMMARY_FORMAT_VERSION.into(),
+    }
+}
+
+fn zero_usage() -> BoundedUsage {
+    BoundedUsage {
+        input_tokens: 0,
+        output_tokens: 0,
+        request_count: 0,
+        elapsed_ms: 0,
+        cost_micros_usd: 0,
+    }
+}
+
+fn configuration_failure(error: LibrarianConfigError) -> LibrarianFailure {
+    let (code, message) = match error {
+        LibrarianConfigError::InvalidRouteField { .. } => (
+            "librarian_route_invalid",
+            "The session librarian route contains an invalid provider, model, or effort value.",
+        ),
+        LibrarianConfigError::InvalidBudget { .. } => (
+            "librarian_budget_invalid",
+            "The session librarian requires positive finite hard-budget values.",
+        ),
+        LibrarianConfigError::UnsupportedRoute { .. } => (
+            "librarian_route_unsupported",
+            "The configured session librarian provider, model, or effort is unsupported.",
+        ),
+        LibrarianConfigError::MissingAuthentication { .. } => (
+            "librarian_authentication_missing",
+            "The configured session librarian route has no available authentication.",
+        ),
+        LibrarianConfigError::UnknownPricing { .. } => (
+            "librarian_pricing_unknown",
+            "The configured session librarian route has no verified pricing metadata.",
+        ),
+        LibrarianConfigError::UnsafeCost { .. } => (
+            "librarian_cost_unapproved",
+            "The session librarian worst-case cost exceeds the approved hard budget.",
+        ),
+    };
+    LibrarianFailure {
+        stage: LibrarianFailureStage::Configuration,
+        code,
+        message: message.into(),
+        usage: None,
+    }
+}
+
 #[cfg(test)]
 #[path = "tests/admission.rs"]
 mod admission_tests;
@@ -213,6 +493,10 @@ mod handoff_tests;
 #[cfg(test)]
 #[path = "tests/publication.rs"]
 mod publication_tests;
+
+#[cfg(test)]
+#[path = "tests/orchestration.rs"]
+mod orchestration_tests;
 
 #[cfg(test)]
 mod tests {
