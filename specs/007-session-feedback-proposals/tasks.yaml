@@ -328,7 +328,7 @@ phases:
     tasks:
       - id: "T024"
         title: "Create local Beads lifecycle and deduplication fixtures"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
