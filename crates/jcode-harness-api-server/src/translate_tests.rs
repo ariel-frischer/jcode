@@ -102,6 +102,158 @@ fn connection_phase_is_forwarded_to_api_clients() {
 }
 
 #[test]
+fn failed_run_connection_phase_fixture_is_payload_free_and_typed_on_wire() {
+    let mut state = state_with_session();
+    let frames = state.legacy_event_to_api(&json!({
+        "type": "connection_phase",
+        "phase": "fixture phase; no prompt or provider payload",
+        "prompt": "SYNTHETIC_PROMPT_MUST_NOT_BE_RETAINED",
+        "tool_arguments": "SYNTHETIC_TOOL_ARGUMENTS_MUST_NOT_BE_RETAINED",
+    }));
+
+    assert_eq!(frames.len(), 1);
+    let frame = &frames[0];
+    assert_eq!(
+        frame.event,
+        ApiEvent::ConnectionPhase {
+            session_id: "s1".into(),
+            phase: "fixture phase; no prompt or provider payload".into(),
+        }
+    );
+    let encoded = serde_json::to_string(&frame.event).expect("serialize fixture event");
+    assert!(encoded.contains("connection_phase"));
+    assert!(!encoded.contains("SYNTHETIC_PROMPT_MUST_NOT_BE_RETAINED"));
+    assert!(!encoded.contains("SYNTHETIC_TOOL_ARGUMENTS_MUST_NOT_BE_RETAINED"));
+}
+
+#[test]
+fn translator_keeps_safety_relevant_events_in_the_owned_turn_contract() {
+    for event in [
+        ApiEvent::TextDelta {
+            session_id: "s1".into(),
+            text: "x".into(),
+        },
+        ApiEvent::TurnDone {
+            session_id: "s1".into(),
+        },
+        ApiEvent::PermissionRequest {
+            session_id: "s1".into(),
+            request_id: "r".into(),
+            tool_name: "tool".into(),
+            description: "confirm".into(),
+        },
+        ApiEvent::ToolExec {
+            session_id: "s1".into(),
+            call_id: "c".into(),
+            name: "tool".into(),
+        },
+    ] {
+        let contract = event.publication_contract();
+        assert_eq!(
+            contract.disposition,
+            jcode_harness_api::EventPublicationDisposition::OwnedTurn
+        );
+        assert_ne!(
+            contract.semantic_class,
+            Some(jcode_harness_api::EventSemanticClass::AdvisoryLifecycle)
+        );
+    }
+}
+
+#[test]
+fn translator_drops_unrecognized_internal_notification_without_filtering_public_events() {
+    let mut state = state_with_session();
+    let frames = state.legacy_event_to_api(&json!({
+        "type": "notification",
+        "message": "not a recognized background progress record",
+    }));
+    assert!(
+        frames.is_empty(),
+        "internal notification should remain filtered"
+    );
+
+    let event = ApiEvent::ConnectionPhase {
+        session_id: "s1".into(),
+        phase: "connecting".into(),
+    };
+    let contract = event.publication_contract();
+    assert_eq!(
+        contract.disposition,
+        jcode_harness_api::EventPublicationDisposition::OwnedTurn
+    );
+    assert_eq!(
+        contract.semantic_class,
+        Some(jcode_harness_api::EventSemanticClass::AdvisoryLifecycle)
+    );
+}
+
+#[test]
+fn explicit_filter_inventory_has_rationales_and_rejects_public_contract_filters() {
+    assert!(!EXPLICIT_FILTERED_LEGACY_EVENTS.is_empty());
+    for (kind, rationale) in EXPLICIT_FILTERED_LEGACY_EVENTS {
+        assert!(
+            !rationale.trim().is_empty(),
+            "{kind} has no filter rationale"
+        );
+        assert_eq!(explicit_filter_rationale(kind), Some(*rationale));
+    }
+    assert_eq!(explicit_filter_rationale("synthetic_unreviewed"), None);
+
+    let mut state = state_with_session();
+    assert!(
+        state
+            .legacy_event_to_api(&json!({
+                "type": "swarm_event",
+                "data": {"payload": "SYNTHETIC_PAYLOAD"}
+            }))
+            .is_empty()
+    );
+    assert!(
+        state
+            .legacy_event_to_api(&json!({
+                "type": "notification",
+                "message": "unrelated internal prose"
+            }))
+            .is_empty()
+    );
+
+    for event in [
+        ApiEvent::TextDelta {
+            session_id: "s1".into(),
+            text: "x".into(),
+        },
+        ApiEvent::ConnectionPhase {
+            session_id: "s1".into(),
+            phase: "connecting".into(),
+        },
+        ApiEvent::TurnDone {
+            session_id: "s1".into(),
+        },
+        ApiEvent::PermissionRequest {
+            session_id: "s1".into(),
+            request_id: "r".into(),
+            tool_name: "tool".into(),
+            description: "confirm".into(),
+        },
+        ApiEvent::ToolExec {
+            session_id: "s1".into(),
+            call_id: "c".into(),
+            name: "tool".into(),
+        },
+    ] {
+        let contract = event.publication_contract();
+        assert_eq!(
+            contract.disposition,
+            jcode_harness_api::EventPublicationDisposition::OwnedTurn
+        );
+        assert!(
+            !BridgeState::translated_event(event).is_empty(),
+            "owned event was filtered"
+        );
+    }
+}
+
+#[test]
 fn create_session_maps_to_subscribe() {
     let mut state = BridgeState::default();
     let out = state.api_request_to_legacy(&json!({"req": "create_session", "id": 1}));

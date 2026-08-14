@@ -150,7 +150,48 @@ enum SimpleKind {
     },
 }
 
+/// Legacy daemon notifications that are intentionally removed before they
+/// can become public protocol events. Every entry requires a reviewable
+/// rationale; safety-relevant `ApiEvent` variants must never be listed here.
+pub(crate) const EXPLICIT_FILTERED_LEGACY_EVENTS: &[(&str, &str)] = &[
+    (
+        "notification",
+        "unrelated notifications are internal prose, not owned-turn progress",
+    ),
+    (
+        "swarm_event",
+        "internal swarm coordination is outside the public turn contract",
+    ),
+];
+
+pub(crate) fn explicit_filter_rationale(kind: &str) -> Option<&'static str> {
+    EXPLICIT_FILTERED_LEGACY_EVENTS
+        .iter()
+        .find_map(|(filtered_kind, rationale)| (*filtered_kind == kind).then_some(*rationale))
+}
+
+fn filtered_internal_event(kind: &str) -> Vec<ServerFrame> {
+    debug_assert!(
+        explicit_filter_rationale(kind).is_some(),
+        "internal filter {kind:?} is missing a reviewed inventory rationale"
+    );
+    Vec::new()
+}
+
 impl BridgeState {
+    /// Apply the canonical event publication disposition at the translation
+    /// boundary. Internal-only values are filtered here; owned-turn and
+    /// request-reply events retain their typed wire representation.
+    fn translated_event(event: ApiEvent) -> Vec<ServerFrame> {
+        match event.publication_contract().disposition {
+            jcode_harness_api::EventPublicationDisposition::Filtered => Vec::new(),
+            jcode_harness_api::EventPublicationDisposition::OwnedTurn
+            | jcode_harness_api::EventPublicationDisposition::OutsideOwnedTurn => {
+                vec![ServerFrame::event(event)]
+            }
+        }
+    }
+
     fn legacy_id(&mut self) -> u64 {
         self.next_legacy_id += 1;
         self.next_legacy_id
@@ -774,59 +815,59 @@ impl BridgeState {
                 }
                 vec![]
             }
-            "text_delta" => vec![ServerFrame::event(ApiEvent::TextDelta {
+            "text_delta" => Self::translated_event(ApiEvent::TextDelta {
                 session_id: session(self),
                 text: event["text"].as_str().unwrap_or("").to_string(),
-            })],
-            "reasoning_delta" => vec![ServerFrame::event(ApiEvent::ReasoningDelta {
+            }),
+            "reasoning_delta" => Self::translated_event(ApiEvent::ReasoningDelta {
                 session_id: session(self),
                 text: event["text"].as_str().unwrap_or("").to_string(),
-            })],
-            "reasoning_done" => vec![ServerFrame::event(ApiEvent::ReasoningDone {
+            }),
+            "reasoning_done" => Self::translated_event(ApiEvent::ReasoningDone {
                 session_id: session(self),
                 duration_secs: event["duration_secs"].as_f64(),
-            })],
-            "connection_phase" => vec![ServerFrame::event(ApiEvent::ConnectionPhase {
+            }),
+            "connection_phase" => Self::translated_event(ApiEvent::ConnectionPhase {
                 session_id: session(self),
                 phase: event["phase"].as_str().unwrap_or("connecting").to_string(),
-            })],
-            "tool_start" => vec![ServerFrame::event(ApiEvent::ToolStart {
+            }),
+            "tool_start" => Self::translated_event(ApiEvent::ToolStart {
                 session_id: session(self),
                 call_id: event["id"].as_str().unwrap_or("").to_string(),
                 name: event["name"].as_str().unwrap_or("").to_string(),
-            })],
-            "tool_input" => vec![ServerFrame::event(ApiEvent::ToolInputDelta {
+            }),
+            "tool_input" => Self::translated_event(ApiEvent::ToolInputDelta {
                 session_id: session(self),
                 call_id: String::new(),
                 delta: event["delta"].as_str().unwrap_or("").to_string(),
-            })],
-            "tool_exec" => vec![ServerFrame::event(ApiEvent::ToolExec {
+            }),
+            "tool_exec" => Self::translated_event(ApiEvent::ToolExec {
                 session_id: session(self),
                 call_id: event["id"].as_str().unwrap_or("").to_string(),
                 name: event["name"].as_str().unwrap_or("").to_string(),
-            })],
-            "tool_done" => vec![ServerFrame::event(ApiEvent::ToolDone {
+            }),
+            "tool_done" => Self::translated_event(ApiEvent::ToolDone {
                 session_id: session(self),
                 call_id: event["id"].as_str().unwrap_or("").to_string(),
                 name: event["name"].as_str().unwrap_or("").to_string(),
                 output: event["output"].as_str().unwrap_or("").to_string(),
                 error: event["error"].as_str().map(str::to_string),
-            })],
-            "tokens" => vec![ServerFrame::event(ApiEvent::TokenUsage {
+            }),
+            "tokens" => Self::translated_event(ApiEvent::TokenUsage {
                 session_id: session(self),
                 input: event["input"].as_u64().unwrap_or(0),
                 output: event["output"].as_u64().unwrap_or(0),
                 cache_read_input: event["cache_read_input"].as_u64(),
-            })],
+            }),
             "done" => {
                 let id = event["id"].as_u64().unwrap_or(0);
                 // Subscribe and other requests also emit `done`; only a
                 // completed `message` is a turn boundary.
                 if self.pending_message_id == Some(id) {
                     self.pending_message_id = None;
-                    vec![ServerFrame::event(ApiEvent::TurnDone {
+                    Self::translated_event(ApiEvent::TurnDone {
                         session_id: session(self),
-                    })]
+                    })
                 } else {
                     vec![]
                 }
@@ -1010,9 +1051,10 @@ impl BridgeState {
                         progress.session_id = session(self);
                         vec![ServerFrame::event(progress.into_event())]
                     }
-                    None => vec![],
+                    None => filtered_internal_event("notification"),
                 }
             }
+            "swarm_event" => filtered_internal_event("swarm_event"),
             "ack" => {
                 let id = event["id"].as_u64().unwrap_or(0);
                 // The daemon acking the in-flight `message` is the proof the
@@ -1091,7 +1133,9 @@ impl BridgeState {
                 }]
             }
             // Everything else on the legacy stream is not part of the stable
-            // API surface yet; drop it.
+            // API surface yet; retain the historical drop behavior. Only
+            // intentionally filtered internal kinds above enter the reviewed
+            // filter inventory.
             _ => vec![],
         }
     }

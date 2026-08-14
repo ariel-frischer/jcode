@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# All repository paths are explicit below. Do not let a parent process redirect
+# Git discovery to an unrelated repository or index.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+
 fail() {
   echo "sync-jcode-go: $*" >&2
   exit 1
@@ -68,16 +72,70 @@ destination_dir=$(cd "$destination_dir" && pwd -P)
 grep -Eq '^module[[:space:]]+github\.com/ariel-frischer/jcode-go[[:space:]]*$' "$source_dir/go.mod" ||
   fail "source go.mod is not github.com/ariel-frischer/jcode-go"
 
+is_public_jcode_go_remote() {
+  local remote=$1 host path
+  while [[ $remote == */ ]]; do
+    remote=${remote%/}
+  done
+
+  case $remote in
+    https://*)
+      remote=${remote#https://}
+      remote=${remote#*@}
+      host=${remote%%/*}
+      [[ $host == github.com ]] || return 1
+      path=${remote#*/}
+      ;;
+    ssh://*)
+      remote=${remote#ssh://}
+      remote=${remote#*@}
+      host=${remote%%/*}
+      [[ $host == github.com ]] || return 1
+      path=${remote#*/}
+      ;;
+    git@github.com:*)
+      path=${remote#git@github.com:}
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  while [[ $path == */ ]]; do
+    path=${path%/}
+  done
+  path=${path%.git}
+  [[ $path == ariel-frischer/jcode-go ]]
+}
+
+git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+  fail "source provenance cannot be established: source must be inside a Git worktree"
+
+source_remotes=$(git -C "$source_dir" remote)
+while IFS= read -r remote_name; do
+  [[ -n $remote_name ]] || continue
+  for remote_mode in fetch push; do
+    if [[ $remote_mode == push ]]; then
+      remote_urls=$(git -C "$source_dir" remote get-url --all --push "$remote_name" 2>/dev/null || true)
+    else
+      remote_urls=$(git -C "$source_dir" remote get-url --all "$remote_name" 2>/dev/null || true)
+    fi
+    while IFS= read -r remote_url; do
+      [[ -n $remote_url ]] || continue
+      if is_public_jcode_go_remote "$remote_url"; then
+        fail "source remote '$remote_name' ($remote_mode) is the public jcode-go repository; reverse synchronization is not allowed"
+      fi
+    done <<<"$remote_urls"
+  done
+done <<<"$source_remotes"
+
 git -C "$destination_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
   fail "destination is not a Git repository"
 destination_root=$(git -C "$destination_dir" rev-parse --show-toplevel)
 [[ $destination_root == "$destination_dir" ]] || fail "destination must be the repository root"
 [[ $(git -C "$destination_dir" branch --show-current) == main ]] || fail "destination must be on branch main"
 remote=$(git -C "$destination_dir" remote get-url origin 2>/dev/null || true)
-case $remote in
-  https://github.com/ariel-frischer/jcode-go|https://github.com/ariel-frischer/jcode-go.git|git@github.com:ariel-frischer/jcode-go|git@github.com:ariel-frischer/jcode-go.git|ssh://git@github.com/ariel-frischer/jcode-go|ssh://git@github.com/ariel-frischer/jcode-go.git) ;;
-  *) fail "destination origin is not github.com/ariel-frischer/jcode-go" ;;
-esac
+is_public_jcode_go_remote "$remote" || fail "destination origin is not github.com/ariel-frischer/jcode-go"
 [[ -z $(git -C "$destination_dir" status --porcelain=v1) ]] || fail "destination worktree must be clean"
 
 if [[ $mode == apply ]]; then

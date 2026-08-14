@@ -1,0 +1,555 @@
+tasks:
+    branch: "007-typed-event-compatibility"
+    created: "2026-08-13"
+    spec_path: "specs/007-typed-event-compatibility/spec.yaml"
+    plan_path: "specs/007-typed-event-compatibility/plan.yaml"
+summary:
+    total_tasks: 35
+    total_phases: 7
+    parallel_opportunities: 20
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Freeze requirement ownership, safety boundaries, and direct acceptance checks before implementation"
+      tasks:
+        - id: "T001"
+          title: "Create the typed-event acceptance and ownership matrix"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: []
+          acceptance_criteria:
+            - "Map FR-001 through FR-016 and NFR-001 through NFR-004 to one direct automated check or reviewed artifact check, including the exact command and owning task."
+            - "Record canonical ownership for Rust wire semantics, Rust translation, canonical sdk/go behavior, and the public jcode-go projection."
+            - "Record data-safety, cleanup, isolated-runtime, no-routing-change, public apply/commit/push approval, and downstream validation boundaries."
+            - "Do not record event payloads, prompts, tool arguments, file contents, credentials, or other sensitive run data."
+    - number: 2
+      title: "Foundational"
+      purpose: "Establish the evidence-handling protocol and current owned-turn inventory used by every story"
+      tasks:
+        - id: "T002"
+          title: "Record the baseline public-event inventory and evidence protocol"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Inventory every current ApiEvent wire kind with its Rust variant and current owned-turn, filtered, or outside-owned-turn behavior without yet assigning an inferred semantic class."
+            - "For every existing filter, record its source location and public-contract rationale; flag any implicit or undocumented filter as uncovered."
+            - "Define how authoritative run evidence is reduced to sanitized kind and concrete type identifiers while discarding payload fields and sensitive content."
+            - "Record the current immutable Jcode revision and timestamp correlation needed to distinguish authoritative evidence from the connection_phase hypothesis."
+    - number: 3
+      title: "User Story 1 - Diagnose the rejected event safely"
+      purpose: "Identify and reproduce the exact failed-run event without exposing its payload"
+      story_reference: "US-001"
+      independent_test: "Replay payload-free Rust and Go fixtures derived from authoritative run evidence and verify the former unsupported_typed_event result names only the exact sanitized kind and type within 256 UTF-8 bytes."
+      tasks:
+        - id: "T003"
+          title: "Recover and record the authoritative failed-run event identity"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Correlate Locus run-1c2020f67330 timestamps and immutable Jcode revision with authoritative bridge or runtime evidence and record the exact sanitized wire kind and Go concrete type."
+            - "Explicitly confirm or reject the connection_phase hypothesis; do not infer the answer from repository history alone."
+            - "Record only source identifiers, timestamps, revision, sanitized kind, and sanitized type; retain no raw frame or payload values."
+            - "If authoritative evidence is unavailable, stop behavioral implementation and record the precise missing source rather than guessing."
+        - id: "T004"
+          title: "Add the payload-free Rust failed-event translation fixture"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Construct the evidence-proven event using synthetic non-sensitive fields and assert its exact protocol-v1 wire kind and publication path."
+            - "Demonstrate the pre-fix compatibility gap deterministically without embedding raw Locus frames or payload content."
+            - "Preserve existing ReasoningDone, ToolExec, terminal, permission, and background-event translation expectations."
+        - id: "T005"
+          title: "Add the payload-free Go unsupported-event regression fixture"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "sdk/go/typed_api_test.go"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Decode the evidence-proven protocol-v1 fixture and assert the exact former unsupported_typed_event kind and concrete type outcome."
+            - "Use synthetic payload values and assert that none of them appear in the error or observer output."
+            - "Keep the fixture deterministic and independent of live Locus, provider credentials, or the shared Jcode daemon."
+        - id: "T006"
+          title: "Add bounded Rust unsupported-identity diagnostic tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-harness-api/src/client.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Cover empty, control-bearing, oversized, and malformed identifiers plus an event containing sensitive synthetic payload fields."
+            - "Require a complete diagnostic of at most 256 UTF-8 bytes containing sanitized kind and type only and no payload-derived value."
+            - "Require unsupported input to remain fail-closed rather than returning a generic success or ignore disposition."
+        - id: "T007"
+          title: "Implement bounded Rust unsupported-event identity diagnostics"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-harness-api/src/client.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Sanitize kind and type without formatting ApiEvent values, raw frames, or event fields."
+            - "Cap the complete rendered diagnostic at 256 UTF-8 bytes and preserve valid bounded identifiers."
+            - "Pass T006 while preserving the established unsupported_typed_event failure code and existing client behavior."
+    - number: 4
+      title: "User Story 2 - Apply explicit event semantics"
+      purpose: "Classify every public owned-turn event and enforce advisory-only filtering with fail-closed safety semantics"
+      story_reference: "US-002"
+      independent_test: "Exercise every semantic class plus repeated advisory, unknown, malformed, nil, and unclassified events; only advisory/lifecycle metadata continues with exactly one bounded warning per Turn."
+      tasks:
+        - id: "T008"
+          title: "Add exhaustive Rust publication-contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+          dependencies: ["T004", "T005", "T007"]
+          acceptance_criteria:
+            - "Assert every ApiEvent variant has exactly one explicit publication disposition and every owned-turn variant has exactly one class."
+            - "Cover content/progress, advisory/lifecycle metadata, terminal, permission, and tool-effect classes with no unknown or default class."
+            - "Assert existing protocol-v1 tags and serialized fields remain unchanged."
+        - id: "T009"
+          title: "Add explicit translator filter and safety-class tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+          dependencies: ["T004", "T005", "T007"]
+          acceptance_criteria:
+            - "Assert only documented internal non-public-turn events are filtered and every filter has a reviewable rationale."
+            - "Reject attempts to filter content/progress, terminal, permission, tool-effect, or another public-contract event."
+            - "Preserve existing ReasoningDone continuation, ToolExec, terminal, permission, and background translation behavior."
+        - id: "T010"
+          title: "Add Go typed-event classification and redaction tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/typed_api_test.go"
+          dependencies: ["T004", "T005", "T007"]
+          acceptance_criteria:
+            - "Require a concrete TypedEvent and exactly one EventSemanticClass for every known owned-turn kind, including the evidence-proven event."
+            - "Require SemanticClassOf to return false for UnknownEvent, nil, malformed, and deliberately unclassified values."
+            - "Cover empty, control-bearing, oversized, and sensitive synthetic identifiers and require payload-free diagnostics of at most 256 UTF-8 bytes."
+            - "Preserve legacy Session.Events UnknownEvent kind and fields compatibility."
+        - id: "T011"
+          title: "Add owned-Turn semantic dispatch policy tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/turn_test.go"
+          dependencies: ["T004", "T005", "T007"]
+          acceptance_criteria:
+            - "Repeated advisory/lifecycle metadata continues the Turn and emits exactly one payload-free warning of at most 256 UTF-8 bytes."
+            - "Unhandled content/progress, terminal, permission, and tool-effect fixtures fail closed rather than being dropped."
+            - "Unknown, malformed, nil, and unclassified fixtures terminate with TurnResultProtocolError and do not continue the Turn."
+            - "Event ordering and existing bounded subscriber-overflow behavior remain unchanged."
+        - id: "T012"
+          title: "Add terminal and cancellation compatibility regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/turn_outcome_test.go"
+          dependencies: ["T004", "T005", "T007"]
+          acceptance_criteria:
+            - "ReasoningDone remains nonterminal and continues to a later typed terminal result."
+            - "ToolExec remains a tool-effect event, and an unhandled required tool-effect fails closed."
+            - "Success, provider failure, cancellation, protocol error, and bridge error retain their existing immutable terminal classifications and outcomes."
+        - id: "T013"
+          title: "Implement the exhaustive Rust event publication contract"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-harness-api/src/events.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Define the closed EventSemanticClass set and EventPublicationContract returned by ApiEvent::publication_contract."
+            - "Use an exhaustive variant match with no wildcard/default classification so a new ApiEvent forces review."
+            - "Assign exactly one disposition and, for owned-turn events, exactly one semantic class without changing wire tags or fields."
+        - id: "T014"
+          title: "Implement explicit Rust translation and filter dispositions"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-harness-api-server/src/translate.rs"
+          dependencies: ["T009", "T013"]
+          acceptance_criteria:
+            - "Route translated events according to the canonical publication contract and keep filters explicit and rationale-backed."
+            - "Never filter an owned-turn content/progress, terminal, permission, or tool-effect event."
+            - "Pass T004 and T009 without changing established protocol-v1 or terminal ownership."
+        - id: "T015"
+          title: "Implement concrete Go typed events and semantic classification"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/session.go"
+          dependencies: ["T010", "T013"]
+          acceptance_criteria:
+            - "Decode every known owned-turn kind to one concrete TypedEvent, including the evidence-proven event."
+            - "Expose SemanticClassOf using explicit concrete-type handling with no inference from event names or payload shapes."
+            - "Return false for unknown, nil, and unclassified values while preserving the exported legacy UnknownEvent contract."
+            - "Render compatibility errors from sanitized kind/type only and cap complete messages at 256 UTF-8 bytes."
+        - id: "T016"
+          title: "Preserve protocol-v1 event provenance in the Go decoder"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/protocol/protocol.go"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Preserve stable known and unknown event kind provenance needed by typed classification and bounded diagnostics."
+            - "Do not change existing protocol-v1 tags, fields, enum representations, or additive UnknownEvent preservation."
+            - "Malformed known events fail decoding without formatting raw fields into errors."
+        - id: "T017"
+          title: "Enforce semantic policy at the owned-Turn boundary"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "sdk/go/turn.go"
+          dependencies: ["T011", "T013", "T015", "T016", "T018"]
+          acceptance_criteria:
+            - "Publish ordered content/progress, terminal, permission, and tool-effect typed events to valid handlers."
+            - "Filter only explicitly advisory/lifecycle metadata and suppress warnings after the first advisory warning within each Turn."
+            - "Terminate unknown, malformed, nil, and unclassified owned-turn input with the typed bounded protocol compatibility error."
+            - "Keep warning state per Turn and preserve queue bounds, cancellation, and terminal-result ownership."
+        - id: "T018"
+          title: "Extend Observer with bounded advisory compatibility metadata"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "sdk/go/client.go"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Reuse the existing Observer contract for the first ignored advisory event without adding a second logging or callback surface."
+            - "Expose only sanitized kind, sanitized type, and advisory disposition; include no event fields or payload values."
+            - "Preserve existing observer behavior for consumers that do not use owned Turns."
+        - id: "T019"
+          title: "Run the complete P0 semantic-policy regression matrix"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T012", "T014", "T017"]
+          acceptance_criteria:
+            - "Record passing exact Rust schema/translator and Go typed_api/turn/turn_outcome test commands."
+            - "Show one-warning advisory continuation and fail-closed outcomes for every required class, unknown, malformed, nil, and unclassified fixtures."
+            - "Show diagnostics are at most 256 UTF-8 bytes and the full fixture corpus contains zero sensitive synthetic payload values."
+            - "Show ReasoningDone, ToolExec, terminal, cancellation, and protocol-v1 behavior remains compatible."
+    - number: 5
+      title: "User Story 3 - Prevent publication gaps"
+      purpose: "Make typed representation, semantic classification, and explicit filtering complete and machine-checked"
+      story_reference: "US-003"
+      independent_test: "Run Rust and Go inventory gates on the complete current event set, then introduce controlled untyped, unclassified, and undeclared-filter fixtures and verify each gate fails with the uncovered event identity."
+      tasks:
+        - id: "T020"
+          title: "Add the cross-language owned-event parity gate"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "sdk/go/protocol/parity_test.go"
+          dependencies: ["T013", "T015", "T016"]
+          acceptance_criteria:
+            - "Compare every Rust ApiEvent wire tag and disposition with the Go known-event list, concrete TypedEvent coverage, semantic class, and explicit filter inventory."
+            - "Require exactly one typed/classified Go representation for every Rust owned-turn event."
+            - "Fail deterministically and name the uncovered sanitized event when a fixture adds an untyped, multiply classified, or unclassified owned event."
+        - id: "T021"
+          title: "Add the Rust exhaustive inventory negative gate"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Prove every current ApiEvent has one disposition and every owned-turn event has one valid semantic class."
+            - "Use a controlled uncovered-entry fixture or compile-fail seam to demonstrate a newly owned event cannot pass without an explicit contract."
+            - "Keep the gate tied to the canonical Rust enum rather than a manually independent event list."
+        - id: "T022"
+          title: "Add undeclared and unsafe filter rejection tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Fail when an internal event is filtered without an explicit inventory entry and public-contract rationale."
+            - "Fail when a public owned-turn event is assigned a filtered disposition."
+            - "Pass for every current explicit non-public filter and identify its wire kind in the coverage report."
+        - id: "T023"
+          title: "Verify complete classified-or-filtered event coverage"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T020", "T021", "T022"]
+          acceptance_criteria:
+            - "Record 100% coverage for the current owned published event inventory and all explicit filters."
+            - "Record deterministic failing evidence for one untyped event, one unclassified event, and one undeclared or unsafe filter fixture."
+            - "Confirm the gate reports the uncovered sanitized identity and does not expose payload values."
+        - id: "T024"
+          title: "Run the full protocol-v1 and lifecycle compatibility corpus"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "sdk/go/protocol/parity_test.go"
+          dependencies: ["T019", "T023"]
+          acceptance_criteria:
+            - "Verify all pre-change protocol-v1 fixtures retain their public event identities and terminal outcomes except the evidence-proven event receiving its reviewed type/class or filter."
+            - "Verify ReasoningDone continuation, ToolExec/tool-effect handling, success, provider failure, cancellation, unknown preservation, and fail-closed owned-Turn behavior."
+            - "Run the corpus repeatedly and obtain identical classifications, warning counts, and outcomes."
+    - number: 6
+      title: "User Story 4 - Publish the canonical SDK safely"
+      purpose: "Document and validate the one-way canonical SDK publication projection without unauthorized external mutation"
+      story_reference: "US-004"
+      independent_test: "Validate canonical sdk/go, produce two byte-identical synchronization previews, apply the reviewed manifest only to a controlled public-module projection, and run equivalent contract fixtures there."
+      tasks:
+        - id: "T025"
+          title: "Extend deterministic SDK projection fixture coverage"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "scripts/test_sync_jcode_go.sh"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Verify the preview manifest projects only canonical sdk/go publishable paths and retains protected public governance and documentation."
+            - "Verify two unchanged previews are byte-identical and a controlled-copy apply performs exactly the reviewed operations."
+            - "Reject reverse synchronization, stale fingerprints, wrong repository or branch, dirty destination, unsafe paths, and direct unreviewed apply before mutation."
+        - id: "T026"
+          title: "Extend canonical and projected SDK validator fixture coverage"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "scripts/test_validate_go_sdk.sh"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Prove the validator runs formatting, module consistency, vet, build, tests, race tests, and Windows amd64 compile checks for canonical and controlled projected copies."
+            - "Prove typed-event compatibility fixture failures remain visible in the aggregate result."
+            - "Prove validation does not rewrite source, module files, or either working tree."
+        - id: "T027"
+          title: "Document typed-event architecture and canonical ownership"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK_ARCHITECTURE.md"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "Declare current-state ownership: Rust ApiEvent for wire/disposition semantics, sdk/go for public typed classes and Turn policy, and jcode-go as a protected publication projection."
+            - "Document owned-turn filtering, legacy UnknownEvent preservation, fail-closed boundaries, and the absence of reverse synchronization."
+            - "Describe the completeness gate and the requirement that new events be typed/classified or explicitly filtered before publication."
+        - id: "T028"
+          title: "Document consumer semantic handling and failure policy"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK.md"
+          dependencies: ["T019", "T023"]
+          acceptance_criteria:
+            - "Document every EventSemanticClass, which class may be ignored, the one-warning-per-Turn behavior, and required exhaustive handling for safety-relevant classes."
+            - "Document fail-closed unknown, malformed, nil, and unclassified owned-Turn behavior and compatible legacy Session.Events behavior."
+            - "Use only symbols and commands present in the delivered implementation."
+        - id: "T029"
+          title: "Update publishable Go SDK typed-event guidance"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "sdk/go/README.md"
+          dependencies: ["T019", "T023"]
+          acceptance_criteria:
+            - "Show exhaustive handler guidance for content/progress, advisory/lifecycle, terminal, permission, and tool-effect classes."
+            - "Explain bounded advisory observations and payload-free protocol compatibility errors."
+            - "Preserve existing module path, Session APIs, protocol-v1 compatibility, and example guidance."
+        - id: "T030"
+          title: "Document the reviewed one-way SDK publication runbook"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/GO_SDK_RELEASE_PLAN.md"
+          dependencies: ["T025", "T026"]
+          acceptance_criteria:
+            - "Name sdk/go as the sole source, jcode-go as the destination, and the deterministic reviewed manifest as the only apply boundary."
+            - "Require equivalent validation in both repositories plus recorded canonical revision, public commit, push confirmation, and downstream version-update evidence."
+            - "Require explicit authorization before public apply, commit, push, origin/main confirmation, or downstream live validation."
+            - "Reject direct public edits, reverse sync, stale manifests, and publication claims without complete evidence."
+        - id: "T031"
+          title: "Prepare and validate the reviewed public SDK projection"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T025", "T026", "T027", "T028", "T029", "T030"]
+          acceptance_criteria:
+            - "Run scripts/validate_go_sdk.sh successfully against canonical sdk/go and record exact commands and toolchain versions."
+            - "Generate two byte-identical non-mutating sync previews and record the reviewed manifest fingerprint and canonical revision."
+            - "Apply the manifest only to a controlled temporary projection and run equivalent typed-event, race, module, and Windows compile checks there."
+            - "Confirm the live public repository remains unchanged and stop at an explicit approval handoff for any apply, commit, push, or downstream version update."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Run delivery gates and audit compatibility, runtime truth, scope, and publication readiness"
+      tasks:
+        - id: "T032"
+          title: "Run focused Rust and Go compatibility validation"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T031"]
+          acceptance_criteria:
+            - "Run exact harness API schema, harness API server translator, Go protocol parity, typed API, Turn, and Turn outcome checks before broader validation."
+            - "Record commands, toolchain versions, pass/fail results, warning counts, terminal outcomes, and diagnostic byte bounds."
+            - "Confirm the tests require no live providers, credentials, paid Locus run, or shared daemon mutation."
+        - id: "T033"
+          title: "Run SDK, synchronization, and platform validation"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T032"]
+          acceptance_criteria:
+            - "Run scripts/validate_go_sdk.sh, scripts/test_sync_jcode_go.sh, and scripts/test_validate_go_sdk.sh successfully."
+            - "Record Go unit, race, module, vet, build, and GOOS=windows GOARCH=amd64 compile evidence."
+            - "Confirm canonical and controlled projected fixture results are equivalent and the live public repository remains unchanged."
+        - id: "T034"
+          title: "Validate the newly built runtime on an isolated socket"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "Build the relevant Jcode binary with the repository selfdev profile and record the resolved executable used for validation."
+            - "Run a deterministic no-provider compatibility smoke against a unique isolated socket and verify the new binary, not builds/shared-server or the shared daemon, serves it."
+            - "Verify cleanup removes the private process and socket and does not alter provider, model, authentication, or effort routing."
+        - id: "T035"
+          title: "Run guardrails and complete the final scope audit"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/007-typed-event-compatibility/evidence.md"
+          dependencies: ["T034"]
+          acceptance_criteria:
+            - "Run scripts/check_guardrails.sh after focused tests and relevant builds and record the result without rebaselining unrelated ratchets."
+            - "Trace every FR, NFR, success criterion, and user-story scenario to current evidence and disclose any skipped or deferred check."
+            - "Verify the final diff is limited to approved harness, canonical SDK, tests, scripts, documentation, and Autospec artifacts and contains no provider-routing change or sensitive data."
+            - "Confirm the artifact is publication-ready but does not claim public apply, commit, push, or downstream update without separate explicit authorization."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-002"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-003"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: []
+parallel_execution:
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T004", "T005"]
+          rationale: "The Rust translation and Go decoder fixtures use distinct packages after the authoritative identity is recorded."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T008", "T009", "T010", "T011", "T012"]
+          rationale: "Behavior-first tests occupy distinct Rust and Go test surfaces and share only the completed diagnosis prerequisite."
+        - tasks: ["T014", "T015", "T016", "T018"]
+          rationale: "Rust translation, Go typed decoding, protocol provenance, and Observer metadata are separate source files after their direct test contracts exist."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T020", "T021", "T022"]
+          rationale: "Cross-language parity, Rust exhaustiveness, and translator filter safety are independent gates over completed semantic contracts."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T025", "T026"]
+          rationale: "Synchronization and aggregate-validator fixtures use separate shell test suites."
+        - tasks: ["T027", "T028", "T029", "T030"]
+          rationale: "Architecture, consumer overview, publishable README, and release runbook are distinct documents based on completed behavior and scripts."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "Setup, evidence baseline, exact failed-event diagnosis, and both P0 stories through enforced Rust and canonical Go semantic policy."
+        validation: "Complete T019: focused Rust and Go fixtures prove the exact event, exhaustive classes, advisory-only filtering, bounded redaction, fail-closed unsafe input, and unchanged lifecycle outcomes."
+    incremental_delivery:
+        - milestone: "Evidence Boundary Ready"
+          phases: [1, 2]
+          deliverable: "Requirements, ownership, safety constraints, and the current event/filter inventory are explicit before behavioral work."
+        - milestone: "Exact Defect Reproduced"
+          phases: [1, 2, 3]
+          deliverable: "Authoritative payload-free Rust and Go fixtures identify and reproduce the rejected event with bounded diagnostics."
+        - milestone: "MVP Semantic Compatibility Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "Every owned-turn event has explicit semantics and only advisory metadata may continue unhandled with one bounded warning."
+        - milestone: "Publication Gap Prevention Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Machine gates reject untyped, unclassified, or improperly filtered event additions while preserving protocol-v1 behavior."
+        - milestone: "Canonical Publication Readiness Complete"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "Canonical and controlled projected SDKs pass equivalent checks, documentation matches the one-way boundary, runtime/guardrails pass, and live public mutation awaits explicit authorization."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-14T02:01:50Z"
+    artifact_type: "tasks"
