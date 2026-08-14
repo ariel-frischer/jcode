@@ -138,7 +138,7 @@ phases:
           - "Success reports reuse/generation status, artifact directory, fingerprint, route, and bounded usage; failure reports no secret values."
       - id: "T010"
         title: "Register the librarian tool without changing unused runtime behavior"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

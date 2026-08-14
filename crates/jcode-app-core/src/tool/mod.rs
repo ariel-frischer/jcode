@@ -28,7 +28,6 @@ mod patch;
 mod read;
 pub mod selfdev;
 pub(crate) mod serde_coerce;
-#[cfg(test)]
 mod session_librarian;
 mod session_search;
 pub(crate) mod session_search_index;
@@ -64,6 +63,26 @@ pub(crate) use jcode_tool_core::intent_schema_property;
 pub use jcode_tool_core::{StdinInputRequest, Tool, ToolContext, ToolExecutionMode};
 pub use jcode_tool_types::{ToolImage, ToolOutput};
 pub(crate) use session_search::spawn_recent_index_warmup;
+
+struct UnavailableSessionLibrarian;
+
+#[async_trait::async_trait]
+impl crate::session_librarian::SessionLibrarian for UnavailableSessionLibrarian {
+    async fn invoke(
+        &self,
+        _invocation: crate::session_librarian::LibrarianInvocation<'_>,
+    ) -> crate::session_librarian::LibrarianResult {
+        crate::session_librarian::LibrarianResult::Failed(
+            crate::session_librarian::LibrarianFailure {
+                stage: crate::session_librarian::LibrarianFailureStage::Configuration,
+                code: "librarian_unavailable",
+                message: "session librarian orchestration is unavailable in this build".to_string(),
+                usage: None,
+            },
+        )
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 struct SessionToolPolicy {
     allowed_tools: Option<HashSet<String>>,
@@ -275,6 +294,9 @@ impl Registry {
                 "session_transition",
                 session_transition::SessionTransitionTool::new,
             );
+            Self::insert_tool_timed(&mut m, &mut timings, "session_librarian", || {
+                session_librarian::SessionLibrarianTool::new(Arc::new(UnavailableSessionLibrarian))
+            });
             Self::insert_tool_timed(&mut m, &mut timings, "memory", memory::MemoryTool::new);
             Self::insert_tool_timed(
                 &mut m,
