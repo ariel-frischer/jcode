@@ -14,6 +14,8 @@ fail() {
 mkdir -p "$TMP/sdk" "$TMP/bin"
 printf 'module github.com/ariel-frischer/jcode-go\n\ngo 1.23\n' >"$TMP/sdk/go.mod"
 printf 'package jcode\n' >"$TMP/sdk/sample.go"
+mkdir -p "$TMP/sdk/nested"
+printf 'fixture\n' >"$TMP/sdk/nested/fixture.txt"
 cp -a "$TMP/sdk" "$TMP/projected"
 
 cat >"$TMP/bin/gofmt" <<'SH'
@@ -55,7 +57,15 @@ chmod +x "$TMP/bin/gofmt" "$TMP/bin/go"
 
 snapshot() {
   sdk=$1
-  git hash-object "$sdk/go.mod" "$sdk/sample.go"
+  (
+    cd "$sdk"
+    find . -type f ! -path './.git/*' -print0 |
+      LC_ALL=C sort -z |
+      while IFS= read -r -d '' path; do
+        printf '%s\t' "${path#./}"
+        git hash-object "$path"
+      done
+  ) | git hash-object --stdin
 }
 
 run_validator() {

@@ -2,7 +2,7 @@ feature:
     branch: "007-typed-event-compatibility"
     created: "2026-08-13"
     status: "Completed"
-    completed_at: 2026-08-14T03:23:23Z
+    completed_at: "2026-08-14T03:23:23Z"
     input: "Stabilize typed-event compatibility across the Jcode harness API and canonical sdk/go. Identify the exact event that caused Locus run-1c2020f67330 to fail with unsupported_typed_event, preserve bounded redacted diagnostics, define explicit semantic classes for public events so only advisory/lifecycle metadata may be ignored with one bounded warning, keep unknown terminal permission tool-effect malformed and unclassified events fail-closed, machine-check that every owned turn event is typed and semantically classified or filtered before publication, preserve existing reasoning_done ToolExec terminal cancellation unknown-event and protocol-v1 behavior, add deterministic Rust and Go regression fixtures and SDK sync validation, and document the canonical sdk/go to public jcode-go publication boundary. Do not change provider routing or silently ignore arbitrary future events."
 user_stories:
     - id: "US-001"

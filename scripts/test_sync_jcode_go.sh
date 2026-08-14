@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SYNC="$ROOT/scripts/sync-jcode-go.sh"
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/jcode-go-sync-test.XXXXXX")
+TMP=$(mktemp -d "/tmp/jcode-go-sync-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
 fail() {
@@ -15,6 +17,15 @@ expect_failure() {
   label=$1
   shift
   if "$@" >"$TMP/$label.out" 2>"$TMP/$label.err"; then
+    fail "$label unexpectedly succeeded"
+  fi
+  test -s "$TMP/$label.err" || fail "$label produced no diagnostic"
+}
+
+expect_failure_with_git_dir() {
+  label=$1
+  shift
+  if GIT_DIR="$TMP/ambient-git-dir" "$@" >"$TMP/$label.out" 2>"$TMP/$label.err"; then
     fail "$label unexpectedly succeeded"
   fi
   test -s "$TMP/$label.err" || fail "$label produced no diagnostic"
@@ -32,6 +43,11 @@ make_source() {
   printf 'license\n' >"$dir/LICENSE"
   printf '#!/bin/sh\nexit 0\n' >"$dir/examples/demo/helper.sh"
   chmod 755 "$dir/examples/demo/helper.sh"
+  git -C "$dir" init -q -b main
+  git -C "$dir" config user.name fixture
+  git -C "$dir" config user.email fixture@example.invalid
+  git -C "$dir" add .
+  git -C "$dir" commit -q -m fixture
 }
 
 make_destination() {
@@ -62,6 +78,21 @@ status_of() {
 
 make_source "$TMP/source"
 make_destination "$TMP/destination"
+git init -q "$TMP/ambient-git-dir"
+
+cp -a "$TMP/source" "$TMP/non-git-source"
+rm -rf "$TMP/non-git-source/.git"
+expect_failure non-git-source "$SYNC" preview --source "$TMP/non-git-source" --destination "$TMP/destination"
+expect_failure_with_git_dir ambient-git-dir "$SYNC" preview --source "$TMP/non-git-source" --destination "$TMP/destination"
+
+make_source "$TMP/renamed-origin-source"
+git -C "$TMP/renamed-origin-source" remote add origin git@github.com:ariel-frischer/jcode-go.git
+git -C "$TMP/renamed-origin-source" remote rename origin upstream
+expect_failure renamed-origin-source "$SYNC" preview --source "$TMP/renamed-origin-source" --destination "$TMP/destination"
+
+make_source "$TMP/missing-origin-source"
+git -C "$TMP/missing-origin-source" remote add upstream https://github.com/ariel-frischer/jcode-go.git
+expect_failure missing-origin-source "$SYNC" preview --source "$TMP/missing-origin-source" --destination "$TMP/destination"
 
 reverse_before=$(status_of "$TMP/destination")
 expect_failure reverse-sync "$SYNC" preview --source "$TMP/destination" --destination "$TMP/destination"

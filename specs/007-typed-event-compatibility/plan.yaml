@@ -429,8 +429,10 @@ implementation_phases:
 
 open_questions:
   - question: "Which exact wire kind and Go concrete type caused Locus run-1c2020f67330 to terminate with unsupported_typed_event?"
-    context: "The sealed run retained the terminal classification but omitted the rejected identity. Source history makes connection_phase the leading candidate because Rust publishes it while the current Go typed decoder does not, but FR-001 forbids guessing."
-    proposed_resolution: "In Phase 1, correlate the sealed run timestamps and immutable Jcode revision with authoritative bridge/runtime evidence, project only sanitized kind/type, reproduce the pre-fix decoder result in a payload-free fixture, and record whether connection_phase is confirmed before implementation continues."
+    context: "Resolved from authoritative bridge/runtime evidence and the payload-free regression fixture recorded in evidence.md."
+    proposed_resolution: "The rejected wire kind was connection_phase and the prior Go decoder represented it as UnknownEvent; the exact kind and type are preserved without payload data."
+    status: "RESOLVED"
+    resolution: "FR-001 is satisfied by the connection_phase fixture and bounded diagnostics in crates/jcode-harness-api-server/src/translate_tests.rs and sdk/go/typed_api_test.go."
 
 _meta:
   version: "1.0.0"

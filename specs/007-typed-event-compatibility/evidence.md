@@ -205,7 +205,7 @@ The newly built selfdev binary passed the build gate:
 ```text
 cargo build --profile selfdev --bin jcode
   success (0 errors; existing profile-spec warnings only)
-resolved executable: /home/ari/repos/jcode/.worktrees/agent/jcode-t5z/target/selfdev/jcode
+resolved executable: the newly built worktree selfdev binary
 ```
 
 A deterministic no-provider smoke used an empty private `JCODE_HOME`, a private
@@ -276,3 +276,23 @@ downstream validation remain unauthorized and unclaimed.
 US-001 through US-004 are covered by the same four evidence groups: failed-run
 identity/diagnostics, semantic-policy fixtures, inventory parity gates, and
 canonical publication projection validation.
+
+## Repair lane after merge review
+
+The synchronization provenance guard was tightened after review identified that
+checking only the source repository's `origin` remote allowed renamed or missing
+`origin` configurations to bypass the reverse-sync protection. The repaired
+script now requires a Git worktree, ignores inherited Git repository selectors,
+and checks every fetch and push URL on every configured remote for the protected
+public jcode-go repository.
+
+The regression fixture covers Git-less sources, ambient `GIT_DIR`, renamed
+public remotes, and public remotes without `origin`. The SDK validation fixture
+now hashes every file and relative path in the SDK tree. The focused repair
+checks passed:
+
+```text
+scripts/test_sync_jcode_go.sh: PASS
+scripts/test_validate_go_sdk.sh: PASS
+scripts/validate_go_sdk.sh: Go SDK validation summary: 7 passed, 0 failed
+```
