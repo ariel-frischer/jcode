@@ -181,7 +181,7 @@ phases:
     tasks:
       - id: "T013"
         title: "Write structural exclusion, compact receipt, redaction, and deterministic admission tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
