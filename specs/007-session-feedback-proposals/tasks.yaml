@@ -366,7 +366,7 @@ phases:
           - "Allow only proposal creation and evidence append mutations and never approve, claim, start, close, delete, publish, or replicate records."
       - id: "T027"
         title: "Validate local proposal deduplication independently"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"

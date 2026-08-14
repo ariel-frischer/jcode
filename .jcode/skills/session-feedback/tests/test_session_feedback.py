@@ -1357,6 +1357,67 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(unique_runner.appended, [])
         self.assert_only_local_bd_commands(unique_runner)
 
+    def test_repeated_creation_artifacts_and_bead_metadata_remain_consistent(self) -> None:
+        repository_beads = SKILL_DIR.parents[2] / ".beads"
+        repository_beads_existed = repository_beads.exists()
+        occurrence = self.occurrence("consistent")
+        runner = self.FakeBdRunner([])
+
+        created = self.persist("unique", runner, occurrence=occurrence)
+
+        self.assertEqual(created["action"], "created")
+        json_path = Path(created["proposal_json"])
+        markdown_path = Path(created["proposal_markdown"])
+        for path in (json_path, markdown_path):
+            self.assertTrue(path.is_relative_to(self.feedback_root))
+            self.assertTrue(path.is_file())
+
+        document = json.loads(json_path.read_text(encoding="utf-8"))
+        proposal = self.proposal("unique")
+        fingerprint = proposal["fingerprint"]
+        self.assertEqual(document["proposal"], proposal)
+        self.assertEqual(document["proposal"]["fingerprint"], fingerprint)
+        self.assertEqual(document["evidence_history"], [occurrence])
+        self.assertTrue(document["review_only"])
+        self.assertEqual(document["review_state"], "needs-approval")
+
+        markdown = markdown_path.read_text(encoding="utf-8")
+        self.assertIn(f"**Fingerprint:** {fingerprint}", markdown)
+        self.assertIn("## Evidence history", markdown)
+        self.assertIn(self.feedback.canonical_json(occurrence), markdown)
+
+        self.assertEqual(len(runner.created), 1)
+        create_command = runner.created[0]["command"]
+        description = create_command[create_command.index("--description") + 1]
+        labels = create_command[create_command.index("--labels") + 1].split(",")
+        self.assertEqual(description, markdown.split("## Evidence history\n", 1)[0])
+        self.assertEqual(labels, ["session-feedback", "needs-approval"])
+        self.assertIn(proposal["target"]["concrete_target"], create_command[2])
+        self.assertIn(f"**Fingerprint:** {fingerprint}", description)
+
+        repeated_record = {
+            "bead_id": created["bead_id"],
+            "fingerprint": fingerprint,
+            "status": "open",
+            "labels": labels,
+            "description": description,
+            "evidence_history": document["evidence_history"],
+        }
+        repeated_runner = self.FakeBdRunner([repeated_record])
+        repeated = self.persist("unique", repeated_runner, occurrence=occurrence)
+        self.assertEqual(
+            repeated,
+            {
+                "action": "duplicate_evidence_ignored",
+                "bead_id": created["bead_id"],
+            },
+        )
+        self.assertEqual(repeated_runner.created, [])
+        self.assertEqual(repeated_runner.appended, [])
+        self.assert_only_local_bd_commands(runner)
+        self.assert_only_local_bd_commands(repeated_runner)
+        self.assertEqual(repository_beads.exists(), repository_beads_existed)
+
     def test_ambiguous_malformed_and_bootstrap_failures_leave_no_partial_state(self) -> None:
         target = SKILL_DIR / "SKILL.md"
         target_before = target.read_bytes()
