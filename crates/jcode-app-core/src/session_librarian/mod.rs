@@ -197,6 +197,10 @@ mod admission_tests;
 mod fingerprint_tests;
 
 #[cfg(test)]
+#[path = "tests/publication.rs"]
+mod publication_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

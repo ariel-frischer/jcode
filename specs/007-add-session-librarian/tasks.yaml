@@ -234,7 +234,7 @@ phases:
           - "The implementation reuses the existing sha2 dependency."
       - id: "T017"
         title: "Write structured-response, rendering, locking, and atomic publication tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
