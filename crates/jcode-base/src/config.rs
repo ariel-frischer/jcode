@@ -11,9 +11,9 @@ pub use jcode_config_types::{
     LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode, NamedProviderAuth,
     NamedProviderConfig, NamedProviderModelConfig, NamedProviderType, NativeScrollbarConfig,
     NotificationsConfig, OverscrollStatusMode, PowerConfig, ProviderConfig, ReasoningDisplayMode,
-    RunSafetyConfig, SafetyConfig, SessionPickerResumeAction, SessionProfileConfig, SkillsMode,
-    SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
-    UpdateChannel, WebSearchConfig, WebSearchEngine,
+    RunSafetyConfig, SafetyConfig, SessionLibrarianConfig, SessionPickerResumeAction,
+    SessionProfileConfig, SkillsMode, SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode,
+    SwarmStripLayout, TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -161,6 +161,14 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_SCROLL_UP_FALLBACK_KEY",
     "JCODE_SCROLL_UP_KEY",
     "JCODE_SEARXNG_URL",
+    "JCODE_SESSION_LIBRARIAN_DEADLINE_SECONDS",
+    "JCODE_SESSION_LIBRARIAN_MAX_COST_USD",
+    "JCODE_SESSION_LIBRARIAN_MAX_INPUT_TOKENS",
+    "JCODE_SESSION_LIBRARIAN_MAX_OUTPUT_TOKENS",
+    "JCODE_SESSION_LIBRARIAN_MAX_REQUESTS",
+    "JCODE_SESSION_LIBRARIAN_MODEL",
+    "JCODE_SESSION_LIBRARIAN_PROVIDER",
+    "JCODE_SESSION_LIBRARIAN_REASONING_EFFORT",
     "JCODE_SHOW_AGENTGREP_OUTPUT",
     "JCODE_SHOW_DIFFS",
     "JCODE_SHOW_THINKING",
@@ -466,6 +474,350 @@ pub fn on_config_reloaded(listener: fn()) {
         .push(listener);
 }
 
+pub const LIBRARIAN_MAX_RECEIPT_BYTES: usize = 1024;
+pub const LIBRARIAN_MAX_ITEM_TOKENS: u32 = 768;
+pub const LIBRARIAN_MAX_NORMALIZED_FILE_TOKENS: u32 = 1200;
+pub const LIBRARIAN_MAX_TOOL_CATEGORY_TOKENS: u32 = 2000;
+
+const DEFAULT_LIBRARIAN_PROVIDER: &str = "openai-oauth";
+const DEFAULT_LIBRARIAN_MODEL: &str = "gpt-5.6-luna";
+const DEFAULT_LIBRARIAN_REASONING_EFFORT: &str = "xhigh";
+const DEFAULT_LIBRARIAN_MAX_INPUT_TOKENS: &str = "12000";
+const DEFAULT_LIBRARIAN_MAX_OUTPUT_TOKENS: &str = "2500";
+const DEFAULT_LIBRARIAN_MAX_REQUESTS: &str = "1";
+const DEFAULT_LIBRARIAN_MAX_COST_USD: &str = "0.50";
+const DEFAULT_LIBRARIAN_DEADLINE_SECONDS: &str = "120";
+
+/// Per-invocation librarian settings. Explicit `Some("")` values are retained
+/// so a malformed high-precedence override cannot silently fall through.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LibrarianInvocationOverrides {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
+    pub max_input_tokens: Option<String>,
+    pub max_output_tokens: Option<String>,
+    pub max_requests: Option<String>,
+    pub max_cost_usd: Option<String>,
+    pub deadline_seconds: Option<String>,
+}
+
+/// Credential-free route identity resolved independently from the active session.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibrarianRouteIdentity {
+    pub provider: String,
+    pub model: String,
+    pub reasoning_effort: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibrarianBudgets {
+    pub max_input_tokens: u32,
+    pub max_output_tokens: u32,
+    pub max_requests: u32,
+    pub max_cost_micros: u64,
+    pub deadline_seconds: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibrarianAdmissionCaps {
+    pub max_receipt_bytes: usize,
+    pub max_item_tokens: u32,
+    pub max_normalized_file_tokens: u32,
+    pub max_tool_category_tokens: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedLibrarianConfig {
+    pub route: LibrarianRouteIdentity,
+    pub budgets: LibrarianBudgets,
+    pub admission_caps: LibrarianAdmissionCaps,
+}
+
+/// Non-secret provider-boundary facts used to fail closed before transmission.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibrarianRouteValidation {
+    pub supported: bool,
+    pub authentication_available: bool,
+    pub worst_case_cost_micros: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibrarianConfigError {
+    InvalidRouteField {
+        field: &'static str,
+        value: String,
+    },
+    InvalidBudget {
+        field: &'static str,
+        value: String,
+    },
+    UnsupportedRoute {
+        provider: String,
+        model: String,
+    },
+    MissingAuthentication {
+        provider: String,
+    },
+    UnknownPricing {
+        provider: String,
+        model: String,
+    },
+    UnsafeCost {
+        approved_micros: u64,
+        required_micros: u64,
+    },
+}
+
+impl std::fmt::Display for LibrarianConfigError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidRouteField { field, value } => {
+                write!(
+                    formatter,
+                    "invalid session librarian {field} value {value:?}"
+                )
+            }
+            Self::InvalidBudget { field, value } => write!(
+                formatter,
+                "invalid session librarian {field} budget {value:?}; use a positive finite value"
+            ),
+            Self::UnsupportedRoute { provider, model } => write!(
+                formatter,
+                "session librarian route {provider}/{model} is unsupported"
+            ),
+            Self::MissingAuthentication { provider } => write!(
+                formatter,
+                "session librarian route {provider} has no available authentication"
+            ),
+            Self::UnknownPricing { provider, model } => write!(
+                formatter,
+                "session librarian route {provider}/{model} has no verified pricing metadata"
+            ),
+            Self::UnsafeCost {
+                approved_micros,
+                required_micros,
+            } => write!(
+                formatter,
+                "session librarian worst-case cost {required_micros} micros USD exceeds the approved {approved_micros} micros USD"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LibrarianConfigError {}
+
+/// Resolve librarian settings through invocation, already-applied environment,
+/// persisted config, and built-in defaults, then fail closed on provider support,
+/// authentication, pricing, and approved worst-case cost.
+pub fn resolve_librarian_config<F>(
+    config: &Config,
+    invocation: &LibrarianInvocationOverrides,
+    _active_route: &LibrarianRouteIdentity,
+    validate_route: F,
+) -> Result<ResolvedLibrarianConfig, LibrarianConfigError>
+where
+    F: FnOnce(&LibrarianRouteIdentity, &LibrarianBudgets) -> LibrarianRouteValidation,
+{
+    let persisted = &config.session_librarian;
+    let route = LibrarianRouteIdentity {
+        provider: resolve_route_field(
+            "provider",
+            invocation.provider.as_deref(),
+            persisted.provider.as_deref(),
+            DEFAULT_LIBRARIAN_PROVIDER,
+        )?,
+        model: resolve_route_field(
+            "model",
+            invocation.model.as_deref(),
+            persisted.model.as_deref(),
+            DEFAULT_LIBRARIAN_MODEL,
+        )?,
+        reasoning_effort: resolve_route_field(
+            "reasoning_effort",
+            invocation.reasoning_effort.as_deref(),
+            persisted.reasoning_effort.as_deref(),
+            DEFAULT_LIBRARIAN_REASONING_EFFORT,
+        )?,
+    };
+
+    let budgets = LibrarianBudgets {
+        max_input_tokens: parse_positive_u32(
+            "max_input_tokens",
+            resolve_value(
+                invocation.max_input_tokens.as_deref(),
+                persisted.max_input_tokens.as_deref(),
+                DEFAULT_LIBRARIAN_MAX_INPUT_TOKENS,
+            ),
+        )?,
+        max_output_tokens: parse_positive_u32(
+            "max_output_tokens",
+            resolve_value(
+                invocation.max_output_tokens.as_deref(),
+                persisted.max_output_tokens.as_deref(),
+                DEFAULT_LIBRARIAN_MAX_OUTPUT_TOKENS,
+            ),
+        )?,
+        max_requests: parse_max_requests(resolve_value(
+            invocation.max_requests.as_deref(),
+            persisted.max_requests.as_deref(),
+            DEFAULT_LIBRARIAN_MAX_REQUESTS,
+        ))?,
+        max_cost_micros: parse_usd_micros(resolve_value(
+            invocation.max_cost_usd.as_deref(),
+            persisted.max_cost_usd.as_deref(),
+            DEFAULT_LIBRARIAN_MAX_COST_USD,
+        ))?,
+        deadline_seconds: parse_positive_u64(
+            "deadline_seconds",
+            resolve_value(
+                invocation.deadline_seconds.as_deref(),
+                persisted.deadline_seconds.as_deref(),
+                DEFAULT_LIBRARIAN_DEADLINE_SECONDS,
+            ),
+        )?,
+    };
+
+    let validation = validate_route(&route, &budgets);
+    if !validation.supported {
+        return Err(LibrarianConfigError::UnsupportedRoute {
+            provider: route.provider.clone(),
+            model: route.model.clone(),
+        });
+    }
+    if !validation.authentication_available {
+        return Err(LibrarianConfigError::MissingAuthentication {
+            provider: route.provider.clone(),
+        });
+    }
+    let required_micros =
+        validation
+            .worst_case_cost_micros
+            .ok_or_else(|| LibrarianConfigError::UnknownPricing {
+                provider: route.provider.clone(),
+                model: route.model.clone(),
+            })?;
+    if required_micros > budgets.max_cost_micros {
+        return Err(LibrarianConfigError::UnsafeCost {
+            approved_micros: budgets.max_cost_micros,
+            required_micros,
+        });
+    }
+
+    let global_input_cap = budgets.max_input_tokens;
+    Ok(ResolvedLibrarianConfig {
+        route,
+        budgets,
+        admission_caps: LibrarianAdmissionCaps {
+            max_receipt_bytes: LIBRARIAN_MAX_RECEIPT_BYTES,
+            max_item_tokens: LIBRARIAN_MAX_ITEM_TOKENS.min(global_input_cap),
+            max_normalized_file_tokens: LIBRARIAN_MAX_NORMALIZED_FILE_TOKENS.min(global_input_cap),
+            max_tool_category_tokens: LIBRARIAN_MAX_TOOL_CATEGORY_TOKENS.min(global_input_cap),
+        },
+    })
+}
+
+fn resolve_value<'a>(
+    invocation: Option<&'a str>,
+    persisted: Option<&'a str>,
+    default: &'static str,
+) -> &'a str {
+    invocation.or(persisted).unwrap_or(default)
+}
+
+fn resolve_route_field(
+    field: &'static str,
+    invocation: Option<&str>,
+    persisted: Option<&str>,
+    default: &'static str,
+) -> Result<String, LibrarianConfigError> {
+    let value = resolve_value(invocation, persisted, default);
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(LibrarianConfigError::InvalidRouteField {
+            field,
+            value: value.to_string(),
+        });
+    }
+    Ok(trimmed.to_string())
+}
+
+fn parse_positive_u32(field: &'static str, value: &str) -> Result<u32, LibrarianConfigError> {
+    match value.trim().parse::<u32>() {
+        Ok(parsed) if parsed > 0 => Ok(parsed),
+        _ => Err(LibrarianConfigError::InvalidBudget {
+            field,
+            value: value.to_string(),
+        }),
+    }
+}
+
+fn parse_positive_u64(field: &'static str, value: &str) -> Result<u64, LibrarianConfigError> {
+    match value.trim().parse::<u64>() {
+        Ok(parsed) if parsed > 0 => Ok(parsed),
+        _ => Err(LibrarianConfigError::InvalidBudget {
+            field,
+            value: value.to_string(),
+        }),
+    }
+}
+
+fn parse_max_requests(value: &str) -> Result<u32, LibrarianConfigError> {
+    let parsed = parse_positive_u32("max_requests", value)?;
+    if parsed != 1 {
+        return Err(LibrarianConfigError::InvalidBudget {
+            field: "max_requests",
+            value: value.to_string(),
+        });
+    }
+    Ok(parsed)
+}
+
+fn parse_usd_micros(value: &str) -> Result<u64, LibrarianConfigError> {
+    let invalid = || LibrarianConfigError::InvalidBudget {
+        field: "max_cost_usd",
+        value: value.to_string(),
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.starts_with('-') || trimmed.starts_with('+') {
+        return Err(invalid());
+    }
+    let mut parts = trimmed.split('.');
+    let whole = parts.next().ok_or_else(&invalid)?;
+    let fraction = parts.next();
+    if parts.next().is_some()
+        || whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(invalid());
+    }
+    let fraction = fraction.unwrap_or("");
+    if fraction.len() > 6 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(invalid());
+    }
+    let whole_micros = whole
+        .parse::<u64>()
+        .map_err(|_| invalid())?
+        .checked_mul(1_000_000)
+        .ok_or_else(&invalid)?;
+    let fraction_micros = if fraction.is_empty() {
+        0
+    } else {
+        fraction
+            .parse::<u64>()
+            .map_err(|_| invalid())?
+            .checked_mul(10_u64.pow(6 - fraction.len() as u32))
+            .ok_or_else(&invalid)?
+    };
+    let micros = whole_micros
+        .checked_add(fraction_micros)
+        .ok_or_else(&invalid)?;
+    if micros == 0 {
+        return Err(invalid());
+    }
+    Ok(micros)
+}
+
 /// Main configuration struct
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -516,6 +868,10 @@ pub struct Config {
     /// Fresh-session handoff policy. Named profiles may override individual
     /// fields without mutating this global baseline.
     pub handoff: HandoffConfig,
+
+    /// Independent route and hard budgets for the manually invoked session librarian.
+    #[serde(default, skip_serializing_if = "SessionLibrarianConfig::is_empty")]
+    pub session_librarian: SessionLibrarianConfig,
 
     /// Agent-specific model defaults
     pub agents: AgentsConfig,

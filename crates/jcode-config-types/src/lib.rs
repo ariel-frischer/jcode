@@ -449,7 +449,8 @@ pub struct SessionProfileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handoff: Option<HandoffProfileConfig>,
 }
-
+mod session_librarian;
+pub use session_librarian::SessionLibrarianConfig;
 /// Global policy for manual and agent-initiated fresh-session handoffs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -464,7 +465,6 @@ pub struct HandoffConfig {
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions_file: Option<String>,
 }
-
 impl Default for HandoffConfig {
     fn default() -> Self {
         Self {

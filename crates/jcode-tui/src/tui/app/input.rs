@@ -3722,11 +3722,13 @@ impl App {
                     title: None,
                     tool_data: None,
                 });
-                if let Some(prompt) = trailing_prompt {
-                    input = prompt;
-                } else {
+                let Some(prompt) = trailing_prompt
+                    .or(skill.default_prompt)
+                    .filter(|prompt| !prompt.trim().is_empty())
+                else {
                     return;
-                }
+                };
+                input = prompt;
             } else {
                 if self.skill_policy_blocks(&skill_name) {
                     self.push_display_message(DisplayMessage {

@@ -28,6 +28,7 @@ mod patch;
 mod read;
 pub mod selfdev;
 pub(crate) mod serde_coerce;
+mod session_librarian;
 mod session_search;
 pub(crate) mod session_search_index;
 pub(crate) mod session_transition;
@@ -54,7 +55,6 @@ pub(crate) fn tool_name_is_allowed(allowed: &HashSet<String>, name: &str) -> boo
 pub(crate) fn tool_name_is_disabled(disabled: &HashSet<String>, name: &str) -> bool {
     disabled.contains(name) || (disabled.contains("mcp") && name.starts_with("mcp__"))
 }
-use std::sync::{LazyLock, RwLock as StdRwLock};
 use tokio::sync::RwLock;
 
 pub(crate) use bash::terminate_owned_foreground_process_groups;
@@ -62,46 +62,10 @@ pub(crate) use jcode_tool_core::intent_schema_property;
 pub use jcode_tool_core::{StdinInputRequest, Tool, ToolContext, ToolExecutionMode};
 pub use jcode_tool_types::{ToolImage, ToolOutput};
 pub(crate) use session_search::spawn_recent_index_warmup;
-#[derive(Clone, Debug, Default)]
-struct SessionToolPolicy {
-    allowed_tools: Option<HashSet<String>>,
-    disabled_tools: HashSet<String>,
-}
 
-static SESSION_TOOL_POLICIES: LazyLock<StdRwLock<HashMap<String, SessionToolPolicy>>> =
-    LazyLock::new(|| StdRwLock::new(HashMap::new()));
-
-pub(crate) fn set_session_tool_policy(
-    session_id: &str,
-    allowed_tools: Option<HashSet<String>>,
-    disabled_tools: HashSet<String>,
-) {
-    let mut policies = SESSION_TOOL_POLICIES
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    policies.insert(
-        session_id.to_string(),
-        SessionToolPolicy {
-            allowed_tools,
-            disabled_tools,
-        },
-    );
-}
-
-pub(crate) fn clear_session_tool_policy(session_id: &str) {
-    let mut policies = SESSION_TOOL_POLICIES
-        .write()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    policies.remove(session_id);
-}
-
-fn session_tool_policy(session_id: &str) -> Option<SessionToolPolicy> {
-    SESSION_TOOL_POLICIES
-        .read()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get(session_id)
-        .cloned()
-}
+mod session_tool_policy;
+use session_tool_policy::session_tool_policy;
+pub(crate) use session_tool_policy::{clear_session_tool_policy, set_session_tool_policy};
 
 /// Whether a tool call opted in to receiving an oversized (truncated) result.
 ///
@@ -273,6 +237,11 @@ impl Registry {
                 "session_transition",
                 session_transition::SessionTransitionTool::new,
             );
+            Self::insert_tool_timed(&mut m, &mut timings, "session_librarian", || {
+                session_librarian::SessionLibrarianTool::new(Arc::new(
+                    crate::session_librarian::DefaultSessionLibrarian::default(),
+                ))
+            });
             Self::insert_tool_timed(&mut m, &mut timings, "memory", memory::MemoryTool::new);
             Self::insert_tool_timed(
                 &mut m,

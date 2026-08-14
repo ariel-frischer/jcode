@@ -56,7 +56,7 @@ async fn test_tool_definitions_are_sorted() {
         "Tool definitions should be sorted alphabetically"
     );
 }
-
+include!("session_librarian_registry_tests.rs");
 #[test]
 fn test_resolve_skill_aliases_to_skill_manage() {
     assert_eq!(Registry::resolve_tool_name("skill"), "skill_manage");

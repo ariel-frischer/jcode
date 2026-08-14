@@ -1,0 +1,485 @@
+tasks:
+  branch: "agent/jcode-zor-librarian"
+  created: "2026-08-14"
+  spec_path: "specs/007-add-session-librarian/spec.yaml"
+  plan_path: "specs/007-add-session-librarian/plan.yaml"
+
+summary:
+  total_tasks: 29
+  total_phases: 7
+  parallel_opportunities: 7
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Create the focused removable module and project-local skill source without introducing a new extension or installer mechanism"
+    tasks:
+      - id: "T001"
+        title: "Create the session librarian module skeleton and register its crate module"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/session_librarian/mod.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "The focused session_librarian module is exported from crates/jcode-app-core/src/lib.rs and compiles as an empty ownership boundary."
+          - "The module contains no scheduler, parallel session store, protocol expansion, or general plugin ABI."
+          - "Existing sha2 workspace and app-core dependencies are reused without adding another hashing dependency."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Define shared versioned contracts and independently resolved configuration required by every user story"
+    tasks:
+      - id: "T002"
+        title: "Write serde compatibility tests for librarian summary contracts"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-session-types/src/lib.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests specify versioned SessionSummary, SourceFingerprint, RouteIdentity, BoundedUsage, structured summary sections, handoff_brief, and relevant_files JSON shapes."
+          - "Roundtrips preserve explicit format and fingerprint versions while legacy session-type consumers remain unaffected."
+          - "Credential-bearing fields are absent from the serialized route contract."
+      - id: "T003"
+        title: "Implement dependency-light versioned librarian artifact contracts"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-session-types/src/lib.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "All contracts required to render summary.json and summary.md are public, serde-compatible, bounded by their owning types, and independent of runtime/provider crates."
+          - "Generated timestamps are represented separately from fingerprint inputs."
+          - "Relevant files use a bounded collection compatible with the established handoff limit of 32 paths."
+      - id: "T004"
+        title: "Write librarian configuration default, precedence, and validation tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-base/src/config_tests/session_librarian.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "The matrix covers built-in defaults, persisted values, environment overrides, explicit invocation overrides, unset and empty values, invalid budgets, unsupported routes, and active-session route isolation."
+          - "Defaults resolve to native OpenAI OAuth, gpt-5.6-luna, xhigh, 12000 input tokens, 2500 output tokens, one request, USD 0.50 maximum exposure, and 120 seconds."
+          - "Fixed local safety caps are 1 KiB per serialized receipt, 768 tokens per admitted item, 1200 tokens per normalized file, and 2000 tokens per tool category; they apply before the configurable global cap."
+          - "Cost values are tested using an exact decimal-compatible or integer-micros representation rather than binary floating point."
+      - id: "T005"
+        title: "Add additive persisted librarian configuration records"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-config-types/src/lib.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Serde-defaulted librarian route and hard-budget fields preserve behavior and deserialization when omitted."
+          - "The persisted contract is additive and does not alter active session provider or profile fields."
+          - "Invalid finite/positive values remain distinguishable for boundary validation instead of silently falling back."
+      - id: "T006"
+        title: "Implement one canonical librarian config resolver"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-base/src/config.rs"
+        dependencies: ["T003", "T005"]
+        acceptance_criteria:
+          - "Resolution applies invocation override, environment override, persisted config, then built-in default precedence."
+          - "The resolver returns an effective non-secret route identity and validated hard budgets without mutating the active session route."
+          - "Invalid, unsupported, missing-authentication, unknown-pricing, and unsafe-cost configurations produce distinct actionable errors before content transmission."
+      - id: "T007"
+        title: "Define librarian invocation, admission, generation, and publication interfaces"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/session_librarian/mod.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "One focused orchestration interface owns current-default or explicit-persisted-session resolution, admission, fingerprinting, provider generation, validation, rendering, locking, and publication."
+          - "Interfaces accept a canonical Session by reference or resolve an explicit identifier read-only through existing persistence and never create a duplicate transcript, switch the active session, or create another persistence path."
+          - "Every terminal result is represented as reused, succeeded, or an actionable non-secret failure with bounded usage when available."
+
+  - number: 3
+    title: "User Story 1 - Manually generate a bounded session summary"
+    purpose: "Expose exactly one explicit current-by-default or named-persisted-session librarian attempt and guarantee zero work when unused"
+    story_reference: "US-001"
+    independent_test: "Run tool and slash-skill fixtures without invoking the librarian and observe zero executions, requests, and writes, then invoke for the current session and a named persisted session and observe exactly one bounded orchestration attempt for each valid target."
+    tasks:
+      - id: "T008"
+        title: "Write manual-only current and explicit persisted-session tool behavior tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/session_librarian.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "No librarian task, provider request, or artifact write occurs merely because the tool is registered."
+          - "An omitted target binds to ToolContext.session_id; one valid explicit session_id resolves that canonical persisted session read-only; each starts exactly one orchestration attempt without switching the active session."
+          - "Invalid or missing explicit source session, concurrent duplicate invocation, and orchestration failure return one actionable non-secret tool result before provider work."
+      - id: "T009"
+        title: "Implement the focused current-default and explicit-session session_librarian tool"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/session_librarian.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "The tool has a minimal schema for manual invocation, one optional session_id, and optional bounded overrides only."
+          - "It defaults to ToolContext.session_id or resolves one explicit persisted identifier through existing server-owned persistence, then delegates one attempt without mutating the active session."
+          - "Success reports reuse/generation status, artifact directory, fingerprint, route, and bounded usage; failure reports no secret values."
+      - id: "T010"
+        title: "Register the librarian tool without changing unused runtime behavior"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/mod.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Registry construction exposes session_librarian through the existing model-tool surface."
+          - "Registration performs no session reads, provider construction, background work, or filesystem writes."
+          - "Existing allowed/disabled tool filtering continues to apply."
+      - id: "T011"
+        title: "Write project-local slash-skill discovery and argument-forwarding tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/session_librarian.rs"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "The existing skill registry discovers /session-librarian from .jcode/skills/session-librarian/SKILL.md through the project-local overlay."
+          - "Typing the bare slash skill submits its minimal current-session prompt once; a trailing session identifier is preserved and explicitly forwarded as session_librarian.session_id without adding a TUI protocol command."
+          - "Normal sessions that never activate the skill have zero librarian attempts."
+      - id: "T012"
+        title: "Add the minimal project-local session-librarian slash skill source"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: ".jcode/skills/session-librarian/SKILL.md"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "The skill explicitly instructs the agent to invoke session_librarian once for the current session when no argument is present or with the exact trailing persisted session identifier when present, then report its result."
+          - "The skill contains no implementation body, transcript copy, automatic trigger, scheduling instruction, or provider credential guidance."
+          - "The skill uses the existing repository-local overlay, is removable as one directory, and can be copied unchanged to ~/.jcode/skills/session-librarian for global use without an installer change."
+
+  - number: 4
+    title: "User Story 2 - Receive safe versioned summary artifacts"
+    purpose: "Filter and redact canonical session content locally, validate one structured summary, and atomically publish a matching Markdown/JSON pair"
+    story_reference: "US-002"
+    independent_test: "Summarize a fixture containing every excluded category, recognized secrets, meaningful decisions, a multi-megabyte edit/patch/read/result, repeated edit retries, malformed provider responses, and interrupted writes, then inspect admitted input, file-read counters, and both artifacts."
+    tasks:
+      - id: "T013"
+        title: "Write structural exclusion, compact receipt, redaction, and deterministic admission tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/tests/admission.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Unique markers for hidden reasoning, repeated startup instructions, complete AGENTS.md content, complete skill bodies, bulk successful tool output, raw edits/patches, inline images, binary blobs, and base64 never enter admitted provider content."
+          - "Recognized credentials are redacted locally before hashing, transmission, persistence, and diagnostics while unchanged safe text remains intact."
+          - "A 1 MiB through 100 MiB edit, multiedit, apply_patch, read, write, or tool result contributes a deterministic receipt of at most 1 KiB with operation/path/status/available counts/intent/input and result hashes; raw patch markers and changed content are absent."
+          - "Repeated file-operation attempts deduplicate by operation, normalized path, and input/result fingerprint; concise redacted failure excerpts, decisions, newest continuation context, and relevant user-visible outcomes remain eligible."
+          - "Instrumented admission performs zero repository file reads, and per-item, per-file, per-tool-category, then global caps are enforced deterministically."
+          - "Empty eligible content fails before any provider request."
+      - id: "T014"
+        title: "Implement typed local admission, compact change receipts, secret redaction, and bounded reduction"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/admission.rs"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "Admission reads typed canonical Session messages and content metadata without terminal parsing or a parallel store."
+          - "Filtering is structural, repeated startup material collapses by stable identity, and successful file/tool operations become canonical receipts capped at 1 KiB using only already-recorded call/result metadata."
+          - "Raw edits, patches, images, binaries, base64, and bulk success output are discarded before admission; retries deduplicate by operation/path/hash; no changed file is opened or reread."
+          - "The existing jcode-base secret redactor is applied before accounting and a conservative provider-aware or upper-bound token count never undercounts."
+          - "Fixed 768-token item, 1200-token file, and 2000-token tool-category caps apply before deterministic reduction to the 12000-token default global limit or rejection before generation."
+      - id: "T015"
+        title: "Write fingerprint stability and idempotency tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/tests/fingerprint.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Equivalent compact admitted redacted items/receipts and summary-affecting config produce the same lowercase SHA-256 fingerprint regardless of excluded raw edit/patch payload size."
+          - "Content, filter, prompt, schema, route, effort, or budget changes produce a different fingerprint."
+          - "Credentials, generated_at, excluded raw transcript/edit/patch/image/binary/base64 bytes, and unstable map ordering do not affect the digest; receipt format version does."
+      - id: "T016"
+        title: "Implement canonical versioned source fingerprinting"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/fingerprint.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "Canonical serialization has stable key ordering and includes algorithm, filter, receipt, prompt, schema, compact admitted content, route identity, effort, and all summary-affecting limits."
+          - "The digest is safe as the immutable generation-directory name."
+          - "The implementation reuses the existing sha2 dependency."
+      - id: "T017"
+        title: "Write structured-response, rendering, locking, and atomic publication tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/tests/publication.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Malformed, truncated, over-limit, mismatched-session, mismatched-fingerprint, or still-sensitive responses publish nothing new."
+          - "Markdown and JSON rendered from one validated value contain matching version, fingerprint, timestamp, route, usage, and summary outcome."
+          - "Interrupted writes preserve the previous valid generation or leave no pair, and same-fingerprint races perform at most one generation."
+          - "A successful pair appears only after one same-filesystem atomic directory rename to ~/.jcode/feedback/sessions/<session-id>/<fingerprint>."
+      - id: "T018"
+        title: "Implement schema validation, dual rendering, locking, and atomic artifact publication"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/session_librarian/publication.rs"
+        dependencies: ["T016", "T017"]
+        acceptance_criteria:
+          - "One validated SessionSummary is the only source for summary.json and summary.md."
+          - "Staging is private and same-filesystem, files are flushed/fsynced where supported, and a directory rename publishes the immutable pair."
+          - "Per-session/fingerprint locking prevents duplicate generation; an existing validated pair returns reused without provider work."
+          - "Failures clean staging state and never replace or expose a partial/mismatched prior pair."
+
+  - number: 5
+    title: "User Story 3 - Reuse the summary for handoff"
+    purpose: "Project concise continuation context into the existing handoff contract without changing that contract"
+    story_reference: "US-003"
+    independent_test: "Generate from a fixture with a goal, completed work, unresolved work, duplicate/invalid paths, and next steps, then feed the JSON fields into the existing session_transition handoff inputs."
+    tasks:
+      - id: "T019"
+        title: "Write handoff brief and relevant-file projection tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/session_librarian/tests/handoff.rs"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "Continuation fixtures yield a non-empty concise handoff_brief and at most 32 normalized deduplicated relevant paths."
+          - "Invalid, secret-bearing, duplicate, and unbounded path entries are rejected or removed locally."
+          - "JSON fields can populate session_transition prompt and relevant_files without transcript parsing."
+          - "Equivalent handoff information is visible in summary.md."
+      - id: "T020"
+        title: "Implement handoff-compatible normalization and rendering"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/session_librarian/handoff.rs"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "Normalization reuses the limits and semantics owned by crates/jcode-app-core/src/tool/session_transition.rs rather than creating a duplicate handoff mechanism."
+          - "The handoff brief captures current goal, completed outcomes, unresolved work, risks, and next steps within schema bounds."
+          - "Markdown and JSON projections agree after local normalization and redaction."
+
+  - number: 6
+    title: "User Story 4 - Control route and hard budgets independently"
+    purpose: "Construct a separate provider route and enforce fail-closed request, token, cost, and deadline limits"
+    story_reference: "US-004"
+    independent_test: "Exercise default and overridden routes plus missing OAuth, unsupported model/effort, unknown pricing, invalid budgets, provider failure, output overflow, deadline, and active-route isolation using fake providers."
+    tasks:
+      - id: "T021"
+        title: "Write independent provider route and hard-budget integration tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/session_librarian/tests/generation.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Unset configuration constructs native OpenAI OAuth gpt-5.6-luna xhigh and an override changes only librarian generation."
+          - "Fake-provider cases cover missing authentication, unsupported provider/model/effort, unavailable runtime registration, unknown or excessive price exposure, provider failure, malformed response, output limit, request count, and deadline."
+          - "No case exceeds one request or any effective hard limit, and the active Agent provider/model/effort remains unchanged."
+          - "Every rejected preflight transmits no session content and publishes no partial artifacts."
+      - id: "T022"
+        title: "Implement independent provider construction and cost preflight"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/session_librarian/generation.rs"
+        dependencies: ["T021"]
+        acceptance_criteria:
+          - "A separate provider instance is constructed through existing jcode-base provider factories and native OpenAI OAuth runtime registration."
+          - "Capability, credential kind, model, effort, pricing evidence, and worst-case input/output exposure are validated before transmission."
+          - "The active session provider object and provider_runtime_state are never mutated."
+      - id: "T023"
+        title: "Enforce runtime request, output, usage, cost, and deadline boundaries"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/session_librarian/generation.rs"
+        dependencies: ["T022", "T014", "T016"]
+        acceptance_criteria:
+          - "Generation sends at most one request, applies max_output_tokens, stops or rejects boundary-reaching output, and enforces the configured wall-clock deadline."
+          - "Actual input, output, requests, elapsed time, and exact cost remain within limits and are recorded in BoundedUsage."
+          - "Provider, timeout, malformed, over-budget, and usage-accounting failures are actionable, non-secret, and do not call publication."
+      - id: "T024"
+        title: "Integrate bounded generation into the one-shot librarian orchestrator"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/session_librarian/mod.rs"
+        dependencies: ["T012", "T018", "T020", "T023"]
+        acceptance_criteria:
+          - "The orchestrator resolves config, admits/redacts content, fingerprints, reuses or locks, generates once, validates, projects handoff fields, and atomically publishes in that order."
+          - "Every invocation returns within the effective deadline with either reusable artifact details or one actionable failure."
+          - "Equivalent successful invocations skip provider generation and changed admitted content creates a new immutable fingerprint directory."
+
+  - number: 7
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Document configuration and ownership, record the feature, and prove repository and built-runtime acceptance"
+    tasks:
+      - id: "T025"
+        title: "Document session librarian architecture, privacy boundaries, and removal criteria"
+        status: "Completed"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "docs/proposals/SESSION_LIBRARIAN.md"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "The proposal names canonical owners, reused session/provider/skill/tool/config/handoff seams, filtering and redaction stages, budgets, fingerprint inputs, artifact format, locking/publication behavior, and explicit non-goals."
+          - "The document includes stabilization and complete removal steps demonstrating minimal upstream drift."
+      - id: "T026"
+        title: "Document librarian configuration, defaults, precedence, and failures"
+        status: "Completed"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "docs/CONFIG.md"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "All persisted and environment settings, built-in defaults, exact precedence, independent-route behavior, valid ranges, cost representation, and failure cases are documented."
+          - "Examples contain no live credentials and explain that no cost or work occurs before manual invocation."
+      - id: "T027"
+        title: "Add the canonical changelog entry for the session librarian"
+        status: "Completed"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "changelog/v0.75.3.json"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "The repository's canonical changelog records the manual slash skill, safe versioned artifacts, handoff reuse, independent route, and hard-budget behavior."
+          - "The entry does not claim automatic summarization or broader plugin support."
+      - id: "T028"
+        title: "Run focused acceptance tests and repository guardrails"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T025", "T026", "T027"]
+        acceptance_criteria:
+          - "Every FR-001 through FR-014 and NFR-001 through NFR-006 maps to a focused automated test with exact command evidence."
+          - "Focused jcode-session-types, jcode-config-types, jcode-base, jcode-app-core, and jcode-tui tests pass before broader checks."
+          - "cargo fmt --check, affected-package build/check, Clippy with warnings denied, dependency-boundary checks, and scripts/check_guardrails.sh pass or isolate a proven unrelated baseline failure."
+          - "autospec artifact validates spec.yaml, plan.yaml, and tasks.yaml."
+      - id: "T029"
+        title: "Build selfdev and run isolated-socket librarian smoke tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/install_release.sh"
+        dependencies: ["T028"]
+        acceptance_criteria:
+          - "cargo build --profile selfdev succeeds and the resulting target/selfdev/jcode binary is used with a private socket rather than the shared daemon."
+          - "A no-trigger run proves zero librarian provider requests and artifact writes; slash activation proves current-default and explicit-persisted-session argument behavior through the built binary."
+          - "A fake-provider or free deterministic invocation through /session-librarian proves one bounded attempt, matching summary.md/summary.json, privacy exclusions, handoff fields, and idempotent reuse without live provider cost."
+          - "Invalid-budget and forced-publication-failure smoke cases return actionable failures and expose no partial artifact pair."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-004"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-002"]
+      blocks: []
+    - story_id: "US-004"
+      depends_on: ["US-001"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3, 4, 6]
+    - phase: 3
+      blocks: [4, 6]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [7]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T002", "T004"]
+        rationale: "Artifact-contract tests and configuration-resolution tests touch different crates and both depend only on the module scaffold."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T015", "T017"]
+        rationale: "Fingerprint and publication test fixtures are separate modules after admission behavior is fixed."
+  - phase: 7
+    parallel_groups:
+      - tasks: ["T025", "T026", "T027"]
+        rationale: "Proposal, configuration documentation, and changelog update are separate artifacts based on the completed behavior."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4, 5, 6]
+    description: "Setup, shared contracts/configuration, manual trigger, safe artifact generation, handoff projection, and independent hard-bounded provider execution; delivery polish follows as incremental completion."
+    validation: "Use focused fake-provider tests plus a newly built private-socket run to prove zero work when unused, current-default and explicit persisted targeting, one manual bounded attempt, excluded-data removal, multi-megabyte edit compaction to a receipt at most 1 KiB with zero rereads, matching atomic artifacts, route isolation, and fail-closed limits."
+  incremental_delivery:
+    - milestone: "Foundation Ready"
+      phases: [1, 2]
+      deliverable: "Versioned summary contracts and a tested independent librarian route/budget resolver with no runtime behavior change."
+    - milestone: "Manual Trigger Ready"
+      phases: [1, 2, 3]
+      deliverable: "The existing slash-skill and tool surfaces can start exactly one current-default or named-persisted-session librarian attempt while unused sessions remain inert."
+    - milestone: "Safe Artifact MVP"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Manual invocations produce or reuse locally filtered, receipt-compacted, hard-bounded, atomically published Markdown/JSON summaries with normalized handoff fields through an independent provider route."
+    - milestone: "Handoff Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Summaries expose normalized handoff_brief and relevant_files compatible with the existing transition contract."
+    - milestone: "Delivery Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Documentation, changelog, focused tests, guardrails, selfdev build, and private-socket runtime evidence are complete."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T01:07:53Z"
+  artifact_type: "tasks"

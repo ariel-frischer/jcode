@@ -53,8 +53,8 @@ include!("tests/issue_832_remote_ctrl_k.rs");
 include!("tests/spinner_slash_commands.rs");
 include!("tests/command_suggestions_cache.rs");
 include!("tests/skill_invocation_multi_word.rs");
+include!("tests/session_librarian.rs");
 include!("tests/prompt_history_cross_session.rs");
-
 #[test]
 fn ctrl_p_opens_categorized_command_palette_and_filters_entries() {
     let mut app = create_test_app();
