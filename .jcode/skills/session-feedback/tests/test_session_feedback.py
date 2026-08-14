@@ -1829,6 +1829,8 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
                 "stderr": "",
                 "elapsed_seconds": 0.25,
                 "estimated_cost_usd": 0.01,
+                "observed_input_tokens": 123,
+                "observed_output_tokens": 45,
             }
         )
         result = self.feedback.run_feedback(
@@ -1855,6 +1857,8 @@ class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(result["accounting"]["proposal_count"], 0)
         self.assertEqual(result["accounting"]["elapsed_seconds"], 0.25)
         self.assertEqual(result["accounting"]["estimated_cost_usd"], 0.01)
+        self.assertEqual(result["accounting"]["observed_input_tokens"], 123)
+        self.assertEqual(result["accounting"]["observed_output_tokens"], 45)
         runner.assert_called_once()
 
     def test_entrypoint_accepts_optional_session_id_and_visible_evidence_json(

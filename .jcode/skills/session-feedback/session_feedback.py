@@ -2269,6 +2269,8 @@ def run_feedback(
             "request_count": generation_accounting["request_count"],
             "request_input": generation_accounting["request_input"],
             "request_output": generation_accounting["request_output"],
+            "observed_input_tokens": generation_accounting["observed_input_tokens"],
+            "observed_output_tokens": generation_accounting["observed_output_tokens"],
             "proposal_count": proposal_count,
             "elapsed_seconds": generation_accounting["elapsed_seconds"],
             "estimated_cost_usd": generation_accounting["estimated_cost_usd"],
