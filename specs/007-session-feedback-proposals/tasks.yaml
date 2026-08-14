@@ -70,7 +70,7 @@ phases:
           - "Bound every string and collection and define the same canonical data needed for Markdown and JSON parity."
       - id: "T005"
         title: "Define the generator response v1 JSON Schema"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: null

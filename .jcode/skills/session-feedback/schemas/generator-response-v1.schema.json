@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jcode.local/session-feedback/schemas/generator-response-v1.schema.json",
+  "title": "Session Feedback Generator Response v1",
+  "description": "A bounded, review-only generator result containing zero or more canonical proposal-v1 records. The response cannot request tools, patches, approvals, implementation, or lifecycle transitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "maxProperties": 2,
+  "required": [
+    "contract_version",
+    "proposals"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "generator-response-v1",
+      "description": "The only generator response contract version supported by this schema."
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/proposal"
+      },
+      "description": "Zero proposals is a successful result. The absolute bound is enforced here and the helper may enforce a lower effective invocation limit."
+    }
+  },
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 14,
+      "required": [
+        "contract_version",
+        "target",
+        "evidence_references",
+        "problem",
+        "hypothesis",
+        "suggested_behavior",
+        "expected_benefit",
+        "token_context_impact",
+        "risk",
+        "blast_radius",
+        "validation_plan",
+        "confidence",
+        "fingerprint",
+        "non_goals"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "proposal-v1",
+          "description": "The only proposal contract version accepted in a generator-response-v1 document."
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "evidence_references": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/evidence_reference"
+          },
+          "description": "Stable, deduplicated references into the normalized evidence bundle."
+        },
+        "problem": {
+          "$ref": "#/$defs/long_text"
+        },
+        "hypothesis": {
+          "$ref": "#/$defs/long_text"
+        },
+        "suggested_behavior": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$",
+          "description": "Review guidance or a bounded patch outline only. It does not authorize mutation, tool use, approval, implementation, or lifecycle changes."
+        },
+        "expected_benefit": {
+          "$ref": "#/$defs/long_text"
+        },
+        "token_context_impact": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$",
+          "description": "Measured or explicitly labeled estimated token or context impact."
+        },
+        "risk": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "blast_radius": {
+          "$ref": "#/$defs/long_text"
+        },
+        "validation_plan": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/plan_step"
+          }
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/sha256"
+        },
+        "non_goals": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/plan_step"
+          },
+          "description": "Explicit exclusions preserving the review-only boundary, including automatic target mutation and approval actions."
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 3,
+      "required": [
+        "category",
+        "scope",
+        "concrete_target"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "global-instructions",
+            "skills",
+            "hooks-config",
+            "model-profile-choices",
+            "context-skill-routing",
+            "harness-setup-contracts",
+            "sdk-public-surfaces",
+            "jcode"
+          ],
+          "description": "The complete proposal-v1 target taxonomy. Unknown categories require a future versioned contract."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "personal-global",
+            "project-jcode"
+          ],
+          "description": "Distinguishes user-global targets from targets owned by this Jcode project."
+        },
+        "concrete_target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]*$",
+          "description": "An exact normalized file, skill, configuration key, profile, contract, SDK surface, or Jcode component."
+        }
+      }
+    },
+    "evidence_reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+    },
+    "long_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$"
+    },
+    "plan_step": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase SHA-256 digest recomputed locally from normalized target, problem, and intended outcome material."
+    }
+  }
+}
