@@ -1,0 +1,11 @@
+{
+  "version": "0.76.0",
+  "date": "2026-08-14",
+  "title": "Review-only session feedback",
+  "highlights": [
+    "Run the removable /session-feedback skill on demand to turn bounded privacy-safe session evidence into a local needs-approval proposal queue"
+  ],
+  "improvements": [
+    "Feedback generation is configurable and limited to one request, with no automatic trigger, target mutation, dedicated feedback CLI, replication, approval, or implementation behavior"
+  ]
+}

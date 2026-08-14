@@ -495,11 +495,11 @@ phases:
     tasks:
       - id: "T036"
         title: "Add the session-feedback proposal workflow changelog entry"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: true
         story_id: null
-        file_path: "CHANGELOG.yaml"
+        file_path: "changelog/v0.76.0.json"
         dependencies: ["T035"]
         acceptance_criteria:
           - "Record the human-triggered removable review-only session-feedback skill, bounded evidence contract, local needs-approval proposal queue, and configurable one-request generation boundary."
