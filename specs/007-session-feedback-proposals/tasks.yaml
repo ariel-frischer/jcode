@@ -273,7 +273,7 @@ phases:
           - "Instrument paths, processes, network, and proposal lifecycle to prove the generator cannot edit targets, apply patches, approve, start, delete, replace, publish, replicate, or perform external actions."
       - id: "T020"
         title: "Implement the single schema-constrained generation request"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

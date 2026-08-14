@@ -7,6 +7,8 @@ import hashlib
 import json
 import math
 import re
+import subprocess
+import time
 import unicodedata
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -887,6 +889,242 @@ def prepare_feedback_invocation(
     }
 
 
+def _generation_limit(
+    config: Mapping[str, Any], name: str, *, integer: bool = False
+) -> int | float:
+    value = config.get(name)
+    valid = (
+        isinstance(value, int) and not isinstance(value, bool) and value > 0
+        if integer
+        else isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    )
+    if not valid:
+        kind = "positive integer" if integer else "positive finite number"
+        raise ValidationError(f"{name} limit must be a {kind}")
+    return int(value) if integer else float(value)
+
+
+def _run_generation_command(
+    command: Sequence[str], *, timeout_seconds: float, estimated_cost_usd: float
+) -> dict[str, Any]:
+    started = time.monotonic()
+    try:
+        completed = subprocess.run(
+            list(command),
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        elapsed = time.monotonic() - started
+        raise ValidationError(
+            f"generation elapsed-time limit exceeded after {elapsed:.3f} seconds"
+        ) from error
+    return {
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "elapsed_seconds": time.monotonic() - started,
+        # Schema mode does not expose provider pricing, so the default runner
+        # records the configured cost reservation as its conservative estimate.
+        "estimated_cost_usd": estimated_cost_usd,
+    }
+
+
+def _validated_runner_receipt(receipt: Any) -> tuple[str, float, float]:
+    if not isinstance(receipt, Mapping):
+        raise ValidationError("generation runner returned an invalid receipt")
+    returncode = receipt.get("returncode")
+    stdout = receipt.get("stdout")
+    stderr = receipt.get("stderr", "")
+    elapsed = receipt.get("elapsed_seconds")
+    cost = receipt.get("estimated_cost_usd")
+    if not isinstance(returncode, int) or isinstance(returncode, bool):
+        raise ValidationError("generation runner receipt has an invalid returncode")
+    if not isinstance(stdout, str) or not isinstance(stderr, str):
+        raise ValidationError("generation runner receipt must contain text output")
+    for name, value in (("elapsed_seconds", elapsed), ("estimated_cost_usd", cost)):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            raise ValidationError(f"generation runner receipt has invalid {name}")
+    if returncode != 0:
+        detail = _bounded_error(stderr.strip() or "no bounded error detail")
+        raise ValidationError(
+            f"generation request failed with exit {returncode}: {detail}"
+        )
+    return stdout, float(elapsed), float(cost)
+
+
+def _validate_generated_proposals(
+    response: Mapping[str, Any],
+    *,
+    evidence: Mapping[str, Any],
+    shortlisted_targets: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    evidence_references = {item["reference"] for item in evidence["items"]}
+    targets = {
+        (
+            normalize_category(target["category"]),
+            normalize_scope(target["scope"]),
+            normalize_concrete_target(target["concrete_target"]),
+        )
+        for target in shortlisted_targets
+    }
+    proposals: list[dict[str, Any]] = []
+    for index, proposal in enumerate(response["proposals"]):
+        target = proposal["target"]
+        target_identity = (
+            normalize_category(target["category"]),
+            normalize_scope(target["scope"]),
+            normalize_concrete_target(target["concrete_target"]),
+        )
+        if target_identity not in targets:
+            raise ValidationError(
+                f"generated proposal {index} targets an item outside the shortlist"
+            )
+        unresolved = sorted(set(proposal["evidence_references"]) - evidence_references)
+        if unresolved:
+            raise ValidationError(
+                f"generated proposal {index} has unresolved evidence references: "
+                + ", ".join(unresolved)
+            )
+        expected_fingerprint = proposal_fingerprint(
+            {
+                "category": target["category"],
+                "scope": target["scope"],
+                "concrete_target": target["concrete_target"],
+                "problem": proposal["problem"],
+                "intended_outcome": proposal["expected_benefit"],
+            }
+        )
+        if proposal["fingerprint"] != expected_fingerprint:
+            raise ValidationError(
+                f"generated proposal {index} fingerprint does not match normalized material"
+            )
+        proposals.append(dict(proposal))
+    return proposals
+
+
+def generate_review_proposals(
+    *,
+    request_input: Mapping[str, Any],
+    evidence: Mapping[str, Any],
+    shortlisted_targets: Sequence[Mapping[str, Any]],
+    effective_config: Mapping[str, Any],
+    runner: Any | None = None,
+) -> dict[str, Any]:
+    """Issue at most one no-tools structured generation request and validate it locally."""
+    if not isinstance(request_input, Mapping) or not isinstance(
+        effective_config, Mapping
+    ):
+        raise ValidationError("generation input and effective_config must be objects")
+    validate_contract("evidence-v1", evidence)
+    if not isinstance(shortlisted_targets, Sequence) or isinstance(
+        shortlisted_targets, (str, bytes)
+    ):
+        raise ValidationError("shortlisted_targets must be a sequence")
+
+    model = effective_config.get("model")
+    effort = effective_config.get("effort")
+    if not isinstance(model, str) or not model.strip() or len(model) > 128:
+        raise ValidationError("model must be a bounded non-empty string")
+    if effort not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}:
+        raise ValidationError("effort must be a supported reasoning effort")
+    max_input_tokens = _generation_limit(
+        effective_config, "max_input_tokens", integer=True
+    )
+    max_output_tokens = _generation_limit(
+        effective_config, "max_output_tokens", integer=True
+    )
+    max_proposals = _generation_limit(effective_config, "max_proposals", integer=True)
+    max_elapsed = _generation_limit(effective_config, "max_elapsed_seconds")
+    max_cost = _generation_limit(effective_config, "max_estimated_cost_usd")
+
+    schema_path = SCHEMA_DIR / "generator-response-v1.schema.json"
+    request_document = canonical_json(request_input)
+    prompt = (
+        "Return only a generator-response-v1 review result for this bounded session "
+        "feedback input. Use no tools and perform no side effects. Input: "
+        + request_document
+    )
+    request_accounting = measure_text("request_input", prompt)
+    if request_accounting["estimated_tokens"] > max_input_tokens:
+        raise ValidationError("generation request input exceeds the token limit")
+    command = [
+        "jcode",
+        "run",
+        "--provider",
+        "openai",
+        "--model",
+        model.strip(),
+        "--reasoning-effort",
+        effort,
+        "--tool-profile",
+        "none",
+        "--max-turns",
+        "1",
+        "--schema",
+        str(schema_path),
+        prompt,
+    ]
+
+    invoke = runner
+    if invoke is None:
+        invoke = lambda value: _run_generation_command(  # noqa: E731
+            value,
+            timeout_seconds=max_elapsed,
+            estimated_cost_usd=max_cost,
+        )
+    stdout, elapsed_seconds, estimated_cost_usd = _validated_runner_receipt(
+        invoke(command)
+    )
+    if elapsed_seconds > max_elapsed:
+        raise ValidationError("generation elapsed-time limit exceeded")
+    if estimated_cost_usd > max_cost:
+        raise ValidationError("generation estimated-cost limit exceeded")
+
+    output_accounting = measure_text("request_output", stdout)
+    if output_accounting["estimated_tokens"] > max_output_tokens:
+        raise ValidationError("generation request output exceeds the token limit")
+    response = parse_contract("generator-response-v1", stdout)
+    proposals = _validate_generated_proposals(
+        response,
+        evidence=evidence,
+        shortlisted_targets=shortlisted_targets,
+    )
+    if len(proposals) > max_proposals:
+        raise ValidationError("generated proposal count exceeds the configured limit")
+
+    return {
+        "contract_version": "generator-response-v1",
+        "proposals": proposals,
+        "accounting": {
+            "request_count": 1,
+            "request_input": request_accounting,
+            "request_output": output_accounting,
+            "proposal_count": len(proposals),
+            "elapsed_seconds": elapsed_seconds,
+            "estimated_cost_usd": estimated_cost_usd,
+            "command": {
+                "provider": "openai",
+                "model": model.strip(),
+                "effort": effort,
+                "tool_profile": "none",
+                "max_turns": 1,
+                "schema": schema_path.name,
+            },
+        },
+    }
+
+
 def build_review_outcome(
     *,
     session_id: str,
@@ -974,6 +1212,7 @@ __all__ = [
     "build_review_outcome",
     "evidence_accounting",
     "fingerprint_material",
+    "generate_review_proposals",
     "load_schema",
     "measure_json",
     "measure_text",

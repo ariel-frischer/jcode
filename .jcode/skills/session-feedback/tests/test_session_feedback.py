@@ -797,8 +797,12 @@ class GenerationBoundaryAndReviewOnlyTests(IsolatedSessionFeedbackTestCase):
         for flag, value in required_pairs.items():
             self.assertIn(flag, command)
             self.assertEqual(command[command.index(flag) + 1], value)
-        self.assertIn("--json", command)
         self.assertIn("--schema", command)
+        self.assertNotIn(
+            "--json",
+            command,
+            "schema mode already returns JSON and the public CLI rejects --json with --schema",
+        )
         schema_path = Path(command[command.index("--schema") + 1])
         self.assertEqual(schema_path.name, "generator-response-v1.schema.json")
         self.assertTrue(schema_path.is_file())
