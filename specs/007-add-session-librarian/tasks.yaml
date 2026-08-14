@@ -353,7 +353,7 @@ phases:
     tasks:
       - id: "T025"
         title: "Document session librarian architecture, privacy boundaries, and removal criteria"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: true
         story_id: null
