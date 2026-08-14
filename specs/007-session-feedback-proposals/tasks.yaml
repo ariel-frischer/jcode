@@ -180,7 +180,7 @@ phases:
     tasks:
       - id: "T013"
         title: "Create prohibited-content and evidence-path fixtures"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"

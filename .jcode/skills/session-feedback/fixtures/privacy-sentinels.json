@@ -1,0 +1,235 @@
+{
+  "fixture_version": "privacy-sentinels-v1",
+  "description": "Synthetic bounded inputs for privacy allowlisting, librarian fallback, and target excerpt gating.",
+  "session": {
+    "current_session_id": "session-synthetic-001",
+    "visible_session_ids": [
+      "session-synthetic-001"
+    ]
+  },
+  "sentinels": {
+    "full_transcript": "SENTINEL_PROHIBITED_FULL_TRANSCRIPT",
+    "repeated_startup_instructions": "SENTINEL_PROHIBITED_STARTUP_INSTRUCTIONS",
+    "complete_skill_corpus": "SENTINEL_PROHIBITED_COMPLETE_SKILL_CORPUS",
+    "raw_patch": "SENTINEL_PROHIBITED_RAW_PATCH",
+    "raw_edit_payload": "SENTINEL_PROHIBITED_RAW_EDIT_PAYLOAD",
+    "image": "SENTINEL_PROHIBITED_IMAGE",
+    "binary": "SENTINEL_PROHIBITED_BINARY",
+    "base64": "SENTINEL_PROHIBITED_BASE64",
+    "credential": "SENTINEL_PROHIBITED_CREDENTIAL",
+    "bulk_successful_tool_output": "SENTINEL_PROHIBITED_BULK_TOOL_OUTPUT"
+  },
+  "inputs": {
+    "compatible_librarian": {
+      "summary_version": "librarian-summary-v1",
+      "session_id": "session-synthetic-001",
+      "items": [
+        {
+          "reference": "outcome-1",
+          "category": "visible_outcome",
+          "summary": "The synthetic review completed with one bounded follow-up.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "reference": "todo-1",
+          "category": "todo_assessment",
+          "summary": "The synthetic privacy check remains pending.",
+          "status": "pending"
+        },
+        {
+          "reference": "tool-1",
+          "category": "tool_invocation_receipt",
+          "name": "read",
+          "outcome": "succeeded",
+          "summary": "Read one already-shortlisted synthetic target.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "reference": "skill-1",
+          "category": "skill_invocation_receipt",
+          "name": "session-feedback",
+          "outcome": "succeeded",
+          "summary": "The synthetic slash skill returned a bounded result.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "reference": "failure-1",
+          "category": "failure_excerpt",
+          "name": "fixture-check",
+          "excerpt": "Synthetic validation stopped at the configured byte limit.",
+          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
+          "content_hash": "4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "reference": "validation-1",
+          "category": "validation_receipt",
+          "name": "privacy-fixture",
+          "outcome": "passed",
+          "summary": "All prohibited sentinel classes were excluded.",
+          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
+          "content_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+        },
+        {
+          "reference": "path-1",
+          "category": "relevant_path",
+          "path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "summary": "Exact synthetic skill target eligible for shortlisting."
+        }
+      ],
+      "prohibited_content": {
+        "full_transcript": "SENTINEL_PROHIBITED_FULL_TRANSCRIPT",
+        "repeated_startup_instructions": "SENTINEL_PROHIBITED_STARTUP_INSTRUCTIONS",
+        "complete_skill_corpus": "SENTINEL_PROHIBITED_COMPLETE_SKILL_CORPUS",
+        "raw_patch": "SENTINEL_PROHIBITED_RAW_PATCH",
+        "raw_edit_payload": "SENTINEL_PROHIBITED_RAW_EDIT_PAYLOAD",
+        "image": "SENTINEL_PROHIBITED_IMAGE",
+        "binary": "SENTINEL_PROHIBITED_BINARY",
+        "base64": "SENTINEL_PROHIBITED_BASE64",
+        "credential": "SENTINEL_PROHIBITED_CREDENTIAL",
+        "bulk_successful_tool_output": "SENTINEL_PROHIBITED_BULK_TOOL_OUTPUT"
+      }
+    },
+    "fallback": {
+      "session_id": "session-synthetic-001",
+      "visible_items": [
+        {
+          "reference": "outcome-1",
+          "category": "visible_outcome",
+          "summary": "The synthetic review completed with one bounded follow-up.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "reference": "todo-1",
+          "category": "todo_assessment",
+          "summary": "The synthetic privacy check remains pending.",
+          "status": "pending"
+        },
+        {
+          "reference": "tool-1",
+          "category": "tool_invocation_receipt",
+          "name": "read",
+          "outcome": "succeeded",
+          "summary": "Read one already-shortlisted synthetic target.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "reference": "skill-1",
+          "category": "skill_invocation_receipt",
+          "name": "session-feedback",
+          "outcome": "succeeded",
+          "summary": "The synthetic slash skill returned a bounded result.",
+          "relevant_path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "reference": "failure-1",
+          "category": "failure_excerpt",
+          "name": "fixture-check",
+          "excerpt": "Synthetic validation stopped at the configured byte limit.",
+          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
+          "content_hash": "4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "reference": "validation-1",
+          "category": "validation_receipt",
+          "name": "privacy-fixture",
+          "outcome": "passed",
+          "summary": "All prohibited sentinel classes were excluded.",
+          "relevant_path": ".jcode/skills/session-feedback/fixtures/privacy-sentinels.json",
+          "content_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+        },
+        {
+          "reference": "path-1",
+          "category": "relevant_path",
+          "path": ".jcode/skills/session-feedback/SKILL.md",
+          "content_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "summary": "Exact synthetic skill target eligible for shortlisting."
+        }
+      ],
+      "prohibited_content": {
+        "full_transcript": "SENTINEL_PROHIBITED_FULL_TRANSCRIPT",
+        "repeated_startup_instructions": "SENTINEL_PROHIBITED_STARTUP_INSTRUCTIONS",
+        "complete_skill_corpus": "SENTINEL_PROHIBITED_COMPLETE_SKILL_CORPUS",
+        "raw_patch": "SENTINEL_PROHIBITED_RAW_PATCH",
+        "raw_edit_payload": "SENTINEL_PROHIBITED_RAW_EDIT_PAYLOAD",
+        "image": "SENTINEL_PROHIBITED_IMAGE",
+        "binary": "SENTINEL_PROHIBITED_BINARY",
+        "base64": "SENTINEL_PROHIBITED_BASE64",
+        "credential": "SENTINEL_PROHIBITED_CREDENTIAL",
+        "bulk_successful_tool_output": "SENTINEL_PROHIBITED_BULK_TOOL_OUTPUT"
+      }
+    }
+  },
+  "case_mutations": {
+    "unsupported_librarian_version": {
+      "base": "compatible_librarian",
+      "replace": {
+        "/summary_version": "librarian-summary-v2"
+      },
+      "expected": "reject_librarian_then_use_valid_fallback"
+    },
+    "malformed_librarian": {
+      "base": "compatible_librarian",
+      "replace": {
+        "/items": {
+          "unexpected": "SENTINEL_MALFORMED_ITEMS_OBJECT"
+        }
+      },
+      "expected": "reject_librarian_then_use_valid_fallback"
+    },
+    "oversized_librarian": {
+      "base": "compatible_librarian",
+      "replace_recipe": {
+        "pointer": "/items/0/summary",
+        "character": "x",
+        "repeat": 1025
+      },
+      "expected": "reject_librarian_then_use_valid_fallback"
+    },
+    "missing_target": {
+      "base": "fallback",
+      "replace": {
+        "/visible_items/6/path": "fixtures/targets/missing/SKILL.md"
+      },
+      "target_state": "missing",
+      "expected": "do_not_broaden_reads"
+    },
+    "unreadable_target": {
+      "base": "fallback",
+      "replace": {
+        "/visible_items/6/path": "fixtures/targets/unreadable/SKILL.md"
+      },
+      "target_state": "create_in_temporary_root_with_mode_000",
+      "expected": "do_not_broaden_reads"
+    },
+    "oversized_target": {
+      "base": "fallback",
+      "replace": {
+        "/visible_items/6/path": "fixtures/targets/oversized/SKILL.md"
+      },
+      "target_state": "create_in_temporary_root_above_effective_excerpt_limit",
+      "expected": "do_not_broaden_reads"
+    }
+  },
+  "expected": {
+    "normalized_contract_version": "evidence-v1",
+    "allowed_categories": [
+      "visible_outcome",
+      "todo_assessment",
+      "tool_invocation_receipt",
+      "skill_invocation_receipt",
+      "failure_excerpt",
+      "validation_receipt",
+      "relevant_path"
+    ],
+    "prohibited_sentinels_absent_from_outputs": true,
+    "librarian_and_fallback_items_equal": true,
+    "maximum_repository_reads_before_shortlist": 0
+  }
+}
