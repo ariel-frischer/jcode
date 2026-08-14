@@ -28,6 +28,8 @@ mod patch;
 mod read;
 pub mod selfdev;
 pub(crate) mod serde_coerce;
+#[cfg(test)]
+mod session_librarian;
 mod session_search;
 pub(crate) mod session_search_index;
 pub(crate) mod session_transition;

@@ -114,7 +114,7 @@ phases:
     tasks:
       - id: "T008"
         title: "Write manual-only current and explicit persisted-session tool behavior tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
