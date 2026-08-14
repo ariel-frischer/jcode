@@ -48,6 +48,27 @@ func TestFrameRoundTripAndUnknownFields(t *testing.T) {
 	}
 }
 
+func TestEventKindPreservesKnownAndUnknownProvenance(t *testing.T) {
+	known, err := DecodeServerFrame([]byte(`{"v":1,"ev":"connection_phase","session_id":"s","phase":"connecting"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := EventKind(known.Event); got != "connection_phase" {
+		t.Fatalf("known kind=%q, want connection_phase", got)
+	}
+	unknown, err := DecodeServerFrame([]byte(`{"v":1,"ev":"future_event","payload":"SYNTHETIC_PAYLOAD"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := EventKind(unknown.Event); got != "future_event" {
+		t.Fatalf("unknown kind=%q, want future_event", got)
+	}
+	fields, ok := FieldsJSON(unknown.Event)
+	if !ok || !strings.Contains(string(fields), "SYNTHETIC_PAYLOAD") {
+		t.Fatalf("unknown fields=%s, want preserved legacy provenance", fields)
+	}
+}
+
 func TestHandshakeAndErrorClassification(t *testing.T) {
 	frame, err := DecodeServerFrame([]byte(`{"v":1,"reply_to":1,"ev":"hello_ok","version":1,"server":"h","capabilities":["events"],"extra":7}`))
 	if err != nil {

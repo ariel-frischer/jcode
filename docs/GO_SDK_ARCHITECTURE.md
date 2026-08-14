@@ -38,6 +38,37 @@ The established `Session.Send`/`Session.Events` contract remains available. `Ses
 
 Protocol v1 preserves snake-case tags/fields, additive unknown fields, and unknown event kinds. ReasoningDone and ToolExec match `ApiEvent` in the harness. Typed terminal failures expose stable bounded classifications without raw provider messages, frames, prompts, credentials, session IDs, or private paths.
 
+## Typed-event ownership and publication policy
+
+`crates/jcode-harness-api` is the wire authority. `ApiEvent::publication_contract`
+is an exhaustive match that assigns each variant one disposition: owned-turn,
+outside-owned-turn, or an explicitly reviewed internal filter at the translation
+boundary. Every owned-turn variant has exactly one `EventSemanticClass`:
+content/progress, advisory/lifecycle metadata, terminal, permission, or
+tool-effect. The class is contract metadata, not an inference from a tag or
+payload shape.
+
+The canonical `sdk/go` module owns the public concrete `TypedEvent` values,
+`SemanticClassOf`, and `Turn` policy. An owned `Turn.Next` publishes
+content/progress, terminal, permission, and tool-effect events to handlers. It
+filters only advisory/lifecycle metadata and emits one bounded redacted
+`Observation` for the first ignored advisory event in that turn. Unknown,
+malformed, nil, or unclassified values terminate the owned turn with a bounded
+`CompatibilityError` wrapped in `ErrProtocolFailure`.
+
+The legacy `Session.Events`/`TypedEventStream` seam remains additive and
+preserves `UnknownEvent{Kind, Fields}` for unknown protocol-v1 kinds. That
+diagnostic compatibility does not make unknown events safe to ignore in an
+owned turn. The parity gate checks the Rust inventory against Go decoding and
+classification; a new owned event must be typed and classified before
+publication, while a non-public event must have an explicit filter rationale.
+
+`github.com/ariel-frischer/jcode-go` is only a protected publication projection
+of `sdk/go`. There is no reverse synchronization path and no second SDK source
+of truth. `scripts/sync-jcode-go.sh` is the reviewed, fingerprint-bound apply
+boundary; its preview and fixture checks must pass before any separately
+authorized public publication.
+
 ## Observability and process safety
 
 Observers receive synchronous bounded lifecycle classifications for connect, turn, launch, cancellation, and shutdown. Implementations must be concurrency-safe and fast. The SDK does not create a telemetry backend.

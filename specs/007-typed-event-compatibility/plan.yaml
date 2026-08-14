@@ -1,0 +1,440 @@
+plan:
+  branch: "007-typed-event-compatibility"
+  created: "2026-08-13"
+  spec_path: "specs/007-typed-event-compatibility/spec.yaml"
+
+summary: |
+  Stabilize the owned-turn event boundary by making event semantics and publication
+  disposition exhaustive at the Rust harness authority, then mirroring the public
+  typed contract in the canonical Go SDK. The implementation will first recover the
+  exact event rejected by Locus run-1c2020f67330 from authoritative runtime evidence
+  and reduce it to a payload-free fixture. Repository history makes connection_phase
+  the leading candidate, but the plan deliberately does not promote that inference to
+  a contract until the evidence fixture proves the exact wire kind and Go type.
+
+  Existing protocol-v1 shapes, Session.Events unknown-event preservation, ReasoningDone,
+  ToolExec, terminal outcomes, cancellation, and provider routing remain unchanged.
+  Owned Turn dispatch will publish handled safety-relevant typed events, filter only
+  explicitly advisory/lifecycle metadata with one bounded redacted observation per
+  turn, and fail closed on unknown, malformed, or semantically uncovered input. Rust
+  and Go completeness tests will prevent new harness events from bypassing typing,
+  classification, or an explicit pre-publication filter; the existing deterministic
+  SDK validation and one-way jcode-go publication workflow remain the delivery path.
+
+technical_context:
+  language: "Rust 2024 edition and Go 1.23, with existing Bash publication tooling"
+  framework: "None"
+  primary_dependencies:
+    - name: "serde"
+      version: "1.x"
+      purpose: "Owns the canonical protocol-v1 tagged Rust event representation and compatibility decoding."
+    - name: "serde_json"
+      version: "1.x"
+      purpose: "Builds deterministic protocol fixtures and validates bounded event identity without logging payloads."
+    - name: "Go standard library"
+      version: "Go 1.23"
+      purpose: "Implements the dependency-free typed-event decoder, semantic policy, turn state, diagnostics, and tests."
+    - name: "Git CLI and Bash"
+      version: "Git 2.x and Bash 3.2+"
+      purpose: "Reuse the reviewed deterministic sdk/go to jcode-go synchronization and validation workflows."
+  storage: "Payload-free regression fixtures, source-level event inventories, and deterministic synchronization manifests; no database"
+  testing:
+    framework: "Rust cargo test, Go testing package, and repository-local shell fixture suites"
+    approach: "Start with exact Rust translator/schema and Go decoder/Turn tests, run the complete protocol-v1 compatibility matrices and Go race tests, then validate the SDK, sync manifest, relevant builds, and repository guardrails"
+  target_platform: "Linux and macOS runtime support, with the existing Windows amd64 Go compile-only boundary"
+  project_type: "library"
+  performance_goals: "100% classified-or-filtered owned-turn coverage; diagnostics and warnings at most 256 UTF-8 bytes with zero payload disclosure; at most one ignored-advisory warning per turn; unchanged terminal and protocol-v1 outcomes"
+  constraints:
+    - "crates/jcode-harness-api remains the protocol-v1 wire authority; sdk/go remains the canonical Go source of truth."
+    - "The exact run-1c2020f67330 event identity must come from authoritative evidence and a deterministic redacted fixture, not repository-history inference alone."
+    - "Only explicitly classified advisory/lifecycle metadata may be filtered from an owned Turn, and the filter must be reviewable and emit no more than one bounded redacted observation per turn."
+    - "Content/progress, terminal, permission, and tool-effect events remain visible to valid handlers and may not enter an implicit ignore path."
+    - "Unknown, malformed, and semantically unclassified owned-turn input fails closed while preserving bounded kind/type provenance."
+    - "Protocol-v1 tags, fields, unknown-event preservation, ReasoningDone, ToolExec, terminal results, and cancellation remain backward compatible."
+    - "No new third-party Rust or Go dependency is needed; semantic ownership stays in the existing harness and SDK layers."
+    - "Provider, model, authentication, and effort routing are out of scope and must remain byte-for-byte behaviorally unchanged."
+    - "Public jcode-go apply, commit, push, or downstream live Locus recovery requires the existing explicit authorization and reviewed publication boundary."
+    - "No live, paid, production-adjacent, or credential-bearing validation is part of local implementation acceptance."
+  scale_scope: "One canonical Rust event enum and translator boundary, one dependency-free Go SDK typed-event/Turn boundary, approximately thirty-one protocol-v1 event tags, focused fixtures and parity tests, and the existing public SDK projection"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Limits changes to harness event semantics/publication, canonical Go typed-event handling, focused fixtures, parity checks, and existing SDK publication documentation."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Keeps protocol-v1 tags and fields, Session.Events, unknown preservation, typed ReasoningDone and ToolExec, terminal outcomes, cancellation, and public import paths compatible."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "No configuration, environment variable, default, or resolution path is added or changed."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Places wire semantics in jcode-harness-api, translation/filter ownership in jcode-harness-api-server, and consumer-facing typed policy in dependency-free sdk/go without reversing dependencies."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every spec class and regression has a direct Rust or Go fixture before broader SDK, build, race, and guardrail validation."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Unknown, malformed, and unclassified owned-turn input fails closed with sanitized bounded kind/type only; payloads, prompts, tool arguments, content, credentials, and paths never enter diagnostics."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Delivery requires focused crate/package checks, scripts/validate_go_sdk.sh, sync fixture validation, relevant Rust builds, and scripts/check_guardrails.sh."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "Extends the existing ApiEvent, Turn, Observer, protocol parity, and one-way SDK publication paths instead of adding a second protocol or compatibility framework."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The plan carries the defect through evidence recovery, deterministic prevention, canonical validation, and publication readiness while retaining explicit approval for external mutation and live recovery."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The event policy is constant-time per event, warning state is one bit per Turn, and private-runtime smoke must use the newly built binary on an isolated socket rather than the shared daemon."
+
+research_findings:
+  decisions:
+    - topic: "Failed-run event identity"
+      decision: "Treat connection_phase as the leading evidence-backed candidate, but require recovery from authoritative Jcode/Locus runtime evidence before naming the fixture or changing compatibility behavior."
+      rationale: "Commit b86833ba2e added ConnectionPhase publication to the Rust bridge after the prior ReasoningDone fix; sdk/go/protocol recognizes connection_phase while sdk/go.decodeTypedEvent lacks a concrete type, which deterministically yields UnknownEvent. The preserved run artifact records unsupported_typed_event but omitted the rejected kind, so history alone is insufficient for FR-001."
+      alternatives_considered:
+        - "Declare connection_phase to be the failed event from source history alone."
+        - "Broaden the fix to ignore every UnknownEvent without identifying the observed contract."
+    - topic: "Canonical event semantics owner"
+      decision: "Add an exhaustive publication disposition and semantic class beside ApiEvent in crates/jcode-harness-api, with every enum variant explicitly marked as owned-turn published, internally filtered, or outside the owned-turn contract."
+      rationale: "The Rust enum is the wire authority and an exhaustive match makes new variants a compile-time review point. Explicit non-turn and filter dispositions avoid inferring safety from an event name or payload shape."
+      alternatives_considered:
+        - "Keep semantics only in the Locus adapter, which would leave other SDK consumers exposed."
+        - "Infer advisory events from naming conventions, which could misclassify permission, terminal, or tool-effect additions."
+    - topic: "Cross-language completeness gate"
+      decision: "Extend the existing Rust-to-Go source parity pattern so every current ApiEvent tag has a declared disposition and every owned-turn published tag has a concrete Go type plus exactly one semantic class."
+      rationale: "The repository already machine-checks the hand-written Go tag list against the Rust enum. Expanding that single gate is smaller and more visible than introducing code generation or a second schema authority."
+      alternatives_considered:
+        - "Generate Go sources from Rust for this isolated contract change."
+        - "Maintain independent Rust and Go lists without a parity assertion."
+    - topic: "Advisory metadata handling"
+      decision: "Filter only explicitly advisory/lifecycle events at the owned Turn publication boundary and emit one bounded redacted Observer classification for the first ignored advisory event in that Turn. Preserve typed delivery on the legacy Session.Events stream where compatibility requires it."
+      rationale: "Turn.dispatch already owns message_accepted filtering, ordering, buffering, and terminal state, while Observer already carries bounded payload-free lifecycle metadata. Reusing both paths enforces the per-turn warning bound without global state or a second logging API."
+      alternatives_considered:
+        - "Require every downstream consumer to independently implement warning suppression."
+        - "Silently drop advisory events with no diagnostic."
+    - topic: "Unknown, malformed, and unclassified behavior"
+      decision: "Preserve UnknownEvent kind and fields in the legacy raw/typed Session.Events compatibility seam, but make owned Turn dispatch terminate with a typed protocol compatibility error whose rendered diagnostic contains only sanitized bounded kind and concrete type identifiers."
+      rationale: "This preserves protocol-v1 forward-diagnostic data for callers that explicitly use the legacy stream while preventing an owned execution Turn from continuing past semantically unknown input. Recognized malformed events already fail decoding and will use the same bounded identity path."
+      alternatives_considered:
+        - "Remove UnknownEvent fields from the public legacy API, which would be breaking."
+        - "Publish unknown values to owned turns and rely on every consumer to fail closed."
+    - topic: "Safety-relevant event handling"
+      decision: "Publish content/progress, terminal, permission, and tool-effect typed events unchanged to owned Turn consumers and expose their semantic class; do not place them in the advisory filter. Downstream adapters must either handle their class or return the compatibility failure."
+      rationale: "These events can affect output, completion, user control, or tool effects. Explicit classes allow Locus and other consumers to enforce exhaustive handler switches without weakening the canonical SDK's additive API."
+      alternatives_considered:
+        - "Treat all non-output events as ignorable metadata."
+        - "Make the SDK synthesize downstream-specific terminal outcomes."
+    - topic: "Diagnostic redaction and bounds"
+      decision: "Use one shared small sanitizer contract per language that normalizes empty, control-bearing, malformed UTF-8, and oversized identifiers and caps the complete diagnostic or warning at 256 UTF-8 bytes. Never format an event value or raw fields."
+      rationale: "Kind and concrete type are sufficient to remediate drift; formatting UnknownEvent or a raw frame can disclose arbitrary prompts, tool arguments, file content, credentials, and provider data."
+      alternatives_considered:
+        - "Serialize the rejected event after deleting selected known-sensitive fields."
+        - "Report only the generic unsupported_typed_event code with no bounded identity."
+    - topic: "Protocol-v1 and terminal compatibility"
+      decision: "Keep existing wire tags/fields and terminal state ownership unchanged; add semantic metadata and boundary checks around decoding/publication rather than changing ServerFrame or TurnResult shapes."
+      rationale: "ReasoningDone is nonterminal, ToolExec is a tool-effect event, TurnDone and provider errors own terminal outcomes, and cancellation remains terminal only through the established immutable Turn result path."
+      alternatives_considered:
+        - "Encode semantic class on the protocol-v1 wire, which would expand the public wire contract unnecessarily."
+        - "Treat advisory metadata or cancellation acknowledgement as terminal."
+    - topic: "SDK publication boundary"
+      decision: "Reuse scripts/validate_go_sdk.sh and scripts/sync-jcode-go.sh; prepare and review the deterministic one-way manifest, validate both copies, and require explicit authorization before public apply, commit, push, or downstream version update."
+      rationale: "The current architecture already names sdk/go as canonical and protects public governance/docs. Reusing the fingerprinted manifest preserves reviewability and prevents reverse edits or destination drift."
+      alternatives_considered:
+        - "Edit github.com/ariel-frischer/jcode-go directly and copy changes back."
+        - "Create a new mirror or publication script for typed events."
+
+data_model:
+  entities:
+    - name: "Public Turn Event Contract"
+      description: "The canonical record for one ApiEvent variant at the owned-turn publication boundary."
+      fields:
+        - name: "wire_kind"
+          type: "snake_case string"
+          description: "Stable protocol-v1 event tag."
+          constraints: "Unique, non-empty for known events, and unchanged for existing variants."
+        - name: "rust_variant"
+          type: "ApiEvent variant"
+          description: "Canonical serialized Rust representation."
+          constraints: "Exactly one per known wire kind."
+        - name: "publication_disposition"
+          type: "owned_turn | filtered | outside_owned_turn"
+          description: "Declares whether the event reaches an owned Turn stream."
+          constraints: "Exactly one explicit disposition; filtered entries require a public-contract rationale."
+        - name: "semantic_class"
+          type: "Event Semantic Class or none"
+          description: "Handling class for public owned-turn events."
+          constraints: "Exactly one class for owned-turn events; none only for explicit filters or non-turn events."
+      relationships:
+        - target: "Go Typed Event"
+          type: "one-to-one"
+          description: "Every owned-turn published Rust event has one concrete canonical Go representation."
+    - name: "Event Semantic Class"
+      description: "The explicit safety and handling category for a public owned-turn event."
+      fields:
+        - name: "name"
+          type: "enum"
+          description: "Content/progress, advisory/lifecycle metadata, terminal, permission, or tool-effect."
+          constraints: "Closed reviewed set; no unknown/default class."
+        - name: "unhandled_policy"
+          type: "publish_required | ignore_with_warning"
+          description: "Determines whether a missing consumer handler may continue."
+          constraints: "Only advisory/lifecycle metadata may use ignore_with_warning."
+      relationships:
+        - target: "Public Turn Event Contract"
+          type: "one-to-many"
+          description: "Each owned-turn event belongs to exactly one semantic class."
+    - name: "Go Typed Event"
+      description: "The canonical sdk/go concrete value decoded from one public turn event."
+      fields:
+        - name: "kind"
+          type: "string"
+          description: "Protocol-v1 event kind used by decodeTypedEvent."
+          constraints: "Matches the Rust wire kind exactly."
+        - name: "concrete_type"
+          type: "TypedEvent implementation"
+          description: "Public Go representation of the event fields."
+          constraints: "Known owned-turn events may not decode as UnknownEvent."
+        - name: "semantic_class"
+          type: "EventSemanticClass"
+          description: "Public classification exposed to downstream handlers."
+          constraints: "Exactly one recognized class for every known owned-turn concrete type."
+      relationships:
+        - target: "Compatibility Diagnostic"
+          type: "one-to-many"
+          description: "Malformed or unclassified decoding failures produce bounded diagnostics."
+    - name: "Compatibility Diagnostic"
+      description: "Payload-free evidence for an ignored advisory event or a fail-closed compatibility error."
+      fields:
+        - name: "disposition"
+          type: "warning | failure"
+          description: "Whether the owned Turn continued or terminated."
+          constraints: "Warning is valid only for classified advisory/lifecycle metadata."
+        - name: "sanitized_kind"
+          type: "UTF-8 string"
+          description: "Bounded normalized event kind."
+          constraints: "Contains no control characters or payload-derived data."
+        - name: "sanitized_type"
+          type: "UTF-8 string"
+          description: "Bounded normalized concrete event type or stable unknown placeholder."
+          constraints: "Contains no formatted event fields or raw frame data."
+        - name: "encoded_length"
+          type: "integer"
+          description: "Complete rendered message length in UTF-8 bytes."
+          constraints: "At most 256 bytes."
+      relationships:
+        - target: "Turn Warning State"
+          type: "many-to-one"
+          description: "Warnings are suppressed after the first advisory warning in a Turn."
+    - name: "Turn Warning State"
+      description: "Per-owned-Turn state that bounds ignored advisory observations."
+      fields:
+        - name: "advisory_warning_emitted"
+          type: "boolean"
+          description: "Records whether this Turn already emitted its bounded advisory warning."
+          constraints: "Starts false, changes at most once, and is never shared across turns."
+      relationships:
+        - target: "Compatibility Diagnostic"
+          type: "one-to-many"
+          description: "Permits at most one warning diagnostic and any fail-closed terminal evidence."
+    - name: "SDK Publication Projection"
+      description: "The reviewed one-way synchronization of canonical sdk/go into public jcode-go."
+      fields:
+        - name: "source_revision"
+          type: "Git commit"
+          description: "Validated canonical Jcode revision."
+          constraints: "Must be recorded before publication."
+        - name: "manifest"
+          type: "jcode-go-sync-manifest-v1"
+          description: "Exact deterministic add/update/remove and protected-retain projection."
+          constraints: "Reviewed, fingerprint-bound, and unchanged at apply time."
+        - name: "validation_evidence"
+          type: "command results"
+          description: "Equivalent canonical and public module contract checks."
+          constraints: "All required checks pass before push."
+      relationships:
+        - target: "Go Typed Event"
+          type: "one-to-many"
+          description: "The projection publishes the canonical typed-event contract without reverse ownership."
+
+api_contracts:
+  endpoints:
+    - method: "Rust method"
+      path: "ApiEvent::publication_contract"
+      description: "Returns the exhaustive owned-turn publication disposition and semantic class for a known harness event."
+      request:
+        content_type: "Rust value"
+        body_schema: "&ApiEvent"
+      response:
+        success_code: 200
+        body_schema: "EventPublicationContract { wire_kind, disposition, semantic_class }"
+      errors:
+        - code: 500
+          description: "A newly added ApiEvent variant without an explicit disposition fails compilation or the completeness test; no runtime default is accepted."
+    - method: "Go function"
+      path: "SemanticClassOf"
+      description: "Returns the reviewed semantic class for one known canonical TypedEvent without inspecting payload values."
+      request:
+        content_type: "Go value"
+        body_schema: "TypedEvent"
+      response:
+        success_code: 200
+        body_schema: "(EventSemanticClass, true) for every known owned-turn concrete type"
+      errors:
+        - code: 422
+          description: "UnknownEvent, nil, or a concrete type with no reviewed class returns false and must enter the fail-closed compatibility path."
+    - method: "Go method"
+      path: "Turn.Next"
+      description: "Publishes ordered safety-relevant typed events, filters only explicit advisory/lifecycle metadata, and terminates on unknown, malformed, or unclassified input."
+      request:
+        content_type: "protocol-v1 ServerFrame"
+        body_schema: "Known or unknown event carrying a stable ev tag and fields"
+      response:
+        success_code: 200
+        body_schema: "TypedEvent in original order, or no event plus one bounded Observer warning for ignored advisory metadata"
+      errors:
+        - code: 422
+          description: "Unknown, malformed, or semantically unclassified input produces TurnResultProtocolError with a bounded payload-free compatibility error."
+        - code: 507
+          description: "Existing bounded subscriber-overflow behavior remains unchanged."
+    - method: "Go method"
+      path: "TypedEventStream.Next"
+      description: "Preserves the legacy Session.Events typed stream, including UnknownEvent kind/fields compatibility, while known events decode to concrete types and classes."
+      request:
+        content_type: "protocol-v1 ServerFrame"
+        body_schema: "Raw known or additive event frame"
+      response:
+        success_code: 200
+        body_schema: "Concrete TypedEvent for known kinds or UnknownEvent { Kind, Fields } for additive unknown kinds"
+      errors:
+        - code: 400
+          description: "Malformed known-event fields return a decode error without formatting raw fields into the error."
+    - method: "Shell command"
+      path: "scripts/sync-jcode-go.sh preview/apply"
+      description: "Projects the validated canonical SDK to public jcode-go through the existing reviewed one-way manifest."
+      request:
+        content_type: "CLI arguments and manifest"
+        body_schema: "Canonical sdk/go path, eligible clean public main destination, and unchanged reviewed manifest for apply"
+      response:
+        success_code: 200
+        body_schema: "Deterministic manifest in preview or exact reviewed operations in authorized apply"
+      errors:
+        - code: 400
+          description: "Wrong repository, branch, dirty state, stale fingerprints, unsafe paths, malformed manifest, or reverse synchronization is rejected before mutation."
+
+project_structure:
+  documentation:
+    - path: "specs/007-typed-event-compatibility/plan.yaml"
+      description: "Binding architecture, evidence, compatibility, validation, and publication plan for the feature."
+    - path: "docs/GO_SDK_ARCHITECTURE.md"
+      description: "Current-state ownership of Rust wire semantics, Go typed classifications, owned-turn filtering, unknown preservation, and publication direction."
+    - path: "docs/GO_SDK.md"
+      description: "Consumer guidance for semantic classes, fail-closed handling, advisory warnings, and legacy versus owned-turn streams."
+    - path: "docs/GO_SDK_RELEASE_PLAN.md"
+      description: "Canonical-to-public manifest review, equivalent validation, commit/push authorization, and downstream version evidence."
+    - path: "sdk/go/README.md"
+      description: "Publishable public Go API guidance and exhaustive handler expectations."
+  source_code:
+    - path: "crates/jcode-harness-api/src/events.rs"
+      description: "Canonical ApiEvent wire variants plus exhaustive owned-turn disposition and semantic class."
+    - path: "crates/jcode-harness-api/src/client.rs"
+      description: "Rust client compatibility behavior updated so unsupported identity is not silently discarded where fail-closed semantics apply."
+    - path: "crates/jcode-harness-api-server/src/translate.rs"
+      description: "Legacy-to-public translation and explicit internal-only filters with reviewable rationales."
+    - path: "sdk/go/protocol/protocol.go"
+      description: "Protocol-v1 known/unknown event preservation and stable kind provenance."
+    - path: "sdk/go/session.go"
+      description: "Concrete typed event definitions, decoding, semantic classification, and bounded compatibility error types."
+    - path: "sdk/go/turn.go"
+      description: "Owned-turn classification enforcement, advisory filtering, one-warning state, and fail-closed terminal behavior."
+    - path: "sdk/go/client.go"
+      description: "Existing bounded Observer contract extended with payload-free advisory compatibility metadata only if required."
+    - path: "scripts/sync-jcode-go.sh"
+      description: "Existing sole deterministic canonical-to-public synchronization boundary; no alternate mirror is introduced."
+    - path: "scripts/validate_go_sdk.sh"
+      description: "Existing seven-category canonical and public SDK validation entry point."
+  tests:
+    - path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+      description: "Protocol-v1 wire regression, unknown identity, exhaustive semantic disposition, and SDK parity gates."
+    - path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+      description: "Exact failed-run translation fixture, owned-turn publication/filter inventory, and existing ReasoningDone, ToolExec, terminal, and background behavior."
+    - path: "sdk/go/protocol/parity_test.go"
+      description: "Machine-checks every Rust event tag against Go known-event, typed-event, semantic-class, and explicit filter coverage."
+    - path: "sdk/go/typed_api_test.go"
+      description: "Concrete decoding for the failed event and every semantic class plus unknown, malformed, unclassified, redaction, and protocol-v1 fixtures."
+    - path: "sdk/go/turn_test.go"
+      description: "Owned-turn ordering, exactly-one advisory warning, required-event publication, fail-closed errors, terminal outcomes, cancellation, and queue bounds."
+    - path: "sdk/go/turn_outcome_test.go"
+      description: "Preserves immutable success, failure, cancellation, provider, protocol, and bridge terminal classifications."
+    - path: "scripts/test_sync_jcode_go.sh"
+      description: "Deterministic projection and protected-public-boundary fixture coverage."
+    - path: "scripts/test_validate_go_sdk.sh"
+      description: "Proves every SDK validation category runs and failures remain visible."
+
+implementation_phases:
+  - phase: 1
+    name: "Recover evidence and freeze the event inventory"
+    goal: "Prove the exact run-1c2020f67330 event identity without retaining payloads and establish the current owned-turn publication matrix."
+    deliverables:
+      - "Authoritative source and timestamp trail for the rejected wire kind and concrete Go type, with the connection_phase hypothesis confirmed or rejected"
+      - "Deterministic payload-free Rust and Go fixture that reproduces the former unsupported_typed_event path"
+      - "Complete ApiEvent inventory recording owned-turn publication, explicit pre-publication filters with rationale, or outside-turn disposition"
+      - "Requirement-to-check acceptance matrix covering all 16 functional requirements, 4 non-functional requirements, publication, push authorization, cleanup, and data-safety boundaries"
+  - phase: 2
+    name: "Establish canonical Rust semantics and publication gates"
+    goal: "Make the harness wire authority exhaustive about semantic class and public owned-turn disposition."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "EventSemanticClass and exhaustive ApiEvent publication contract with no default classification"
+      - "Explicit reviewable filters limited to non-public-turn events and a test that rejects undeclared or public-contract filters"
+      - "Bounded sanitized Rust event identity for unsupported input without payload retention"
+      - "Focused schema and translator regressions preserving protocol-v1, ReasoningDone, ToolExec, terminal, permission, and background behavior"
+  - phase: 3
+    name: "Enforce canonical Go typed-event compatibility"
+    goal: "Give every owned-turn event a concrete Go type and semantic class, permit only bounded advisory filtering, and fail closed on unsafe drift."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Concrete typed decoder support for the evidence-proven event and all currently published owned-turn tags"
+      - "Public EventSemanticClass classification with parity coverage against the Rust inventory"
+      - "Turn dispatch policy that filters only advisory/lifecycle metadata and emits exactly one bounded redacted Observer warning per Turn"
+      - "Typed protocol compatibility errors for unknown, malformed, nil, and semantically unclassified Turn events while legacy Session.Events preserves UnknownEvent"
+      - "Focused Go fixtures for every class, repeated advisory metadata, control/malformed/oversized identifiers, payload exclusion, and required-handler paths"
+  - phase: 4
+    name: "Lock protocol, lifecycle, and SDK regressions"
+    goal: "Prove the new semantic policy does not alter established protocol-v1 or terminal behavior."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Complete Rust-to-Go coverage gate that fails for any newly owned event lacking a type, class, or explicit filter"
+      - "Deterministic ReasoningDone continuation, ToolExec/tool-effect, success, provider failure, cancellation, unknown-event, and protocol-v1 corpus"
+      - "Go unit, race, Windows compile, and isolated newly built private-runtime smoke evidence with no provider-routing changes"
+      - "Updated architecture, SDK, README, and release documentation describing semantic handling and canonical publication ownership"
+  - phase: 5
+    name: "Validate and prepare the public SDK projection"
+    goal: "Produce reviewable canonical-to-public evidence and complete repository delivery gates without unauthorized external mutation."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Passing focused Rust package tests, relevant builds, scripts/validate_go_sdk.sh, sync/validator fixture suites, and scripts/check_guardrails.sh"
+      - "Two byte-identical sync previews whose reviewed manifest contains only canonical SDK projection changes and preserves public governance/docs"
+      - "Equivalent contract validation in a controlled public-module projection, with canonical revision and exact commands recorded in Bead jcode-t5z"
+      - "Explicit approval checkpoint before applying to public jcode-go main, committing, pushing, confirming origin/main, or triggering downstream locus-jd84 validation"
+      - "After authorization, recorded public commit/push evidence and downstream version-update handoff through the existing one-way workflow"
+
+open_questions:
+  - question: "Which exact wire kind and Go concrete type caused Locus run-1c2020f67330 to terminate with unsupported_typed_event?"
+    context: "The sealed run retained the terminal classification but omitted the rejected identity. Source history makes connection_phase the leading candidate because Rust publishes it while the current Go typed decoder does not, but FR-001 forbids guessing."
+    proposed_resolution: "In Phase 1, correlate the sealed run timestamps and immutable Jcode revision with authoritative bridge/runtime evidence, project only sanitized kind/type, reproduce the pre-fix decoder result in a payload-free fixture, and record whether connection_phase is confirmed before implementation continues."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T01:53:26Z"
+  artifact_type: "plan"

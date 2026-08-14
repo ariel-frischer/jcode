@@ -42,6 +42,7 @@ make_destination() {
   git -C "$dir" config user.name fixture
   git -C "$dir" config user.email fixture@example.invalid
   git -C "$dir" remote add origin "$remote"
+  printf 'module github.com/ariel-frischer/jcode-go\n\ngo 1.23\n' >"$dir/go.mod"
   mkdir -p "$dir/docs" "$dir/specs/kept" "$dir/.autospec"
   printf 'package jcode\n\nconst Version = "old"\n' >"$dir/client.go"
   printf 'package jcode\n' >"$dir/obsolete.go"
@@ -51,7 +52,7 @@ make_destination() {
   printf 'public governance\n' >"$dir/.autospec/constitution.yaml"
   printf 'public agents\n' >"$dir/AGENTS.md"
   printf '.beads/\n' >"$dir/.gitignore"
-  git -C "$dir" add AGENTS.md .autospec/constitution.yaml .gitignore README.md client.go docs/architecture.md obsolete.go specs/kept/spec.yaml
+  git -C "$dir" add AGENTS.md .autospec/constitution.yaml .gitignore README.md client.go docs/architecture.md go.mod obsolete.go specs/kept/spec.yaml
   git -C "$dir" commit -q -m fixture
 }
 
@@ -61,6 +62,10 @@ status_of() {
 
 make_source "$TMP/source"
 make_destination "$TMP/destination"
+
+reverse_before=$(status_of "$TMP/destination")
+expect_failure reverse-sync "$SYNC" preview --source "$TMP/destination" --destination "$TMP/destination"
+test "$reverse_before" = "$(status_of "$TMP/destination")" || fail "reverse-sync rejection mutated destination"
 
 before=$(status_of "$TMP/destination")
 "$SYNC" preview --source "$TMP/source" --destination "$TMP/destination" >"$TMP/preview-1.manifest"
@@ -105,6 +110,7 @@ test ! -e "$TMP/outside/event.go" || fail "symlink rejection wrote outside desti
 
 printf 'bad\n' >"$TMP/malformed.manifest"
 expect_failure malformed "$SYNC" apply --source "$TMP/source" --destination "$TMP/destination" --manifest "$TMP/malformed.manifest"
+expect_failure direct-apply "$SYNC" apply --source "$TMP/source" --destination "$TMP/destination"
 sed '1s/v1/v2/' "$TMP/preview-1.manifest" >"$TMP/unsupported.manifest"
 expect_failure unsupported "$SYNC" apply --source "$TMP/source" --destination "$TMP/destination" --manifest "$TMP/unsupported.manifest"
 cp "$TMP/preview-1.manifest" "$TMP/unsafe.manifest"

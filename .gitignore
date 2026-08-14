@@ -5,6 +5,10 @@ release/
 *.rs.bk
 *.rlib
 *.prof*
+*.exe
+*.test
+*.out
+vendor/
 .env*
 Cargo.lock
 __pycache__/

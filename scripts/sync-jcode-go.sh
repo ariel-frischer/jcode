@@ -68,16 +68,31 @@ destination_dir=$(cd "$destination_dir" && pwd -P)
 grep -Eq '^module[[:space:]]+github\.com/ariel-frischer/jcode-go[[:space:]]*$' "$source_dir/go.mod" ||
   fail "source go.mod is not github.com/ariel-frischer/jcode-go"
 
+is_public_jcode_go_remote() {
+  case $1 in
+    https://github.com/ariel-frischer/jcode-go|https://github.com/ariel-frischer/jcode-go.git|git@github.com:ariel-frischer/jcode-go|git@github.com:ariel-frischer/jcode-go.git|ssh://git@github.com/ariel-frischer/jcode-go|ssh://git@github.com/ariel-frischer/jcode-go.git)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+if git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  source_remote=$(git -C "$source_dir" remote get-url origin 2>/dev/null || true)
+  if is_public_jcode_go_remote "$source_remote"; then
+    fail "source origin is the public jcode-go repository; reverse synchronization is not allowed"
+  fi
+fi
+
 git -C "$destination_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
   fail "destination is not a Git repository"
 destination_root=$(git -C "$destination_dir" rev-parse --show-toplevel)
 [[ $destination_root == "$destination_dir" ]] || fail "destination must be the repository root"
 [[ $(git -C "$destination_dir" branch --show-current) == main ]] || fail "destination must be on branch main"
 remote=$(git -C "$destination_dir" remote get-url origin 2>/dev/null || true)
-case $remote in
-  https://github.com/ariel-frischer/jcode-go|https://github.com/ariel-frischer/jcode-go.git|git@github.com:ariel-frischer/jcode-go|git@github.com:ariel-frischer/jcode-go.git|ssh://git@github.com/ariel-frischer/jcode-go|ssh://git@github.com/ariel-frischer/jcode-go.git) ;;
-  *) fail "destination origin is not github.com/ariel-frischer/jcode-go" ;;
-esac
+is_public_jcode_go_remote "$remote" || fail "destination origin is not github.com/ariel-frischer/jcode-go"
 [[ -z $(git -C "$destination_dir" status --porcelain=v1) ]] || fail "destination worktree must be clean"
 
 if [[ $mode == apply ]]; then

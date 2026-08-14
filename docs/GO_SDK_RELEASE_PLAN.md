@@ -4,6 +4,26 @@
 
 The canonical source is `sdk/go`; the public destination is `github.com/ariel-frischer/jcode-go`. Publication is externally visible and requires explicit maintainer authorization. This reconciliation does not authorize applying to or pushing the live public repository.
 
+## One-way ownership and evidence contract
+
+`sdk/go` is the sole source of the typed-event implementation. The public
+`jcode-go` repository is a protected publication projection, not a second
+source and never an upstream for reverse synchronization. The only apply
+boundary is the deterministic, fingerprint-bound manifest emitted by
+`scripts/sync-jcode-go.sh`; direct public edits, reverse sync attempts, stale
+manifests, dirty or ineligible destinations, unsafe paths, and unreviewed apply
+commands must be rejected before the first write.
+
+A publication-readiness record must include the canonical source revision, two
+byte-identical non-mutating previews, the reviewed manifest fingerprint,
+`scripts/validate_go_sdk.sh` results, the sync and validator fixture results,
+and equivalent typed-event, race, module, and Windows compile checks in a
+controlled projection. It must also record the public commit, push confirmation
+on `origin/main`, and downstream module/version-update evidence when (and only
+when) those actions are separately authorized and completed. Previewing,
+validating, or applying to a controlled temporary projection never authorizes
+public apply, commit, push, or live downstream validation.
+
 ## Supported validation matrix
 
 | Go | Linux | macOS | Windows |

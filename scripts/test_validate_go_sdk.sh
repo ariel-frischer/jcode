@@ -14,6 +14,7 @@ fail() {
 mkdir -p "$TMP/sdk" "$TMP/bin"
 printf 'module github.com/ariel-frischer/jcode-go\n\ngo 1.23\n' >"$TMP/sdk/go.mod"
 printf 'package jcode\n' >"$TMP/sdk/sample.go"
+cp -a "$TMP/sdk" "$TMP/projected"
 
 cat >"$TMP/bin/gofmt" <<'SH'
 #!/usr/bin/env bash
@@ -43,6 +44,9 @@ case $* in
   *) exit 91 ;;
 esac
 if [[ ${FAIL_CATEGORY:-} == "$category" ]]; then
+  if [[ $category == tests ]]; then
+    echo 'typed-event fixture failure' >&2
+  fi
   exit 1
 fi
 exit 0
@@ -50,17 +54,21 @@ SH
 chmod +x "$TMP/bin/gofmt" "$TMP/bin/go"
 
 snapshot() {
-  git hash-object "$TMP/sdk/go.mod" "$TMP/sdk/sample.go"
+  sdk=$1
+  git hash-object "$sdk/go.mod" "$sdk/sample.go"
 }
 
 run_validator() {
-  COMMAND_LOG=$1 FAIL_CATEGORY=${2:-} PATH="$TMP/bin:$PATH" \
-    "$VALIDATE" --sdk-dir "$TMP/sdk"
+  log=$1
+  category=${2:-}
+  sdk=${3:-$TMP/sdk}
+  COMMAND_LOG=$log FAIL_CATEGORY=$category PATH="$TMP/bin:$PATH" \
+    "$VALIDATE" --sdk-dir "$sdk"
 }
 
-before=$(snapshot)
+before=$(snapshot "$TMP/sdk")
 run_validator "$TMP/success.log" >"$TMP/success.out"
-test "$before" = "$(snapshot)" || fail "successful validation mutated SDK files"
+test "$before" = "$(snapshot "$TMP/sdk")" || fail "successful validation mutated SDK files"
 
 grep -q $'^gofmt\t.*sample.go$' "$TMP/success.log"
 grep -q $'^go\tGOOS=\tGOARCH=\tmod tidy -diff$' "$TMP/success.log"
@@ -72,6 +80,12 @@ grep -q $'^go\tGOOS=\tGOARCH=\ttest -race ./\.\.\.$' "$TMP/success.log"
 grep -q $'^go\tGOOS=windows\tGOARCH=amd64\tbuild ./\.\.\.$' "$TMP/success.log"
 test "$(grep -c '^\[PASS\]' "$TMP/success.out")" -eq 7 || fail "success summary did not contain seven passes"
 
+projected_before=$(snapshot "$TMP/projected")
+run_validator "$TMP/projected.log" '' "$TMP/projected" >"$TMP/projected.out"
+test "$projected_before" = "$(snapshot "$TMP/projected")" || fail "projected validation mutated SDK files"
+test "$(grep -c '^\[PASS\]' "$TMP/projected.out")" -eq 7 || fail "projected summary did not contain seven passes"
+grep -q $'^go\tGOOS=windows\tGOARCH=amd64\tbuild ./\.\.\.$' "$TMP/projected.log"
+
 for category in formatting module-consistency vet build tests race-tests windows-amd64-build; do
   log="$TMP/fail-$category.log"
   output="$TMP/fail-$category.out"
@@ -79,8 +93,11 @@ for category in formatting module-consistency vet build tests race-tests windows
     fail "$category failure unexpectedly succeeded"
   fi
   grep -q "^\[FAIL\] $category" "$output" || fail "$category failure was not visible"
+  if [[ $category == tests ]]; then
+    grep -q '^typed-event fixture failure$' "$output" || fail "typed-event failure was hidden from aggregate output"
+  fi
   grep -q $'^go\tGOOS=windows\tGOARCH=amd64\tbuild ./\.\.\.$' "$log" || fail "$category stopped before the final category"
-  test "$before" = "$(snapshot)" || fail "$category failure mutated SDK files"
+  test "$before" = "$(snapshot "$TMP/sdk")" || fail "$category failure mutated SDK files"
 done
 
 echo "test_validate_go_sdk: PASS"

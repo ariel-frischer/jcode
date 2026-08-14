@@ -24,6 +24,33 @@ The SDK is an external protocol-v1 client. It uses the local harness API over ne
 
 See [`sdk/go/README.md`](../sdk/go/README.md) for API examples and lifecycle/error details.
 
+## Typed-event semantics
+
+`EventSemanticClass` is closed and explicit. The canonical event inventory
+assigns every owned-turn event exactly one class:
+
+| Class | Owned `Turn.Next` policy |
+| --- | --- |
+| `EventSemanticClassContentProgress` | Publish to the handler. |
+| `EventSemanticClassAdvisoryLifecycle` | May be ignored; the first ignored event emits one bounded `Observation` with sanitized `EventKind`, `EventType`, and `Disposition`. |
+| `EventSemanticClassTerminal` | Publish and wait for the immutable terminal result. |
+| `EventSemanticClassPermission` | Publish and apply an explicit user/application policy. |
+| `EventSemanticClassToolEffect` | Publish and handle the tool effect; never treat it as metadata. |
+
+Use `SemanticClassOf` when adapting a `TypedEvent` to an exhaustive handler.
+An owned turn never infers a class from an event name or payload. Unknown,
+malformed, nil, and semantically unclassified input fails closed as a
+`TurnResultProtocolError` whose `CompatibilityError` contains only sanitized
+kind/type identifiers and is at most 256 UTF-8 bytes. No prompt, tool argument,
+provider content, credential, path, or raw event fields are formatted into the
+diagnostic.
+
+The legacy `Session.Events` stream remains compatible: known kinds decode to
+their concrete typed values, while an additive unknown kind is returned as
+`UnknownEvent` with its kind and fields preserved for callers that explicitly
+own forward-compatibility handling. That preservation does not authorize an
+owned `Turn` to continue past an unknown or unclassified event.
+
 ## Use from source
 
 In another module:

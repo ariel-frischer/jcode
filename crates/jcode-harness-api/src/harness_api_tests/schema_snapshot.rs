@@ -1,6 +1,7 @@
 //! Schema snapshot tests: fail if the wire shape changes accidentally.
 
 use crate::*;
+use std::collections::HashSet;
 
 #[test]
 fn client_frame_wire_shape() {
@@ -94,6 +95,407 @@ fn unknown_event_kind_is_skippable() {
     let json = r#"{"v":1,"ev":"some_future_event","payload":123}"#;
     let frame: ServerFrame = serde_json::from_str(json).unwrap();
     assert_eq!(frame.event, ApiEvent::Unknown);
+}
+
+#[test]
+fn every_api_event_has_one_explicit_publication_contract() {
+    let events = [
+        (
+            ApiEvent::HelloOk {
+                version: 1,
+                server: "fixture".into(),
+                capabilities: vec![],
+            },
+            "hello_ok",
+        ),
+        (ApiEvent::Ok, "ok"),
+        (
+            ApiEvent::Error {
+                code: ErrorCode::Internal,
+                message: "fixture".into(),
+                provider_code: None,
+            },
+            "error",
+        ),
+        (ApiEvent::Sessions { sessions: vec![] }, "sessions"),
+        (
+            ApiEvent::Attached {
+                session: SessionInfo {
+                    session_id: "s".into(),
+                    working_dir: None,
+                    title: None,
+                    status: "idle".into(),
+                    transcript_bytes: None,
+                    archived: false,
+                    archived_at_ms: None,
+                },
+            },
+            "attached",
+        ),
+        (
+            ApiEvent::History {
+                session_id: "s".into(),
+                messages: vec![],
+            },
+            "history",
+        ),
+        (ApiEvent::Pong, "pong"),
+        (
+            ApiEvent::TextDelta {
+                session_id: "s".into(),
+                text: "x".into(),
+            },
+            "text_delta",
+        ),
+        (
+            ApiEvent::ReasoningDelta {
+                session_id: "s".into(),
+                text: "x".into(),
+            },
+            "reasoning_delta",
+        ),
+        (
+            ApiEvent::ReasoningDone {
+                session_id: "s".into(),
+                duration_secs: None,
+            },
+            "reasoning_done",
+        ),
+        (
+            ApiEvent::ToolStart {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                name: "n".into(),
+            },
+            "tool_start",
+        ),
+        (
+            ApiEvent::ToolInputDelta {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                delta: "x".into(),
+            },
+            "tool_input_delta",
+        ),
+        (
+            ApiEvent::ToolExec {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                name: "n".into(),
+            },
+            "tool_exec",
+        ),
+        (
+            ApiEvent::ToolDone {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                name: "n".into(),
+                output: "x".into(),
+                error: None,
+            },
+            "tool_done",
+        ),
+        (
+            ApiEvent::TokenUsage {
+                session_id: "s".into(),
+                input: 1,
+                output: 2,
+                cache_read_input: None,
+            },
+            "token_usage",
+        ),
+        (
+            ApiEvent::TurnDone {
+                session_id: "s".into(),
+            },
+            "turn_done",
+        ),
+        (
+            ApiEvent::BackgroundProgress {
+                session_id: "s".into(),
+                task_id: "t".into(),
+                label: "l".into(),
+                percent: None,
+                summary: "x".into(),
+                done: false,
+            },
+            "background_progress",
+        ),
+        (
+            ApiEvent::MessageAccepted {
+                session_id: "s".into(),
+            },
+            "message_accepted",
+        ),
+        (
+            ApiEvent::PermissionRequest {
+                session_id: "s".into(),
+                request_id: "r".into(),
+                tool_name: "n".into(),
+                description: "d".into(),
+            },
+            "permission_request",
+        ),
+        (
+            ApiEvent::SessionStatus {
+                session_id: "s".into(),
+                status: "idle".into(),
+            },
+            "session_status",
+        ),
+        (
+            ApiEvent::ConnectionPhase {
+                session_id: "s".into(),
+                phase: "connecting".into(),
+            },
+            "connection_phase",
+        ),
+        (
+            ApiEvent::ModelInfo {
+                session_id: "s".into(),
+                provider: None,
+                model: None,
+            },
+            "model_info",
+        ),
+        (
+            ApiEvent::Models {
+                session_id: "s".into(),
+                models: vec![],
+                current: None,
+            },
+            "models",
+        ),
+        (
+            ApiEvent::RuntimeInfo {
+                session_id: "s".into(),
+                provider: None,
+                model: None,
+                routes: vec![],
+            },
+            "runtime_info",
+        ),
+        (
+            ApiEvent::CredentialUpdated {
+                provider: "p".into(),
+                configured: true,
+            },
+            "credential_updated",
+        ),
+        (
+            ApiEvent::FileContent {
+                session_id: "s".into(),
+                path: "p".into(),
+                content: "x".into(),
+                size: 1,
+                truncated: false,
+            },
+            "file_content",
+        ),
+        (
+            ApiEvent::Files {
+                session_id: "s".into(),
+                paths: vec![],
+            },
+            "files",
+        ),
+        (
+            ApiEvent::TextMatches {
+                session_id: "s".into(),
+                matches: vec![],
+            },
+            "text_matches",
+        ),
+        (
+            ApiEvent::FileStatus {
+                session_id: "s".into(),
+                path: "p".into(),
+                exists: true,
+                kind: "file".into(),
+                size: None,
+                modified_ms: None,
+            },
+            "file_status",
+        ),
+        (
+            ApiEvent::Compacted {
+                session_id: "s".into(),
+                message: "x".into(),
+            },
+            "compacted",
+        ),
+        (
+            ApiEvent::SessionRenamed {
+                session_id: "s".into(),
+                title: None,
+                display_title: "x".into(),
+            },
+            "session_renamed",
+        ),
+        (ApiEvent::Unknown, "unknown"),
+    ];
+    assert_eq!(events.len(), api_event_variant_count());
+    validate_publication_inventory(
+        &events
+            .iter()
+            .map(|(event, _)| event.publication_contract())
+            .collect::<Vec<_>>(),
+    )
+    .expect("canonical ApiEvent inventory must be complete and explicit");
+    for (event, wire_kind) in events {
+        let contract = event.publication_contract();
+        assert_eq!(contract.wire_kind, wire_kind);
+        match contract.disposition {
+            EventPublicationDisposition::OwnedTurn => {
+                assert!(
+                    contract.semantic_class.is_some(),
+                    "{wire_kind} lacks a semantic class"
+                );
+            }
+            EventPublicationDisposition::Filtered
+            | EventPublicationDisposition::OutsideOwnedTurn => {
+                assert!(
+                    contract.semantic_class.is_none(),
+                    "{wire_kind} has a class outside the owned turn"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn exhaustive_inventory_rejects_uncovered_or_unsafe_fixtures() {
+    let valid = EventPublicationContract {
+        wire_kind: "fixture",
+        disposition: EventPublicationDisposition::OwnedTurn,
+        semantic_class: Some(EventSemanticClass::ContentProgress),
+        filter_rationale: None,
+    };
+    let mut missing_class = valid;
+    missing_class.semantic_class = None;
+    assert!(validate_publication_inventory(&[missing_class]).is_err());
+
+    let undeclared_filter = EventPublicationContract {
+        wire_kind: "fixture_filter",
+        disposition: EventPublicationDisposition::Filtered,
+        semantic_class: None,
+        filter_rationale: None,
+    };
+    assert!(validate_publication_inventory(&[undeclared_filter]).is_err());
+
+    let duplicate = [valid, valid];
+    assert!(validate_publication_inventory(&duplicate).is_err());
+}
+
+fn validate_publication_inventory(entries: &[EventPublicationContract]) -> Result<(), String> {
+    let mut wire_kinds = HashSet::new();
+    for entry in entries {
+        if !wire_kinds.insert(entry.wire_kind) {
+            return Err(format!("duplicate wire kind {}", entry.wire_kind));
+        }
+        match entry.disposition {
+            EventPublicationDisposition::OwnedTurn => {
+                if entry.semantic_class.is_none() || entry.filter_rationale.is_some() {
+                    return Err(format!(
+                        "owned event {} must have one class and no filter rationale",
+                        entry.wire_kind
+                    ));
+                }
+            }
+            EventPublicationDisposition::Filtered => {
+                if entry.semantic_class.is_some()
+                    || entry
+                        .filter_rationale
+                        .map_or(true, |rationale| rationale.trim().is_empty())
+                {
+                    return Err(format!(
+                        "filtered event {} requires a rationale and no class",
+                        entry.wire_kind
+                    ));
+                }
+            }
+            EventPublicationDisposition::OutsideOwnedTurn => {
+                if entry.semantic_class.is_some() || entry.filter_rationale.is_some() {
+                    return Err(format!(
+                        "outside-turn event {} cannot have class/filter metadata",
+                        entry.wire_kind
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn api_event_variant_count() -> usize {
+    let source = include_str!("../events.rs");
+    let (_, rest) = source
+        .split_once("pub enum ApiEvent {")
+        .expect("ApiEvent declaration");
+    let (body, _) = rest.split_once("\n}").expect("ApiEvent source body");
+    body.lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            trimmed
+                .chars()
+                .next()
+                .is_some_and(|ch| ch.is_ascii_uppercase())
+                && trimmed
+                    .chars()
+                    .take_while(|ch| ch.is_ascii_alphanumeric())
+                    .count()
+                    > 0
+                && (trimmed.contains('{') || trimmed.ends_with(','))
+        })
+        .count()
+}
+
+#[test]
+fn owned_turn_contract_covers_each_semantic_class_without_wire_changes() {
+    let classes = [
+        (
+            ApiEvent::TextDelta {
+                session_id: "s".into(),
+                text: "x".into(),
+            },
+            EventSemanticClass::ContentProgress,
+        ),
+        (
+            ApiEvent::ConnectionPhase {
+                session_id: "s".into(),
+                phase: "connecting".into(),
+            },
+            EventSemanticClass::AdvisoryLifecycle,
+        ),
+        (
+            ApiEvent::TurnDone {
+                session_id: "s".into(),
+            },
+            EventSemanticClass::Terminal,
+        ),
+        (
+            ApiEvent::PermissionRequest {
+                session_id: "s".into(),
+                request_id: "r".into(),
+                tool_name: "n".into(),
+                description: "d".into(),
+            },
+            EventSemanticClass::Permission,
+        ),
+        (
+            ApiEvent::ToolExec {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                name: "n".into(),
+            },
+            EventSemanticClass::ToolEffect,
+        ),
+    ];
+    for (event, expected) in classes {
+        let contract = event.publication_contract();
+        assert_eq!(contract.disposition, EventPublicationDisposition::OwnedTurn);
+        assert_eq!(contract.semantic_class, Some(expected));
+    }
 }
 
 #[test]

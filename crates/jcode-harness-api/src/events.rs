@@ -2,6 +2,36 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Closed semantic classes for events that can reach an owned turn stream.
+///
+/// This is intentionally not inferred from event names or payload shape. A new
+/// `ApiEvent` variant must be assigned here and in its publication contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventSemanticClass {
+    ContentProgress,
+    AdvisoryLifecycle,
+    Terminal,
+    Permission,
+    ToolEffect,
+}
+
+/// Publication disposition at the owned-turn boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventPublicationDisposition {
+    OwnedTurn,
+    Filtered,
+    OutsideOwnedTurn,
+}
+
+/// Exhaustive wire/publication metadata for one `ApiEvent` variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventPublicationContract {
+    pub wire_kind: &'static str,
+    pub disposition: EventPublicationDisposition,
+    pub semantic_class: Option<EventSemanticClass>,
+    pub filter_rationale: Option<&'static str>,
+}
+
 /// Curated event surface. Internally-tagged on `"ev"`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "ev", rename_all = "snake_case")]
@@ -242,6 +272,66 @@ pub enum ApiEvent {
     /// Forward-compatibility catch-all: clients must skip this silently.
     #[serde(other)]
     Unknown,
+}
+
+impl ApiEvent {
+    /// Return the reviewed publication and semantic policy for this event.
+    ///
+    /// Keep this match exhaustive: adding an `ApiEvent` variant must stop the
+    /// build until its owned-turn contract is reviewed.
+    pub fn publication_contract(&self) -> EventPublicationContract {
+        use EventPublicationDisposition::{OutsideOwnedTurn as Outside, OwnedTurn as Owned};
+        use EventSemanticClass::{AdvisoryLifecycle as Advisory, ContentProgress as Content};
+        use EventSemanticClass::{Permission, Terminal, ToolEffect};
+
+        let owned = |wire_kind, semantic_class| EventPublicationContract {
+            wire_kind,
+            disposition: Owned,
+            semantic_class: Some(semantic_class),
+            filter_rationale: None,
+        };
+        let outside = |wire_kind| EventPublicationContract {
+            wire_kind,
+            disposition: Outside,
+            semantic_class: None,
+            filter_rationale: None,
+        };
+
+        match self {
+            Self::HelloOk { .. } => outside("hello_ok"),
+            Self::Ok => outside("ok"),
+            Self::Error { .. } => owned("error", Terminal),
+            Self::Sessions { .. } => outside("sessions"),
+            Self::Attached { .. } => outside("attached"),
+            Self::History { .. } => outside("history"),
+            Self::Pong => outside("pong"),
+            Self::TextDelta { .. } => owned("text_delta", Content),
+            Self::ReasoningDelta { .. } => owned("reasoning_delta", Content),
+            Self::ReasoningDone { .. } => owned("reasoning_done", Advisory),
+            Self::ToolStart { .. } => owned("tool_start", Content),
+            Self::ToolInputDelta { .. } => owned("tool_input_delta", Content),
+            Self::ToolExec { .. } => owned("tool_exec", ToolEffect),
+            Self::ToolDone { .. } => owned("tool_done", Content),
+            Self::TokenUsage { .. } => owned("token_usage", Content),
+            Self::TurnDone { .. } => owned("turn_done", Terminal),
+            Self::BackgroundProgress { .. } => owned("background_progress", Advisory),
+            Self::MessageAccepted { .. } => owned("message_accepted", Advisory),
+            Self::PermissionRequest { .. } => owned("permission_request", Permission),
+            Self::SessionStatus { .. } => owned("session_status", Advisory),
+            Self::ConnectionPhase { .. } => owned("connection_phase", Advisory),
+            Self::ModelInfo { .. } => owned("model_info", Advisory),
+            Self::Models { .. } => outside("models"),
+            Self::RuntimeInfo { .. } => outside("runtime_info"),
+            Self::CredentialUpdated { .. } => outside("credential_updated"),
+            Self::FileContent { .. } => outside("file_content"),
+            Self::Files { .. } => outside("files"),
+            Self::TextMatches { .. } => outside("text_matches"),
+            Self::FileStatus { .. } => outside("file_status"),
+            Self::Compacted { .. } => outside("compacted"),
+            Self::SessionRenamed { .. } => outside("session_renamed"),
+            Self::Unknown => outside("unknown"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
