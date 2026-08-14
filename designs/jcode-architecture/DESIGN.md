@@ -209,14 +209,14 @@ flowchart LR
   Tools -->|approved filesystem and process effects| Workspace
   Historical -.->|excluded from current boundary| ClientHub
 
-  subgraph Legend[Legend]
+  subgraph Legend[Legend / map key]
     direction LR
     LegendCurrent[Implemented Jcode component]
     LegendStore[(Durable or bounded local store)]
     LegendExternal[External trust boundary]
     LegendAsync[Dashed arrow means async<br/>or lifecycle path]
     LegendHistorical[Historical or optional context]
-    LegendCurrent --> LegendStore --> LegendExternal --> LegendAsync --> LegendHistorical
+    LegendCurrent --> LegendStore --> LegendExternal -.-> LegendAsync --> LegendHistorical
   end
 
   classDef current fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
