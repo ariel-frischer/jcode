@@ -161,7 +161,7 @@ phases:
           - "Emit an actionable bounded result with session identity, evidence source, proposal count, accounting summary, and proposal locations or explicit zero-proposal status."
       - id: "T012"
         title: "Define the human-triggered slash workflow contract"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-001"
