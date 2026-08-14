@@ -54,7 +54,7 @@ mod file_diff_ui;
 #[path = "ui_frame_metrics.rs"]
 mod frame_metrics;
 #[path = "ui_header.rs"]
-mod header;
+pub(crate) mod header;
 #[path = "ui_inline_file_preview.rs"]
 mod inline_file_preview_ui;
 #[path = "ui_inline_image.rs"]
