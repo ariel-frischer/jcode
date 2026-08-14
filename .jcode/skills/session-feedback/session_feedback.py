@@ -6,8 +6,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
+import tempfile
 import time
 import unicodedata
 from pathlib import Path
@@ -1134,6 +1136,343 @@ def render_review_proposal(proposal: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _default_bd_runner(command: Sequence[str], *, cwd: Path) -> dict[str, Any]:
+    completed = subprocess.run(
+        list(command),
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
+def _run_bd(
+    runner: Any,
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    operation: str,
+) -> str:
+    if not command or command[0] != "bd":
+        raise ValidationError("feedback persistence permits only local bd commands")
+    forbidden = {"remote", "replicate", "sync", "push", "pull", "delete"}
+    if forbidden & {part.lower() for part in command}:
+        raise ValidationError(
+            "feedback persistence forbids remote or destructive bd commands"
+        )
+    try:
+        receipt = runner(tuple(command), cwd=cwd)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ValidationError(
+            _bounded_error(f"bd {operation} failed: {error}")
+        ) from error
+    if not isinstance(receipt, Mapping):
+        raise ValidationError(f"bd {operation} returned a malformed receipt")
+    returncode = receipt.get("returncode")
+    stdout = receipt.get("stdout", "")
+    stderr = receipt.get("stderr", "")
+    if (
+        not isinstance(returncode, int)
+        or not isinstance(stdout, str)
+        or not isinstance(stderr, str)
+    ):
+        raise ValidationError(f"bd {operation} returned a malformed receipt")
+    if returncode != 0:
+        detail = stderr.strip() or stdout.strip() or f"exit status {returncode}"
+        raise ValidationError(_bounded_error(f"bd {operation} failed: {detail}"))
+    return stdout
+
+
+def _feedback_root(value: str | Path) -> Path:
+    root = Path(value).expanduser()
+    if not root.is_absolute():
+        raise ValidationError("feedback_root must be an absolute path")
+    return root.resolve(strict=False)
+
+
+def bootstrap_feedback_store(
+    *,
+    feedback_root: str | Path = Path.home() / ".jcode" / "feedback",
+    bd_runner: Any | None = None,
+) -> dict[str, str]:
+    """Create the contained local feedback layout and initialize Beads once."""
+    root = _feedback_root(feedback_root)
+    runs = root / "runs"
+    proposals = root / "proposals"
+    beads = root / ".beads"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        runs.mkdir(exist_ok=True)
+        proposals.mkdir(exist_ok=True)
+    except OSError as error:
+        raise ValidationError(
+            _bounded_error(f"unable to bootstrap feedback storage: {error}")
+        ) from error
+
+    runner = _default_bd_runner if bd_runner is None else bd_runner
+    if not beads.is_dir():
+        _run_bd(runner, ["bd", "init", "--quiet"], cwd=root, operation="init")
+    if not beads.is_dir():
+        raise ValidationError("bd init did not create the local .beads directory")
+    return {
+        "feedback_root": str(root),
+        "runs": str(runs),
+        "proposals": str(proposals),
+        "beads": str(beads),
+    }
+
+
+def _validated_evidence_occurrence(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValidationError("evidence_occurrence must be an object")
+    required = {
+        "occurrence_id",
+        "session_id",
+        "observed_at",
+        "evidence_references",
+        "evidence_digest",
+    }
+    if set(value) != required:
+        raise ValidationError("evidence_occurrence has missing or unknown fields")
+    occurrence = json.loads(canonical_json(value))
+    for field in ("occurrence_id", "session_id", "observed_at"):
+        item = occurrence[field]
+        if not isinstance(item, str) or not item.strip() or len(item) > 128:
+            raise ValidationError(
+                f"evidence_occurrence.{field} is invalid or oversized"
+            )
+    references = occurrence["evidence_references"]
+    if not isinstance(references, list) or not 1 <= len(references) <= 32:
+        raise ValidationError(
+            "evidence_occurrence.evidence_references is invalid or oversized"
+        )
+    if any(
+        not isinstance(item, str) or not item.strip() or len(item) > 256
+        for item in references
+    ):
+        raise ValidationError(
+            "evidence_occurrence.evidence_references contains an invalid value"
+        )
+    if len(set(references)) != len(references):
+        raise ValidationError(
+            "evidence_occurrence.evidence_references contains duplicates"
+        )
+    digest = occurrence["evidence_digest"]
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ValidationError(
+            "evidence_occurrence.evidence_digest must be lowercase SHA-256"
+        )
+    if len(canonical_bytes(occurrence)) > 8_192:
+        raise ValidationError("evidence_occurrence exceeds the byte limit")
+    return occurrence
+
+
+def _record_labels(record: Mapping[str, Any]) -> set[str]:
+    labels = record.get("labels", [])
+    if isinstance(labels, str):
+        return {item.strip() for item in labels.split(",") if item.strip()}
+    if isinstance(labels, Sequence) and not isinstance(labels, (str, bytes)):
+        if all(isinstance(item, str) for item in labels):
+            return {item for item in labels if item}
+    raise ValidationError("malformed session-feedback record labels")
+
+
+def _record_fingerprint(record: Mapping[str, Any]) -> str:
+    fingerprint = record.get("fingerprint")
+    if fingerprint is None and isinstance(record.get("metadata"), Mapping):
+        fingerprint = record["metadata"].get("fingerprint")
+    if fingerprint is None and isinstance(record.get("description"), str):
+        match = re.search(
+            r"(?im)^\*\*Fingerprint:\*\*\s*([0-9a-f]{64})\s*$", record["description"]
+        )
+        fingerprint = match.group(1) if match else None
+    if (
+        not isinstance(fingerprint, str)
+        or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None
+    ):
+        raise ValidationError("malformed session-feedback record fingerprint")
+    return fingerprint
+
+
+def _searchable_record(record: Mapping[str, Any]) -> bool:
+    labels = _record_labels(record)
+    if "session-feedback" not in labels:
+        return False
+    status = record.get("status")
+    if status in {"open", "in_progress", "in-progress"}:
+        return True
+    return status == "closed" and "feedback-relevant" in labels
+
+
+def _record_identity(record: Mapping[str, Any]) -> str:
+    bead_id = record.get("bead_id", record.get("id"))
+    if not isinstance(bead_id, str) or not bead_id.strip() or len(bead_id) > 256:
+        raise ValidationError("malformed session-feedback record identity")
+    return bead_id
+
+
+def _record_evidence_history(record: Mapping[str, Any]) -> list[dict[str, Any]]:
+    history = record.get("evidence_history", [])
+    if not isinstance(history, Sequence) or isinstance(history, (str, bytes)):
+        raise ValidationError("malformed session-feedback evidence history")
+    return [_validated_evidence_occurrence(item) for item in history]
+
+
+def _write_proposal_artifacts(
+    *,
+    proposals_dir: Path,
+    proposal: Mapping[str, Any],
+    occurrence: Mapping[str, Any],
+    atomic_replace: Any,
+) -> tuple[Path, Path]:
+    rendered = render_review_proposal(proposal)
+    fingerprint = proposal["fingerprint"]
+    json_path = proposals_dir / f"{fingerprint}.json"
+    markdown_path = proposals_dir / f"{fingerprint}.md"
+    if json_path.exists() or markdown_path.exists():
+        raise ValidationError(
+            "proposal artifact already exists without a matching record"
+        )
+    document = json.loads(rendered["json"])
+    document["evidence_history"] = [occurrence]
+    json_text = canonical_json(document) + "\n"
+    markdown_text = (
+        rendered["markdown"]
+        + "## Evidence history\n\n    "
+        + canonical_json(occurrence)
+        + "\n"
+    )
+    staged: list[Path] = []
+    committed: list[Path] = []
+    try:
+        for destination, content in (
+            (json_path, json_text),
+            (markdown_path, markdown_text),
+        ):
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{fingerprint}.", suffix=".tmp", dir=proposals_dir
+            )
+            temporary = Path(temporary_name)
+            staged.append(temporary)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            atomic_replace(temporary, destination)
+            staged.remove(temporary)
+            committed.append(destination)
+    except OSError as error:
+        for path in staged + committed:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise ValidationError(
+            _bounded_error(f"atomic proposal persistence failed: {error}")
+        ) from error
+    return json_path, markdown_path
+
+
+def persist_review_proposal(
+    *,
+    proposal: Mapping[str, Any],
+    evidence_occurrence: Mapping[str, Any],
+    feedback_root: str | Path = Path.home() / ".jcode" / "feedback",
+    bd_runner: Any | None = None,
+    atomic_replace: Any = os.replace,
+) -> dict[str, Any]:
+    """Create one review record or append one bounded, nonduplicate occurrence."""
+    rendered = render_review_proposal(proposal)
+    canonical_proposal = json.loads(rendered["json"])["proposal"]
+    occurrence = _validated_evidence_occurrence(evidence_occurrence)
+    root = _feedback_root(feedback_root)
+    runner = _default_bd_runner if bd_runner is None else bd_runner
+    layout = bootstrap_feedback_store(feedback_root=root, bd_runner=runner)
+    proposals_dir = Path(layout["proposals"])
+
+    stdout = _run_bd(
+        runner,
+        ["bd", "list", "--json", "--label", "session-feedback", "--limit", "0"],
+        cwd=root,
+        operation="list",
+    )
+    try:
+        records = json.loads(stdout or "[]")
+    except json.JSONDecodeError as error:
+        raise ValidationError(
+            _bounded_error(f"bd list returned malformed JSON: {error}")
+        ) from error
+    if not isinstance(records, list) or any(
+        not isinstance(item, Mapping) for item in records
+    ):
+        raise ValidationError("bd list returned malformed session-feedback records")
+
+    matches: list[Mapping[str, Any]] = []
+    for record in records:
+        if not _searchable_record(record):
+            continue
+        if _record_fingerprint(record) == canonical_proposal["fingerprint"]:
+            matches.append(record)
+    if len(matches) > 1:
+        raise ValidationError("ambiguous session-feedback fingerprint matches")
+    if matches:
+        match = matches[0]
+        bead_id = _record_identity(match)
+        history = _record_evidence_history(match)
+        if occurrence in history:
+            return {"action": "duplicate_evidence_ignored", "bead_id": bead_id}
+        _run_bd(
+            runner,
+            ["bd", "comments", "add", bead_id, canonical_json(occurrence)],
+            cwd=root,
+            operation="append evidence",
+        )
+        return {"action": "evidence_appended", "bead_id": bead_id}
+
+    json_path, markdown_path = _write_proposal_artifacts(
+        proposals_dir=proposals_dir,
+        proposal=canonical_proposal,
+        occurrence=occurrence,
+        atomic_replace=atomic_replace,
+    )
+    title = f"Session feedback: {canonical_proposal['target']['concrete_target']}"
+    try:
+        create_stdout = _run_bd(
+            runner,
+            [
+                "bd",
+                "create",
+                title,
+                "--description",
+                rendered["markdown"],
+                "--labels",
+                "session-feedback,needs-approval",
+                "--json",
+            ],
+            cwd=root,
+            operation="create",
+        )
+        created = json.loads(create_stdout)
+        bead_id = created.get("id") if isinstance(created, Mapping) else None
+        if not isinstance(bead_id, str) or not bead_id:
+            raise ValidationError("bd create returned a malformed record identity")
+    except (ValidationError, json.JSONDecodeError):
+        json_path.unlink(missing_ok=True)
+        markdown_path.unlink(missing_ok=True)
+        raise
+    return {
+        "action": "created",
+        "bead_id": bead_id,
+        "proposal_json": str(json_path),
+        "proposal_markdown": str(markdown_path),
+    }
+
+
 def generate_review_proposals(
     *,
     request_input: Mapping[str, Any],
@@ -1377,6 +1716,7 @@ __all__ = [
     "ValidationError",
     "canonical_bytes",
     "canonical_json",
+    "bootstrap_feedback_store",
     "build_review_outcome",
     "DEFAULT_GENERATION_CONFIG",
     "evidence_accounting",
@@ -1392,6 +1732,7 @@ __all__ = [
     "normalize_scope",
     "normalize_text",
     "parse_contract",
+    "persist_review_proposal",
     "prepare_feedback_invocation",
     "proposal_fingerprint",
     "render_review_proposal",
