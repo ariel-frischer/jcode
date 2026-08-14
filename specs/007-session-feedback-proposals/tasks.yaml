@@ -34,7 +34,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Write foundational contract and deterministic-core tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
