@@ -245,7 +245,7 @@ fn recognized_secrets_are_redacted_before_canonicalization_and_safe_text_is_unch
 fn huge_file_and_tool_payloads_become_deterministic_one_kib_receipts() {
     let operations = ["edit", "multiedit", "apply_patch", "read", "write", "bash"];
     let payload_sizes = [
-        1 * 1024 * 1024,
+        1024 * 1024,
         2 * 1024 * 1024,
         4 * 1024 * 1024,
         8 * 1024 * 1024,

@@ -154,7 +154,7 @@ pub(crate) fn admit_session(
                 ContentBlock::ToolUse {
                     id, name, input, ..
                 } => {
-                    pending_tools.insert(id.clone(), pending_tool(name, input));
+                    pending_tools.insert(id.clone(), pending_tool(name, input)?);
                 }
                 ContentBlock::ToolResult {
                     tool_use_id,
@@ -191,7 +191,7 @@ pub(crate) fn admit_session(
     }
 
     let bounded = apply_category_caps(bounded, caps);
-    let admitted = apply_global_cap(&session.id, bounded, budgets.max_input_tokens);
+    let admitted = apply_global_cap(&session.id, bounded, budgets.max_input_tokens)?;
     if admitted.is_empty() {
         return Err(LibrarianFailure {
             stage: LibrarianFailureStage::Admission,
@@ -203,7 +203,7 @@ pub(crate) fn admit_session(
         });
     }
 
-    let canonical_payload = serialize_payload(&session.id, &admitted);
+    let canonical_payload = serialize_payload(&session.id, &admitted)?;
     let input_tokens = conservative_token_count(&canonical_payload);
     if input_tokens > budgets.max_input_tokens {
         return Err(LibrarianFailure {
@@ -257,20 +257,21 @@ fn looks_like_base64_blob(text: &str) -> bool {
     total > 0 && eligible.saturating_mul(100) / total >= 98
 }
 
-fn pending_tool(operation: &str, input: &Value) -> PendingToolUse {
+fn pending_tool(operation: &str, input: &Value) -> Result<PendingToolUse, LibrarianFailure> {
     let redacted_input = redact_json(input);
-    let canonical_input = serde_json::to_vec(&canonical_json(&redacted_input)).unwrap_or_default();
+    let canonical_input = serde_json::to_vec(&canonical_json(&redacted_input))
+        .map_err(admission_serialization_failure)?;
     let path = first_string(input, &["file_path", "path", "file"]).map(normalize_recorded_path);
     let intent = first_string(input, &["intent"])
         .map(redact_secrets)
         .map(|value| truncate_utf8(&value, ERROR_EXCERPT_BYTES));
 
-    PendingToolUse {
+    Ok(PendingToolUse {
         operation: operation.to_string(),
         path,
         intent,
         canonical_input,
-    }
+    })
 }
 
 fn first_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
@@ -352,10 +353,10 @@ fn extract_counts(result: &str) -> BTreeMap<String, u64> {
 fn receipt_identity(receipt: &AdmissionItem) -> String {
     format!(
         "{}\0{}\0{}\0{}",
-        receipt.operation.as_deref().unwrap_or_default(),
-        receipt.path.as_deref().unwrap_or_default(),
-        receipt.input_sha256.as_deref().unwrap_or_default(),
-        receipt.result_sha256.as_deref().unwrap_or_default(),
+        receipt.operation.as_deref().unwrap_or(""),
+        receipt.path.as_deref().unwrap_or(""),
+        receipt.input_sha256.as_deref().unwrap_or(""),
+        receipt.result_sha256.as_deref().unwrap_or(""),
     )
 }
 
@@ -397,27 +398,39 @@ fn apply_global_cap(
     session_id: &str,
     items: Vec<AdmissionItem>,
     max_input_tokens: u32,
-) -> Vec<AdmissionItem> {
+) -> Result<Vec<AdmissionItem>, LibrarianFailure> {
     let mut selected = Vec::<AdmissionItem>::new();
     for item in items.into_iter().rev() {
         let mut candidate = Vec::with_capacity(selected.len() + 1);
         candidate.push(item.clone());
         candidate.extend(selected.iter().cloned());
-        if conservative_token_count(&serialize_payload(session_id, &candidate)) <= max_input_tokens
+        if conservative_token_count(&serialize_payload(session_id, &candidate)?) <= max_input_tokens
         {
             selected = candidate;
         }
     }
-    selected
+    Ok(selected)
 }
 
-fn serialize_payload(session_id: &str, items: &[AdmissionItem]) -> Vec<u8> {
+fn serialize_payload(
+    session_id: &str,
+    items: &[AdmissionItem],
+) -> Result<Vec<u8>, LibrarianFailure> {
     serde_json::to_vec(&CanonicalAdmission {
         version: ADMISSION_FORMAT_VERSION,
         session_id,
         items,
     })
-    .expect("session librarian admission payload must serialize")
+    .map_err(admission_serialization_failure)
+}
+
+fn admission_serialization_failure(error: serde_json::Error) -> LibrarianFailure {
+    LibrarianFailure {
+        stage: LibrarianFailureStage::Admission,
+        code: "librarian_admission_serialization_failed",
+        message: format!("Session librarian could not serialize bounded admitted content: {error}"),
+        usage: None,
+    }
 }
 
 fn conservative_token_count(bytes: &[u8]) -> u32 {
@@ -432,8 +445,7 @@ fn sha256(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut encoded = String::with_capacity(64);
     for byte in digest {
-        use std::fmt::Write as _;
-        let _ = write!(encoded, "{byte:02x}");
+        encoded.push_str(&format!("{byte:02x}"));
     }
     encoded
 }

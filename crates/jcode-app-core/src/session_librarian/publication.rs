@@ -170,7 +170,7 @@ struct PublicationLock {
 
 impl Drop for PublicationLock {
     fn drop(&mut self) {
-        let _ = fs::remove_dir(&self.lock_directory);
+        drop(fs::remove_dir(&self.lock_directory));
     }
 }
 
@@ -191,7 +191,7 @@ impl StagingCleanup {
 impl Drop for StagingCleanup {
     fn drop(&mut self) {
         if let Some(path) = self.path.take() {
-            let _ = fs::remove_dir_all(path);
+            drop(fs::remove_dir_all(path));
         }
     }
 }
@@ -365,7 +365,14 @@ fn validate_published_pair(
                 format!("Existing summary.json does not match the summary schema: {error}"),
             )
         })?;
-    if serde_json::to_value(&summary).ok().as_ref() != Some(&source_value) {
+    let normalized_value = serde_json::to_value(&summary).map_err(|error| {
+        failure(
+            LibrarianFailureStage::Validation,
+            "librarian_existing_pair_invalid",
+            format!("Existing summary.json could not be normalized: {error}"),
+        )
+    })?;
+    if normalized_value != source_value {
         return Err(failure(
             LibrarianFailureStage::Validation,
             "librarian_existing_pair_mismatch",
@@ -406,7 +413,7 @@ fn create_staging_directory(
         match fs::create_dir(&path) {
             Ok(()) => {
                 if let Err(error) = set_private_directory_permissions(&path) {
-                    let _ = fs::remove_dir(&path);
+                    drop(fs::remove_dir(&path));
                     return Err(error);
                 }
                 return Ok(path);

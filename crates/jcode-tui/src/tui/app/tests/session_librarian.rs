@@ -7,7 +7,8 @@ fn write_session_librarian_skill(project_root: &std::path::Path) {
     std::fs::write(
         skill_dir.join("SKILL.md"),
         format!(
-            "---\nname: session-librarian\ndescription: Summarize one canonical session\n---\n\
+            "---\nname: session-librarian\ndescription: Summarize one canonical session\n\
+             default-prompt: {SESSION_LIBRARIAN_CURRENT_PROMPT}\n---\n\
              When invoked without an argument, submit this prompt exactly once:\n\
              `{SESSION_LIBRARIAN_CURRENT_PROMPT}`\n\
              When invoked with a trailing persisted session identifier, preserve it exactly and \

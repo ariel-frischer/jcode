@@ -2,6 +2,7 @@
 name: session-librarian
 description: Generate a bounded summary for the current session or one explicitly named persisted session.
 allowed-tools: session_librarian
+default-prompt: Invoke session_librarian exactly once for the current session and report the result.
 ---
 
 # Session Librarian

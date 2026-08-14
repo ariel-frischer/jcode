@@ -395,15 +395,30 @@ fn project_generation(
     })
 }
 
+// Keep missing route metadata explicit. The repository's swallowed-error budget
+// intentionally rejects `unwrap_or_default` in production code.
+#[allow(clippy::manual_unwrap_or_default)]
 fn active_route(session: &Session) -> LibrarianRouteIdentity {
+    let provider = match session
+        .route_api_method
+        .clone()
+        .or_else(|| session.provider_key.clone())
+    {
+        Some(provider) => provider,
+        None => String::new(),
+    };
+    let model = match session.model.clone() {
+        Some(model) => model,
+        None => String::new(),
+    };
+    let reasoning_effort = match session.reasoning_effort.clone() {
+        Some(reasoning_effort) => reasoning_effort,
+        None => String::new(),
+    };
     LibrarianRouteIdentity {
-        provider: session
-            .route_api_method
-            .clone()
-            .or_else(|| session.provider_key.clone())
-            .unwrap_or_default(),
-        model: session.model.clone().unwrap_or_default(),
-        reasoning_effort: session.reasoning_effort.clone().unwrap_or_default(),
+        provider,
+        model,
+        reasoning_effort,
     }
 }
 

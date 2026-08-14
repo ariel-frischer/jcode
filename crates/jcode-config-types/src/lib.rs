@@ -449,47 +449,8 @@ pub struct SessionProfileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handoff: Option<HandoffProfileConfig>,
 }
-
-/// Optional persisted route and hard-budget overrides for the session librarian.
-///
-/// Values remain strings at this persistence boundary so the owning resolver can
-/// distinguish omitted settings from explicit empty, malformed, non-positive,
-/// or otherwise unsupported values and return an actionable validation error.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(default)]
-pub struct SessionLibrarianConfig {
-    /// Provider route used independently from the active session provider.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    /// Model used independently from the active session model.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    /// Provider reasoning effort for librarian generation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning_effort: Option<String>,
-    /// Maximum admitted provider input tokens.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_input_tokens: Option<String>,
-    /// Maximum generated provider output tokens.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_output_tokens: Option<String>,
-    /// Maximum provider requests per invocation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_requests: Option<String>,
-    /// Maximum approved provider cost in exact decimal USD text.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_cost_usd: Option<String>,
-    /// Wall-clock deadline for one invocation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deadline_seconds: Option<String>,
-}
-
-impl SessionLibrarianConfig {
-    pub fn is_empty(&self) -> bool {
-        self == &Self::default()
-    }
-}
-
+mod session_librarian;
+pub use session_librarian::SessionLibrarianConfig;
 /// Global policy for manual and agent-initiated fresh-session handoffs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -504,7 +465,6 @@ pub struct HandoffConfig {
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions_file: Option<String>,
 }
-
 impl Default for HandoffConfig {
     fn default() -> Self {
         Self {
@@ -825,42 +785,7 @@ impl Default for AgentsConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AgentsConfig, HandoffConfig, SessionLibrarianConfig, SessionProfileConfig, SwarmRolePolicy,
-    };
-
-    #[test]
-    fn omitted_librarian_config_preserves_the_legacy_empty_shape() {
-        let config: SessionLibrarianConfig = toml::from_str("").expect("legacy config");
-
-        assert!(config.is_empty());
-        assert_eq!(toml::to_string(&config).expect("serialize config"), "");
-    }
-
-    #[test]
-    fn librarian_config_round_trips_explicit_invalid_values_for_boundary_validation() {
-        let config: SessionLibrarianConfig = toml::from_str(
-            r#"
-            provider = ""
-            model = "gpt-5.6-luna"
-            reasoning_effort = "unsupported"
-            max_input_tokens = "0"
-            max_output_tokens = "many"
-            max_requests = "2"
-            max_cost_usd = "NaN"
-            deadline_seconds = "-1"
-            "#,
-        )
-        .expect("persistence must retain values for resolver validation");
-
-        assert_eq!(config.provider.as_deref(), Some(""));
-        assert_eq!(config.max_input_tokens.as_deref(), Some("0"));
-        assert_eq!(config.max_cost_usd.as_deref(), Some("NaN"));
-
-        let encoded = toml::to_string(&config).expect("serialize config");
-        let decoded: SessionLibrarianConfig = toml::from_str(&encoded).expect("deserialize config");
-        assert_eq!(decoded, config);
-    }
+    use super::{AgentsConfig, HandoffConfig, SessionProfileConfig, SwarmRolePolicy};
 
     #[test]
     fn handoff_defaults_enable_bounded_agent_continuation() {

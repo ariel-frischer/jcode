@@ -386,7 +386,7 @@ phases:
           - "The entry does not claim automatic summarization or broader plugin support."
       - id: "T028"
         title: "Run focused acceptance tests and repository guardrails"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null

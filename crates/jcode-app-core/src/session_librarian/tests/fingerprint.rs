@@ -173,7 +173,8 @@ fn every_summary_affecting_content_or_configuration_change_changes_the_digest() 
     changed.route.reasoning_effort = "medium".into();
     variants.push(("effort", changed));
 
-    let budget_mutations: &[(&str, fn(&mut LibrarianBudgetIdentity))] = &[
+    type BudgetMutation = (&'static str, fn(&mut LibrarianBudgetIdentity));
+    let budget_mutations: &[BudgetMutation] = &[
         ("deadline", |budget: &mut LibrarianBudgetIdentity| {
             budget.deadline_seconds += 1
         }),

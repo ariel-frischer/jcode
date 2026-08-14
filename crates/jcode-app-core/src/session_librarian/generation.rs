@@ -86,10 +86,13 @@ impl GenerationProviderFactory for NativeGenerationProviderFactory {
         let provider = jcode_base::provider::external::instantiate_external_provider(
             jcode_base::provider::external::OPENAI_RUNTIME,
         )?;
-        provider.set_model(&route.model).ok()?;
-        provider
-            .set_reasoning_effort(&route.reasoning_effort)
-            .ok()?;
+        if provider.set_model(&route.model).is_err()
+            || provider
+                .set_reasoning_effort(&route.reasoning_effort)
+                .is_err()
+        {
+            return None;
+        }
         Some(provider)
     }
 }

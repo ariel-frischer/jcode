@@ -883,7 +883,7 @@ impl Agent {
                     println!("Activating skill: {}", skill.name);
                     println!("{}\n", skill.description);
                     self.active_skill = Some(invocation.name.to_string());
-                    if let Some(prompt) = invocation.prompt {
+                    if let Some(prompt) = invocation.prompt.or(skill.default_prompt.as_deref()) {
                         if let Err(e) = self.run_once(prompt).await {
                             eprintln!("\nError: {}\n", e);
                         }
