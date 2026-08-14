@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jcode.local/session-feedback/schemas/evidence-v1.schema.json",
+  "title": "Session Feedback Bounded Evidence v1",
+  "description": "A privacy-safe, bounded evidence bundle produced by either a compatible librarian summary or the deterministic visible-session fallback.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "source",
+    "items",
+    "accounting"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "evidence-v1",
+      "description": "The only evidence contract version supported by this schema."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "librarian",
+        "fallback"
+      ],
+      "description": "The adapter that produced the normalized bundle."
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/evidence_item"
+      },
+      "description": "Allowlisted evidence only. The item and field limits impose a deterministic aggregate payload ceiling."
+    },
+    "accounting": {
+      "$ref": "#/$defs/accounting"
+    }
+  },
+  "$defs": {
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "description": "Stable bundle-local reference used by proposals and accounting."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+@-]*$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?:~/)?(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)[A-Za-z0-9._@+:-]+(?:/[A-Za-z0-9._@+:-]+)*$",
+      "description": "A normalized relative or home-relative relevant path. Absolute paths, traversal segments, repeated separators, backslashes, and control characters are rejected."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase SHA-256 digest of already-visible material."
+    },
+    "visible_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "summary"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "visible_outcome"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "todo_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "summary",
+        "status"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "todo_assessment"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "cancelled"
+          ]
+        }
+      }
+    },
+    "tool_invocation_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "name",
+        "outcome"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "tool_invocation_receipt"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "outcome": {
+          "$ref": "#/$defs/invocation_outcome"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "skill_invocation_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "name",
+        "outcome"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "skill_invocation_receipt"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "outcome": {
+          "$ref": "#/$defs/invocation_outcome"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "invocation_outcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "cancelled"
+      ]
+    },
+    "failure_excerpt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "excerpt"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "failure_excerpt"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]*$",
+          "description": "A short visible failure excerpt, never a transcript or bulk tool output."
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "validation_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "name",
+        "outcome"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "validation_receipt"
+        },
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "failed",
+            "skipped"
+          ]
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "relevant_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "category",
+        "path"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/reference"
+        },
+        "category": {
+          "const": "relevant_path"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        }
+      }
+    },
+    "evidence_item": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/visible_outcome"
+        },
+        {
+          "$ref": "#/$defs/todo_assessment"
+        },
+        {
+          "$ref": "#/$defs/tool_invocation_receipt"
+        },
+        {
+          "$ref": "#/$defs/skill_invocation_receipt"
+        },
+        {
+          "$ref": "#/$defs/failure_excerpt"
+        },
+        {
+          "$ref": "#/$defs/validation_receipt"
+        },
+        {
+          "$ref": "#/$defs/relevant_path"
+        }
+      ]
+    },
+    "category_measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "item_count",
+        "serialized_bytes",
+        "estimated_tokens"
+      ],
+      "properties": {
+        "item_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "serialized_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        }
+      }
+    },
+    "by_category": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 7,
+      "properties": {
+        "visible_outcome": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "todo_assessment": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "tool_invocation_receipt": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "skill_invocation_receipt": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "failure_excerpt": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "validation_receipt": {
+          "$ref": "#/$defs/category_measurement"
+        },
+        "relevant_path": {
+          "$ref": "#/$defs/category_measurement"
+        }
+      }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serialized_bytes",
+        "estimated_tokens",
+        "by_category"
+      ],
+      "properties": {
+        "serialized_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 262144
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        },
+        "by_category": {
+          "$ref": "#/$defs/by_category"
+        }
+      },
+      "$comment": "The dependency-free helper must additionally verify that category counts and measurements reconcile exactly with items and aggregate totals; JSON Schema cannot express those arithmetic sums."
+    }
+  }
+}

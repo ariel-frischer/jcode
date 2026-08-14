@@ -46,7 +46,7 @@ phases:
           - "Keep tests isolated with temporary HOME and injected executables so no developer feedback state, live provider, repository Beads store, or network service is touched."
       - id: "T003"
         title: "Define the bounded evidence v1 JSON Schema"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: null
