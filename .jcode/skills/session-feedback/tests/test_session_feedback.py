@@ -28,6 +28,7 @@ ENTRYPOINT_PATH = SKILL_DIR / "__main__.py"
 PRIVACY_FIXTURE_PATH = SKILL_DIR / "fixtures" / "privacy-sentinels.json"
 GENERATOR_FIXTURE_PATH = SKILL_DIR / "fixtures" / "generator-responses.json"
 DEDUP_FIXTURE_PATH = SKILL_DIR / "fixtures" / "dedup-records.json"
+CONFIG_FIXTURE_PATH = SKILL_DIR / "fixtures" / "config-precedence.json"
 SCHEMA_NAMES = (
     "evidence-v1",
     "proposal-v1",
@@ -1463,6 +1464,213 @@ class LocalPersistenceAndDeduplicationTests(IsolatedSessionFeedbackTestCase):
         self.assertEqual(runner.appended, [])
         self.assertEqual(list((self.feedback_root / "proposals").glob("*")), [])
         self.assertEqual(list(self.feedback_root.rglob("*.tmp")), [])
+
+
+class ConfigurationResolutionTests(IsolatedSessionFeedbackTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.fixture = json.loads(CONFIG_FIXTURE_PATH.read_text(encoding="utf-8"))
+        self.config_path = self.home / ".jcode" / "feedback" / "config.json"
+
+    def write_persisted(self, values: dict[str, object]) -> None:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config_path.write_text(json.dumps(values), encoding="utf-8")
+
+    def resolve(
+        self,
+        *,
+        invocation: dict[str, object] | None = None,
+        environment: dict[str, str] | None = None,
+        persisted: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        if persisted is not None:
+            self.write_persisted(persisted)
+        return self.feedback.resolve_feedback_config(
+            invocation_overrides=invocation or {},
+            environment=environment or {},
+            config_path=self.config_path,
+        )
+
+    @staticmethod
+    def distinct_values(
+        field: str, metadata: dict[str, object]
+    ) -> tuple[object, str, object]:
+        default = metadata["default"]
+        if field == "model":
+            return default, str(default), default
+        if field == "effort":
+            return "low", "high", "minimal"
+        if isinstance(default, int):
+            return default - 3, str(default - 2), default - 1
+        return float(default) - 0.3, str(float(default) - 0.2), float(default) - 0.1
+
+    def test_every_field_resolves_invocation_environment_persisted_then_default(
+        self,
+    ) -> None:
+        for field, metadata in self.fixture["fields"].items():
+            invocation_value, environment_value, persisted_value = self.distinct_values(
+                field, metadata
+            )
+            environment_name = metadata["environment"]
+            layers = (
+                (
+                    "invocation",
+                    {field: invocation_value},
+                    {environment_name: environment_value},
+                    {field: persisted_value},
+                    invocation_value,
+                ),
+                (
+                    "environment",
+                    {field: ""},
+                    {environment_name: environment_value},
+                    {field: persisted_value},
+                    environment_value,
+                ),
+                (
+                    "persisted",
+                    {field: ""},
+                    {environment_name: ""},
+                    {field: persisted_value},
+                    persisted_value,
+                ),
+                (
+                    "default",
+                    {field: ""},
+                    {environment_name: ""},
+                    {field: ""},
+                    metadata["default"],
+                ),
+            )
+            for source, invocation, environment, persisted, expected in layers:
+                with self.subTest(field=field, source=source):
+                    resolved = self.resolve(
+                        invocation=invocation,
+                        environment=environment,
+                        persisted=persisted,
+                    )
+                    expected_type = type(metadata["default"])
+                    self.assertEqual(resolved["values"][field], expected_type(expected))
+                    self.assertEqual(resolved["sources"][field], source)
+
+    def test_fixture_precedence_cases_and_empty_values_are_deterministic(self) -> None:
+        for case in self.fixture["precedence_cases"]:
+            with self.subTest(case=case["id"]):
+                resolved = self.resolve(
+                    invocation=case["invocation"],
+                    environment=case["environment"],
+                    persisted=case["persisted"],
+                )
+                expected = case["expected"]
+                for field, value in expected.get("values", {}).items():
+                    self.assertEqual(resolved["values"][field], value)
+                for field, source in expected.get("sources", {}).items():
+                    self.assertEqual(resolved["sources"][field], source)
+                if "source_for_all" in expected:
+                    self.assertEqual(
+                        set(resolved["sources"].values()), {expected["source_for_all"]}
+                    )
+
+    def test_invalid_present_values_fail_at_their_source_without_fallback(self) -> None:
+        fields = self.fixture["fields"]
+        for case in self.fixture["invalid_value_cases"]:
+            field = case["field"]
+            source = case["source"]
+            invocation: dict[str, object] = {}
+            environment: dict[str, str] = {}
+            persisted = {field: fields[field]["default"]}
+            if source == "invocation":
+                invocation[field] = case["value"]
+            elif source == "environment":
+                environment[fields[field]["environment"]] = str(case["value"])
+            else:
+                persisted[field] = case["value"]
+
+            with (
+                self.subTest(case=case["id"]),
+                self.assertRaisesRegex(
+                    self.feedback.ValidationError, case["expected_error"]
+                ),
+            ):
+                self.resolve(
+                    invocation=invocation,
+                    environment=environment,
+                    persisted=persisted,
+                )
+
+    def test_invalid_invocation_fails_before_evidence_reads_or_generation(self) -> None:
+        runner = mock.Mock(side_effect=AssertionError("generation must not start"))
+        with (
+            mock.patch.object(
+                self.feedback,
+                "prepare_feedback_invocation",
+                side_effect=AssertionError("evidence must not be read"),
+            ),
+            self.assertRaisesRegex(self.feedback.ValidationError, "unsupported model"),
+        ):
+            self.feedback.run_feedback(
+                requested_session_id=None,
+                current_session_id="session-current-1",
+                visible_session_ids=("session-current-1",),
+                visible_items=(),
+                librarian_summary_path=None,
+                invocation_config={"model": "synthetic-unsupported-model"},
+                feedback_config_path=self.config_path,
+                runner=runner,
+            )
+        runner.assert_not_called()
+
+    def test_defaults_use_native_openai_oauth_medium_and_one_request(self) -> None:
+        resolved = self.resolve()
+        self.assertEqual(resolved["route"]["provider"], "openai")
+        self.assertEqual(resolved["route"]["authentication"], "native-oauth")
+        self.assertEqual(resolved["values"]["model"], "gpt-5.6-sol")
+        self.assertEqual(resolved["values"]["effort"], "medium")
+        self.assertEqual(resolved["route"]["max_requests"], 1)
+
+    def test_diagnostics_report_non_secret_values_and_sources(self) -> None:
+        secret = "synthetic-secret-must-not-appear"
+        resolved = self.resolve(
+            invocation={"effort": "low"},
+            environment={
+                "JCODE_SESSION_FEEDBACK_MAX_PROPOSALS": "3",
+                "OPENAI_API_KEY": secret,
+            },
+            persisted={"max_output_tokens": 4096},
+        )
+        diagnostics = resolved["diagnostics"]
+        rendered = self.feedback.canonical_json(diagnostics)
+        self.assertNotIn(secret, rendered)
+        for field in self.fixture["fields"]:
+            with self.subTest(field=field):
+                self.assertEqual(
+                    diagnostics[field]["effective"], resolved["values"][field]
+                )
+                self.assertEqual(
+                    diagnostics[field]["source"], resolved["sources"][field]
+                )
+                self.assertIn("configured", diagnostics[field])
+
+    def test_budget_boundaries_pass_below_and_at_limit_and_fail_above(self) -> None:
+        for case in self.fixture["budget_boundary_cases"]:
+            field = case["field"]
+            limit = case["limit"]
+            for position in ("below", "at"):
+                with self.subTest(field=field, position=position):
+                    self.feedback.validate_budget_limit(
+                        field=field,
+                        observed=case[position]["observed"],
+                        limit=limit,
+                    )
+            with (
+                self.subTest(field=field, position="above"),
+                self.assertRaisesRegex(self.feedback.ValidationError, field),
+            ):
+                self.feedback.validate_budget_limit(
+                    field=field,
+                    observed=case["above"]["observed"],
+                    limit=limit,
+                )
 
 
 class LocalEntrypointTests(IsolatedSessionFeedbackTestCase):
