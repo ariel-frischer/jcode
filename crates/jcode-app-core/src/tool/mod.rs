@@ -28,7 +28,6 @@ mod patch;
 mod read;
 pub mod selfdev;
 pub(crate) mod serde_coerce;
-mod session_librarian;
 mod session_search;
 pub(crate) mod session_search_index;
 pub(crate) mod session_transition;
@@ -231,11 +230,6 @@ impl Registry {
                 "session_transition",
                 session_transition::SessionTransitionTool::new,
             );
-            Self::insert_tool_timed(&mut m, &mut timings, "session_librarian", || {
-                session_librarian::SessionLibrarianTool::new(Arc::new(
-                    crate::session_librarian::DefaultSessionLibrarian::default(),
-                ))
-            });
             Self::insert_tool_timed(&mut m, &mut timings, "memory", memory::MemoryTool::new);
             Self::insert_tool_timed(
                 &mut m,

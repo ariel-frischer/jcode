@@ -43,7 +43,6 @@ pub mod server;
 pub mod server_spawn;
 pub mod session_effort;
 pub mod session_launch;
-pub mod session_librarian;
 pub mod session_rebuild;
 pub mod setup_hints;
 pub mod ssh_remote;
