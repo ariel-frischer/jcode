@@ -15,6 +15,10 @@ pub enum TransportMode {
     Stdio,
     Tcp,
     Socket,
+    #[serde(rename = "tcp_listen", alias = "tcp-listen")]
+    TcpListen,
+    #[serde(rename = "socket_listen", alias = "socket-listen")]
+    SocketListen,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -137,8 +141,8 @@ impl AdapterRegistry {
             "dlv".into(),
             AdapterConfig {
                 command: "dlv".into(),
-                args: vec!["dap".into()],
-                transport: TransportMode::Tcp,
+                args: vec!["dap".into(), "--listen=127.0.0.1:${port}".into()],
+                transport: TransportMode::TcpListen,
                 languages: vec!["go".into()],
                 file_types: vec![".go".into()],
                 root_markers: vec!["go.mod".into(), "go.work".into()],
@@ -150,10 +154,11 @@ impl AdapterRegistry {
             "js-debug-adapter".into(),
             AdapterConfig {
                 command: "js-debug-adapter".into(),
+                args: vec!["${port}".into(), "127.0.0.1".into()],
                 languages: vec!["javascript".into(), "typescript".into()],
                 file_types: vec![".js".into(), ".ts".into(), ".tsx".into()],
                 root_markers: vec!["package.json".into(), "tsconfig.json".into()],
-                transport: TransportMode::Tcp,
+                transport: TransportMode::TcpListen,
                 ..AdapterConfig::default()
             },
         );

@@ -66,6 +66,16 @@ transport = "socket"
     )
     .expect("config");
     assert_eq!(config.transport, TransportMode::Socket);
+
+    let config: AdapterConfig = toml::from_str(
+        r#"
+command = "js-debug-adapter"
+transport = "tcp_listen"
+args = ["${port}"]
+"#,
+    )
+    .expect("listener config");
+    assert_eq!(config.transport, TransportMode::TcpListen);
 }
 
 #[test]

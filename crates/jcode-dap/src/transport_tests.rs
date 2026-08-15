@@ -184,6 +184,36 @@ async fn client_connects_to_an_existing_tcp_adapter() {
     assert_eq!(response.body.expect("body")["connected"], true);
 }
 
+#[tokio::test]
+async fn client_spawns_an_adapter_that_listens_on_tcp() {
+    let fixture =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fake_adapter.py");
+    let args = vec![
+        fixture.to_string_lossy().into_owned(),
+        "--tcp".to_owned(),
+        "${port}".to_owned(),
+    ];
+    let client = DapClient::spawn_tcp_listen(
+        "python3",
+        &args,
+        std::path::Path::new("."),
+        Duration::from_secs(2),
+    )
+    .await
+    .expect("listener adapter");
+    let response = client
+        .request(
+            "threads",
+            serde_json::json!({}),
+            Duration::from_secs(1),
+            None,
+        )
+        .await
+        .expect("tcp listener response");
+    assert_eq!(response.body.expect("body")["threads"][0]["name"], "fake");
+    client.dispose().await;
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn client_connects_to_an_existing_unix_socket_adapter() {

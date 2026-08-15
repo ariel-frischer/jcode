@@ -270,6 +270,9 @@ impl DapSessionManager {
                         "attach requires a TCP port for socket transports".into(),
                     ));
                 }
+                TransportMode::TcpListen | TransportMode::SocketListen => {
+                    spawn_adapter(&adapter, &cwd, &policy).await?
+                }
             }
         };
         let events = client.subscribe();
@@ -635,6 +638,28 @@ async fn spawn_adapter(
             {
                 DapClient::spawn_unix(&command, &adapter.config.args, cwd, policy.startup_timeout)
                     .await
+            }
+            #[cfg(not(unix))]
+            {
+                Err(DapError::Unsupported(
+                    "Unix-socket DAP adapters are unavailable on this platform".into(),
+                ))
+            }
+        }
+        TransportMode::TcpListen => {
+            DapClient::spawn_tcp_listen(&command, &adapter.config.args, cwd, policy.startup_timeout)
+                .await
+        }
+        TransportMode::SocketListen => {
+            #[cfg(unix)]
+            {
+                DapClient::spawn_unix_listen(
+                    &command,
+                    &adapter.config.args,
+                    cwd,
+                    policy.startup_timeout,
+                )
+                .await
             }
             #[cfg(not(unix))]
             {

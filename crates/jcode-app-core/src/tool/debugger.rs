@@ -48,7 +48,7 @@ impl Tool for DebuggerTool {
     }
 
     fn description(&self) -> &str {
-        "Run bounded, capability-aware DAP debugger operations against configured adapters."
+        "Run bounded, capability-aware DAP debugger operations against configured adapters. Use launch or attach explicitly when debugging is needed, keep the returned session_id for follow-up actions, and use sessions/status to inspect active sessions. This tool never starts a debugger because a file changed."
     }
 
     fn parameters_schema(&self) -> Value {
