@@ -1,6 +1,7 @@
 use super::Action;
-use super::session::{AttachRequest, DapSessionManager, LaunchRequest};
+use super::session::{AttachRequest, DapSessionManager, LaunchRequest, prepare_breakpoint_state};
 use super::session::{SessionSnapshot, SessionStatus, append_output};
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -72,4 +73,19 @@ fn output_bounds_never_split_utf8_codepoints() {
     assert!(snapshot.output.is_char_boundary(snapshot.output.len()));
     assert!(snapshot.output.len() <= 5);
     assert!(snapshot.output_truncated);
+}
+
+#[test]
+fn breakpoint_preparation_preserves_existing_state_until_commit() {
+    let existing = BTreeMap::from([("main.rs".to_owned(), vec![json!({"line": 1})])]);
+    let (arguments, (_, complete)) = prepare_breakpoint_state(
+        Action::SetBreakpoint,
+        &json!({"source": {"path": "main.rs"}, "breakpoints": [{"line": 2}]}),
+        &existing,
+    )
+    .expect("breakpoint arguments");
+
+    assert_eq!(existing["main.rs"].len(), 1);
+    assert_eq!(complete.len(), 2);
+    assert_eq!(arguments["breakpoints"].as_array().unwrap().len(), 2);
 }

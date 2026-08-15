@@ -5,6 +5,9 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TransportMode {
@@ -203,14 +206,20 @@ impl AdapterRegistry {
             .map(PathBuf::from)
             .or_else(dirs_home);
         let user = home
+            .filter(|home| trusted_config_dir(home))
             .map(|home| read_config_file(&home.join("dap.toml")))
             .transpose()?
             .and_then(|layers| layers.into_iter().next());
-        let mut dirs = Vec::new();
         let mut current = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+        let boundary = nearest_vcs_root(&current)
+            .or_else(|| dirs_home().filter(|home| current.starts_with(home)))
+            .unwrap_or_else(|| current.clone());
+        let mut dirs = Vec::new();
         loop {
-            dirs.push(current.clone());
-            if !current.pop() {
+            if trusted_config_dir(&current) {
+                dirs.push(current.clone());
+            }
+            if current == boundary || !current.pop() {
                 break;
             }
         }
@@ -375,6 +384,33 @@ fn is_executable(path: &Path) -> bool {
     path.metadata()
         .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
+}
+
+fn nearest_vcs_root(cwd: &Path) -> Option<PathBuf> {
+    let mut current = cwd.to_path_buf();
+    loop {
+        if current.join(".git").exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+#[cfg(unix)]
+fn trusted_config_dir(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    path.metadata()
+        .map(|metadata| metadata.uid() == unsafe { libc::geteuid() })
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn trusted_config_dir(path: &Path) -> bool {
+    path.is_dir()
 }
 
 #[cfg(not(unix))]

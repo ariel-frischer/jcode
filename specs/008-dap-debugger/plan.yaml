@@ -250,7 +250,7 @@ project_structure:
   tests:
     - path: "crates/jcode-dap/src/*_tests.rs"
       description: "Unit tests for config, framing, protocol, policy, and session transitions"
-    - path: "crates/jcode-dap/tests/fake_adapter.rs"
+    - path: "crates/jcode-dap/tests/fake_adapter.py"
       description: "Fake stdio/TCP/socket adapter integration fixtures and launch/attach flows"
     - path: "crates/jcode-app-core/src/tool/debugger_tests.rs"
       description: "Tool schema, policy, metadata, and DebugJob compatibility tests"

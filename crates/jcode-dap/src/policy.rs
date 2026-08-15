@@ -101,11 +101,18 @@ impl Default for DapPolicy {
 impl DapPolicy {
     pub fn from_toml_layers(layers: &[&str]) -> Result<Self> {
         let mut policy = Self::default();
-        for layer in layers {
+        if let Some(user) = layers.first() {
+            let file: PolicyFile =
+                toml::from_str(user).map_err(|error| DapError::Config(error.to_string()))?;
+            if let Some(permissions) = file.permissions {
+                permissions.apply_all(&mut policy);
+            }
+        }
+        for layer in layers.iter().skip(1) {
             let file: PolicyFile =
                 toml::from_str(layer).map_err(|error| DapError::Config(error.to_string()))?;
             if let Some(permissions) = file.permissions {
-                permissions.apply_all(&mut policy);
+                permissions.apply_narrowing(&mut policy);
             }
         }
         Ok(policy)
@@ -113,17 +120,22 @@ impl DapPolicy {
 
     pub fn load(cwd: &Path) -> Result<Self> {
         let (user, project) = crate::config::AdapterRegistry::load_scoped_config_layers(cwd)?;
+        let refs: Vec<&str> = project.iter().map(String::as_str).collect();
+        Self::from_scoped_toml_layers(user.as_deref(), &refs)
+    }
+
+    pub fn from_scoped_toml_layers(user: Option<&str>, project: &[&str]) -> Result<Self> {
         let mut policy = Self::default();
         if let Some(user) = user {
             let file: PolicyFile =
-                toml::from_str(&user).map_err(|error| DapError::Config(error.to_string()))?;
+                toml::from_str(user).map_err(|error| DapError::Config(error.to_string()))?;
             if let Some(permissions) = file.permissions {
                 permissions.apply_all(&mut policy);
             }
         }
         for project in project {
             let file: PolicyFile =
-                toml::from_str(&project).map_err(|error| DapError::Config(error.to_string()))?;
+                toml::from_str(project).map_err(|error| DapError::Config(error.to_string()))?;
             if let Some(permissions) = file.permissions {
                 permissions.apply_narrowing(&mut policy);
             }

@@ -115,3 +115,21 @@ fn nearest_root_marker_wins_over_an_ancestor_marker() {
         .expect("selected adapter");
     assert_eq!(selected.name, "nested");
 }
+
+#[test]
+fn project_config_scan_stops_at_nearest_vcs_root() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let project = temp.path().join("project");
+    let nested = project.join("nested");
+    std::fs::create_dir_all(&nested).expect("nested directory");
+    std::fs::create_dir(project.join(".git")).expect("vcs marker");
+    std::fs::write(
+        project.join("dap.toml"),
+        "[adapters.fake]\ncommand = \"/bin/echo\"\n",
+    )
+    .expect("project config");
+
+    let (_, project) = AdapterRegistry::load_scoped_config_layers(&nested).expect("layers");
+    assert_eq!(project.len(), 1);
+    assert!(project[0].contains("[adapters.fake]"));
+}

@@ -35,8 +35,16 @@ allow_memory_write = true
     ])
     .expect("policy");
 
-    assert!(policy.check(Action::Continue).is_ok());
-    assert!(policy.check(Action::WriteMemory).is_ok());
+    assert!(policy.check(Action::Continue).is_err());
+    assert!(policy.check(Action::WriteMemory).is_err());
     assert_eq!(policy.request_timeout.as_millis(), 5000);
     assert_eq!(policy.max_output_bytes, 4096);
+
+    let project_only = DapPolicy::from_scoped_toml_layers(
+        None,
+        &["[permissions]\nallow_process_control = true\nallow_memory_write = true\n"],
+    )
+    .expect("project-only policy");
+    assert!(project_only.check(Action::Continue).is_ok());
+    assert!(project_only.check(Action::WriteMemory).is_err());
 }

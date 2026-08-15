@@ -357,22 +357,37 @@ impl DapSessionManager {
         arguments: Value,
         cancellation: Option<CancellationToken>,
     ) -> Result<Value> {
-        let (client, capabilities, policy, arguments) = {
+        let (client, capabilities, policy, arguments, breakpoint_update, resume_state) = {
             let mut sessions = self.sessions.lock().await;
             let session = sessions
                 .get_mut(id)
                 .ok_or_else(|| DapError::Session(format!("unknown session '{id}'")))?;
             session.last_used = Instant::now();
-            let arguments = if matches!(action, Action::SetBreakpoint | Action::RemoveBreakpoint) {
-                update_breakpoint_state(session, action, &arguments)?
-            } else {
-                arguments
-            };
+            let (arguments, breakpoint_update) =
+                if matches!(action, Action::SetBreakpoint | Action::RemoveBreakpoint) {
+                    let (arguments, update) =
+                        prepare_breakpoint_state(action, &arguments, &session.breakpoints)?;
+                    (arguments, Some(update))
+                } else {
+                    (arguments, None)
+                };
+            let resume_state = matches!(
+                action,
+                Action::Continue | Action::StepOver | Action::StepIn | Action::StepOut
+            )
+            .then(|| {
+                (
+                    session.snapshot.status,
+                    session.snapshot.stop_reason.clone(),
+                )
+            });
             (
                 session.client.clone(),
                 session.capabilities.clone(),
                 session.policy.clone(),
                 arguments,
+                breakpoint_update,
+                resume_state,
             )
         };
         policy.check(action)?;
@@ -420,9 +435,21 @@ impl DapSessionManager {
         ) {
             self.mark_running(id).await;
         }
-        let response = client
+        let response = match client
             .request(command, arguments, policy.request_timeout, cancellation)
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                if let Some((status, stop_reason)) = resume_state {
+                    self.restore_status(id, status, stop_reason).await;
+                }
+                return Err(error);
+            }
+        };
+        if let Some((source, breakpoints)) = breakpoint_update {
+            self.commit_breakpoint_state(id, source, breakpoints).await;
+        }
         if matches!(action, Action::Stop | Action::Disconnect) {
             let _ = self.disconnect_internal(id).await;
         }
@@ -488,6 +515,29 @@ impl DapSessionManager {
         if let Some(session) = self.sessions.lock().await.get_mut(id) {
             session.snapshot.status = SessionStatus::Running;
             session.snapshot.stop_reason = None;
+        }
+    }
+
+    async fn restore_status(&self, id: &str, status: SessionStatus, stop_reason: Option<String>) {
+        if let Some(session) = self.sessions.lock().await.get_mut(id) {
+            session.snapshot.status = status;
+            session.snapshot.stop_reason = stop_reason;
+        }
+    }
+
+    async fn commit_breakpoint_state(&self, id: &str, source: String, breakpoints: Vec<Value>) {
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.get_mut(id) else {
+            return;
+        };
+        if breakpoints.is_empty() {
+            session.breakpoints.remove(&source);
+            session.snapshot.breakpoints.remove(&source);
+        } else {
+            session
+                .breakpoints
+                .insert(source.clone(), breakpoints.clone());
+            session.snapshot.breakpoints.insert(source, breakpoints);
         }
     }
 
@@ -646,11 +696,11 @@ pub(crate) fn append_output(snapshot: &mut SessionSnapshot, output: &str, max_by
     }
 }
 
-fn update_breakpoint_state(
-    session: &mut LiveSession,
+pub(crate) fn prepare_breakpoint_state(
     action: Action,
     arguments: &Value,
-) -> Result<Value> {
+    existing: &BTreeMap<String, Vec<Value>>,
+) -> Result<(Value, (String, Vec<Value>))> {
     let source = arguments
         .get("source")
         .and_then(|source| source.get("path"))
@@ -661,46 +711,35 @@ fn update_breakpoint_state(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let complete = {
-        let breakpoints = session.breakpoints.entry(source.to_owned()).or_default();
-        match action {
-            Action::SetBreakpoint => {
-                for requested_breakpoint in requested {
-                    let line = requested_breakpoint
-                        .get("line")
-                        .and_then(Value::as_i64)
-                        .ok_or_else(|| DapError::Session("breakpoint requires line".into()))?;
-                    breakpoints.retain(|breakpoint| {
-                        breakpoint.get("line").and_then(Value::as_i64) != Some(line)
-                    });
-                    breakpoints.push(requested_breakpoint);
-                }
+    let mut complete = existing.get(source).cloned().unwrap_or_default();
+    match action {
+        Action::SetBreakpoint => {
+            for requested_breakpoint in requested {
+                let line = requested_breakpoint
+                    .get("line")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| DapError::Session("breakpoint requires line".into()))?;
+                complete.retain(|breakpoint| {
+                    breakpoint.get("line").and_then(Value::as_i64) != Some(line)
+                });
+                complete.push(requested_breakpoint);
             }
-            Action::RemoveBreakpoint => {
-                for requested_breakpoint in requested {
-                    let line = requested_breakpoint
-                        .get("line")
-                        .and_then(Value::as_i64)
-                        .ok_or_else(|| {
-                            DapError::Session("breakpoint removal requires line".into())
-                        })?;
-                    breakpoints.retain(|breakpoint| {
-                        breakpoint.get("line").and_then(Value::as_i64) != Some(line)
-                    });
-                }
-            }
-            _ => unreachable!("breakpoint state only applies to breakpoint actions"),
         }
-        breakpoints.clone()
-    };
-    if complete.is_empty() {
-        session.breakpoints.remove(source);
-        session.snapshot.breakpoints.remove(source);
-    } else {
-        session
-            .snapshot
-            .breakpoints
-            .insert(source.to_owned(), complete.clone());
+        Action::RemoveBreakpoint => {
+            for requested_breakpoint in requested {
+                let line = requested_breakpoint
+                    .get("line")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| DapError::Session("breakpoint removal requires line".into()))?;
+                complete.retain(|breakpoint| {
+                    breakpoint.get("line").and_then(Value::as_i64) != Some(line)
+                });
+            }
+        }
+        _ => unreachable!("breakpoint state only applies to breakpoint actions"),
     }
-    Ok(serde_json::json!({"source": {"path": source}, "breakpoints": complete}))
+    Ok((
+        serde_json::json!({"source": {"path": source}, "breakpoints": complete}),
+        (source.to_owned(), complete),
+    ))
 }
