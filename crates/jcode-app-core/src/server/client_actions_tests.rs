@@ -323,7 +323,15 @@ async fn no_argument_handoff_persists_summary_for_destination_startup() {
     let registry = Registry::new(provider.clone()).await;
     let agent = Arc::new(Mutex::new(Agent::new(provider, registry)));
     let (client_event_tx, mut client_event_rx) = mpsc::unbounded_channel();
-    handle_handoff(71, &parent.id, &agent, None, Some(true), &client_event_tx).await;
+    handle_handoff(
+        71,
+        parent.id.clone(),
+        agent,
+        None,
+        Some(true),
+        client_event_tx,
+    )
+    .await;
 
     let event = client_event_rx
         .recv()
@@ -351,6 +359,7 @@ async fn no_argument_handoff_persists_summary_for_destination_startup() {
     let startup_input = startup["input"]
         .as_str()
         .expect("handoff startup context should contain text");
+    assert!(startup_input.contains("Generated handoff summary"));
     assert!(startup_input.contains("Next steps:"));
     assert!(startup_input.contains("Review the generated handoff next steps"));
     assert_eq!(startup["submit_on_restore"], true);

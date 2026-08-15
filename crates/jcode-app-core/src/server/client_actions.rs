@@ -15,7 +15,7 @@ use jcode_agent_runtime::{SoftInterruptSource, StreamError};
 use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 
@@ -732,6 +732,7 @@ pub(super) fn create_handoff_child_session(
         auto_start,
         max_chain_transitions,
         None,
+        false,
     )
 }
 
@@ -741,9 +742,9 @@ fn create_handoff_child_session_with_compaction(
     auto_start: bool,
     max_chain_transitions: usize,
     compaction: Option<crate::session::StoredCompactionState>,
+    copy_todos: bool,
 ) -> anyhow::Result<(String, String)> {
     let parent = Session::load(parent_session_id)?;
-    let copy_todos = compaction.is_some();
     let mut depth = 0usize;
     let mut cursor = parent.parent_id.clone();
     while let Some(parent_id) = cursor {
@@ -789,27 +790,24 @@ fn create_handoff_child_session_with_compaction(
 }
 
 const MAX_GENERATED_HANDOFF_PROMPT_CHARS: usize = 32 * 1024;
+const HANDOFF_SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn generated_handoff_prompt(
     session_id: &str,
     compaction: Option<&crate::session::StoredCompactionState>,
 ) -> String {
     let mut prompt = String::from("Continue from this fresh-session handoff.\n\n");
-    if let Some(summary) = compaction
+    let summary_section = if let Some(summary) = compaction
         .map(|state| state.summary_text.trim())
         .filter(|summary| !summary.is_empty())
     {
-        prompt.push_str("Handoff summary:\n");
-        prompt.push_str(summary);
-        prompt.push_str("\n\n");
+        format!("Handoff summary:\n{summary}\n\n")
     } else {
-        prompt.push_str(
-            "No prior conversation summary was available. Inspect the repository and current durable task state before continuing.\n\n",
-        );
-    }
+        "No prior conversation summary was available. Inspect the repository and current durable task state before continuing.\n\n"
+            .to_string()
+    };
 
     let todos = crate::todo::load_todos(session_id).unwrap_or_default();
-    prompt.push_str("Next steps:\n");
     let mut open_todos = todos
         .iter()
         .filter(|todo| !todo.status.eq_ignore_ascii_case("completed"))
@@ -821,24 +819,29 @@ fn generated_handoff_prompt(
             "- Inspect the current repository state and continue the unfinished work.".to_string(),
         );
     }
-    prompt.push_str(&open_todos.join("\n"));
+    let next_steps_section = format!("\n\nNext steps:\n{}", open_todos.join("\n"));
 
-    if prompt.len() > MAX_GENERATED_HANDOFF_PROMPT_CHARS {
-        crate::util::truncate_str(&prompt, MAX_GENERATED_HANDOFF_PROMPT_CHARS).to_string()
-    } else {
-        prompt
-    }
+    let next_steps_section = crate::util::truncate_str(
+        &next_steps_section,
+        MAX_GENERATED_HANDOFF_PROMPT_CHARS.saturating_sub(prompt.len()),
+    );
+    let summary_budget = MAX_GENERATED_HANDOFF_PROMPT_CHARS
+        .saturating_sub(prompt.len())
+        .saturating_sub(next_steps_section.len());
+    prompt.push_str(crate::util::truncate_str(&summary_section, summary_budget));
+    prompt.push_str(next_steps_section);
+    prompt
 }
 
 pub(super) async fn handle_handoff(
     id: u64,
-    client_session_id: &str,
-    agent: &Arc<Mutex<Agent>>,
+    client_session_id: String,
+    agent: Arc<Mutex<Agent>>,
     prompt: Option<String>,
     auto_start: Option<bool>,
-    client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
+    client_event_tx: mpsc::UnboundedSender<ServerEvent>,
 ) {
-    let parent = match Session::load(client_session_id) {
+    let parent = match Session::load(&client_session_id) {
         Ok(parent) => parent,
         Err(error) => {
             let _ = client_event_tx.send(ServerEvent::Error {
@@ -875,22 +878,25 @@ pub(super) async fn handle_handoff(
         }
     };
     let prompt = prompt.and_then(|prompt| (!prompt.trim().is_empty()).then_some(prompt));
-    let (prompt, compaction) = if prompt.is_some() {
-        (prompt, None)
+    let (prompt, compaction, copy_todos) = if prompt.is_some() {
+        (prompt, None, false)
     } else {
         let provider = {
             let agent_guard = agent.lock().await;
             agent_guard.provider_fork()
         };
-        let compaction = match crate::compaction::build_transfer_compaction_state(
-            provider,
-            transfer_active_messages(&parent),
-            parent.compaction.clone(),
+        let compaction = match tokio::time::timeout(
+            HANDOFF_SUMMARY_TIMEOUT,
+            crate::compaction::build_transfer_compaction_state(
+                provider,
+                transfer_active_messages(&parent),
+                parent.compaction.clone(),
+            ),
         )
         .await
         {
-            Ok(compaction) => compaction,
-            Err(error) => {
+            Ok(Ok(compaction)) => compaction,
+            Ok(Err(error)) => {
                 let _ = client_event_tx.send(ServerEvent::Error {
                     id,
                     message: format!("Failed to generate handoff summary: {error}"),
@@ -899,22 +905,35 @@ pub(super) async fn handle_handoff(
                 });
                 return;
             }
+            Err(_) => {
+                let _ = client_event_tx.send(ServerEvent::Error {
+                    id,
+                    message: format!(
+                        "Timed out generating handoff summary after {} seconds",
+                        HANDOFF_SUMMARY_TIMEOUT.as_secs()
+                    ),
+                    retry_after_secs: None,
+                    provider_code: None,
+                });
+                return;
+            }
         };
-        let prompt = generated_handoff_prompt(client_session_id, compaction.as_ref());
-        (Some(prompt), compaction)
+        let prompt = generated_handoff_prompt(&client_session_id, compaction.as_ref());
+        (Some(prompt), compaction, true)
     };
     let auto_start = auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
     match create_handoff_child_session_with_compaction(
-        client_session_id,
+        &client_session_id,
         prompt,
         auto_start,
         policy.max_chain_transitions,
         compaction,
+        copy_todos,
     ) {
         Ok((new_session_id, new_session_name)) => {
             let _ = client_event_tx.send(ServerEvent::SessionHandoffReady {
                 id,
-                source_session_id: client_session_id.to_string(),
+                source_session_id: client_session_id,
                 new_session_id,
                 new_session_name,
                 auto_start,
