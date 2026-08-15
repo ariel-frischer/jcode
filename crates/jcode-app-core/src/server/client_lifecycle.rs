@@ -2048,7 +2048,15 @@ pub(super) async fn handle_client(
                 ) {
                     continue;
                 }
-                handle_handoff(id, &client_session_id, prompt, auto_start, &client_event_tx).await;
+                handle_handoff(
+                    id,
+                    &client_session_id,
+                    &agent,
+                    prompt,
+                    auto_start,
+                    &client_event_tx,
+                )
+                .await;
             }
 
             Request::Compact { id } => {

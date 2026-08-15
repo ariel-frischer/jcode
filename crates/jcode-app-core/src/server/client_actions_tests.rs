@@ -1,8 +1,8 @@
 #![cfg_attr(test, allow(clippy::await_holding_lock))]
 
 use super::{
-    NotifySessionContext, clone_split_session, create_handoff_child_session, handle_notify_session,
-    handle_rename_session, handle_resume_all_sessions, handle_set_feature,
+    NotifySessionContext, clone_split_session, create_handoff_child_session, handle_handoff,
+    handle_notify_session, handle_rename_session, handle_resume_all_sessions, handle_set_feature,
 };
 use crate::agent::Agent;
 use crate::message::{ContentBlock, Message, Role, StreamEvent, ToolDefinition};
@@ -61,6 +61,10 @@ impl Provider for MockProvider {
         Err(anyhow::anyhow!(
             "mock provider complete should not be called in client_actions tests"
         ))
+    }
+
+    async fn complete_simple(&self, _prompt: &str, _system: &str) -> Result<String> {
+        Ok("Generated handoff summary. Next steps: continue the unfinished work.".to_string())
     }
 
     fn name(&self) -> &str {
@@ -275,6 +279,91 @@ fn handoff_child_persists_prompt_for_destination_startup() {
     .expect("parse draft startup context");
     assert_eq!(draft["input"], "review the handoff first");
     assert_eq!(draft["submit_on_restore"], false);
+
+    if let Some(prev_home) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[tokio::test]
+async fn no_argument_handoff_persists_summary_for_destination_startup() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let prev_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp.path());
+
+    let mut parent = crate::session::Session::create_with_id(
+        "session_parent_handoff_summary_test".to_string(),
+        None,
+        None,
+    );
+    parent.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "Finish the handoff summary regression and report the next steps".to_string(),
+            cache_control: None,
+        }],
+    );
+    parent.save().expect("save parent");
+    crate::todo::save_todos(
+        &parent.id,
+        &[crate::todo::TodoItem {
+            content: "Review the generated handoff next steps".to_string(),
+            status: "in_progress".to_string(),
+            priority: "high".to_string(),
+            id: "handoff-next-step".to_string(),
+            ..Default::default()
+        }],
+    )
+    .expect("save parent todo");
+
+    let provider: Arc<dyn Provider> = Arc::new(MockProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let agent = Arc::new(Mutex::new(Agent::new(provider, registry)));
+    let (client_event_tx, mut client_event_rx) = mpsc::unbounded_channel();
+    handle_handoff(71, &parent.id, &agent, None, Some(true), &client_event_tx).await;
+
+    let event = client_event_rx
+        .recv()
+        .await
+        .expect("handoff should emit an event");
+    let (child_id, auto_start) = match event {
+        ServerEvent::SessionHandoffReady {
+            new_session_id,
+            auto_start,
+            ..
+        } => (new_session_id, auto_start),
+        other => panic!("expected handoff-ready event, got {other:?}"),
+    };
+    assert!(
+        auto_start,
+        "no-argument handoff should start its summary once"
+    );
+
+    let startup_path = temp.path().join(format!("client-input-{child_id}"));
+    let startup: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&startup_path)
+            .expect("no-argument handoff should persist destination startup context"),
+    )
+    .expect("parse persisted handoff startup context");
+    let startup_input = startup["input"]
+        .as_str()
+        .expect("handoff startup context should contain text");
+    assert!(startup_input.contains("Next steps:"));
+    assert!(startup_input.contains("Review the generated handoff next steps"));
+    assert_eq!(startup["submit_on_restore"], true);
+
+    let child = crate::session::Session::load(&child_id).expect("load handoff child");
+    assert!(child.messages.is_empty());
+    assert!(child.compaction.is_some());
+    let child_todos = crate::todo::load_todos(&child_id).expect("load handoff child todos");
+    assert_eq!(child_todos.len(), 1);
+    assert_eq!(
+        child_todos[0].content,
+        "Review the generated handoff next steps"
+    );
 
     if let Some(prev_home) = prev_home {
         crate::env::set_var("JCODE_HOME", prev_home);

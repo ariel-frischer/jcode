@@ -135,7 +135,7 @@ impl App {
                 "/transfer\nCompact the current session into a summary-only handoff, copy the current todo list to a fresh session, and open that transferred session in a new window.\n\nIf a turn is currently running, jcode first soft-pauses the current session at the next safe point, then performs the transfer."
             }
             "handoff" => {
-                "/handoff [prompt]\nCreate a clean child session with no conversation or compaction history and switch this client to it. With a prompt, the fresh session starts automatically. Without a prompt, it opens blank.\n\nConfigure global defaults under [handoff] and per-profile overrides under [profiles.<name>.handoff]."
+                "/handoff [prompt]\nCreate a clean child session and switch this client to it. With a prompt, that prompt is used as the fresh session's startup context. Without a prompt, Jcode generates a bounded handoff summary, carries forward open todo next steps, and starts the fresh session with that context.\n\nUse /transfer when you want a summary-only transfer in a new window. Configure global defaults under [handoff] and per-profile overrides under [profiles.<name>.handoff]."
             }
             "plan" => {
                 "/plan [goal]\nDraft a plan without implementing anything. The model inspects the repo, then presents a structured plan (Goal, Scope, Approach, Validation, Open questions) as a dedicated plan card in the conversation.\n\nNothing is edited: it stops after presenting the plan. Once you approve, it converts the plan into a todo list and starts the work.\n\n/plan with no goal plans the task currently in focus."
