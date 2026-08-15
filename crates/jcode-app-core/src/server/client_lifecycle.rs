@@ -2048,7 +2048,20 @@ pub(super) async fn handle_client(
                 ) {
                     continue;
                 }
-                handle_handoff(id, &client_session_id, prompt, auto_start, &client_event_tx).await;
+                let handoff_session_id = client_session_id.clone();
+                let handoff_agent = Arc::clone(&agent);
+                let handoff_event_tx = client_event_tx.clone();
+                tokio::spawn(async move {
+                    handle_handoff(
+                        id,
+                        handoff_session_id,
+                        handoff_agent,
+                        prompt,
+                        auto_start,
+                        handoff_event_tx,
+                    )
+                    .await;
+                });
             }
 
             Request::Compact { id } => {
