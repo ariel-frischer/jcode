@@ -155,6 +155,7 @@ async fn test_stream_error() -> Result<()> {
         StreamEvent::TextDelta("Starting...".to_string()),
         StreamEvent::Error {
             message: "Something went wrong".to_string(),
+            provider_code: None,
             retry_after_secs: None,
         },
     ]);
