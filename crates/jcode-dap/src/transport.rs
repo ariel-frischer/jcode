@@ -12,7 +12,7 @@ use tokio::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::process::{Child, Command};
-use tokio::sync::{Mutex, broadcast, oneshot};
+use tokio::sync::{Mutex, Notify, broadcast, oneshot};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
@@ -112,8 +112,10 @@ pub struct DapClient {
     writer: Arc<Mutex<Box<dyn AsyncWrite + Send + Unpin>>>,
     pending: Arc<Mutex<HashMap<u64, oneshot::Sender<Result<DapResponseMessage>>>>>,
     events: broadcast::Sender<DapEventMessage>,
+    requests: broadcast::Sender<crate::protocol::DapRequestMessage>,
     next_seq: Arc<AtomicU64>,
     disposed: Arc<AtomicBool>,
+    dispose_notify: Arc<Notify>,
     kill_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     capabilities: Arc<Mutex<DapCapabilities>>,
 }
@@ -125,12 +127,15 @@ impl DapClient {
         W: AsyncWrite + Send + Unpin + 'static,
     {
         let (events, _) = broadcast::channel(64);
+        let (requests, _) = broadcast::channel(32);
         let client = Arc::new(Self {
             writer: Arc::new(Mutex::new(Box::new(writer))),
             pending: Arc::new(Mutex::new(HashMap::new())),
             events,
+            requests,
             next_seq: Arc::new(AtomicU64::new(1)),
             disposed: Arc::new(AtomicBool::new(false)),
+            dispose_notify: Arc::new(Notify::new()),
             kill_tx: Arc::new(Mutex::new(None)),
             capabilities: Arc::new(Mutex::new(DapCapabilities::default())),
         });
@@ -480,6 +485,7 @@ impl DapClient {
     {
         let pending = self.pending.clone();
         let events = self.events.clone();
+        let requests = self.requests.clone();
         let disposed = self.disposed.clone();
         tokio::spawn(async move {
             let mut codec = FrameCodec::default();
@@ -528,6 +534,13 @@ impl DapClient {
                                 let _ = events.send(event);
                             }
                         }
+                        Some("request") => {
+                            if let Ok(request) =
+                                serde_json::from_value::<crate::protocol::DapRequestMessage>(value)
+                            {
+                                let _ = requests.send(request);
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -547,6 +560,43 @@ impl DapClient {
 
     pub fn subscribe(&self) -> broadcast::Receiver<DapEventMessage> {
         self.events.subscribe()
+    }
+
+    /// Subscribe to adapter-initiated requests such as `runInTerminal`.
+    ///
+    /// The session manager rejects unsupported reverse requests explicitly so
+    /// adapters cannot leave a launch request waiting forever on a response.
+    pub fn subscribe_requests(&self) -> broadcast::Receiver<crate::protocol::DapRequestMessage> {
+        self.requests.subscribe()
+    }
+
+    pub fn dispose_signal(&self) -> Arc<Notify> {
+        self.dispose_notify.clone()
+    }
+
+    pub async fn respond_to_request(
+        &self,
+        request: &crate::protocol::DapRequestMessage,
+        success: bool,
+        message: Option<String>,
+        body: Option<Value>,
+    ) -> Result<()> {
+        let response = DapResponseMessage {
+            seq: self.next_seq.fetch_add(1, Ordering::Relaxed),
+            message_type: "response".to_owned(),
+            request_seq: request.seq,
+            success,
+            command: request.command.clone(),
+            message,
+            body,
+        };
+        let payload = serde_json::to_vec(&response)?;
+        let mut framed = format!("Content-Length: {}\r\n\r\n", payload.len()).into_bytes();
+        framed.extend_from_slice(&payload);
+        let mut writer = self.writer.lock().await;
+        writer.write_all(&framed).await?;
+        writer.flush().await?;
+        Ok(())
     }
 
     pub async fn request(
@@ -622,6 +672,7 @@ impl DapClient {
                 serde_json::json!({
                     "clientID": "jcode",
                     "clientName": "jcode",
+                    "adapterID": "jcode",
                     "supportsRunInTerminalRequest": false
                 }),
                 request_timeout,
@@ -644,6 +695,7 @@ impl DapClient {
         if self.disposed.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.dispose_notify.notify_waiters();
         if let Some(kill) = self.kill_tx.lock().await.take() {
             let _ = kill.send(());
         }
