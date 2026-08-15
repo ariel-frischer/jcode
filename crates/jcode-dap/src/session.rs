@@ -1,7 +1,7 @@
 use crate::config::{AdapterRegistry, ResolvedAdapter, TransportMode};
 use crate::error::{DapError, Result};
 use crate::policy::{Action, DapPolicy};
-use crate::protocol::{DapCapabilities, DapEventMessage};
+use crate::protocol::{DapCapabilities, DapEventMessage, DapResponseMessage};
 use crate::transport::DapClient;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -166,6 +166,7 @@ impl DapSessionManager {
         };
         let adapter = registry.select_launch(&request.program, &cwd, request.adapter.as_deref())?;
         let client = spawn_adapter(&adapter, &cwd, &policy).await?;
+        spawn_reverse_request_guard(client.clone());
         let events = client.subscribe();
         let capabilities = match client.initialize(policy.request_timeout).await {
             Ok(capabilities) => capabilities,
@@ -210,23 +211,14 @@ impl DapSessionManager {
             &adapter.config.launch_defaults,
             Value::Object(launch_overrides),
         );
-        let response = client
-            .request("launch", launch_args, policy.request_timeout, None)
-            .await;
+        let response = request_launch_with_configuration(
+            client.clone(),
+            launch_args,
+            policy.request_timeout,
+            capabilities.supports("supportsConfigurationDoneRequest"),
+        )
+        .await;
         if let Err(error) = response {
-            let _ = self.disconnect_internal(&id).await;
-            return Err(error);
-        }
-        if capabilities.supports("supportsConfigurationDoneRequest")
-            && let Err(error) = client
-                .request(
-                    "configurationDone",
-                    serde_json::json!({}),
-                    policy.request_timeout,
-                    None,
-                )
-                .await
-        {
             let _ = self.disconnect_internal(&id).await;
             return Err(error);
         }
@@ -275,6 +267,7 @@ impl DapSessionManager {
                 }
             }
         };
+        spawn_reverse_request_guard(client.clone());
         let events = client.subscribe();
         let capabilities = match client.initialize(policy.request_timeout).await {
             Ok(capabilities) => capabilities,
@@ -622,6 +615,59 @@ impl DapSessionManager {
     }
 }
 
+/// Send a launch request while allowing adapters that emit `initialized` before
+/// replying to launch to receive the required `configurationDone` request.
+///
+/// Debugpy uses this ordering: it starts the debuggee, emits `initialized`, and
+/// waits for configurationDone before completing launch. Waiting for launch's
+/// response first deadlocks the session until the request timeout expires.
+pub(crate) async fn request_launch_with_configuration(
+    client: Arc<DapClient>,
+    arguments: Value,
+    request_timeout: Duration,
+    supports_configuration_done: bool,
+) -> Result<(DapResponseMessage, bool)> {
+    let mut events = client.subscribe();
+    let launch = client.request("launch", arguments, request_timeout, None);
+    tokio::pin!(launch);
+    let mut configuration_done_sent = false;
+
+    loop {
+        tokio::select! {
+            response = &mut launch => {
+                let response = response?;
+                if supports_configuration_done && !configuration_done_sent {
+                    client
+                        .request(
+                            "configurationDone",
+                            serde_json::json!({}),
+                            request_timeout,
+                            None,
+                        )
+                        .await?;
+                    configuration_done_sent = true;
+                }
+                return Ok((response, configuration_done_sent));
+            }
+            event = events.recv(), if supports_configuration_done && !configuration_done_sent => {
+                if let Ok(event) = event
+                    && event.event == "initialized"
+                {
+                    client
+                        .request(
+                            "configurationDone",
+                            serde_json::json!({}),
+                            request_timeout,
+                            None,
+                        )
+                        .await?;
+                    configuration_done_sent = true;
+                }
+            }
+        }
+    }
+}
+
 async fn spawn_adapter(
     adapter: &ResolvedAdapter,
     cwd: &Path,
@@ -669,6 +715,41 @@ async fn spawn_adapter(
             }
         }
     }
+}
+
+/// Reject adapter-initiated requests that Jcode does not implement yet.
+///
+/// DAP adapters are allowed to send requests back to the client. Dropping one
+/// silently is worse than a bounded protocol error because the adapter may
+/// keep the corresponding launch request pending indefinitely. The advertised
+/// initialize capabilities already tell adapters that Jcode does not provide
+/// an interactive terminal, and this guard keeps that contract explicit.
+fn spawn_reverse_request_guard(client: Arc<DapClient>) {
+    let mut requests = client.subscribe_requests();
+    let disposed = client.dispose_signal();
+    tokio::spawn(async move {
+        loop {
+            let request = tokio::select! {
+                _ = disposed.notified() => break,
+                request = requests.recv() => match request {
+                    Ok(request) => request,
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                },
+            };
+            let _ = client
+                .respond_to_request(
+                    &request,
+                    false,
+                    Some(format!(
+                        "Jcode does not support adapter reverse request '{}'",
+                        request.command
+                    )),
+                    None,
+                )
+                .await;
+        }
+    });
 }
 
 fn normalize_cwd(cwd: &Path) -> PathBuf {

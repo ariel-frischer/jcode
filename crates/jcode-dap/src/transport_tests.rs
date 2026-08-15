@@ -103,6 +103,101 @@ async fn client_correlates_responses_and_cancels_a_hung_request() {
 }
 
 #[tokio::test]
+async fn initialize_includes_adapter_id_required_by_adapters() {
+    let (client_stream, adapter_stream) = tokio::io::duplex(4096);
+    let (client_reader, client_writer) = split(client_stream);
+    let client = DapClient::from_stream(client_reader, client_writer).await;
+    let (mut adapter_reader, mut adapter_writer) = split(adapter_stream);
+    let (seen_tx, seen_rx) = oneshot::channel();
+
+    tokio::spawn(async move {
+        let mut codec = FrameCodec::default();
+        let mut bytes = [0_u8; 1024];
+        let count = adapter_reader
+            .read(&mut bytes)
+            .await
+            .expect("initialize read");
+        let payload = codec
+            .push(&bytes[..count])
+            .expect("initialize frame")
+            .pop()
+            .expect("initialize request");
+        let request: serde_json::Value = serde_json::from_slice(&payload).expect("initialize json");
+        assert_eq!(request["command"], "initialize");
+        assert_eq!(request["arguments"]["adapterID"], "jcode");
+
+        let response = serde_json::json!({
+            "seq": 2,
+            "type": "response",
+            "request_seq": request["seq"],
+            "success": true,
+            "command": "initialize",
+            "body": {}
+        });
+        adapter_writer
+            .write_all(&frame(&response.to_string()))
+            .await
+            .expect("initialize response write");
+        let _ = seen_tx.send(());
+    });
+
+    client
+        .initialize(Duration::from_secs(1))
+        .await
+        .expect("initialize response");
+    seen_rx.await.expect("adapter saw initialize request");
+}
+
+#[tokio::test]
+async fn client_surfaces_and_replies_to_adapter_reverse_requests() {
+    let (client_stream, adapter_stream) = tokio::io::duplex(4096);
+    let (client_reader, client_writer) = split(client_stream);
+    let client = DapClient::from_stream(client_reader, client_writer).await;
+    let mut requests = client.subscribe_requests();
+    let (mut adapter_reader, mut adapter_writer) = split(adapter_stream);
+
+    let request = serde_json::json!({
+        "seq": 41,
+        "type": "request",
+        "command": "runInTerminal",
+        "arguments": {"args": ["python"]}
+    });
+    adapter_writer
+        .write_all(&frame(&request.to_string()))
+        .await
+        .expect("reverse request write");
+
+    let request = requests.recv().await.expect("reverse request event");
+    assert_eq!(request.command, "runInTerminal");
+    client
+        .respond_to_request(
+            &request,
+            false,
+            Some("unsupported in this test client".to_owned()),
+            None,
+        )
+        .await
+        .expect("reverse request response");
+
+    let mut codec = FrameCodec::default();
+    let mut bytes = [0_u8; 1024];
+    let count = adapter_reader
+        .read(&mut bytes)
+        .await
+        .expect("reverse response read");
+    let payload = codec
+        .push(&bytes[..count])
+        .expect("reverse response frame")
+        .pop()
+        .expect("reverse response payload");
+    let response: serde_json::Value =
+        serde_json::from_slice(&payload).expect("reverse response json");
+    assert_eq!(response["type"], "response");
+    assert_eq!(response["request_seq"], 41);
+    assert_eq!(response["success"], false);
+}
+
+#[tokio::test]
 async fn client_times_out_a_request_when_the_adapter_does_not_reply() {
     let (client_stream, _adapter_stream) = tokio::io::duplex(4096);
     let (client_reader, client_writer) = split(client_stream);
