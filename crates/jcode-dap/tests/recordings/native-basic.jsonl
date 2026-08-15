@@ -1,0 +1,4 @@
+{"seq":10,"type":"response","request_seq":1,"success":true,"command":"initialize","body":{"supportsConfigurationDoneRequest":true,"supportsModulesRequest":true}}
+{"seq":11,"type":"event","event":"output","body":{"category":"stdout","output":"native output\n"}}
+{"seq":12,"type":"event","event":"stopped","body":{"reason":"entry","threadId":2}}
+{"seq":13,"type":"response","request_seq":2,"success":true,"command":"threads","body":{"threads":[{"id":2,"name":"native"}]}}

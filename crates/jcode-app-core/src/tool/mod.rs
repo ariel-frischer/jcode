@@ -9,6 +9,7 @@ mod communicate;
 #[cfg(target_os = "macos")]
 mod computer;
 mod config_edit_notice;
+mod debugger;
 mod conversation_search;
 mod debug_socket;
 mod discover;
@@ -167,6 +168,9 @@ impl Registry {
                 "agentgrep",
                 agentgrep::AgentGrepTool::new,
             );
+            Self::insert_tool_timed(&mut m, &mut timings, "debugger", || {
+                debugger::DebuggerTool::new(Arc::new(jcode_dap::DapSessionManager::new()))
+            });
             Self::insert_tool_timed(
                 &mut m,
                 &mut timings,
@@ -1252,3 +1256,5 @@ mod mcp_allow_list_tests {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod debugger_tests;

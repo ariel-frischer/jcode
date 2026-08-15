@@ -1,0 +1,315 @@
+tasks:
+    branch: "agent/jcode-1j0"
+    created: "2026-08-14"
+    spec_path: "specs/008-dap-debugger/spec.yaml"
+    plan_path: "specs/008-dap-debugger/plan.yaml"
+summary:
+    total_tasks: 18
+    total_phases: 6
+    parallel_opportunities: 4
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Create the standalone crate and wire it into the workspace without touching DebugJob."
+      tasks:
+        - id: "T001"
+          title: "Create crates/jcode-dap package and workspace dependency wiring"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "Cargo.toml, crates/jcode-dap/Cargo.toml, crates/jcode-dap/src/lib.rs, crates/jcode-app-core/Cargo.toml"
+          dependencies: []
+          acceptance_criteria:
+            - "jcode-dap is a workspace member and app-core can depend on it."
+            - "The crate compiles with protocol, config, transport, session, and policy module boundaries."
+            - "Existing DebugJob files are unchanged."
+        - id: "T002"
+          title: "Add deterministic fake DAP adapter fixture harness"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-dap/tests/support/fake_adapter.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "The fixture can speak Content-Length-framed requests over stdio and record commands."
+            - "The fixture can simulate launch, attach, stop, output, capability, timeout, malformed-message, and exit scenarios."
+    - number: 2
+      title: "Foundational"
+      purpose: "Lock down protocol envelopes, policy tiers, and configuration contracts with failing tests first."
+      tasks:
+        - id: "T003"
+          title: "Write protocol, framing, and policy red tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-dap/src/protocol_tests.rs, crates/jcode-dap/src/transport_tests.rs, crates/jcode-dap/src/policy_tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests initially fail for fragmented and multiple Content-Length frames, malformed recovery, pending response correlation, timeout, cancellation, and tier classification."
+        - id: "T004"
+          title: "Implement DAP wire protocol types and action permission tiers"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-dap/src/protocol.rs, crates/jcode-dap/src/policy.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Request, response, event, capabilities, launch/attach, and normalized result types deserialize unknown adapter-specific fields safely."
+            - "Actions classify into readonly, process-control, evaluate, and memory-write tiers with memory writes denied by default."
+            - "Protocol and policy tests pass."
+    - number: 3
+      title: "User Story 1 - Configure language-neutral debugger adapters"
+      purpose: "Provide built-in, user, and project adapter configuration with deterministic selection."
+      story_reference: "US-001"
+      independent_test: "Load temporary config layers and select adapters for files, roots, explicit names, disabled entries, and unavailable commands."
+      tasks:
+        - id: "T005"
+          title: "Write adapter registry precedence and selection red tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-dap/src/config_tests.rs"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Tests specify built-in/user/project precedence, deep default merging, enable/disable, relative commands, root markers, file types, explicit selection, and no-adapter behavior."
+        - id: "T006"
+          title: "Implement adapter registry, catalog, resolution, and matching"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-dap/src/config.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Built-in entries include at least gdb, lldb-dap, debugpy, dlv, and js-debug-adapter as lazy declarative catalog entries."
+            - "TOML layers merge deterministically and preserve disabled or unavailable diagnostics without launching them."
+            - "Selection prefers explicit adapter, then root specificity, then stable adapter name order."
+            - "All config tests pass without requiring installed debuggers."
+    - number: 4
+      title: "User Story 2 - Run bounded DAP sessions"
+      purpose: "Own adapter transports and lifecycle for explicit launch and attach operations."
+      story_reference: "US-002"
+      independent_test: "Use the fake adapter to launch and attach over stdio and TCP, exercise failure/cancellation, and assert cleanup."
+      tasks:
+        - id: "T007"
+          title: "Write transport and lifecycle red tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-dap/src/transport_tests.rs, crates/jcode-dap/tests/fake_adapter.rs"
+          dependencies: ["T002", "T006"]
+          acceptance_criteria:
+            - "Tests cover stdio, TCP, and Unix-socket or platform-gated transport startup, launch versus attach, adapter exit, request timeout, cancellation, malformed frames, and disconnect cleanup."
+        - id: "T008"
+          title: "Implement Content-Length transport and correlated request client"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-dap/src/transport.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "Transport uses direct process spawning with non-interactive detached process groups and no shell interpolation."
+            - "One reader task drains frames, correlates responses, dispatches events, bounds writes, and recovers from malformed messages."
+            - "Stdio, TCP, and Unix socket modes report actionable startup and cleanup errors."
+            - "Transport tests pass and no pending request survives adapter exit."
+    - number: 5
+      title: "User Story 3 - Inspect and control a stopped program"
+      purpose: "Implement capability-aware session state and debugger operations."
+      story_reference: "US-003"
+      independent_test: "Run the fake adapter diagnosis scenario from launch or attach through breakpoint, stop, inspection, evaluate, continue, and disconnect."
+      tasks:
+        - id: "T009"
+          title: "Write session operation and capability-gate red tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-dap/src/session_tests.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Tests cover launch, attach, initialize/configurationDone, breakpoints, continue, pause, step over/in/out, threads, stack, scopes, variables, evaluate, output, stop, disconnect, unsupported capabilities, and bounded output."
+        - id: "T010"
+          title: "Implement server-owned DAP session manager"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-dap/src/session.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Session manager owns clients, status, negotiated capabilities, breakpoint state, stop location, output tail, and exit metadata."
+            - "Launch and attach are separate explicit paths and do not implicitly launch arbitrary programs."
+            - "Optional operations check capabilities before dispatch and return structured capability errors."
+            - "Stop/continue/output events update state, output is capped at 128 KiB, and idle sessions can be reaped."
+            - "Session tests pass."
+        - id: "T011"
+          title: "Add child-session relationship and session-tree cleanup handling"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-dap/src/session.rs, crates/jcode-dap/src/transport.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Sessions can record parent and child ids and cleanup traverses descendants before releasing the root."
+            - "A reverse start-debugging request is answered safely or reported as unsupported without leaking the adapter."
+    - number: 6
+      title: "User Story 4 - Tool policy, documentation, benchmark, and polish"
+      purpose: "Expose the capability through Jcode, document safe use, measure performance, and run final validation."
+      story_reference: "US-004"
+      independent_test: "Execute the debugger tool under default and restrictive policy settings and verify ordinary DebugJob and bash workflows remain unchanged."
+      tasks:
+        - id: "T012"
+          title: "Write debugger tool and policy integration red tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/tool/debugger_tests.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Tests cover schema/action parsing, missing working directory, read-only versus process-control versus evaluate versus memory-write policy, metadata bounds, and disabled-tool profile behavior."
+        - id: "T013"
+          title: "Implement the app-core debugger Tool and register it"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/tool/debugger.rs, crates/jcode-app-core/src/tool/mod.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "The debugger tool exposes sessions/status, launch, attach, breakpoint, continue, pause, stepping, stack/scopes/variables, evaluate, output, stop, and disconnect actions."
+            - "ToolContext.working_dir is the default debug cwd and ToolOutput metadata is structured and bounded."
+            - "Existing tool allow/disable policy and named profiles can hide or disable the debugger tool."
+            - "Existing DebugJob tests and behavior remain unchanged."
+        - id: "T014"
+          title: "Add configuration and safe-operation documentation"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-005"
+          file_path: "docs/DAP.md"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Docs explain TOML precedence, built-in adapters, launch versus attach, operation tiers, output/time bounds, missing binaries, malformed frames, attach failures, and cleanup."
+            - "Examples use explicit safe local commands and do not imply arbitrary automatic launches."
+        - id: "T015"
+          title: "Add deterministic offline DAP diagnosis benchmark"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-005"
+          file_path: "scripts/dap_benchmark.py"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Benchmark compares fake-adapter diagnosis with a print-debugging baseline."
+            - "Output includes success, wall latency, process CPU time, tool calls, and bounded resource measurements."
+            - "Benchmark does not require network, installed adapters, or production processes."
+        - id: "T016"
+          title: "Add changelog entry and run formatting, lint, tests, and build validation"
+          status: "Completed"
+          type: "refactor"
+          parallel: false
+          story_id: null
+          file_path: "CHANGELOG.yaml, docs/DAP.md, workspace source"
+          dependencies: ["T014", "T015"]
+          acceptance_criteria:
+            - "Changelog is synced and valid."
+            - "cargo fmt --check, focused jcode-dap tests, app-core tests, and the serialized workspace build pass."
+            - "Final diff contains only the DAP capability, its specs, docs, benchmark, and changelog."
+        - id: "T017"
+          title: "Run fresh-base runtime smoke validation without the shared daemon"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "target/selfdev/jcode and /run/user/1000/jcode-dap-smoke.sock"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "A selfdev-built binary is used for a bounded local smoke check or the reason it is unavailable is recorded."
+            - "The shared Jcode daemon and unrelated agent processes are not modified."
+        - id: "T018"
+          title: "Record Bead validation evidence and commit the isolated implementation"
+          status: "InProgress"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: ".beads and git history"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Bead comment records source research, files, tests, benchmark, build, runtime validation, and remaining limitations."
+            - "The worktree contains a focused commit ready for serial merge-wt integration."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002", "US-003", "US-004"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-002"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-003"]
+          blocks: ["US-005"]
+        - story_id: "US-005"
+          depends_on: ["US-004"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+parallel_execution:
+    - phase: 1
+      parallel_groups:
+        - tasks: ["T001", "T002"]
+          rationale: "The fixture design can be prepared while package wiring is established, but fixture code depends on the crate path existing."
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T003"]
+          rationale: "Foundational tests define protocol and policy contracts before implementation."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T005"]
+          rationale: "Configuration tests are isolated from transport implementation."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T014", "T015"]
+          rationale: "Documentation and offline benchmark touch disjoint files after tool integration."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "A standalone configured DAP crate, fake-adapter launch/attach lifecycle, core inspection/control operations, and the registered debugger tool with explicit policy tiers."
+        validation: "Run jcode-dap unit/integration tests and app-core debugger tool tests against the fake adapter with no installed debugger."
+    incremental_delivery:
+        - milestone: "Protocol and Registry Ready"
+          phases: [1, 2, 3]
+          deliverable: "Reusable DAP crate can resolve adapters and exchange bounded correlated protocol messages."
+        - milestone: "Debugger Tool Ready"
+          phases: [1, 2, 3, 4]
+          deliverable: "Jcode exposes explicit debugger actions while preserving existing tools and DebugJob."
+        - milestone: "Documented and Measured"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Safe setup docs, deterministic benchmark, changelog, and validation evidence are complete."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-14T21:17:16Z"
+    artifact_type: "tasks"

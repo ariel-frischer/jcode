@@ -23,6 +23,7 @@ members = [
     "crates/jcode-background-types",
     "crates/jcode-batch-types",
     "crates/jcode-build-support",
+    "crates/jcode-dap",
     "crates/jcode-compaction-core",
     "crates/jcode-config-types",
     "crates/jcode-command-risk",

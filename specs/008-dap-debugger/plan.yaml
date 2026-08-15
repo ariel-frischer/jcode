@@ -1,0 +1,317 @@
+plan:
+  branch: "agent/jcode-1j0"
+  created: "2026-08-14"
+  spec_path: "specs/008-dap-debugger/spec.yaml"
+
+summary: |
+  Add a standalone `jcode-dap` Rust crate that owns the language-neutral DAP
+  protocol, Content-Length framing, adapter registry, transport startup, and
+  server-scoped session lifecycle. The crate will use declarative TOML adapter
+  configuration with built-in, user, and project layers, lazy command
+  availability checks, deterministic file/root matching, capability negotiation,
+  bounded event output, request correlation, timeouts, cancellation, and idle
+  cleanup. Existing DebugJob code remains untouched.
+
+  Integrate the crate through one `debugger` Tool in jcode-app-core. The tool
+  maps a compact action schema to session-manager operations, reports structured
+  metadata, and enforces read-only, process-control, expression-evaluation, and
+  memory-write policy tiers. Tests use an in-process fake DAP adapter and
+  deterministic recordings, while docs and an offline benchmark explain safe
+  operation. The design follows Oh My Pi's modular boundaries without copying
+  implementation code.
+
+technical_context:
+  language: "Rust 2024"
+  framework: "Tokio async runtime"
+  primary_dependencies:
+    - name: "tokio"
+      version: "1"
+      purpose: "Async process, TCP, Unix socket, timers, channels, and cancellation-aware I/O"
+    - name: "serde and serde_json"
+      version: "1"
+      purpose: "DAP wire messages, adapter TOML-compatible data, tool arguments, and metadata"
+    - name: "toml"
+      version: "0.8"
+      purpose: "Project and user adapter registry files"
+    - name: "anyhow"
+      version: "1"
+      purpose: "Actionable errors at the app-core tool boundary"
+    - name: "async-trait"
+      version: "0.1"
+      purpose: "Existing Jcode Tool contract"
+  storage: "No persistent DAP state; configuration files are read on resolution and session state lives in the server process"
+  testing:
+    framework: "Cargo unit and integration tests"
+    approach: "Test-first module tests for framing and config, fake-adapter integration tests for session lifecycle and operations, app-core tool contract tests, and deterministic benchmark fixtures"
+  target_platform: "Linux first, with stdio and TCP portable and Unix-socket transport gated by platform"
+  project_type: "CLI agent capability and reusable library crate"
+  performance_goals: "One async reader per active transport, no polling request correlation, no blocking process I/O on Tokio workers, 128 KiB retained output per session, and fake-adapter dispatch overhead below 5 ms p50 excluding adapter response time"
+  constraints:
+    - "Do not change existing DebugJob behavior or implementation"
+    - "Do not make the core depend on LSP or a language-specific debugger"
+    - "Do not use shell interpolation for adapter commands or implicit arbitrary launches"
+    - "Memory writes are denied by default; ordinary tool policy can disable the debugger tool"
+    - "Serialize Cargo-heavy commands"
+  scale_scope: "A bounded number of local debugger sessions per long-lived Jcode server, with one transport reader and bounded output per session"
+
+constitution_check:
+  constitution_path: "Not found"
+  gates:
+    - name: "Repository workflow and worktree isolation"
+      status: "PASS"
+      notes: "Implementation is isolated in .worktrees/agent/jcode-1j0 and preserves unrelated DebugJob code."
+    - name: "Modularity and minimal drift"
+      status: "PASS"
+      notes: "Protocol, transport, config, session, and app-core tool layers are separate; Oh My Pi is treated as research input rather than copied source."
+    - name: "Safety and bounded execution"
+      status: "PASS"
+      notes: "Direct process spawning, detached non-interactive adapters, timeouts, bounded output, explicit action tiers, and default-denied memory writes are part of the design."
+    - name: "Test-first implementation"
+      status: "PASS"
+      notes: "Each implementation phase begins with focused failing tests or fixtures before production behavior is added."
+
+research_findings:
+  decisions:
+    - topic: "Oh My Pi module boundaries"
+      decision: "Use separate protocol, framing/transport, adapter config, session manager, and tool adapter modules."
+      rationale: "Oh My Pi keeps client/config/session/types independent; this limits compile and maintenance blast radius and preserves language neutrality."
+      alternatives_considered:
+        - "One monolithic debugger tool module"
+        - "Embedding DAP logic into the existing DebugJob server code"
+    - topic: "Adapter configuration and precedence"
+      decision: "Use built-ins, user JCODE_HOME/dap.toml, and project ancestor/cwd dap.toml layers with deterministic low-to-high merges."
+      rationale: "This mirrors the useful Oh My Pi behavior while fitting Jcode's TOML-first configuration conventions and keeping missing binaries lazy."
+      alternatives_considered:
+        - "Only global config.toml"
+        - "JSON/YAML-only project files"
+    - topic: "Transport and framing"
+      decision: "Implement Content-Length framing over stdio, TCP, and Unix sockets with one reader task, pending-request map, bounded writes, and malformed-frame recovery."
+      rationale: "DAP is message-framed rather than line-delimited; correlated asynchronous requests are required for strong performance and correct event handling."
+      alternatives_considered:
+        - "Polling stdout for responses"
+        - "One process per operation"
+    - topic: "Session ownership"
+      decision: "Use a process-owned, server-scoped SessionManager keyed by session id, with bounded output tails and idle cleanup."
+      rationale: "The server already owns long-lived background state, and the user explicitly requires no terminal takeover or leaked adapter processes."
+      alternatives_considered:
+        - "Per-tool-call short-lived adapters"
+        - "A global CLI foreground debugger"
+    - topic: "Permission tiers"
+      decision: "Keep one agent-facing debugger tool but classify actions in the DAP crate and apply configurable policy before dispatch; rely on existing allow/disable profile filtering for the tool surface."
+      rationale: "This exposes a compact API while making process control, evaluation, and memory writes auditable and independently testable."
+      alternatives_considered:
+        - "Separate tool names for every permission tier"
+        - "Relying only on provider-side tool filtering"
+    - topic: "Testing strategy"
+      decision: "Use an in-process fake adapter and deterministic wire recordings, plus declarative real-adapter catalog fixtures."
+      rationale: "Adapters are optional local binaries, so CI must not require installation or network access while still exercising launch and attach separately."
+      alternatives_considered:
+        - "Require gdb/lldb/debugpy in CI"
+        - "Only unit-test JSON serialization"
+
+data_model:
+  entities:
+    - name: "AdapterConfig"
+      description: "Raw declarative adapter definition before executable resolution."
+      fields:
+        - name: "command"
+          type: "String"
+          description: "Executable or relative adapter path"
+          constraints: "Required for enabled adapters; never shell-expanded"
+        - name: "args"
+          type: "Vec<String>"
+          description: "Direct process arguments with transport placeholders"
+          constraints: "Bounded count and length"
+        - name: "languages/file_types/root_markers"
+          type: "Vec<String>"
+          description: "Language-neutral matching metadata"
+          constraints: "Normalized and stable"
+        - name: "launch_defaults/attach_defaults"
+          type: "Map<String, Value>"
+          description: "Adapter-specific DAP request defaults"
+          constraints: "Deep-merged by precedence"
+        - name: "enabled/transport"
+          type: "bool/TransportMode"
+          description: "Availability and connection strategy"
+          constraints: "Memory writes are not represented here"
+    - name: "ResolvedAdapter"
+      description: "An enabled config with a resolved executable and selection metadata."
+      fields:
+        - name: "name"
+          type: "String"
+          description: "Stable adapter id"
+          constraints: "Unique in effective registry"
+        - name: "resolved_command"
+          type: "PathBuf"
+          description: "Verified executable path"
+          constraints: "Must exist and be executable or resolvable on PATH"
+        - name: "cwd"
+          type: "PathBuf"
+          description: "Debug working directory"
+          constraints: "Absolute normalized path"
+    - name: "DapMessage"
+      description: "DAP request, response, or event wire envelope."
+      fields:
+        - name: "seq/type"
+          type: "u64/String"
+          description: "Correlation and message kind"
+          constraints: "Valid DAP envelope"
+        - name: "command/event/body"
+          type: "String/Value"
+          description: "Operation payload"
+          constraints: "Frame size bounded"
+    - name: "DapSession"
+      description: "Server-owned adapter process or socket session."
+      fields:
+        - name: "id/status"
+          type: "String/SessionStatus"
+          description: "Session identity and lifecycle"
+          constraints: "Terminated sessions are cleaned up after retention"
+        - name: "capabilities"
+          type: "Capabilities"
+          description: "Negotiated adapter feature flags"
+          constraints: "Optional operations check before dispatch"
+        - name: "output_tail"
+          type: "Vec<u8>"
+          description: "Recent adapter output"
+          constraints: "Maximum 128 KiB"
+        - name: "parent/children"
+          type: "Option<String>/Vec<String>"
+          description: "Session tree relationships"
+          constraints: "Cleanup traverses the tree"
+    - name: "DapPolicy"
+      description: "Action-tier and bound settings resolved for a debug working directory."
+      fields:
+        - name: "allow_process_control"
+          type: "bool"
+          description: "Launch, attach, continue, pause, step, stop, disconnect"
+          constraints: "Checked before request dispatch"
+        - name: "allow_evaluate"
+          type: "bool"
+          description: "Expression evaluation permission"
+          constraints: "Checked before evaluate"
+        - name: "allow_memory_write"
+          type: "bool"
+          description: "Memory mutation permission"
+          constraints: "False by default"
+        - name: "timeouts/output_limit"
+          type: "Duration/usize"
+          description: "Request and retained-output bounds"
+          constraints: "Positive and capped"
+
+api_contracts:
+  endpoints:
+    - method: "Tool action"
+      path: "debugger.action"
+      description: "Agent-facing structured DAP operation surface"
+      request:
+        content_type: "application/json"
+        body_schema: "{action, adapter?, program?, args?, cwd?, file?, line?, condition?, pid?, host?, port?, expression?, frame_id?, variable_ref?, timeout?, ...}"
+      response:
+        success_code: 200
+        body_schema: "ToolOutput with bounded text and metadata containing session snapshot, operation result, capability state, and truncation information"
+      errors:
+        - code: 400
+          description: "Invalid action arguments, missing working directory, no matching adapter, or unsupported operation"
+        - code: 408
+          description: "DAP request or transport startup exceeded its configured timeout"
+        - code: 409
+          description: "Permission tier denied or session state does not permit the operation"
+        - code: 502
+          description: "Adapter exited, returned a protocol failure, or attach endpoint was unreachable"
+
+project_structure:
+  documentation:
+    - path: "docs/DAP.md"
+      description: "Configuration, adapter catalog, operation table, security boundaries, troubleshooting, and safe validation"
+    - path: "specs/008-dap-debugger/spec.yaml"
+      description: "Autospec feature requirements and acceptance scenarios"
+    - path: "specs/008-dap-debugger/plan.yaml"
+      description: "Autospec architecture and research decisions"
+    - path: "specs/008-dap-debugger/tasks.yaml"
+      description: "Dependency-ordered implementation tasks"
+  source_code:
+    - path: "crates/jcode-dap/Cargo.toml"
+      description: "Standalone DAP crate dependencies"
+    - path: "crates/jcode-dap/src/config.rs"
+      description: "Declarative adapter catalog, precedence, matching, and executable resolution"
+    - path: "crates/jcode-dap/src/protocol.rs"
+      description: "DAP wire envelopes and normalized operation types"
+    - path: "crates/jcode-dap/src/transport.rs"
+      description: "Content-Length framing, stdio/TCP/Unix transport, request correlation, and cleanup"
+    - path: "crates/jcode-dap/src/session.rs"
+      description: "Server-owned session manager, capability gates, operations, events, and bounded output"
+    - path: "crates/jcode-app-core/src/tool/debugger.rs"
+      description: "Jcode Tool adapter and action policy integration"
+    - path: "crates/jcode-app-core/src/tool/mod.rs"
+      description: "Debugger tool registration"
+    - path: "Cargo.toml and crates/jcode-app-core/Cargo.toml"
+      description: "Workspace and dependency wiring"
+  tests:
+    - path: "crates/jcode-dap/src/*_tests.rs"
+      description: "Unit tests for config, framing, protocol, policy, and session transitions"
+    - path: "crates/jcode-dap/tests/fake_adapter.rs"
+      description: "Fake stdio/TCP/socket adapter integration fixtures and launch/attach flows"
+    - path: "crates/jcode-app-core/src/tool/debugger_tests.rs"
+      description: "Tool schema, policy, metadata, and DebugJob compatibility tests"
+    - path: "scripts/dap_benchmark.py"
+      description: "Offline deterministic benchmark against a print-debugging baseline"
+
+implementation_phases:
+  - phase: 1
+    name: "Autospec and crate foundation"
+    goal: "Create the standalone crate, workspace wiring, public module boundaries, and test fixtures."
+    deliverables:
+      - "Validated spec, plan, and tasks artifacts"
+      - "jcode-dap crate with dependencies and public error/policy/session types"
+      - "Fake adapter fixture harness and baseline tests"
+  - phase: 2
+    name: "Configuration and protocol transport"
+    goal: "Implement deterministic adapter resolution and robust DAP framing/transports."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Built-in/user/project TOML registry with precedence and selection"
+      - "Content-Length framing, correlated requests, response timeouts, cancellation, and malformed-message recovery"
+      - "Stdio, TCP, and Unix-socket startup and cleanup"
+  - phase: 3
+    name: "Session lifecycle and operations"
+    goal: "Implement launch/attach, capability negotiation, debugger operations, event state, output bounds, and cleanup."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Server-owned DapSessionManager with launch and attach separation"
+      - "Breakpoints, stepping, inspection, evaluate, output, stop, disconnect, and capability-aware errors"
+      - "Idle expiry and child-session relationship bookkeeping"
+  - phase: 4
+    name: "Jcode tool and policy integration"
+    goal: "Expose the debugger through the existing Tool registry and preserve profile/tool policy behavior."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Debugger Tool schema, action dispatch, bounded ToolOutput metadata, and tier checks"
+      - "Registry registration and tool-policy compatibility tests"
+  - phase: 5
+    name: "Documentation, benchmark, and polish"
+    goal: "Document safe operation and measure debugger-assisted diagnosis offline."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "docs/DAP.md"
+      - "Deterministic benchmark and print-debugging baseline"
+      - "Formatting, focused tests, full serialized validation, and changelog entry"
+
+open_questions:
+  - question: "Should future releases expose DAP session events as first-class BusEvent values?"
+    context: "The first release can return bounded event state through the tool; direct UI streaming would expand the event compatibility surface."
+    proposed_resolution: "Keep the manager event channel internal for now and add a follow-up only after tool-use measurements justify a UI event contract."
+  - question: "Which real adapter catalog entries should be enabled by default?"
+    context: "Availability differs across installations and automatic defaults must not slow startup or launch missing binaries."
+    proposed_resolution: "Ship declarative entries for gdb/lldb-dap/debugpy/dlv/js-debug-adapter and resolve availability lazily; users can override or disable each entry."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T21:17:16Z"
+  artifact_type: "plan"

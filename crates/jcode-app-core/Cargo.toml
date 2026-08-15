@@ -90,6 +90,7 @@ jcode-build-meta = { path = "../jcode-build-meta" }
 jcode-base = { path = "../jcode-base", default-features = false }
 jcode-config-types = { path = "../jcode-config-types" }
 jcode-command-risk = { path = "../jcode-command-risk" }
+jcode-dap = { path = "../jcode-dap" }
 jcode-core = { path = "../jcode-core" }
 jcode-message-types = { path = "../jcode-message-types" }
 jcode-overnight-core = { path = "../jcode-overnight-core" }

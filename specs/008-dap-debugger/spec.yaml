@@ -1,0 +1,275 @@
+feature:
+  branch: "agent/jcode-1j0"
+  created: "2026-08-14"
+  status: "Draft"
+  input: >-
+    Add a language-neutral, configurable DAP debugger capability to Jcode,
+    informed by the modular Oh My Pi design. Provide project and user adapter
+    registry configuration with deterministic precedence, stdio/TCP/socket
+    transports, safe non-interactive adapter lifecycle, correlated framed
+    protocol requests with timeouts and cancellation, capability-aware launch
+    and attach sessions, breakpoints, stepping, stack/scopes/variables,
+    evaluation, bounded output and cleanup, plus an agent-facing debugger tool
+    with explicit read-only, process-control, expression-evaluation, and
+    memory-write permission tiers. Preserve existing DebugJob behavior and
+    document safe setup and troubleshooting.
+
+user_stories:
+  - id: "US-001"
+    title: "Configure language-neutral debugger adapters"
+    priority: "P1"
+    as_a: "Jcode operator"
+    i_want: "to define debugger adapters and launch or attach defaults at user and project scope"
+    so_that: "the same debugger capability works across languages without hard-coded language logic"
+    why_this_priority: "Configuration and deterministic adapter selection are the foundation for every debugger operation."
+    independent_test: "Load built-in, user, and project adapter fixtures and verify effective configuration and selection."
+    acceptance_scenarios:
+      - given: "A built-in adapter, a user override, and a project override exist"
+        when: "Jcode resolves adapters for a project"
+        then: "Project settings override user settings, user settings override built-ins, and nested launch or attach defaults merge deterministically."
+      - given: "An adapter is disabled or its command is unavailable"
+        when: "Jcode lists or selects adapters"
+        then: "The adapter is reported as disabled or unavailable and is never launched automatically."
+      - given: "A source file, project root marker, or explicit adapter name is supplied"
+        when: "Jcode selects a launch adapter"
+        then: "Selection is deterministic, language-neutral, and reports why no adapter matches when none is available."
+
+  - id: "US-002"
+    title: "Run bounded DAP sessions"
+    priority: "P1"
+    as_a: "Jcode agent"
+    i_want: "to launch or attach to a configured adapter and keep its session owned by the server"
+    so_that: "debugging does not take over the user's terminal and does not leak processes"
+    why_this_priority: "Reliable session ownership and transport lifecycle are prerequisites for safe inspection and control."
+    independent_test: "Run a fake stdio, TCP, and Unix-socket adapter through launch and attach fixtures, then stop and disconnect them."
+    acceptance_scenarios:
+      - given: "A configured adapter command and a launch target"
+        when: "The debugger tool launches a session"
+        then: "Jcode starts a detached non-interactive adapter, completes DAP initialization and launch, and returns a session snapshot."
+      - given: "A reachable attach endpoint or process id"
+        when: "The debugger tool attaches"
+        then: "Jcode completes initialization and attach without starting an arbitrary debuggee."
+      - given: "An adapter exits, times out, or receives cancellation"
+        when: "A request or session is active"
+        then: "Pending requests fail promptly, the session becomes terminated, and owned resources are cleaned up."
+
+  - id: "US-003"
+    title: "Inspect and control a stopped program"
+    priority: "P1"
+    as_a: "Jcode agent"
+    i_want: "to set breakpoints, step or continue, inspect threads and variables, and evaluate expressions"
+    so_that: "I can diagnose failures with structured runtime evidence instead of print debugging"
+    why_this_priority: "These operations are the core user value of the DAP capability."
+    independent_test: "Use a deterministic fake adapter recording to exercise each operation and verify normalized output and capability errors."
+    acceptance_scenarios:
+      - given: "A stopped session with a supported capability"
+        when: "The agent requests stack frames, scopes, or variables"
+        then: "Jcode returns bounded structured results tied to the active session and stop location."
+      - given: "A session with a configured source breakpoint"
+        when: "The agent continues or steps"
+        then: "Jcode returns the updated stopped or running state and receives subsequent stop or output events."
+      - given: "An adapter that does not advertise an optional capability"
+        when: "The agent requests that operation"
+        then: "Jcode returns a capability-aware error without sending an unsupported request."
+
+  - id: "US-004"
+    title: "Apply explicit debugger safety tiers"
+    priority: "P1"
+    as_a: "Jcode operator"
+    i_want: "read-only inspection, process control, expression evaluation, and memory writes to have explicit policy tiers"
+    so_that: "debugging remains bounded and compatible with named session profiles and tool policy"
+    why_this_priority: "A debugger can control processes and mutate memory, so safety boundaries must be explicit before enabling it."
+    independent_test: "Run the debugger tool under default, restrictive, and profile-filtered policies and verify each action tier."
+    acceptance_scenarios:
+      - given: "The debugger tool is disabled by a named profile"
+        when: "An agent attempts any debugger action"
+        then: "The existing tool policy rejects it and ordinary workflows are unchanged."
+      - given: "Memory-write permission is not enabled"
+        when: "The agent requests a memory write"
+        then: "Jcode rejects the action before sending a DAP request."
+      - given: "A run timeout, cancellation, or output bound is reached"
+        when: "A debugger action is in progress"
+        then: "The operation stops within the configured bound and returns a concise diagnostic."
+
+  - id: "US-005"
+    title: "Troubleshoot and measure debugger-assisted diagnosis"
+    priority: "P2"
+    as_a: "Jcode maintainer"
+    i_want: "document adapter setup, security boundaries, troubleshooting, and a benchmark harness"
+    so_that: "operators can install adapters safely and compare debugger-assisted diagnosis with print debugging"
+    why_this_priority: "Documentation and measurement make the experimental capability maintainable and evaluable."
+    independent_test: "Run documentation examples against fake adapters and execute the benchmark in deterministic offline mode."
+    acceptance_scenarios:
+      - given: "A missing adapter, malformed protocol message, or attach failure"
+        when: "An operator follows the troubleshooting guide"
+        then: "The guide identifies the likely cause, safe validation command, and cleanup path."
+      - given: "A debugger fixture and a print-debugging baseline"
+        when: "The benchmark runs"
+        then: "It records success, latency, tool calls, and resource use without network or production dependencies."
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "MUST provide a modular Rust DAP crate with protocol types, framed transport, adapter configuration, and session lifecycle independent of any language debugger."
+      testable: true
+      acceptance_criteria: "The new crate builds independently and unit tests exercise protocol, config, transport, and session modules without app-core tool code."
+    - id: "FR-002"
+      description: "MUST load a declarative adapter registry from built-ins, user scope, and project scope with deterministic precedence, partial nested default merges, enable or disable flags, root markers, languages, file types, and stdio/TCP/socket transport selection."
+      testable: true
+      acceptance_criteria: "Config fixture tests verify source precedence, merges, disabled adapters, command resolution, root matching, and deterministic selection."
+    - id: "FR-003"
+      description: "MUST implement DAP Content-Length framing, correlated request and response handling, bounded writes, malformed-message recovery, request timeouts, and cancellation-aware cleanup."
+      testable: true
+      acceptance_criteria: "Transport tests cover fragmented frames, multiple frames, malformed JSON or headers, unknown responses, timeout, cancellation, and adapter exit."
+    - id: "FR-004"
+      description: "MUST own adapter processes and socket connections in a server-scoped session manager without attaching to an interactive terminal or launching arbitrary programs implicitly."
+      testable: true
+      acceptance_criteria: "Lifecycle tests verify detached process groups, launch versus attach separation, stop/disconnect cleanup, idle expiry, and no adapter behavior."
+    - id: "FR-005"
+      description: "MUST expose bounded debugger operations for sessions, launch, attach, breakpoints, continue, pause, step over/in/out, stack traces, scopes, variables, evaluate, output, stop, and disconnect."
+      testable: true
+      acceptance_criteria: "A fake DAP adapter fixture records all required operations and the tool returns normalized snapshots and metadata."
+    - id: "FR-006"
+      description: "MUST gate optional DAP operations on negotiated capabilities and return actionable errors when an adapter does not support them."
+      testable: true
+      acceptance_criteria: "Capability fixtures prove unsupported requests are rejected locally and supported requests are forwarded."
+    - id: "FR-007"
+      description: "MUST maintain stop, continue, output, exit, and child-session relationships, bound retained output, and clean up idle or terminated session trees."
+      testable: true
+      acceptance_criteria: "Session tests verify event state transitions, a bounded output tail, child relationship bookkeeping, and idle cleanup."
+    - id: "FR-008"
+      description: "MUST expose explicit permission tiers for read-only inspection, process control, expression evaluation, and memory writes, composing with existing tool allow or disable policy and named session profiles."
+      testable: true
+      acceptance_criteria: "Policy tests verify each action class under permissive and restrictive DAP settings and prove existing DebugJob behavior is unaffected."
+    - id: "FR-009"
+      description: "MUST include a fake adapter plus deterministic protocol recordings and at least two real-adapter configuration fixtures, with launch and attach paths tested separately."
+      testable: true
+      acceptance_criteria: "Offline tests run the fake adapter and inspect real adapter catalog fixtures without requiring installed debuggers or network access."
+    - id: "FR-010"
+      description: "MUST document configuration, adapter setup, launch versus attach, supported operations, security boundaries, troubleshooting, safe local validation, and benchmark usage."
+      testable: true
+      acceptance_criteria: "docs/DAP.md contains executable safe examples and explains missing-binary, malformed-protocol, timeout, attach, and cleanup diagnostics."
+    - id: "FR-011"
+      description: "MUST provide an offline benchmark that compares debugger-assisted diagnosis with a print-debugging baseline using success, latency, tool calls, and resource-use measurements."
+      testable: true
+      acceptance_criteria: "A deterministic benchmark command emits machine-readable measurements without modifying user processes or requiring network services."
+  non_functional:
+    - id: "NFR-001"
+      category: "performance"
+      description: "The debugger tool MUST avoid blocking Tokio worker threads, use one reader task per active transport, correlate requests without polling, and retain only bounded output."
+      measurable_target: "Under the fake-adapter fixture, p50 request dispatch overhead remains below 5 ms excluding adapter response time and retained output never exceeds 128 KiB per session."
+    - id: "NFR-002"
+      category: "reliability"
+      description: "Adapter failures MUST be isolated to their session and all owned child processes, sockets, pending requests, and timers MUST be cleaned up."
+      measurable_target: "Repeated launch, failure, cancellation, and cleanup fixtures leave zero manager-owned live sessions or adapter processes."
+    - id: "NFR-003"
+      category: "security"
+      description: "The core MUST not interpolate untrusted values into a shell, automatically start arbitrary programs, or permit memory writes unless explicitly enabled."
+      measurable_target: "Static and integration tests show adapter commands use direct process spawning, launch requires an explicit action and program, and memory writes default to denied."
+    - id: "NFR-004"
+      category: "code_quality"
+      description: "The Rust implementation MUST preserve modular boundaries so transport, protocol, configuration, session management, and the app-core tool adapter can evolve independently."
+      measurable_target: "The DAP crate has separate modules with unit tests and app-core depends on it only through its public session and policy APIs."
+
+success_criteria:
+  measurable_outcomes:
+    - id: "SC-001"
+      description: "An operator can configure an adapter and obtain a deterministic launch or attach session using only project or user files."
+      metric: "Offline configuration and fake-adapter integration fixture pass rate"
+      target: "100% of required launch and attach fixtures pass"
+    - id: "SC-002"
+      description: "An agent can complete a structured debugging loop from breakpoint to stopped-state inspection without terminal takeover."
+      metric: "Fake-adapter diagnosis scenario completion"
+      target: "At least 90% success across 20 deterministic repetitions"
+    - id: "SC-003"
+      description: "Debugger failures are bounded and recoverable rather than hanging the agent or leaking adapter processes."
+      metric: "Timeout, cancellation, malformed-message, and cleanup fixture results"
+      target: "All failure fixtures terminate within configured bounds with zero leaked sessions"
+    - id: "SC-004"
+      description: "Debugger-assisted diagnosis is measurable against print debugging."
+      metric: "Benchmark output fields"
+      target: "Every run records success, wall latency, process CPU time, tool calls, and bounded resource-use samples"
+
+key_entities:
+  - name: "AdapterConfig"
+    description: "Declarative user or project definition of a DAP adapter and its launch or attach defaults."
+    attributes:
+      - "name"
+      - "command and args"
+      - "languages and file types"
+      - "root markers"
+      - "enabled"
+      - "transport"
+      - "launch and attach defaults"
+  - name: "ResolvedAdapter"
+    description: "An enabled adapter configuration with a verified executable or endpoint strategy for a working directory."
+    attributes:
+      - "adapter name"
+      - "resolved command"
+      - "transport"
+      - "working directory"
+      - "availability"
+  - name: "DapSession"
+    description: "Server-owned debugger session with transport, negotiated capabilities, state, output tail, and session relationships."
+    attributes:
+      - "session id"
+      - "adapter"
+      - "status"
+      - "capabilities"
+      - "stop location"
+      - "breakpoints"
+      - "parent and child session ids"
+      - "bounded output"
+  - name: "DapOperation"
+    description: "A bounded agent-facing debugger action classified by permission tier."
+    attributes:
+      - "action"
+      - "permission tier"
+      - "request arguments"
+      - "timeout"
+      - "normalized result"
+
+edge_cases:
+  - scenario: "The adapter emits non-protocol bytes or malformed JSON between valid frames."
+    expected_behavior: "The reader reports a bounded protocol diagnostic, resynchronizes when possible, and continues processing later valid frames."
+  - scenario: "A response arrives after its request timed out or was cancelled."
+    expected_behavior: "The response is ignored or recorded as an unmatched response without affecting another request."
+  - scenario: "The adapter exits before initialization, launch, attach, or configurationDone completes."
+    expected_behavior: "The operation fails with adapter exit context and all pending requests and resources are released."
+  - scenario: "A source file matches multiple enabled adapters."
+    expected_behavior: "Root-marker specificity, explicit adapter choice, and stable adapter name ordering produce deterministic selection."
+  - scenario: "No adapter is configured or no configured command is installed."
+    expected_behavior: "The debugger tool returns a concise setup error and existing DebugJob and ordinary process tools remain unchanged."
+  - scenario: "Retained output exceeds the configured cap."
+    expected_behavior: "Only the newest bounded tail is retained and metadata indicates truncation and cumulative output size."
+  - scenario: "A profile disables the debugger tool while a stale session exists."
+    expected_behavior: "New actions are rejected by ordinary tool policy and server cleanup still expires the stale session."
+
+assumptions:
+  - "DAP configuration uses dedicated dap.toml files to keep the protocol registry independent from unrelated global settings, with user files under JCODE_HOME and project files under the working tree."
+  - "Built-in adapter fixtures are declarative and availability is checked lazily, so missing debugger binaries never block ordinary Jcode startup."
+  - "Process-control actions are enabled by default for explicit debugger tool calls, expression evaluation is separately configurable, and memory writes are denied by default."
+  - "The first release targets local stdio, TCP, and Unix-socket adapters; remote network security and debugger-specific launch schemas remain adapter configuration concerns."
+  - "The benchmark is deterministic and offline; real adapter availability is tested as configuration fixtures rather than as a required CI dependency."
+
+constraints:
+  - "Do not modify or replace the existing DebugJob implementation."
+  - "Do not make DAP depend on LSP or hard-code language-specific debugger logic into the core."
+  - "Do not launch arbitrary programs implicitly or take over a user terminal."
+  - "Preserve existing tool policy, named session profiles, hooks, jcode run bounds, and cancellation behavior."
+  - "Use Rust workspace conventions and serialize Cargo-heavy validation."
+  - "Use the Oh My Pi source only as architectural research; implement an independent Rust design and preserve MIT attribution requirements if substantial source ideas are copied."
+
+out_of_scope:
+  - "Advisor, watchdog, or mid-stream intervention behavior."
+  - "LSP integration, edit feedback, or language-server lifecycle."
+  - "A full graphical debugger UI."
+  - "Automatic debugger installation or package-manager mutations."
+  - "Remote debugger authentication, multi-user authorization, or production deployment."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-14T21:17:16Z"
+  artifact_type: "spec"
