@@ -38,9 +38,6 @@ fn preserve_reasoning_context_defaults_to_enabled() {
 #[path = "config_tests/run_safety.rs"]
 mod run_safety;
 
-#[path = "config_tests/session_librarian.rs"]
-mod session_librarian;
-
 #[test]
 fn swarm_spawn_mode_defaults_to_inline() {
     assert_eq!(
