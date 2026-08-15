@@ -238,7 +238,7 @@ phases:
             - "The shared Jcode daemon and unrelated agent processes are not modified."
         - id: "T018"
           title: "Record Bead validation evidence and commit the isolated implementation"
-          status: "InProgress"
+          status: "Completed"
           type: "documentation"
           parallel: false
           story_id: null
