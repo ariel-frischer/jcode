@@ -169,7 +169,7 @@ impl DapClient {
             .current_dir(cwd)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
         #[cfg(unix)]
         process.process_group(0);
@@ -205,7 +205,7 @@ impl DapClient {
             .current_dir(cwd)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
         #[cfg(unix)]
         process.process_group(0);
@@ -249,7 +249,7 @@ impl DapClient {
             .current_dir(cwd)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
         process.process_group(0);
         let mut child = process.spawn()?;
@@ -334,7 +334,7 @@ impl DapClient {
                         for (_, sender) in pending.drain() {
                             let _ = sender.send(Err(DapError::Protocol(error.to_string())));
                         }
-                        continue;
+                        break;
                     }
                 };
                 for frame in frames {
@@ -397,9 +397,14 @@ impl DapClient {
             let mut writer = self.writer.lock().await;
             writer.write_all(&framed).await?;
             writer.flush().await
-        })
-        .await
-        .map_err(|_| DapError::Timeout(format!("writing DAP request {command}")))?;
+        }).await;
+        let write_result = match write_result {
+            Ok(result) => result,
+            Err(_) => {
+                self.pending.lock().await.remove(&seq);
+                return Err(DapError::Timeout(format!("writing DAP request {command}")));
+            }
+        };
         if let Err(error) = write_result {
             self.pending.lock().await.remove(&seq);
             return Err(DapError::Io(error));

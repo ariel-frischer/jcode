@@ -180,7 +180,7 @@ success_criteria:
     - id: "SC-002"
       description: "An agent can complete a structured debugging loop from breakpoint to stopped-state inspection without terminal takeover."
       metric: "Fake-adapter diagnosis scenario completion"
-      target: "At least 90% success across 20 deterministic repetitions"
+      target: "100% success across 20 deterministic repetitions"
     - id: "SC-003"
       description: "Debugger failures are bounded and recoverable rather than hanging the agent or leaking adapter processes."
       metric: "Timeout, cancellation, malformed-message, and cleanup fixture results"

@@ -31,7 +31,7 @@ phases:
           type: "test"
           parallel: true
           story_id: null
-          file_path: "crates/jcode-dap/tests/support/fake_adapter.rs"
+          file_path: "crates/jcode-dap/tests/fake_adapter.rs"
           dependencies: ["T001"]
           acceptance_criteria:
             - "The fixture can speak Content-Length-framed requests over stdio and record commands."

@@ -4,7 +4,7 @@ use crate::policy::{Action, DapPolicy};
 use crate::protocol::DapCapabilities;
 use crate::transport::DapClient;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -273,13 +273,19 @@ impl DapSessionManager {
         self.sessions.lock().await.insert(id.clone(), session);
         self.add_child_relation(parent_session_id.as_deref(), &id).await;
         self.spawn_event_loop(id.clone(), client.clone(), policy.max_output_bytes);
-        let attach_args = merge_defaults(&adapter.config.attach_defaults, serde_json::json!({
-            "request": "attach",
-            "pid": request.pid,
-            "host": request.host,
-            "port": request.port,
-            "cwd": cwd,
-        }));
+        let mut attach_overrides = Map::new();
+        attach_overrides.insert("request".into(), Value::from("attach"));
+        attach_overrides.insert("cwd".into(), serde_json::to_value(&cwd)?);
+        if let Some(pid) = request.pid {
+            attach_overrides.insert("pid".into(), Value::from(pid));
+        }
+        if let Some(host) = request.host.as_deref() {
+            attach_overrides.insert("host".into(), Value::from(host));
+        }
+        if let Some(port) = request.port {
+            attach_overrides.insert("port".into(), Value::from(port));
+        }
+        let attach_args = merge_defaults(&adapter.config.attach_defaults, Value::Object(attach_overrides));
         if let Err(error) = client
             .request("attach", attach_args, policy.request_timeout, None)
             .await
@@ -421,7 +427,12 @@ impl DapSessionManager {
         let sessions = self.sessions.clone();
         tokio::spawn(async move {
             let mut events = client.subscribe();
-            while let Ok(event) = events.recv().await {
+            loop {
+                let event = match events.recv().await {
+                    Ok(event) => event,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                };
                 let mut sessions_guard = sessions.lock().await;
                 let Some(session) = sessions_guard.get_mut(&id) else { break; };
                 match event.event.as_str() {

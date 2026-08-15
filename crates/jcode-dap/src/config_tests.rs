@@ -61,3 +61,50 @@ transport = "socket"
     .expect("config");
     assert_eq!(config.transport, TransportMode::Socket);
 }
+
+#[test]
+fn policy_only_layers_do_not_become_adapter_entries() {
+    let registry = AdapterRegistry::from_toml_layers(
+        BTreeMap::new(),
+        &["[permissions]\nallow_memory_write = true\n"],
+    )
+    .expect("policy-only layer");
+    assert!(registry.adapters().is_empty());
+}
+
+#[test]
+fn nearest_root_marker_wins_over_an_ancestor_marker() {
+    let temp = tempfile::tempdir().expect("temp directory");
+    let project = temp.path().join("project");
+    let nested = project.join("nested");
+    std::fs::create_dir_all(&nested).expect("nested directory");
+    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"root\"\n").expect("root marker");
+    std::fs::write(nested.join(".debug-root"), "").expect("nested marker");
+    let program = nested.join("main.rs");
+    std::fs::write(&program, "fn main() {}\n").expect("program");
+
+    let mut adapters = BTreeMap::new();
+    adapters.insert(
+        "ancestor".to_owned(),
+        AdapterConfig {
+            command: "/bin/echo".into(),
+            file_types: vec![".rs".into()],
+            root_markers: vec!["Cargo.toml".into()],
+            ..AdapterConfig::default()
+        },
+    );
+    adapters.insert(
+        "nested".to_owned(),
+        AdapterConfig {
+            command: "/bin/echo".into(),
+            file_types: vec![".rs".into()],
+            root_markers: vec![".debug-root".into()],
+            ..AdapterConfig::default()
+        },
+    );
+    let registry = AdapterRegistry::from_toml_layers(adapters, &[]).expect("registry");
+    let selected = registry
+        .select_launch(&program, &nested, None)
+        .expect("selected adapter");
+    assert_eq!(selected.name, "nested");
+}

@@ -107,9 +107,9 @@ from a filename and does not run arbitrary launch commands from tool input.
   sequence number. There is no response polling loop.
 - Malformed JSON frames are counted and skipped so later valid frames can still
   be processed. Invalid headers and oversized frames return a bounded protocol
-  error.
-- Adapter processes are started directly, in a non-interactive process group,
-  and are killed during disconnect or startup failure.
+  error and terminate that transport rather than retrying the invalid buffer.
+- Adapter processes are started directly. On Unix they use a non-interactive
+  process group and are killed during disconnect or startup failure.
 - Retained adapter output is capped at 128 KiB per session. Metadata marks a
   truncated tail.
 - Terminated or idle sessions can be reclaimed with the manager's explicit

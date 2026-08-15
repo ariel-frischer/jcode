@@ -106,14 +106,30 @@ impl Tool for DebuggerTool {
             }
             "attach" => {
                 let cwd = resolve_cwd(&input, &ctx)?;
+                let port = input
+                    .get("port")
+                    .and_then(Value::as_u64)
+                    .map(|value| {
+                        u16::try_from(value)
+                            .map_err(|_| anyhow!("debugger port must be between 0 and 65535"))
+                    })
+                    .transpose()?;
+                let pid = input
+                    .get("pid")
+                    .and_then(Value::as_u64)
+                    .map(|value| {
+                        u32::try_from(value)
+                            .map_err(|_| anyhow!("debugger pid exceeds u32::MAX"))
+                    })
+                    .transpose()?;
                 let snapshot = self
                     .manager
                     .attach(AttachRequest {
                         adapter: string_field(&input, "adapter"),
                         cwd,
                         host: string_field(&input, "host"),
-                        port: input.get("port").and_then(Value::as_u64).map(|value| value as u16),
-                        pid: input.get("pid").and_then(Value::as_u64).map(|value| value as u32),
+                        port,
+                        pid,
                         parent_session_id: string_field(&input, "parent_session_id"),
                     })
                     .await?;

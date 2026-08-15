@@ -266,36 +266,44 @@ implementation_phases:
       - "jcode-dap crate with dependencies and public error/policy/session types"
       - "Fake adapter fixture harness and baseline tests"
   - phase: 2
+    name: "Protocol and policy foundations"
+    goal: "Define DAP envelopes, capabilities, error handling, and explicit permission tiers."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "DAP request, response, event, and capability types"
+      - "Read-only, process-control, evaluate, and memory-write policy tiers"
+  - phase: 3
     name: "Configuration and protocol transport"
     goal: "Implement deterministic adapter resolution and robust DAP framing/transports."
     dependencies:
-      - "Phase 1"
+      - "Phase 2"
     deliverables:
       - "Built-in/user/project TOML registry with precedence and selection"
       - "Content-Length framing, correlated requests, response timeouts, cancellation, and malformed-message recovery"
       - "Stdio, TCP, and Unix-socket startup and cleanup"
-  - phase: 3
+  - phase: 4
     name: "Session lifecycle and operations"
     goal: "Implement launch/attach, capability negotiation, debugger operations, event state, output bounds, and cleanup."
     dependencies:
-      - "Phase 2"
+      - "Phase 3"
     deliverables:
       - "Server-owned DapSessionManager with launch and attach separation"
       - "Breakpoints, stepping, inspection, evaluate, output, stop, disconnect, and capability-aware errors"
       - "Idle expiry and child-session relationship bookkeeping"
-  - phase: 4
+  - phase: 5
     name: "Jcode tool and policy integration"
     goal: "Expose the debugger through the existing Tool registry and preserve profile/tool policy behavior."
     dependencies:
-      - "Phase 3"
+      - "Phase 4"
     deliverables:
       - "Debugger Tool schema, action dispatch, bounded ToolOutput metadata, and tier checks"
       - "Registry registration and tool-policy compatibility tests"
-  - phase: 5
+  - phase: 6
     name: "Documentation, benchmark, and polish"
     goal: "Document safe operation and measure debugger-assisted diagnosis offline."
     dependencies:
-      - "Phase 4"
+      - "Phase 5"
     deliverables:
       - "docs/DAP.md"
       - "Deterministic benchmark and print-debugging baseline"

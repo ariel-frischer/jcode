@@ -1,6 +1,7 @@
 use crate::error::{DapError, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -80,7 +81,9 @@ impl AdapterRegistry {
         for layer in layers {
             let value: toml::Value = toml::from_str(layer).map_err(|error| DapError::Config(error.to_string()))?;
             let value = serde_json::to_value(value).map_err(|error| DapError::Config(error.to_string()))?;
-            let adapters = value.get("adapters").unwrap_or(&value);
+            let Some(adapters) = value.get("adapters") else {
+                continue;
+            };
             let Some(entries) = adapters.as_object() else { return Err(DapError::Config("adapters must be a table".into())); };
             for (name, override_value) in entries {
                 let current = serde_json::to_value(base.get(name).cloned().unwrap_or_default())?;
@@ -129,7 +132,15 @@ impl AdapterRegistry {
             let specificity = root_marker_depth(program, cwd, &config.root_markers);
             if let Ok(adapter) = self.resolve(name, cwd) { matches.push((specificity, name.clone(), adapter)); }
         }
-        matches.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+        matches.sort_by(|left, right| {
+            let specificity = match (left.0, right.0) {
+                (Some(left), Some(right)) => left.cmp(&right),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            };
+            specificity.then_with(|| left.1.cmp(&right.1))
+        });
         matches.into_iter().next().map(|(_, _, adapter)| adapter).ok_or_else(|| DapError::Config(format!("no available DAP adapter matches {}", program.display())))
     }
 }
@@ -151,16 +162,16 @@ fn resolve_command(command: &str, cwd: &Path) -> Option<PathBuf> {
     std::env::var_os("PATH").into_iter().flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()).map(|dir| dir.join(command)).find(|candidate| candidate.is_file())
 }
 
-fn root_marker_depth(program: &Path, cwd: &Path, markers: &[String]) -> usize {
-    if markers.is_empty() { return 0; }
+fn root_marker_depth(program: &Path, cwd: &Path, markers: &[String]) -> Option<usize> {
+    if markers.is_empty() { return None; }
     let mut current = if program.is_absolute() { program.parent().unwrap_or(cwd).to_path_buf() } else { cwd.join(program).parent().unwrap_or(cwd).to_path_buf() };
     let mut depth = 0;
     loop {
         if markers.iter().any(|marker| current.join(marker).exists()) {
-            return depth + 1;
+            return Some(depth);
         }
         if !current.pop() {
-            return 0;
+            return None;
         }
         depth += 1;
     }

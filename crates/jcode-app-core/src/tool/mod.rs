@@ -168,9 +168,6 @@ impl Registry {
                 "agentgrep",
                 agentgrep::AgentGrepTool::new,
             );
-            Self::insert_tool_timed(&mut m, &mut timings, "debugger", || {
-                debugger::DebuggerTool::new(Arc::new(jcode_dap::DapSessionManager::new()))
-            });
             Self::insert_tool_timed(
                 &mut m,
                 &mut timings,
@@ -298,6 +295,12 @@ impl Registry {
         let base_start = std::time::Instant::now();
         let mut tools_map = Self::base_tools(&skills);
         let base_ms = base_start.elapsed().as_millis();
+
+        Self::insert_tool(
+            &mut tools_map,
+            "debugger",
+            debugger::DebuggerTool::new(Arc::new(jcode_dap::DapSessionManager::new())),
+        );
 
         // Per-session tools that need provider/registry references
         let session_tools_start = std::time::Instant::now();
