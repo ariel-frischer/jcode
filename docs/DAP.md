@@ -20,6 +20,9 @@ to the session working directory. Higher-precedence files override lower ones.
 Adapter objects and their `launch_defaults` and `attach_defaults` maps are
 merged by key. Adapter names are stable and selection ties are resolved by
 root-marker specificity, then name order.
+Project adapter definitions are executable configuration. Use them only in
+trusted workspaces. A debugger action still must explicitly request launch or
+attach, and Jcode never launches an adapter implicitly while browsing files.
 
 ```toml
 [adapters.debugpy]
@@ -40,7 +43,8 @@ request = "attach"
 justMyCode = false
 
 [permissions]
-# These values layer with the same user/project precedence as adapters.
+# User permissions can explicitly widen defaults. Project permissions may only
+# narrow those user settings, which keeps checked-in config from widening trust.
 allow_process_control = true
 allow_evaluate = true
 allow_memory_write = false
@@ -83,7 +87,7 @@ The DAP crate classifies operations before dispatch:
 | --- | --- | --- |
 | Read-only | sessions, status, threads, stack, scopes, variables, output, modules, read memory | Allowed |
 | Process control | launch, attach, breakpoints, continue, pause, stepping, stop, disconnect | Allowed only through an explicit debugger action |
-| Expression evaluation | evaluate | Allowed through an explicit debugger action |
+| Expression evaluation | evaluate | Denied by default; enable explicitly |
 | Memory write | write memory | Denied by default |
 
 The ordinary Jcode tool allow/disable policy and named session profiles still

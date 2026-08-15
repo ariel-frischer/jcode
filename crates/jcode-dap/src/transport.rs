@@ -2,15 +2,17 @@ use crate::error::{DapError, Result};
 use crate::protocol::{DapCapabilities, DapEventMessage, DapResponseMessage};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split};
 use tokio::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::process::{Child, Command};
-use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::sync::{Mutex, broadcast, oneshot};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
@@ -46,7 +48,9 @@ impl FrameCodec {
         loop {
             let Some(header_end) = find_header_end(&self.buffer) else {
                 if self.buffer.len() > 64 * 1024 {
-                    return Err(DapError::Protocol("DAP header exceeded maximum size".into()));
+                    return Err(DapError::Protocol(
+                        "DAP header exceeded maximum size".into(),
+                    ));
                 }
                 break;
             };
@@ -60,9 +64,9 @@ impl FrameCodec {
                     .flatten()
             });
             let Some(content_length) = content_length else {
-                self.malformed_messages += 1;
-                self.buffer.drain(..header_end + delimiter_len);
-                continue;
+                return Err(DapError::Protocol(
+                    "DAP frame is missing Content-Length".into(),
+                ));
             };
             if content_length > self.max_frame_bytes {
                 return Err(DapError::Protocol(format!(
@@ -87,10 +91,12 @@ impl FrameCodec {
 }
 
 fn find_header_end(buffer: &[u8]) -> Option<usize> {
-    buffer
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .or_else(|| buffer.windows(2).position(|window| window == b"\n\n"))
+    let crlf = buffer.windows(4).position(|window| window == b"\r\n\r\n");
+    let lf = buffer.windows(2).position(|window| window == b"\n\n");
+    match (crlf, lf) {
+        (Some(crlf), Some(lf)) => Some(crlf.min(lf)),
+        (value, None) | (None, value) => value,
+    }
 }
 
 fn header_delimiter_len(buffer: &[u8], header_end: usize) -> usize {
@@ -139,7 +145,9 @@ impl DapClient {
     ) -> Result<Arc<Self>> {
         let stream = timeout(connect_timeout, TcpStream::connect((host, port)))
             .await
-            .map_err(|_| DapError::Timeout(format!("connecting to DAP adapter at {host}:{port}")))??;
+            .map_err(|_| {
+                DapError::Timeout(format!("connecting to DAP adapter at {host}:{port}"))
+            })??;
         let (reader, writer) = split(stream);
         Ok(Self::from_stream(reader, writer).await)
     }
@@ -152,7 +160,10 @@ impl DapClient {
         let stream = timeout(connect_timeout, UnixStream::connect(path))
             .await
             .map_err(|_| {
-                DapError::Timeout(format!("connecting to DAP adapter socket {}", path.display()))
+                DapError::Timeout(format!(
+                    "connecting to DAP adapter socket {}",
+                    path.display()
+                ))
             })??;
         let (reader, writer) = split(stream);
         Ok(Self::from_stream(reader, writer).await)
@@ -237,8 +248,17 @@ impl DapClient {
         cwd: &std::path::Path,
         startup_timeout: Duration,
     ) -> Result<Arc<Self>> {
-        let socket_path = std::env::temp_dir().join(format!("jcode-dap-{}.sock", uuid::Uuid::new_v4()));
-        let listener = UnixListener::bind(&socket_path)?;
+        let socket_dir = std::env::temp_dir().join(format!("jcode-dap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&socket_dir)?;
+        std::fs::set_permissions(&socket_dir, std::fs::Permissions::from_mode(0o700))?;
+        let socket_path = socket_dir.join("adapter.sock");
+        let listener = match UnixListener::bind(&socket_path) {
+            Ok(listener) => listener,
+            Err(error) => {
+                let _ = std::fs::remove_dir(&socket_dir);
+                return Err(error.into());
+            }
+        };
         let args = args
             .iter()
             .map(|arg| arg.replace("${socket}", &socket_path.to_string_lossy()))
@@ -252,18 +272,27 @@ impl DapClient {
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
         process.process_group(0);
-        let mut child = process.spawn()?;
+        let mut child = match process.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
+                return Err(error.into());
+            }
+        };
         let accepted = timeout(startup_timeout, listener.accept()).await;
         let (stream, _) = match accepted {
             Ok(Ok(stream)) => stream,
             Ok(Err(error)) => {
                 let _ = child.kill().await;
                 let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
                 return Err(error.into());
             }
             Err(_) => {
                 let _ = child.kill().await;
                 let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
                 return Err(DapError::Timeout(format!(
                     "DAP Unix adapter did not connect to {}",
                     socket_path.display()
@@ -271,6 +300,7 @@ impl DapClient {
             }
         };
         let _ = std::fs::remove_file(&socket_path);
+        let _ = std::fs::remove_dir(&socket_dir);
         let (reader, writer) = split(stream);
         let client = Self::from_stream(reader, writer).await;
         Self::track_child(&client, child).await;
@@ -299,7 +329,9 @@ impl DapClient {
             ));
             let mut pending = pending.lock().await;
             for (_, sender) in pending.drain() {
-                let _ = sender.send(Err(DapError::AdapterExited("adapter process exited".into())));
+                let _ = sender.send(Err(DapError::AdapterExited(
+                    "adapter process exited".into(),
+                )));
             }
         });
     }
@@ -320,7 +352,8 @@ impl DapClient {
                     Ok(count) => count,
                     Err(error) => {
                         let mut pending = pending.lock().await;
-                        let error = DapError::Io(std::io::Error::new(error.kind(), error.to_string()));
+                        let error =
+                            DapError::Io(std::io::Error::new(error.kind(), error.to_string()));
                         for (_, sender) in pending.drain() {
                             let _ = sender.send(Err(DapError::Protocol(error.to_string())));
                         }
@@ -344,8 +377,10 @@ impl DapClient {
                     };
                     match value.get("type").and_then(Value::as_str) {
                         Some("response") => {
-                            if let Ok(response) = serde_json::from_value::<DapResponseMessage>(value)
-                                && let Some(sender) = pending.lock().await.remove(&response.request_seq)
+                            if let Ok(response) =
+                                serde_json::from_value::<DapResponseMessage>(value)
+                                && let Some(sender) =
+                                    pending.lock().await.remove(&response.request_seq)
                             {
                                 let _ = sender.send(Ok(response));
                             }
@@ -397,7 +432,8 @@ impl DapClient {
             let mut writer = self.writer.lock().await;
             writer.write_all(&framed).await?;
             writer.flush().await
-        }).await;
+        })
+        .await;
         let write_result = match write_result {
             Ok(result) => result,
             Err(_) => {
@@ -415,7 +451,9 @@ impl DapClient {
                     _ = token.cancelled() => Err(DapError::Cancelled),
                     result = receiver => result.map_err(|_| DapError::AdapterExited("response channel closed".into()))?,
                 },
-                None => receiver.await.map_err(|_| DapError::AdapterExited("response channel closed".into()))?,
+                None => receiver
+                    .await
+                    .map_err(|_| DapError::AdapterExited("response channel closed".into()))?,
             }
         };
         match timeout(request_timeout, wait).await {

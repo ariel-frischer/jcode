@@ -9,9 +9,9 @@ mod communicate;
 #[cfg(target_os = "macos")]
 mod computer;
 mod config_edit_notice;
-mod debugger;
 mod conversation_search;
 mod debug_socket;
+mod debugger;
 mod discover;
 mod discover_secrets;
 mod edit;
@@ -1258,6 +1258,6 @@ mod mcp_allow_list_tests {
 }
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod debugger_tests;
+#[cfg(test)]
+mod tests;

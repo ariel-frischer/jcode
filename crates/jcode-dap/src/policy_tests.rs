@@ -14,7 +14,7 @@ fn memory_write_is_denied_by_default_but_other_explicit_tiers_are_configurable()
     let policy = DapPolicy::default();
     assert!(policy.check(Action::StackTrace).is_ok());
     assert!(policy.check(Action::Continue).is_ok());
-    assert!(policy.check(Action::Evaluate).is_ok());
+    assert!(policy.check(Action::Evaluate).is_err());
     assert!(policy.check(Action::WriteMemory).is_err());
 }
 

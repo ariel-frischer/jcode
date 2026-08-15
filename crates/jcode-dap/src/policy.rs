@@ -47,8 +47,8 @@ impl Action {
             | Self::Scopes
             | Self::Variables
             | Self::Output
-            | Self::ReadMemory
             | Self::Modules => PermissionTier::ReadOnly,
+            Self::ReadMemory => PermissionTier::ReadOnly,
             Self::Evaluate => PermissionTier::Evaluate,
             Self::WriteMemory => PermissionTier::MemoryWrite,
             Self::Launch
@@ -89,7 +89,7 @@ impl Default for DapPolicy {
     fn default() -> Self {
         Self {
             allow_process_control: true,
-            allow_evaluate: true,
+            allow_evaluate: false,
             allow_memory_write: false,
             request_timeout: Duration::from_secs(30),
             startup_timeout: Duration::from_secs(10),
@@ -102,19 +102,33 @@ impl DapPolicy {
     pub fn from_toml_layers(layers: &[&str]) -> Result<Self> {
         let mut policy = Self::default();
         for layer in layers {
-            let file: PolicyFile = toml::from_str(layer)
-                .map_err(|error| DapError::Config(error.to_string()))?;
+            let file: PolicyFile =
+                toml::from_str(layer).map_err(|error| DapError::Config(error.to_string()))?;
             if let Some(permissions) = file.permissions {
-                permissions.apply(&mut policy);
+                permissions.apply_all(&mut policy);
             }
         }
         Ok(policy)
     }
 
     pub fn load(cwd: &Path) -> Result<Self> {
-        let layers = crate::config::AdapterRegistry::load_config_layers(cwd)?;
-        let refs: Vec<&str> = layers.iter().map(String::as_str).collect();
-        Self::from_toml_layers(&refs)
+        let (user, project) = crate::config::AdapterRegistry::load_scoped_config_layers(cwd)?;
+        let mut policy = Self::default();
+        if let Some(user) = user {
+            let file: PolicyFile =
+                toml::from_str(&user).map_err(|error| DapError::Config(error.to_string()))?;
+            if let Some(permissions) = file.permissions {
+                permissions.apply_all(&mut policy);
+            }
+        }
+        for project in project {
+            let file: PolicyFile =
+                toml::from_str(&project).map_err(|error| DapError::Config(error.to_string()))?;
+            if let Some(permissions) = file.permissions {
+                permissions.apply_narrowing(&mut policy);
+            }
+        }
+        Ok(policy)
     }
 
     pub fn check(&self, action: Action) -> Result<()> {
@@ -144,7 +158,7 @@ struct PermissionConfig {
 }
 
 impl PermissionConfig {
-    fn apply(self, policy: &mut DapPolicy) {
+    fn apply_all(self, policy: &mut DapPolicy) {
         if let Some(value) = self.allow_process_control {
             policy.allow_process_control = value;
         }
@@ -162,6 +176,31 @@ impl PermissionConfig {
         }
         if let Some(value) = self.max_output_bytes {
             policy.max_output_bytes = value.max(1);
+        }
+    }
+
+    fn apply_narrowing(self, policy: &mut DapPolicy) {
+        if self.allow_process_control == Some(false) {
+            policy.allow_process_control = false;
+        }
+        if self.allow_evaluate == Some(false) {
+            policy.allow_evaluate = false;
+        }
+        if self.allow_memory_write == Some(false) {
+            policy.allow_memory_write = false;
+        }
+        if let Some(value) = self.request_timeout_ms {
+            policy.request_timeout = policy
+                .request_timeout
+                .min(Duration::from_millis(value.max(1)));
+        }
+        if let Some(value) = self.startup_timeout_ms {
+            policy.startup_timeout = policy
+                .startup_timeout
+                .min(Duration::from_millis(value.max(1)));
+        }
+        if let Some(value) = self.max_output_bytes {
+            policy.max_output_bytes = policy.max_output_bytes.min(value.max(1));
         }
     }
 }

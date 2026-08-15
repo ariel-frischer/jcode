@@ -40,8 +40,14 @@ custom = "project"
 #[test]
 fn launch_selection_is_stable_and_disabled_adapters_are_skipped() {
     let mut adapters = BTreeMap::new();
-    adapters.insert("zeta".to_owned(), AdapterConfig::test("/bin/echo", vec![".rs"]));
-    adapters.insert("alpha".to_owned(), AdapterConfig::test("/bin/echo", vec![".rs"]));
+    adapters.insert(
+        "zeta".to_owned(),
+        AdapterConfig::test("/bin/echo", vec![".rs"]),
+    );
+    adapters.insert(
+        "alpha".to_owned(),
+        AdapterConfig::test("/bin/echo", vec![".rs"]),
+    );
     adapters.get_mut("alpha").unwrap().enabled = false;
     let registry = AdapterRegistry::from_toml_layers(adapters, &[]).expect("registry");
     let selected = registry
@@ -78,7 +84,8 @@ fn nearest_root_marker_wins_over_an_ancestor_marker() {
     let project = temp.path().join("project");
     let nested = project.join("nested");
     std::fs::create_dir_all(&nested).expect("nested directory");
-    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"root\"\n").expect("root marker");
+    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"root\"\n")
+        .expect("root marker");
     std::fs::write(nested.join(".debug-root"), "").expect("nested marker");
     let program = nested.join("main.rs");
     std::fs::write(&program, "fn main() {}\n").expect("program");

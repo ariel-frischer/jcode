@@ -1,4 +1,7 @@
-use jcode_dap::{Action, AdapterConfig, AdapterRegistry, DapPolicy, DapSessionManager, LaunchRequest, SessionStatus};
+use jcode_dap::{
+    Action, AdapterConfig, AdapterRegistry, DapPolicy, DapSessionManager, LaunchRequest,
+    SessionStatus,
+};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -50,19 +53,43 @@ async fn launches_configured_stdio_adapter_and_reaps_it() {
         .expect("launch");
     assert_eq!(snapshot.adapter, "fake");
 
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    let output = manager
-        .execute(&snapshot.id, Action::Output, json!({}), None)
-        .await
-        .expect("output");
-    assert!(output["output"].as_str().unwrap_or_default().contains("fake adapter"));
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let output = loop {
+        let output = manager
+            .execute(&snapshot.id, Action::Output, json!({}), None)
+            .await
+            .expect("output");
+        if output["status"] == json!(SessionStatus::Stopped)
+            && output["output"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("fake adapter")
+        {
+            break output;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "adapter events not observed: {output}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    assert!(
+        output["output"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("fake adapter")
+    );
     assert_eq!(output["status"], json!(SessionStatus::Stopped));
 
     let write_error = manager
         .execute(&snapshot.id, Action::WriteMemory, json!({}), None)
         .await
         .expect_err("unsupported memory write");
-    assert!(write_error.to_string().contains("supportsWriteMemoryRequest"));
+    assert!(
+        write_error
+            .to_string()
+            .contains("supportsWriteMemoryRequest")
+    );
 
     let threads = manager
         .execute(&snapshot.id, Action::Threads, json!({}), None)
@@ -79,6 +106,50 @@ async fn launches_configured_stdio_adapter_and_reaps_it() {
         )
         .await
         .expect("breakpoint");
+    assert_eq!(
+        manager
+            .get(&snapshot.id)
+            .await
+            .expect("snapshot")
+            .breakpoints["main.py"]
+            .len(),
+        1
+    );
+    manager
+        .execute(
+            &snapshot.id,
+            Action::SetBreakpoint,
+            json!({"source": {"path": "main.py"}, "breakpoints": [{"line": 2}]}),
+            None,
+        )
+        .await
+        .expect("second breakpoint");
+    assert_eq!(
+        manager
+            .get(&snapshot.id)
+            .await
+            .expect("snapshot")
+            .breakpoints["main.py"]
+            .len(),
+        2
+    );
+    manager
+        .execute(
+            &snapshot.id,
+            Action::RemoveBreakpoint,
+            json!({"source": {"path": "main.py"}, "breakpoints": [{"line": 1}]}),
+            None,
+        )
+        .await
+        .expect("remove breakpoint");
+    assert_eq!(
+        manager
+            .get(&snapshot.id)
+            .await
+            .expect("snapshot")
+            .breakpoints["main.py"][0]["line"],
+        2
+    );
     manager
         .execute(&snapshot.id, Action::StepOver, json!({"threadId": 1}), None)
         .await

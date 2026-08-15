@@ -2,10 +2,14 @@ use super::protocol::{DapEventMessage, DapRequestMessage, DapResponseMessage};
 
 #[test]
 fn dap_messages_round_trip_unknown_adapter_fields() {
-    let request = DapRequestMessage::new(7, "launch", serde_json::json!({
-        "program": "/tmp/app",
-        "adapterSpecific": {"stopOnEntry": true}
-    }));
+    let request = DapRequestMessage::new(
+        7,
+        "launch",
+        serde_json::json!({
+            "program": "/tmp/app",
+            "adapterSpecific": {"stopOnEntry": true}
+        }),
+    );
     let value = serde_json::to_value(&request).expect("serialize request");
     let decoded: DapRequestMessage = serde_json::from_value(value).expect("deserialize request");
     assert_eq!(decoded.seq, 7);

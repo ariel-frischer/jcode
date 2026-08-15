@@ -1,6 +1,6 @@
-use super::session::{AttachRequest, DapSessionManager, LaunchRequest};
 use super::Action;
-use super::session::{append_output, SessionSnapshot, SessionStatus};
+use super::session::{AttachRequest, DapSessionManager, LaunchRequest};
+use super::session::{SessionSnapshot, SessionStatus, append_output};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -39,8 +39,14 @@ async fn attach_is_a_separate_path_and_requires_an_endpoint_or_pid() {
 
 #[test]
 fn capability_requirements_are_explicit_for_optional_actions() {
-    assert_eq!(Action::WriteMemory.required_capability(), Some("supportsWriteMemoryRequest"));
-    assert_eq!(Action::Modules.required_capability(), Some("supportsModulesRequest"));
+    assert_eq!(
+        Action::WriteMemory.required_capability(),
+        Some("supportsWriteMemoryRequest")
+    );
+    assert_eq!(
+        Action::Modules.required_capability(),
+        Some("supportsModulesRequest")
+    );
     assert_eq!(Action::StackTrace.required_capability(), None);
 }
 
@@ -58,6 +64,7 @@ fn output_bounds_never_split_utf8_codepoints() {
         capabilities: BTreeMap::new(),
         parent_session_id: None,
         child_session_ids: Vec::new(),
+        breakpoints: BTreeMap::new(),
     };
 
     append_output(&mut snapshot, "αβγδε", 5);

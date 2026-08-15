@@ -1,7 +1,7 @@
 use crate::config::{AdapterRegistry, ResolvedAdapter, TransportMode};
 use crate::error::{DapError, Result};
 use crate::policy::{Action, DapPolicy};
-use crate::protocol::DapCapabilities;
+use crate::protocol::{DapCapabilities, DapEventMessage};
 use crate::transport::DapClient;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -59,6 +59,8 @@ pub struct SessionSnapshot {
     pub parent_session_id: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub child_session_ids: Vec<SessionId>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub breakpoints: BTreeMap<String, Vec<Value>>,
 }
 
 struct LiveSession {
@@ -67,6 +69,7 @@ struct LiveSession {
     capabilities: DapCapabilities,
     policy: DapPolicy,
     last_used: Instant,
+    breakpoints: BTreeMap<String, Vec<Value>>,
 }
 
 #[derive(Clone)]
@@ -111,7 +114,10 @@ impl DapSessionManager {
 
     pub async fn list(&self) -> Vec<SessionSnapshot> {
         let sessions = self.sessions.lock().await;
-        sessions.values().map(|session| session.snapshot.clone()).collect()
+        sessions
+            .values()
+            .map(|session| session.snapshot.clone())
+            .collect()
     }
 
     pub async fn get(&self, id: &str) -> Option<SessionSnapshot> {
@@ -147,7 +153,9 @@ impl DapSessionManager {
 
     pub async fn launch(&self, request: LaunchRequest) -> Result<SessionSnapshot> {
         if request.program.as_os_str().is_empty() {
-            return Err(DapError::Session("launch requires an explicit program path".into()));
+            return Err(DapError::Session(
+                "launch requires an explicit program path".into(),
+            ));
         }
         let cwd = normalize_cwd(&request.cwd);
         let policy = self.policy_for(&cwd)?;
@@ -158,6 +166,7 @@ impl DapSessionManager {
         };
         let adapter = registry.select_launch(&request.program, &cwd, request.adapter.as_deref())?;
         let client = spawn_adapter(&adapter, &cwd, &policy).await?;
+        let events = client.subscribe();
         let capabilities = match client.initialize(policy.request_timeout).await {
             Ok(capabilities) => capabilities,
             Err(error) => {
@@ -181,40 +190,58 @@ impl DapSessionManager {
                 capabilities: capability_map(&capabilities),
                 parent_session_id: parent_session_id.clone(),
                 child_session_ids: Vec::new(),
+                breakpoints: BTreeMap::new(),
             },
             capabilities: capabilities.clone(),
             policy: policy.clone(),
             last_used: Instant::now(),
+            breakpoints: BTreeMap::new(),
         };
         self.sessions.lock().await.insert(id.clone(), session);
-        self.add_child_relation(parent_session_id.as_deref(), &id).await;
-        self.spawn_event_loop(id.clone(), client.clone(), policy.max_output_bytes);
-        let launch_args = merge_defaults(&adapter.config.launch_defaults, serde_json::json!({
-            "request": "launch",
-            "program": request.program,
-            "cwd": cwd,
-            "args": request.args,
-        }));
-        let response = client.request("launch", launch_args, policy.request_timeout, None).await;
+        self.add_child_relation(parent_session_id.as_deref(), &id)
+            .await;
+        self.spawn_event_loop(id.clone(), events, policy.max_output_bytes);
+        let mut launch_overrides = Map::new();
+        launch_overrides.insert("request".into(), Value::from("launch"));
+        launch_overrides.insert("program".into(), serde_json::to_value(&request.program)?);
+        launch_overrides.insert("cwd".into(), serde_json::to_value(&cwd)?);
+        launch_overrides.insert("args".into(), serde_json::to_value(&request.args)?);
+        let launch_args = merge_defaults(
+            &adapter.config.launch_defaults,
+            Value::Object(launch_overrides),
+        );
+        let response = client
+            .request("launch", launch_args, policy.request_timeout, None)
+            .await;
         if let Err(error) = response {
             let _ = self.disconnect_internal(&id).await;
             return Err(error);
         }
         if capabilities.supports("supportsConfigurationDoneRequest")
             && let Err(error) = client
-                .request("configurationDone", serde_json::json!({}), policy.request_timeout, None)
+                .request(
+                    "configurationDone",
+                    serde_json::json!({}),
+                    policy.request_timeout,
+                    None,
+                )
                 .await
         {
             let _ = self.disconnect_internal(&id).await;
             return Err(error);
         }
-        self.update_status_if_configuring(&id, SessionStatus::Running).await;
-        self.get(&id).await.ok_or_else(|| DapError::Session("session disappeared after launch".into()))
+        self.update_status_if_configuring(&id, SessionStatus::Running)
+            .await;
+        self.get(&id)
+            .await
+            .ok_or_else(|| DapError::Session("session disappeared after launch".into()))
     }
 
     pub async fn attach(&self, request: AttachRequest) -> Result<SessionSnapshot> {
         if request.pid.is_none() && request.port.is_none() {
-            return Err(DapError::Session("attach requires a pid or host/port endpoint".into()));
+            return Err(DapError::Session(
+                "attach requires a pid or host/port endpoint".into(),
+            ));
         }
         let cwd = normalize_cwd(&request.cwd);
         let policy = self.policy_for(&cwd)?;
@@ -223,7 +250,10 @@ impl DapSessionManager {
             Some(registry) => registry.clone(),
             None => AdapterRegistry::load(&cwd)?,
         };
-        let adapter_name = request.adapter.as_deref().ok_or_else(|| DapError::Config("attach requires an explicit adapter".into()))?;
+        let adapter_name = request
+            .adapter
+            .as_deref()
+            .ok_or_else(|| DapError::Config("attach requires an explicit adapter".into()))?;
         let adapter = registry.resolve(adapter_name, &cwd)?;
         let client = if let Some(port) = request.port {
             DapClient::connect_tcp(
@@ -242,6 +272,7 @@ impl DapSessionManager {
                 }
             }
         };
+        let events = client.subscribe();
         let capabilities = match client.initialize(policy.request_timeout).await {
             Ok(capabilities) => capabilities,
             Err(error) => {
@@ -265,14 +296,17 @@ impl DapSessionManager {
                 capabilities: capability_map(&capabilities),
                 parent_session_id: parent_session_id.clone(),
                 child_session_ids: Vec::new(),
+                breakpoints: BTreeMap::new(),
             },
             capabilities: capabilities.clone(),
             policy: policy.clone(),
             last_used: Instant::now(),
+            breakpoints: BTreeMap::new(),
         };
         self.sessions.lock().await.insert(id.clone(), session);
-        self.add_child_relation(parent_session_id.as_deref(), &id).await;
-        self.spawn_event_loop(id.clone(), client.clone(), policy.max_output_bytes);
+        self.add_child_relation(parent_session_id.as_deref(), &id)
+            .await;
+        self.spawn_event_loop(id.clone(), events, policy.max_output_bytes);
         let mut attach_overrides = Map::new();
         attach_overrides.insert("request".into(), Value::from("attach"));
         attach_overrides.insert("cwd".into(), serde_json::to_value(&cwd)?);
@@ -285,7 +319,10 @@ impl DapSessionManager {
         if let Some(port) = request.port {
             attach_overrides.insert("port".into(), Value::from(port));
         }
-        let attach_args = merge_defaults(&adapter.config.attach_defaults, Value::Object(attach_overrides));
+        let attach_args = merge_defaults(
+            &adapter.config.attach_defaults,
+            Value::Object(attach_overrides),
+        );
         if let Err(error) = client
             .request("attach", attach_args, policy.request_timeout, None)
             .await
@@ -295,28 +332,56 @@ impl DapSessionManager {
         }
         if capabilities.supports("supportsConfigurationDoneRequest")
             && let Err(error) = client
-                .request("configurationDone", serde_json::json!({}), policy.request_timeout, None)
+                .request(
+                    "configurationDone",
+                    serde_json::json!({}),
+                    policy.request_timeout,
+                    None,
+                )
                 .await
         {
             let _ = self.disconnect_internal(&id).await;
             return Err(error);
         }
-        self.update_status_if_configuring(&id, SessionStatus::Running).await;
-        self.get(&id).await.ok_or_else(|| DapError::Session("session disappeared after attach".into()))
+        self.update_status_if_configuring(&id, SessionStatus::Running)
+            .await;
+        self.get(&id)
+            .await
+            .ok_or_else(|| DapError::Session("session disappeared after attach".into()))
     }
 
-    pub async fn execute(&self, id: &str, action: Action, arguments: Value, cancellation: Option<CancellationToken>) -> Result<Value> {
-        let (client, capabilities, policy) = {
+    pub async fn execute(
+        &self,
+        id: &str,
+        action: Action,
+        arguments: Value,
+        cancellation: Option<CancellationToken>,
+    ) -> Result<Value> {
+        let (client, capabilities, policy, arguments) = {
             let mut sessions = self.sessions.lock().await;
-            let session = sessions.get_mut(id).ok_or_else(|| DapError::Session(format!("unknown session '{id}'")))?;
+            let session = sessions
+                .get_mut(id)
+                .ok_or_else(|| DapError::Session(format!("unknown session '{id}'")))?;
             session.last_used = Instant::now();
-            (session.client.clone(), session.capabilities.clone(), session.policy.clone())
+            let arguments = if matches!(action, Action::SetBreakpoint | Action::RemoveBreakpoint) {
+                update_breakpoint_state(session, action, &arguments)?
+            } else {
+                arguments
+            };
+            (
+                session.client.clone(),
+                session.capabilities.clone(),
+                session.policy.clone(),
+                arguments,
+            )
         };
         policy.check(action)?;
         if let Some(capability) = action.required_capability()
             && !capabilities.supports(capability)
         {
-            return Err(DapError::Unsupported(format!("adapter did not advertise {capability}")));
+            return Err(DapError::Unsupported(format!(
+                "adapter did not advertise {capability}"
+            )));
         }
         let command = match action {
             Action::Continue => "continue",
@@ -329,7 +394,13 @@ impl DapSessionManager {
             Action::Scopes => "scopes",
             Action::Variables => "variables",
             Action::Evaluate => "evaluate",
-            Action::Output => return self.get(id).await.map(|snapshot| serde_json::to_value(snapshot).unwrap_or(Value::Null)).ok_or_else(|| DapError::Session("session disappeared".into())),
+            Action::Output => {
+                return self
+                    .get(id)
+                    .await
+                    .map(|snapshot| serde_json::to_value(snapshot).unwrap_or(Value::Null))
+                    .ok_or_else(|| DapError::Session("session disappeared".into()));
+            }
             Action::ReadMemory => "readMemory",
             Action::WriteMemory => "writeMemory",
             Action::Modules => "modules",
@@ -337,12 +408,21 @@ impl DapSessionManager {
             Action::Disconnect => "disconnect",
             Action::SetBreakpoint => "setBreakpoints",
             Action::RemoveBreakpoint => "setBreakpoints",
-            Action::Status | Action::Sessions | Action::Launch | Action::Attach => return Err(DapError::Session("action requires a manager-level operation".into())),
+            Action::Status | Action::Sessions | Action::Launch | Action::Attach => {
+                return Err(DapError::Session(
+                    "action requires a manager-level operation".into(),
+                ));
+            }
         };
-        let response = client.request(command, arguments, policy.request_timeout, cancellation).await?;
-        if matches!(action, Action::Continue | Action::StepOver | Action::StepIn | Action::StepOut) {
-            self.update_status(id, SessionStatus::Running).await;
+        if matches!(
+            action,
+            Action::Continue | Action::StepOver | Action::StepIn | Action::StepOut
+        ) {
+            self.mark_running(id).await;
         }
+        let response = client
+            .request(command, arguments, policy.request_timeout, cancellation)
+            .await?;
         if matches!(action, Action::Stop | Action::Disconnect) {
             let _ = self.disconnect_internal(id).await;
         }
@@ -381,6 +461,16 @@ impl DapSessionManager {
                 continue;
             };
             let parent_id = session.snapshot.parent_session_id.clone();
+            let terminate_debuggee = session.snapshot.program.is_some();
+            let _ = session
+                .client
+                .request(
+                    "disconnect",
+                    serde_json::json!({"terminateDebuggee": terminate_debuggee}),
+                    session.policy.request_timeout.min(Duration::from_secs(1)),
+                    None,
+                )
+                .await;
             session.client.dispose().await;
             if let Some(parent_id) = parent_id
                 && let Some(parent) = self.sessions.lock().await.get_mut(&parent_id)
@@ -394,14 +484,23 @@ impl DapSessionManager {
         Ok(())
     }
 
-    async fn update_status(&self, id: &str, status: SessionStatus) {
-        if let Some(session) = self.sessions.lock().await.get_mut(id) { session.snapshot.status = status; }
+    async fn mark_running(&self, id: &str) {
+        if let Some(session) = self.sessions.lock().await.get_mut(id) {
+            session.snapshot.status = SessionStatus::Running;
+            session.snapshot.stop_reason = None;
+        }
     }
 
     async fn add_child_relation(&self, parent_id: Option<&str>, child_id: &str) {
-        let Some(parent_id) = parent_id else { return; };
+        let Some(parent_id) = parent_id else {
+            return;
+        };
         if let Some(parent) = self.sessions.lock().await.get_mut(parent_id)
-            && !parent.snapshot.child_session_ids.iter().any(|id| id == child_id)
+            && !parent
+                .snapshot
+                .child_session_ids
+                .iter()
+                .any(|id| id == child_id)
         {
             parent.snapshot.child_session_ids.push(child_id.to_owned());
         }
@@ -423,10 +522,14 @@ impl DapSessionManager {
         }
     }
 
-    fn spawn_event_loop(&self, id: SessionId, client: Arc<DapClient>, max_output: usize) {
+    fn spawn_event_loop(
+        &self,
+        id: SessionId,
+        mut events: broadcast::Receiver<DapEventMessage>,
+        max_output: usize,
+    ) {
         let sessions = self.sessions.clone();
         tokio::spawn(async move {
-            let mut events = client.subscribe();
             loop {
                 let event = match events.recv().await {
                     Ok(event) => event,
@@ -434,16 +537,28 @@ impl DapSessionManager {
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 };
                 let mut sessions_guard = sessions.lock().await;
-                let Some(session) = sessions_guard.get_mut(&id) else { break; };
+                let Some(session) = sessions_guard.get_mut(&id) else {
+                    break;
+                };
                 match event.event.as_str() {
                     "stopped" => {
                         session.snapshot.status = SessionStatus::Stopped;
-                        session.snapshot.stop_reason = event.body.as_ref().and_then(|body| body.get("reason")).and_then(Value::as_str).map(str::to_owned);
+                        session.snapshot.stop_reason = event
+                            .body
+                            .as_ref()
+                            .and_then(|body| body.get("reason"))
+                            .and_then(Value::as_str)
+                            .map(str::to_owned);
                     }
                     "continued" => session.snapshot.status = SessionStatus::Running,
                     "terminated" | "exited" => session.snapshot.status = SessionStatus::Terminated,
                     "output" => {
-                        if let Some(output) = event.body.as_ref().and_then(|body| body.get("output")).and_then(Value::as_str) {
+                        if let Some(output) = event
+                            .body
+                            .as_ref()
+                            .and_then(|body| body.get("output"))
+                            .and_then(Value::as_str)
+                        {
                             append_output(&mut session.snapshot, output, max_output);
                         }
                     }
@@ -468,13 +583,8 @@ async fn spawn_adapter(
         TransportMode::Socket => {
             #[cfg(unix)]
             {
-                DapClient::spawn_unix(
-                    &command,
-                    &adapter.config.args,
-                    cwd,
-                    policy.startup_timeout,
-                )
-                .await
+                DapClient::spawn_unix(&command, &adapter.config.args, cwd, policy.startup_timeout)
+                    .await
             }
             #[cfg(not(unix))]
             {
@@ -486,9 +596,17 @@ async fn spawn_adapter(
     }
 }
 
-fn normalize_cwd(cwd: &Path) -> PathBuf { cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf()) }
+fn normalize_cwd(cwd: &Path) -> PathBuf {
+    cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf())
+}
 
-fn capability_map(capabilities: &DapCapabilities) -> BTreeMap<String, bool> { capabilities.values.iter().filter_map(|(key, value)| value.as_bool().map(|value| (key.clone(), value))).collect() }
+fn capability_map(capabilities: &DapCapabilities) -> BTreeMap<String, bool> {
+    capabilities
+        .values
+        .iter()
+        .filter_map(|(key, value)| value.as_bool().map(|value| (key.clone(), value)))
+        .collect()
+}
 
 fn merge_defaults(defaults: &Value, overrides: Value) -> Value {
     let mut result = defaults.clone();
@@ -526,4 +644,63 @@ pub(crate) fn append_output(snapshot: &mut SessionSnapshot, output: &str, max_by
         snapshot.output.drain(..split);
         snapshot.output_truncated = true;
     }
+}
+
+fn update_breakpoint_state(
+    session: &mut LiveSession,
+    action: Action,
+    arguments: &Value,
+) -> Result<Value> {
+    let source = arguments
+        .get("source")
+        .and_then(|source| source.get("path"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| DapError::Session("breakpoint operation requires source.path".into()))?;
+    let requested = arguments
+        .get("breakpoints")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let complete = {
+        let breakpoints = session.breakpoints.entry(source.to_owned()).or_default();
+        match action {
+            Action::SetBreakpoint => {
+                for requested_breakpoint in requested {
+                    let line = requested_breakpoint
+                        .get("line")
+                        .and_then(Value::as_i64)
+                        .ok_or_else(|| DapError::Session("breakpoint requires line".into()))?;
+                    breakpoints.retain(|breakpoint| {
+                        breakpoint.get("line").and_then(Value::as_i64) != Some(line)
+                    });
+                    breakpoints.push(requested_breakpoint);
+                }
+            }
+            Action::RemoveBreakpoint => {
+                for requested_breakpoint in requested {
+                    let line = requested_breakpoint
+                        .get("line")
+                        .and_then(Value::as_i64)
+                        .ok_or_else(|| {
+                            DapError::Session("breakpoint removal requires line".into())
+                        })?;
+                    breakpoints.retain(|breakpoint| {
+                        breakpoint.get("line").and_then(Value::as_i64) != Some(line)
+                    });
+                }
+            }
+            _ => unreachable!("breakpoint state only applies to breakpoint actions"),
+        }
+        breakpoints.clone()
+    };
+    if complete.is_empty() {
+        session.breakpoints.remove(source);
+        session.snapshot.breakpoints.remove(source);
+    } else {
+        session
+            .snapshot
+            .breakpoints
+            .insert(source.to_owned(), complete.clone());
+    }
+    Ok(serde_json::json!({"source": {"path": source}, "breakpoints": complete}))
 }

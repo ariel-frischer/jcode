@@ -1,6 +1,6 @@
 use super::transport::{DapClient, FrameCodec};
 use std::time::Duration;
-use tokio::io::{split, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, split};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -17,7 +17,10 @@ fn codec_handles_fragmented_and_multiple_frames() {
     let mut bytes = first[8..].to_vec();
     bytes.extend(second);
     let messages = codec.push(&bytes).expect("complete frames");
-    assert_eq!(messages, vec![br#"{"seq":1}"#.to_vec(), br#"{"seq":2}"#.to_vec()]);
+    assert_eq!(
+        messages,
+        vec![br#"{"seq":1}"#.to_vec(), br#"{"seq":2}"#.to_vec()]
+    );
 }
 
 #[test]
@@ -50,9 +53,12 @@ async fn client_correlates_responses_and_cancels_a_hung_request() {
         let mut seen_tx = Some(seen_tx);
         loop {
             let count = adapter_reader.read(&mut bytes).await.expect("request read");
-            if count == 0 { return; }
+            if count == 0 {
+                return;
+            }
             for payload in codec.push(&bytes[..count]).expect("request frame") {
-                let request: serde_json::Value = serde_json::from_slice(&payload).expect("request json");
+                let request: serde_json::Value =
+                    serde_json::from_slice(&payload).expect("request json");
                 if request["command"] == "threads" {
                     let response = serde_json::json!({
                         "seq": 2,
@@ -62,7 +68,10 @@ async fn client_correlates_responses_and_cancels_a_hung_request() {
                         "command": "threads",
                         "body": {"threads": []}
                     });
-                    adapter_writer.write_all(&frame(&response.to_string())).await.expect("response write");
+                    adapter_writer
+                        .write_all(&frame(&response.to_string()))
+                        .await
+                        .expect("response write");
                     let _ = seen_tx.take().expect("seen sender").send(());
                 }
             }
@@ -70,14 +79,24 @@ async fn client_correlates_responses_and_cancels_a_hung_request() {
     });
 
     let response = client
-        .request("threads", serde_json::json!({}), Duration::from_secs(1), None)
+        .request(
+            "threads",
+            serde_json::json!({}),
+            Duration::from_secs(1),
+            None,
+        )
         .await
         .expect("threads response");
     assert!(response.success);
     seen_rx.await.expect("adapter saw request");
 
     let cancellation = CancellationToken::new();
-    let pending = client.request("hang", serde_json::json!({}), Duration::from_secs(10), Some(cancellation.clone()));
+    let pending = client.request(
+        "hang",
+        serde_json::json!({}),
+        Duration::from_secs(10),
+        Some(cancellation.clone()),
+    );
     cancellation.cancel();
     let error = pending.await.expect_err("cancelled request");
     assert!(error.to_string().contains("cancel"));
@@ -89,7 +108,12 @@ async fn client_times_out_a_request_when_the_adapter_does_not_reply() {
     let (client_reader, client_writer) = split(client_stream);
     let client = DapClient::from_stream(client_reader, client_writer).await;
     let error = client
-        .request("hang", serde_json::json!({}), Duration::from_millis(20), None)
+        .request(
+            "hang",
+            serde_json::json!({}),
+            Duration::from_millis(20),
+            None,
+        )
         .await
         .expect_err("request timeout");
     assert!(error.to_string().contains("timeout"));
@@ -103,7 +127,12 @@ async fn client_reports_adapter_exit_to_pending_requests() {
     drop(adapter_stream);
     tokio::time::sleep(Duration::from_millis(10)).await;
     let error = client
-        .request("after_exit", serde_json::json!({}), Duration::from_millis(50), None)
+        .request(
+            "after_exit",
+            serde_json::json!({}),
+            Duration::from_millis(50),
+            None,
+        )
         .await
         .expect_err("adapter exit");
     assert!(error.to_string().contains("closed") || error.to_string().contains("exited"));
@@ -111,7 +140,9 @@ async fn client_reports_adapter_exit_to_pending_requests() {
 
 #[tokio::test]
 async fn client_connects_to_an_existing_tcp_adapter() {
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.expect("listener");
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("listener");
     let address = listener.local_addr().expect("address");
     tokio::spawn(async move {
         let (stream, _) = listener.accept().await.expect("accept");
@@ -119,7 +150,11 @@ async fn client_connects_to_an_existing_tcp_adapter() {
         let mut codec = FrameCodec::default();
         let mut bytes = [0_u8; 1024];
         let count = reader.read(&mut bytes).await.expect("request read");
-        let payload = codec.push(&bytes[..count]).expect("request frame").pop().expect("request");
+        let payload = codec
+            .push(&bytes[..count])
+            .expect("request frame")
+            .pop()
+            .expect("request");
         let request: serde_json::Value = serde_json::from_slice(&payload).expect("request json");
         let response = serde_json::json!({
             "seq": 2,
@@ -129,13 +164,21 @@ async fn client_connects_to_an_existing_tcp_adapter() {
             "command": request["command"],
             "body": {"connected": true}
         });
-        writer.write_all(&frame(&response.to_string())).await.expect("response write");
+        writer
+            .write_all(&frame(&response.to_string()))
+            .await
+            .expect("response write");
     });
     let client = DapClient::connect_tcp("127.0.0.1", address.port(), Duration::from_secs(1))
         .await
         .expect("tcp connection");
     let response = client
-        .request("threads", serde_json::json!({}), Duration::from_secs(1), None)
+        .request(
+            "threads",
+            serde_json::json!({}),
+            Duration::from_secs(1),
+            None,
+        )
         .await
         .expect("tcp response");
     assert_eq!(response.body.expect("body")["connected"], true);
@@ -144,7 +187,8 @@ async fn client_connects_to_an_existing_tcp_adapter() {
 #[cfg(unix)]
 #[tokio::test]
 async fn client_connects_to_an_existing_unix_socket_adapter() {
-    let socket_path = std::env::temp_dir().join(format!("jcode-dap-test-{}.sock", uuid::Uuid::new_v4()));
+    let socket_path =
+        std::env::temp_dir().join(format!("jcode-dap-test-{}.sock", uuid::Uuid::new_v4()));
     let listener = tokio::net::UnixListener::bind(&socket_path).expect("unix listener");
     let server_path = socket_path.clone();
     tokio::spawn(async move {
@@ -153,7 +197,11 @@ async fn client_connects_to_an_existing_unix_socket_adapter() {
         let mut codec = FrameCodec::default();
         let mut bytes = [0_u8; 1024];
         let count = reader.read(&mut bytes).await.expect("request read");
-        let payload = codec.push(&bytes[..count]).expect("request frame").pop().expect("request");
+        let payload = codec
+            .push(&bytes[..count])
+            .expect("request frame")
+            .pop()
+            .expect("request");
         let request: serde_json::Value = serde_json::from_slice(&payload).expect("request json");
         let response = serde_json::json!({
             "seq": 2,
@@ -163,14 +211,22 @@ async fn client_connects_to_an_existing_unix_socket_adapter() {
             "command": request["command"],
             "body": {"connected": true}
         });
-        writer.write_all(&frame(&response.to_string())).await.expect("response write");
+        writer
+            .write_all(&frame(&response.to_string()))
+            .await
+            .expect("response write");
         let _ = std::fs::remove_file(server_path);
     });
     let client = DapClient::connect_unix(&socket_path, Duration::from_secs(1))
         .await
         .expect("unix connection");
     let response = client
-        .request("threads", serde_json::json!({}), Duration::from_secs(1), None)
+        .request(
+            "threads",
+            serde_json::json!({}),
+            Duration::from_secs(1),
+            None,
+        )
         .await
         .expect("unix response");
     assert_eq!(response.body.expect("body")["connected"], true);

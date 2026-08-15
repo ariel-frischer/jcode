@@ -79,6 +79,9 @@ pub struct DapCapabilities {
 
 impl DapCapabilities {
     pub fn supports(&self, name: &str) -> bool {
-        self.values.get(name).and_then(Value::as_bool).unwrap_or(false)
+        self.values
+            .get(name)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
     }
 }

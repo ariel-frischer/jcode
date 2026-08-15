@@ -21,7 +21,9 @@ fn context() -> ToolContext {
 fn debugger_tool_exposes_bounded_action_schema() {
     let tool = DebuggerTool::new(Arc::new(DapSessionManager::new()));
     let schema = tool.parameters_schema();
-    let actions = schema["properties"]["action"]["enum"].as_array().expect("action enum");
+    let actions = schema["properties"]["action"]["enum"]
+        .as_array()
+        .expect("action enum");
     assert!(actions.iter().any(|action| action == "launch"));
     assert!(actions.iter().any(|action| action == "stack_trace"));
     assert!(actions.iter().any(|action| action == "write_memory"));

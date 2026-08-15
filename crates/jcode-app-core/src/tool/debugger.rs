@@ -1,16 +1,34 @@
 use super::{Tool, ToolContext, ToolOutput};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use jcode_dap::{Action, AttachRequest, DapSessionManager, LaunchRequest};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 const DEBUGGER_ACTIONS: &[&str] = &[
-    "sessions", "status", "launch", "attach", "set_breakpoint", "remove_breakpoint",
-    "continue", "pause", "step_over", "step_in", "step_out", "threads", "stack_trace",
-    "scopes", "variables", "evaluate", "output", "stop", "disconnect", "read_memory",
-    "write_memory", "modules",
+    "sessions",
+    "status",
+    "launch",
+    "attach",
+    "set_breakpoint",
+    "remove_breakpoint",
+    "continue",
+    "pause",
+    "step_over",
+    "step_in",
+    "step_out",
+    "threads",
+    "stack_trace",
+    "scopes",
+    "variables",
+    "evaluate",
+    "output",
+    "stop",
+    "disconnect",
+    "read_memory",
+    "write_memory",
+    "modules",
 ];
 
 pub struct DebuggerTool {
@@ -61,8 +79,7 @@ impl Tool for DebuggerTool {
                 "memory_reference": {"type": "string"},
                 "data": {"type": "string"},
                 "offset": {"type": "integer"},
-                "count": {"type": "integer"},
-                "timeout": {"type": "integer"}
+                "count": {"type": "integer"}
             }
         })
     }
@@ -78,7 +95,9 @@ impl Tool for DebuggerTool {
                 let sessions = self.manager.list().await;
                 let metadata = json!({"action": action_name, "sessions": sessions});
                 let output = serde_json::to_string_pretty(&json!({"sessions": sessions}))?;
-                Ok(ToolOutput::new(output).with_title("Debugger sessions").with_metadata(metadata))
+                Ok(ToolOutput::new(output)
+                    .with_title("Debugger sessions")
+                    .with_metadata(metadata))
             }
             "launch" => {
                 let cwd = resolve_cwd(&input, &ctx)?;
@@ -90,7 +109,12 @@ impl Tool for DebuggerTool {
                 let args = input
                     .get("args")
                     .and_then(Value::as_array)
-                    .map(|args| args.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                    .map(|args| {
+                        args.iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_owned)
+                            .collect()
+                    })
                     .unwrap_or_default();
                 let snapshot = self
                     .manager
@@ -118,8 +142,7 @@ impl Tool for DebuggerTool {
                     .get("pid")
                     .and_then(Value::as_u64)
                     .map(|value| {
-                        u32::try_from(value)
-                            .map_err(|_| anyhow!("debugger pid exceeds u32::MAX"))
+                        u32::try_from(value).map_err(|_| anyhow!("debugger pid exceeds u32::MAX"))
                     })
                     .transpose()?;
                 let snapshot = self
@@ -138,8 +161,11 @@ impl Tool for DebuggerTool {
             _ => {
                 let action = parse_action(&action_name)?;
                 let session_id = resolve_session_id(&input, &self.manager).await?;
-                let arguments = dap_arguments(&action_name, &input);
-                let result = self.manager.execute(&session_id, action, arguments, None).await?;
+                let arguments = dap_arguments(&action_name, &input)?;
+                let result = self
+                    .manager
+                    .execute(&session_id, action, arguments, None)
+                    .await?;
                 render_result(&action_name, result)
             }
         }
@@ -188,7 +214,7 @@ fn string_field(input: &Value, key: &str) -> Option<String> {
     input.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
-fn dap_arguments(action: &str, input: &Value) -> Value {
+fn dap_arguments(action: &str, input: &Value) -> Result<Value> {
     let mut arguments = Map::new();
     let copy_string = |source: &str, target: &str, arguments: &mut Map<String, Value>| {
         if let Some(value) = input.get(source).and_then(Value::as_str) {
@@ -203,19 +229,34 @@ fn dap_arguments(action: &str, input: &Value) -> Value {
 
     match action {
         "set_breakpoint" => {
-            if let Some(file) = input.get("file").and_then(Value::as_str) {
-                arguments.insert("source".into(), json!({"path": file}));
-            }
+            let file = input
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("set_breakpoint requires file"))?;
+            let line = input
+                .get("line")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("set_breakpoint requires line"))?;
+            arguments.insert("source".into(), json!({"path": file}));
             let mut breakpoint = Map::new();
-            copy_number("line", "line", &mut breakpoint);
+            breakpoint.insert("line".into(), Value::from(line));
             copy_string("condition", "condition", &mut breakpoint);
-            arguments.insert("breakpoints".into(), Value::Array(vec![Value::Object(breakpoint)]));
+            arguments.insert(
+                "breakpoints".into(),
+                Value::Array(vec![Value::Object(breakpoint)]),
+            );
         }
         "remove_breakpoint" => {
-            if let Some(file) = input.get("file").and_then(Value::as_str) {
-                arguments.insert("source".into(), json!({"path": file}));
-            }
-            arguments.insert("breakpoints".into(), Value::Array(Vec::new()));
+            let file = input
+                .get("file")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("remove_breakpoint requires file"))?;
+            let line = input
+                .get("line")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("remove_breakpoint requires line"))?;
+            arguments.insert("source".into(), json!({"path": file}));
+            arguments.insert("breakpoints".into(), json!([{"line": line}]));
         }
         "continue" | "pause" | "step_over" | "step_in" | "step_out" => {
             copy_number("thread_id", "threadId", &mut arguments);
@@ -240,7 +281,7 @@ fn dap_arguments(action: &str, input: &Value) -> Value {
         }
         _ => {}
     }
-    Value::Object(arguments)
+    Ok(Value::Object(arguments))
 }
 
 async fn resolve_session_id(input: &Value, manager: &DapSessionManager) -> Result<String> {
@@ -251,11 +292,15 @@ async fn resolve_session_id(input: &Value, manager: &DapSessionManager) -> Resul
     sessions
         .last()
         .map(|session| session.id.clone())
-        .ok_or_else(|| anyhow!("debugger action requires session_id because no debugger session exists"))
+        .ok_or_else(|| {
+            anyhow!("debugger action requires session_id because no debugger session exists")
+        })
 }
 
 fn render_result(action: &str, result: Value) -> Result<ToolOutput> {
     let metadata = json!({"action": action, "result": result});
     let output = serde_json::to_string_pretty(&metadata)?;
-    Ok(ToolOutput::new(output).with_title(format!("Debugger {action}")).with_metadata(metadata))
+    Ok(ToolOutput::new(output)
+        .with_title(format!("Debugger {action}"))
+        .with_metadata(metadata))
 }
