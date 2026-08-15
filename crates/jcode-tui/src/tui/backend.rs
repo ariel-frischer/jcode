@@ -255,6 +255,7 @@ pub struct RemoteConnection {
     #[cfg(test)]
     protocol_bytes_scanned: usize,
     has_loaded_history: bool,
+    resume_in_flight: bool,
     call_output_tokens_seen: u64,
 }
 
@@ -337,6 +338,7 @@ impl RemoteConnection {
             #[cfg(test)]
             protocol_bytes_scanned: 0,
             has_loaded_history: false,
+            resume_in_flight: false,
             call_output_tokens_seen: 0,
         };
 
@@ -653,6 +655,7 @@ impl RemoteConnection {
         // History application replaces the display vector, so repeated payloads
         // remain idempotent rather than appending duplicate messages.
         self.has_loaded_history = false;
+        self.resume_in_flight = true;
         Ok(())
     }
 
@@ -1303,6 +1306,7 @@ impl RemoteConnection {
             #[cfg(test)]
             protocol_bytes_scanned: 0,
             has_loaded_history: false,
+            resume_in_flight: false,
             call_output_tokens_seen: 0,
         }
     }
@@ -1322,6 +1326,14 @@ impl RemoteConnection {
         self.has_loaded_history
     }
 
+    /// Whether a session switch has been requested but its target History has
+    /// not yet been applied. Startup auto-submit must wait during this window,
+    /// or the prompt can be sent to the source session before the server
+    /// retargets the connection.
+    pub fn resume_in_flight(&self) -> bool {
+        self.resume_in_flight
+    }
+
     /// Whether the socket reader already holds part of an inbound protocol
     /// frame. A history recovery request must not be sent in this state: the
     /// original response is in flight, and another request only queues another
@@ -1333,6 +1345,7 @@ impl RemoteConnection {
     /// Mark history as loaded
     pub fn mark_history_loaded(&mut self) {
         self.has_loaded_history = true;
+        self.resume_in_flight = false;
     }
 
     /// Handle tool start - begin tracking for diff generation
@@ -1507,6 +1520,10 @@ mod tests {
             !remote.has_loaded_history(),
             "target persisted History must not be mistaken for the source session's replay"
         );
+        assert!(
+            remote.resume_in_flight(),
+            "startup submission must remain gated until the target History arrives"
+        );
         let mut line = String::new();
         reader
             .read_line(&mut line)
@@ -1517,6 +1534,9 @@ mod tests {
             Request::ResumeSession { session_id, .. }
                 if session_id == "session_orphaned_after_reload"
         ));
+
+        remote.mark_history_loaded();
+        assert!(!remote.resume_in_flight());
     }
 
     #[tokio::test]
