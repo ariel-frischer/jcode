@@ -701,7 +701,7 @@ fn test_file_activity_scroll_reproduces_trailing_ghost_after_native_scroll_like_
 }
 
 #[test]
-fn test_remote_typing_resumes_bottom_follow_mode() {
+fn test_remote_typing_preserves_scrolled_position_by_default() {
     let mut app = create_test_app();
     app.scroll_offset = 7;
     app.auto_scroll_paused = true;
@@ -710,15 +710,15 @@ fn test_remote_typing_resumes_bottom_follow_mode() {
 
     assert_eq!(app.input, "x");
     assert_eq!(app.cursor_pos, 1);
-    assert_eq!(app.scroll_offset, 0);
+    assert_eq!(app.scroll_offset, 7);
     assert!(
-        !app.auto_scroll_paused,
-        "typing in remote mode should follow newest content, not pin top"
+        app.auto_scroll_paused,
+        "remote typing should preserve the user's current chat position by default"
     );
 }
 
 #[test]
-fn test_local_typing_resumes_bottom_follow_mode() {
+fn test_local_typing_preserves_scrolled_position_by_default() {
     let mut app = create_test_app();
     app.scroll_offset = 7;
     app.auto_scroll_paused = true;
@@ -728,11 +728,24 @@ fn test_local_typing_resumes_bottom_follow_mode() {
 
     assert_eq!(app.input, "x");
     assert_eq!(app.cursor_pos, 1);
-    assert_eq!(app.scroll_offset, 0);
+    assert_eq!(app.scroll_offset, 7);
     assert!(
-        !app.auto_scroll_paused,
-        "local typing should follow newest content just like remote typing"
+        app.auto_scroll_paused,
+        "local typing should preserve the user's current chat position by default"
     );
+}
+
+#[test]
+fn test_multiline_paste_preserves_scrolled_position_by_default() {
+    let mut app = create_test_app();
+    app.scroll_offset = 7;
+    app.auto_scroll_paused = true;
+
+    app.handle_paste("first line\nsecond line".to_string());
+
+    assert_eq!(app.input, "first line\nsecond line");
+    assert_eq!(app.scroll_offset, 7);
+    assert!(app.auto_scroll_paused);
 }
 
 #[test]
@@ -753,6 +766,8 @@ fn test_local_typing_snaps_rendered_viewport_to_bottom_in_one_frame() {
         max_scroll - 8
     );
 
+    app.handle_key(KeyCode::Char('s'), KeyModifiers::ALT)
+        .unwrap();
     app.handle_key(KeyCode::Char('x'), KeyModifiers::empty())
         .unwrap();
     let _ = render_and_snap(&app, &mut terminal);
@@ -824,14 +839,14 @@ fn test_local_alt_s_toggles_typing_scroll_lock() {
         .unwrap();
     assert_eq!(
         app.status_notice(),
-        Some("Typing scroll lock: ON - typing stays at current chat position".to_string())
+        Some("Typing scroll lock: OFF - typing follows chat bottom".to_string())
     );
 
     app.handle_key(KeyCode::Char('s'), KeyModifiers::ALT)
         .unwrap();
     assert_eq!(
         app.status_notice(),
-        Some("Typing scroll lock: OFF - typing follows chat bottom".to_string())
+        Some("Typing scroll lock: ON - typing stays at current chat position".to_string())
     );
 }
 
@@ -939,6 +954,8 @@ fn test_remote_typing_scroll_lock_preserves_scroll_position() {
 
     rt.block_on(app.handle_remote_key(KeyCode::Char('s'), KeyModifiers::ALT, &mut remote))
         .unwrap();
+    rt.block_on(app.handle_remote_key(KeyCode::Char('s'), KeyModifiers::ALT, &mut remote))
+        .unwrap();
     app.handle_remote_char_input('x');
 
     assert_eq!(app.input, "x");
@@ -958,6 +975,8 @@ fn test_local_typing_scroll_lock_preserves_scroll_position() {
 
     app.handle_key(KeyCode::Char('s'), KeyModifiers::ALT)
         .unwrap();
+    app.handle_key(KeyCode::Char('s'), KeyModifiers::ALT)
+        .unwrap();
     app.handle_key(KeyCode::Char('x'), KeyModifiers::empty())
         .unwrap();
 
@@ -971,7 +990,7 @@ fn test_local_typing_scroll_lock_preserves_scroll_position() {
 }
 
 #[test]
-fn test_remote_typing_scroll_lock_can_be_toggled_back_off() {
+fn test_remote_typing_scroll_lock_can_be_toggled_off() {
     let mut app = create_test_app();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -980,8 +999,6 @@ fn test_remote_typing_scroll_lock_can_be_toggled_back_off() {
     app.scroll_offset = 7;
     app.auto_scroll_paused = true;
 
-    rt.block_on(app.handle_remote_key(KeyCode::Char('s'), KeyModifiers::ALT, &mut remote))
-        .unwrap();
     rt.block_on(app.handle_remote_key(KeyCode::Char('s'), KeyModifiers::ALT, &mut remote))
         .unwrap();
     app.handle_remote_char_input('x');
