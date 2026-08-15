@@ -1214,6 +1214,7 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
     // opening and its prompt starting, which was proportional to history payload
     // transfer/render time for large parent sessions.
     if !remote.has_loaded_history()
+        && !remote.resume_in_flight()
         && app.submit_input_on_startup
         && !app.is_processing
         && !app.remote_model_switch_in_flight

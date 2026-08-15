@@ -750,6 +750,37 @@ fn process_remote_followups_sends_startup_prompt_before_history_arrives() {
 }
 
 #[test]
+fn process_remote_followups_defers_startup_prompt_during_resume() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.runtime_mode = crate::tui::app::AppRuntimeMode::RemoteClient;
+    app.input = "Continue the handoff once the child is attached".to_string();
+    app.cursor_pos = app.input.len();
+    app.submit_input_on_startup = true;
+
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    remote.mark_history_loaded();
+    rt.block_on(remote.resume_session("session_handoff_resume_barrier"))
+        .expect("resume request should send");
+
+    rt.block_on(process_remote_followups(&mut app, &mut remote));
+
+    assert!(remote.resume_in_flight());
+    assert!(app.submit_input_on_startup);
+    assert_eq!(app.input, "Continue the handoff once the child is attached");
+    assert!(!app.is_processing);
+
+    remote.mark_history_loaded();
+    rt.block_on(process_remote_followups(&mut app, &mut remote));
+
+    assert!(!app.submit_input_on_startup);
+    assert!(app.input.is_empty());
+    assert!(app.is_processing);
+}
+
+#[test]
 fn has_pending_startup_submission_requires_input_and_flag() {
     // Guards the predicate that gates post-connect startup dispatch.
     let mut app = create_test_app();
