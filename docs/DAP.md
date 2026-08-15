@@ -5,6 +5,50 @@ processes and socket connections under the long-lived server instead of taking
 over the user's terminal. Existing `DebugJob` operations are separate and are
 unchanged when the debugger tool is unavailable or disabled.
 
+## Availability and lifetime
+
+The `debugger` tool is registered by default, so a normal full-profile Jcode
+session can use it without a per-session switch. Tool policies still apply:
+
+```toml
+[tools]
+profile = "minimal"
+enabled = ["bash", "read", "write", "debugger"]
+
+# Or explicitly remove it from an otherwise full profile:
+# disabled = ["debugger"]
+```
+
+An explicit `enabled` list is an allow-list, so include the other tools the
+session needs. `enabled = ["*"]` or `enabled = ["all"]` keeps the unrestricted
+tool set. Named session profiles can apply their own tool policy after the
+global setting.
+
+The tool being available does not mean a debugger is running. A **debugging
+session** is one server-owned DAP connection plus its adapter process or socket,
+negotiated capabilities, breakpoints, event reader, and bounded output/state
+snapshot. It starts only after an explicit `debugger` call with `action =
+"launch"` or `action = "attach"`, remains alive for later calls, and is cleaned
+up by `stop`, `disconnect`, or idle reaping. Reading or editing files never
+creates one.
+
+The model receives the debugger's normal tool definition: the bounded action
+enum, argument schema, and the short workflow description above. There is no
+large language-specific instruction block injected into every turn. The model
+usually follows this sequence:
+
+1. Call `sessions` or `status` if it needs to inspect existing debugger state.
+2. Call `launch` with an explicit program, or `attach` with an explicit adapter
+   and PID/endpoint.
+3. Save the returned `session_id` and use it for breakpoints, stepping, stack,
+   scopes, variables, output, and cleanup.
+4. Use `disconnect` or `stop` when finished.
+
+This is similar to Oh My Pi's design: adapter resolution, framing, session state,
+capability checks, and background event handling are separate modules. Jcode's
+agent-facing contract is intentionally one bounded `debugger` tool rather than
+many permanently visible language-specific tools.
+
 ## Enable an adapter
 
 Adapters are declarative. Jcode never installs a debugger and never launches a
@@ -57,10 +101,13 @@ max_output_bytes = 131072
 # enabled = false
 ```
 
-Supported transports are `stdio`, `tcp`, and Unix `socket` on Unix systems.
-TCP launch arguments can use `${port}`. Unix-socket launch arguments can use
-`${socket}`. Adapter arguments are passed directly to the executable. They are
-not evaluated by a shell.
+Supported transports are `stdio`, `tcp`, `tcp_listen`, and Unix `socket` or
+`socket_listen` on Unix systems. The original `tcp` and `socket` modes are for
+adapters that dial back into a Jcode-owned listener. The `*_listen` modes are
+for adapters that start their own DAP server and are the usual choice for
+js-debug-adapter and Delve. TCP launch arguments can use `${port}`. Unix-socket
+launch arguments can use `${socket}`. Adapter arguments are passed directly to
+the executable. They are not evaluated by a shell.
 
 ## Tool operations
 
@@ -141,6 +188,60 @@ requests.
 The adapter may not advertise the required capability. Use `sessions` to
 inspect the negotiated snapshot, then choose a supported inspection operation.
 Do not work around a capability rejection by sending a custom shell command.
+
+## FAQ
+
+### Does DAP run on every file edit?
+
+No. DAP is lazy and explicit. A file edit can be followed by a normal build or
+test, but Jcode does not launch an adapter or debuggee unless the agent calls
+`debugger` with `launch` or `attach`.
+
+### Can I leave the debugger tool enabled in every session?
+
+Yes. That is the default with the normal `full` tool profile. Put adapter
+definitions in the global `~/.jcode/dap.toml`; the adapter processes still start
+only on demand. If a minimal or named profile hides it, add `debugger` to that
+profile's `tools.enabled` list or remove it from `tools.disabled`.
+
+### Does the global config install adapters?
+
+No. `~/.jcode/dap.toml` only describes commands and transport settings. Install
+the adapter outside Jcode, then Jcode checks command availability when a launch
+or attach action is requested. This keeps startup fast and avoids background
+processes for projects that never use debugging.
+
+### What do I need for each supported language?
+
+- Rust: `gdb` with `gdb -i dap`, or `lldb-dap` if preferred. Build with debug
+  information, such as the normal Cargo dev profile.
+- Go: Delve (`dlv`) with its DAP server support.
+- TypeScript/JavaScript: Microsoft's `js-debug-adapter` and Node.js.
+- Python: `debugpy`, launched as `python -m debugpy.adapter`.
+
+The checked-in built-in catalog covers these adapters. A user config can pin an
+absolute command path or override arguments and defaults when a distribution's
+launcher differs.
+
+### Is this the same as shelling out to a debugger?
+
+No. Jcode speaks the Debug Adapter Protocol over stdio or a private local
+socket. The adapter owns debugger-specific behavior, while Jcode owns request
+timeouts, cancellation, capability gates, output bounds, and session cleanup.
+The agent cannot turn a debugger action into an arbitrary launch command.
+
+### Why is `evaluate` disabled but stack inspection allowed?
+
+Evaluation can execute code inside the debuggee, and memory writes can mutate a
+live process. They are separate policy tiers. Read-only inspection is allowed by
+default, evaluation requires `allow_evaluate = true`, and memory writes require
+`allow_memory_write = true` in the trusted user policy.
+
+### How do I debug an already-running process?
+
+Use `attach` with an explicit `adapter` and either `pid` or `host`/`port`. Jcode
+does not infer a process from an edited filename or attach to an arbitrary
+process automatically.
 
 ### Safe local validation
 

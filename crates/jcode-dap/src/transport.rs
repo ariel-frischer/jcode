@@ -241,8 +241,146 @@ impl DapClient {
         Ok(client)
     }
 
+    /// Spawn an adapter that listens on a caller-selected TCP port.
+    ///
+    /// The `${port}` placeholder is replaced before launch. This is the mode
+    /// used by adapters such as js-debug-adapter, which expose a DAP server
+    /// rather than dialing back into a client-owned listener.
+    pub async fn spawn_tcp_listen(
+        command: &str,
+        args: &[String],
+        cwd: &std::path::Path,
+        startup_timeout: Duration,
+    ) -> Result<Arc<Self>> {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+        let port = listener.local_addr()?.port();
+        drop(listener);
+        let args = args
+            .iter()
+            .map(|arg| arg.replace("${port}", &port.to_string()))
+            .collect::<Vec<_>>();
+        let mut process = Command::new(command);
+        process
+            .args(args)
+            .current_dir(cwd)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        #[cfg(unix)]
+        process.process_group(0);
+        let mut child = process.spawn()?;
+        let stream = match timeout(startup_timeout, async {
+            loop {
+                if let Some(status) = child.try_wait()? {
+                    return Err(DapError::AdapterExited(format!(
+                        "DAP TCP adapter exited before listening: {status}"
+                    )));
+                }
+                match TcpStream::connect(("127.0.0.1", port)).await {
+                    Ok(stream) => break Ok(stream),
+                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                }
+            }
+        })
+        .await
+        {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                return Err(error);
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                return Err(DapError::Timeout(format!(
+                    "DAP TCP adapter did not listen on port {port}"
+                )));
+            }
+        };
+        let (reader, writer) = split(stream);
+        let client = Self::from_stream(reader, writer).await;
+        Self::track_child(&client, child).await;
+        Ok(client)
+    }
+
     #[cfg(unix)]
     pub async fn spawn_unix(
+        command: &str,
+        args: &[String],
+        cwd: &std::path::Path,
+        startup_timeout: Duration,
+    ) -> Result<Arc<Self>> {
+        let socket_dir = std::env::temp_dir().join(format!("jcode-dap-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&socket_dir)?;
+        std::fs::set_permissions(&socket_dir, std::fs::Permissions::from_mode(0o700))?;
+        let socket_path = socket_dir.join("adapter.sock");
+        let args = args
+            .iter()
+            .map(|arg| arg.replace("${socket}", &socket_path.to_string_lossy()))
+            .collect::<Vec<_>>();
+        let mut process = Command::new(command);
+        process
+            .args(args)
+            .current_dir(cwd)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        process.process_group(0);
+        let mut child = match process.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
+                return Err(error.into());
+            }
+        };
+        let stream = match timeout(startup_timeout, async {
+            loop {
+                if let Some(status) = child.try_wait()? {
+                    return Err(DapError::AdapterExited(format!(
+                        "DAP Unix adapter exited before listening: {status}"
+                    )));
+                }
+                match UnixStream::connect(&socket_path).await {
+                    Ok(stream) => break Ok(stream),
+                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                }
+            }
+        })
+        .await
+        {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
+                return Err(error);
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = std::fs::remove_file(&socket_path);
+                let _ = std::fs::remove_dir(&socket_dir);
+                return Err(DapError::Timeout(format!(
+                    "DAP Unix adapter did not connect to {}",
+                    socket_path.display()
+                )));
+            }
+        };
+        let _ = std::fs::remove_file(&socket_path);
+        let _ = std::fs::remove_dir(&socket_dir);
+        let (reader, writer) = split(stream);
+        let client = Self::from_stream(reader, writer).await;
+        Self::track_child(&client, child).await;
+        Ok(client)
+    }
+
+    /// Spawn an adapter that listens on a temporary Unix socket.
+    ///
+    /// The `${socket}` placeholder is replaced before launch. The temporary
+    /// socket directory is private and removed after the adapter connects.
+    #[cfg(unix)]
+    pub async fn spawn_unix_listen(
         command: &str,
         args: &[String],
         cwd: &std::path::Path,
@@ -294,7 +432,7 @@ impl DapClient {
                 let _ = std::fs::remove_file(&socket_path);
                 let _ = std::fs::remove_dir(&socket_dir);
                 return Err(DapError::Timeout(format!(
-                    "DAP Unix adapter did not connect to {}",
+                    "DAP Unix adapter did not listen on {}",
                     socket_path.display()
                 )));
             }
