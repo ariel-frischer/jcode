@@ -1,0 +1,4 @@
+{"seq":1,"type":"response","request_seq":1,"success":true,"command":"initialize","body":{"supportsConfigurationDoneRequest":true,"supportsReadMemoryRequest":true}}
+{"seq":2,"type":"event","event":"output","body":{"category":"console","output":"python output\n"}}
+{"seq":3,"type":"event","event":"stopped","body":{"reason":"breakpoint","threadId":1}}
+{"seq":4,"type":"response","request_seq":2,"success":true,"command":"threads","body":{"threads":[{"id":1,"name":"python"}]}}

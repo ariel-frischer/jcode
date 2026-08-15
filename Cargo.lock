@@ -3449,6 +3449,7 @@ dependencies = [
  "jcode-command-risk",
  "jcode-config-types",
  "jcode-core",
+ "jcode-dap",
  "jcode-import-core",
  "jcode-message-types",
  "jcode-notify-email",
@@ -3648,6 +3649,21 @@ dependencies = [
  "unicode-properties",
  "unicode-segmentation",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "jcode-dap"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "uuid",
 ]
 
 [[package]]

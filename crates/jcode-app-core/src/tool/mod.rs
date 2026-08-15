@@ -11,6 +11,7 @@ mod computer;
 mod config_edit_notice;
 mod conversation_search;
 mod debug_socket;
+mod debugger;
 mod discover;
 mod discover_secrets;
 mod edit;
@@ -294,6 +295,12 @@ impl Registry {
         let base_start = std::time::Instant::now();
         let mut tools_map = Self::base_tools(&skills);
         let base_ms = base_start.elapsed().as_millis();
+
+        Self::insert_tool(
+            &mut tools_map,
+            "debugger",
+            debugger::DebuggerTool::new(Arc::new(jcode_dap::DapSessionManager::new())),
+        );
 
         // Per-session tools that need provider/registry references
         let session_tools_start = std::time::Instant::now();
@@ -1250,5 +1257,7 @@ mod mcp_allow_list_tests {
     }
 }
 
+#[cfg(test)]
+mod debugger_tests;
 #[cfg(test)]
 mod tests;
