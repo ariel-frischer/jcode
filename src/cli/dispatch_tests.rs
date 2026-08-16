@@ -421,3 +421,24 @@ async fn server_is_running_at_treats_live_listener_as_running_without_pong() {
         "a live listener should prevent duplicate server spawns even if ping is slow or absent"
     );
 }
+
+#[test]
+fn explicit_client_socket_path_overrides_process_default() {
+    let _guard = crate::storage::lock_test_env();
+    let default_socket = tempfile::tempdir()
+        .expect("default socket tempdir")
+        .path()
+        .join("default.sock");
+    let explicit_socket = tempfile::tempdir()
+        .expect("explicit socket tempdir")
+        .path()
+        .join("explicit.sock");
+    crate::server::set_socket_path(default_socket.to_str().expect("default socket path"));
+
+    assert_eq!(
+        client_socket_path(Some(
+            explicit_socket.to_str().expect("explicit socket path")
+        )),
+        explicit_socket
+    );
+}

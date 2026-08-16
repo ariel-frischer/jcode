@@ -952,10 +952,11 @@ async fn run_default_command(
     if std::env::var_os("JCODE_RESUMING").is_none() {
         crate::tui::theme_detect::prewarm_theme_mode();
     }
+    let socket_path = client_socket_path(args.socket.as_deref());
     let mut server_running = if args.fresh_spawn {
         true
     } else {
-        server_is_running().await
+        server_is_running_at(&socket_path).await
     };
     startup_profile::mark("server_check");
 
@@ -998,7 +999,7 @@ async fn run_default_command(
         // loop against a stale socket (issues #277/#291). This only removes a
         // socket that has no live listener AND whose daemon lock is free, so it
         // can never disturb a running server.
-        if server::reap_stale_socket_if_dead(&server::socket_path()).await {
+        if server::reap_stale_socket_if_dead(&socket_path).await {
             output::stderr_info("Removed a stale jcode socket from a previous server.");
         }
 
@@ -1042,6 +1043,12 @@ fn print_provider_test_coverage_report(report: &str, colorize: bool) {
 
 pub(crate) async fn server_is_running() -> bool {
     server_is_running_at(&server::socket_path()).await
+}
+
+fn client_socket_path(socket: Option<&str>) -> std::path::PathBuf {
+    socket
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(server::socket_path)
 }
 
 async fn wait_for_existing_reload_server(context: &str) -> bool {
