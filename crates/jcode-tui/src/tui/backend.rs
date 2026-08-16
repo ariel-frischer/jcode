@@ -292,6 +292,7 @@ pub(crate) trait RemoteEventState {
     fn reset_call_output_tokens_seen(&mut self);
     fn set_session_id(&mut self, id: String);
     fn has_loaded_history(&self) -> bool;
+    fn arm_resume_in_flight(&mut self);
     fn mark_history_loaded(&mut self);
 }
 
@@ -654,8 +655,7 @@ impl RemoteConnection {
         // an empty transcript despite its intact persisted messages (#753).
         // History application replaces the display vector, so repeated payloads
         // remain idempotent rather than appending duplicate messages.
-        self.has_loaded_history = false;
-        self.resume_in_flight = true;
+        self.arm_resume_in_flight();
         Ok(())
     }
 
@@ -1334,6 +1334,13 @@ impl RemoteConnection {
         self.resume_in_flight
     }
 
+    /// Defer startup input until the target session's history has replaced the
+    /// source session's history on this connection.
+    pub fn arm_resume_in_flight(&mut self) {
+        self.has_loaded_history = false;
+        self.resume_in_flight = true;
+    }
+
     /// Whether the socket reader already holds part of an inbound protocol
     /// frame. A history recovery request must not be sent in this state: the
     /// original response is in flight, and another request only queues another
@@ -1430,6 +1437,10 @@ impl RemoteEventState for RemoteConnection {
         Self::has_loaded_history(self)
     }
 
+    fn arm_resume_in_flight(&mut self) {
+        Self::arm_resume_in_flight(self);
+    }
+
     fn mark_history_loaded(&mut self) {
         Self::mark_history_loaded(self);
     }
@@ -1473,6 +1484,8 @@ impl RemoteEventState for ReplayRemoteState {
     fn has_loaded_history(&self) -> bool {
         true
     }
+
+    fn arm_resume_in_flight(&mut self) {}
 
     fn mark_history_loaded(&mut self) {}
 }

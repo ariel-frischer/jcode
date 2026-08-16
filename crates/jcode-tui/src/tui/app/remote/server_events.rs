@@ -2821,6 +2821,11 @@ pub(in crate::tui::app) fn handle_server_event(
                 )));
                 false
             };
+            // The destination resume is consumed on the next event-loop tick.
+            // Arm the barrier now, while this event is still being handled, so
+            // restored startup input cannot be submitted to the source parent
+            // during that gap.
+            remote.arm_resume_in_flight();
             app.workspace_client.queue_resume_session(new_session_id);
             app.set_status_notice(if !context_restored {
                 "Handoff context unavailable".to_string()
