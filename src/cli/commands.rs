@@ -2584,6 +2584,31 @@ Re-run with `--force` if you really want to stop the server.";
     Ok(())
 }
 
+/// Retire stale daemons from superseded managed builds without touching the
+/// current shared server, alternate sockets, or unowned processes.
+pub fn run_server_cleanup_stale_command(emit_json: bool) -> Result<()> {
+    let report = crate::server::cleanup_stale_managed_servers();
+    if emit_json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        return Ok(());
+    }
+
+    println!(
+        "jcode server cleanup: scanned={} cleaned={} skipped={} socket={}",
+        report.scanned, report.cleaned, report.skipped, report.socket
+    );
+    if let Some(issue) = report.metadata_issue {
+        eprintln!("jcode server cleanup: {issue}");
+    }
+    for entry in report.entries {
+        println!(
+            "  {} pid={} version={} git={} decision={} outcome={}",
+            entry.name, entry.pid, entry.version, entry.git_hash, entry.decision, entry.outcome
+        );
+    }
+    Ok(())
+}
+
 pub(crate) struct RunSingleMessageOptions<'a> {
     pub(crate) reasoning_effort: Option<&'a str>,
     pub(crate) profile_run_options: Option<&'a super::profile::ProfileRunOptions>,

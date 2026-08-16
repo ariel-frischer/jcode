@@ -331,6 +331,8 @@ pub fn run_auto_update() -> Result<()> {
 
     if let Err(e) = build::install_local_release(&repo_dir) {
         crate::logging::warn(&format!("auto-update install failed: {}", e));
+    } else {
+        report_stale_server_cleanup("auto-update install");
     }
 
     let hash = ProcessCommand::new("git")
@@ -442,6 +444,8 @@ pub fn run_update() -> Result<()> {
 
     if let Err(e) = build::install_local_release(&repo_dir) {
         update::print_centered(&format!("Warning: install failed: {}", e));
+    } else {
+        report_stale_server_cleanup("update install");
     }
 
     let hash = ProcessCommand::new("git")
@@ -515,5 +519,19 @@ fn reload_server_after_update(reason: &str) {
                 reason, exe, error
             ));
         }
+    }
+}
+
+fn report_stale_server_cleanup(reason: &str) {
+    let report = crate::server::cleanup_stale_managed_servers();
+    if let Some(issue) = report.metadata_issue {
+        crate::logging::warn(&format!(
+            "update: stale server cleanup after {reason} was skipped: {issue}"
+        ));
+    } else if report.cleaned > 0 {
+        crate::logging::info(&format!(
+            "update: cleaned {} stale managed server process(es) after {reason}",
+            report.cleaned
+        ));
     }
 }

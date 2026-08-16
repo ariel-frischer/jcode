@@ -141,6 +141,16 @@ if [ "${JCODE_SKIP_SERVER_RELOAD:-}" != "1" ]; then
   fi
 fi
 
+# Retire detached daemons from superseded managed builds. The command owns the
+# registry/PID/build-path checks, so this installer shares the exact same
+# narrow cleanup path as Rust rebuild and reinstall flows. It is best-effort so
+# a partial install or malformed registry never rolls back the new channels.
+if "$install_dir/jcode" --no-update server cleanup-stale </dev/null; then
+  :
+else
+  echo "Warning: stale jcode server cleanup did not complete; no processes were broadly matched." >&2
+fi
+
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$install_dir"; then
   echo ""
   echo "Tip: add $install_dir to PATH if needed."

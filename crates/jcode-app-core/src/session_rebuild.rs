@@ -67,8 +67,21 @@ fn run_cargo_release_step(repo_dir: &Path, args: &[&str]) -> Result<ExitStatus> 
 }
 
 fn install_local_release_with_warning(repo_dir: &Path) {
-    if let Err(e) = build::install_local_release(repo_dir) {
-        eprintln!("Warning: install failed: {}", e);
+    match build::install_local_release(repo_dir) {
+        Ok(_) => report_stale_server_cleanup("rebuild install"),
+        Err(e) => eprintln!("Warning: install failed: {}", e),
+    }
+}
+
+fn report_stale_server_cleanup(reason: &str) {
+    let report = crate::server::cleanup_stale_managed_servers();
+    if let Some(issue) = report.metadata_issue {
+        eprintln!("Warning: stale server cleanup after {reason} was skipped: {issue}");
+    } else if report.cleaned > 0 {
+        eprintln!(
+            "Cleaned {} stale managed jcode server process(es) after {reason}.",
+            report.cleaned
+        );
     }
 }
 
@@ -205,11 +218,20 @@ fn background_release_tests(publisher: &BackgroundRebuildPublisher, repo_dir: &P
 }
 
 fn background_install_local_release(publisher: &BackgroundRebuildPublisher, repo_dir: &Path) {
-    if let Err(error) = build::install_local_release(repo_dir) {
-        publisher.status(format!(
+    match build::install_local_release(repo_dir) {
+        Ok(_) => {
+            let report = crate::server::cleanup_stale_managed_servers();
+            if let Some(issue) = report.metadata_issue {
+                publisher.status(format!(
+                    "Cleanup warning: {}. Will reload from the repo build if needed.",
+                    issue
+                ));
+            }
+        }
+        Err(error) => publisher.status(format!(
             "Install warning: {}. Will reload from the repo build if needed.",
             error
-        ));
+        )),
     }
 }
 

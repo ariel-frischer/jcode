@@ -221,6 +221,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             ServerCommand::Stop { force, json } => {
                 commands::run_server_stop_command(force, json).await?;
             }
+            ServerCommand::CleanupStale { json } => {
+                commands::run_server_cleanup_stale_command(json)?;
+            }
         },
         Some(Command::Run {
             message,
