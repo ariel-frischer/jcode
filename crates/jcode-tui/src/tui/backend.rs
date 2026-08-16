@@ -324,6 +324,9 @@ impl RemoteConnection {
         let stream = Stream::connect(server::socket_path()).await?;
         let socket_connect_ms = socket_connect_start.elapsed().as_millis();
         let (reader, writer) = stream.into_split();
+        let resume_target = resume_session
+            .filter(|session_id| crate::session::session_exists(session_id))
+            .map(|session_id| session_id.to_string());
 
         let mut conn = Self {
             reader: BufReader::new(reader),
@@ -338,16 +341,13 @@ impl RemoteConnection {
             #[cfg(test)]
             protocol_bytes_scanned: 0,
             has_loaded_history: false,
-            resume_in_flight: false,
+            resume_in_flight: resume_target.is_some(),
             call_output_tokens_seen: 0,
         };
 
         // Subscribe to events
         let subscribe_start = Instant::now();
         let (working_dir, selfdev) = super::subscribe_metadata(remote_working_dir);
-        let resume_target = resume_session
-            .filter(|session_id| crate::session::session_exists(session_id))
-            .map(|session_id| session_id.to_string());
         conn.send_request(Request::Subscribe {
             id: conn.next_request_id,
             working_dir,
