@@ -580,7 +580,9 @@ mod tests {
             report.entries[0].outcome.as_str(),
             "graceful-exit" | "escalated-exit"
         ));
-        let _ = child.wait();
+        child
+            .wait()
+            .expect("managed cleanup fixture should be waitable");
         assert!(!crate::platform::is_process_running(pid));
     }
 
@@ -606,7 +608,9 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(4));
         assert_eq!(report.cleaned, 1, "report={report:?}");
         assert_eq!(report.entries[0].outcome, "escalated-exit");
-        let _ = child.wait();
+        child
+            .wait()
+            .expect("managed cleanup fixture should be waitable");
         assert!(!crate::platform::is_process_running(pid));
 
         let repeated = cleanup_stale_managed_servers();
