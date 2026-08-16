@@ -104,6 +104,10 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
     assert_eq!(app.input, "continue from the handoff summary");
     assert!(app.submit_input_on_startup);
     assert_eq!(app.cursor_pos, app.input.len());
+    assert!(
+        remote.resume_in_flight(),
+        "SessionHandoffReady must arm the resume barrier before the next tick consumes the target"
+    );
 }
 
 #[test]
@@ -778,6 +782,32 @@ fn process_remote_followups_defers_startup_prompt_during_resume() {
     assert!(!app.submit_input_on_startup);
     assert!(app.input.is_empty());
     assert!(app.is_processing);
+}
+
+#[test]
+fn process_remote_followups_defers_startup_prompt_with_stale_source_history() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.runtime_mode = crate::tui::app::AppRuntimeMode::RemoteClient;
+    app.input = "Continue only after the handoff target is attached".to_string();
+    app.cursor_pos = app.input.len();
+    app.submit_input_on_startup = true;
+
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    remote.mark_history_loaded();
+    remote.arm_resume_in_flight();
+
+    rt.block_on(process_remote_followups(&mut app, &mut remote));
+
+    assert!(remote.resume_in_flight());
+    assert!(app.submit_input_on_startup);
+    assert_eq!(
+        app.input,
+        "Continue only after the handoff target is attached"
+    );
+    assert!(!app.is_processing);
 }
 
 #[test]

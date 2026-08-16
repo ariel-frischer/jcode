@@ -1257,6 +1257,11 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
         return;
     }
 
+    if remote.resume_in_flight() {
+        note_startup_submit_deferred(app, "session resume in flight");
+        return;
+    }
+
     let _ = recover_stranded_soft_interrupts(app, remote).await;
 
     if app.pending_queued_dispatch {
