@@ -248,7 +248,7 @@ fn current_managed_binary_paths() -> Vec<PathBuf> {
 
 #[expect(
     clippy::manual_ok_err,
-    reason = "The production swallowed-error guardrail forbids .ok() for this ownership probe"
+    reason = "The production swallowed-error guardrail forbids fallible-to-option conversion for this ownership probe"
 )]
 fn canonicalize_path(path: PathBuf) -> Option<PathBuf> {
     match std::fs::canonicalize(path) {
@@ -361,7 +361,10 @@ fn process_commandline_is_serve(_pid: u32) -> bool {
 fn socket_has_live_listener(path: &Path) -> bool {
     use std::os::unix::net::UnixStream;
 
-    UnixStream::connect(path).is_ok()
+    match UnixStream::connect(path) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 #[cfg(not(unix))]
