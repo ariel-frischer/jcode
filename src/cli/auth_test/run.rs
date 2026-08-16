@@ -1,11 +1,12 @@
-async fn maybe_run_auth_test_smoke(
+async fn maybe_run_auth_test_smoke_with_cancellation(
     report: &mut AuthTestProviderReport,
     kind: AuthTestSmokeKind,
     target: AuthTestTarget,
     model: Option<&str>,
     enabled: bool,
     prompt: &str,
-) {
+    cancellation: Option<&ValidationCancellation>,
+) -> Result<()> {
     if enabled && report.success && target.supports_smoke() {
         // Some providers validate chat but cannot run the tool smoke. The
         // Cursor native agent transport is text-only (no tool calls over
@@ -22,9 +23,15 @@ async fn maybe_run_auth_test_smoke(
                  validates chat."
                     .to_string(),
             );
-            return;
+            return Ok(());
         }
-        match kind.run(target, model, prompt).await {
+        match run_validation_step_if_guarded(
+            kind.step_name(),
+            kind.run(target, model, prompt),
+            cancellation,
+        )
+        .await
+        {
             Ok(output) => {
                 let ok = output.contains("AUTH_TEST_OK");
                 kind.set_output(report, output.clone());
@@ -38,6 +45,7 @@ async fn maybe_run_auth_test_smoke(
                     },
                 );
             }
+            Err(err) if is_validation_guard_failure(&err) => return Err(err),
             Err(err) => report.push_step(kind.step_name(), false, format!("{err:#}")),
         }
     } else if !target.supports_smoke() {
@@ -45,27 +53,41 @@ async fn maybe_run_auth_test_smoke(
     } else if !enabled {
         report.push_step(kind.step_name(), true, kind.skipped_by_flag_detail());
     }
+    Ok(())
 }
 
-async fn maybe_run_auth_test_smoke_for_choice(
+async fn maybe_run_auth_test_smoke_for_choice_with_cancellation(
     report: &mut AuthTestProviderReport,
     kind: AuthTestSmokeKind,
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
     enabled: bool,
     prompt: &str,
-) {
+    cancellation: Option<&ValidationCancellation>,
+) -> Result<()> {
     if enabled && report.success {
-        match auth_test_choice_plan(choice, model).await {
+        match run_validation_step_if_guarded(
+            kind.step_name(),
+            auth_test_choice_plan(choice, model),
+            cancellation,
+        )
+        .await
+        {
             Ok(AuthTestChoicePlan::Run { model }) => {
                 if matches!(kind, AuthTestSmokeKind::Tool)
                     && let Some(detail) =
                         tool_smoke_skip_detail_for_choice(choice, model.as_deref())
                 {
                     report.push_step(kind.step_name(), true, detail);
-                    return;
+                    return Ok(());
                 }
-                match kind.run_for_choice(choice, model.as_deref(), prompt).await {
+                match run_validation_step_if_guarded(
+                    kind.step_name(),
+                    kind.run_for_choice(choice, model.as_deref(), prompt),
+                    cancellation,
+                )
+                .await
+                {
                     Ok(output) => {
                         let ok = output.contains("AUTH_TEST_OK");
                         kind.set_output(report, output.clone());
@@ -79,17 +101,153 @@ async fn maybe_run_auth_test_smoke_for_choice(
                             },
                         );
                     }
+                    Err(err) if is_validation_guard_failure(&err) => return Err(err),
                     Err(err) => report.push_step(kind.step_name(), false, format!("{err:#}")),
                 }
             }
             Ok(AuthTestChoicePlan::Skip(detail)) => {
                 report.push_step(kind.step_name(), true, detail);
             }
+            Err(err) if is_validation_guard_failure(&err) => return Err(err),
             Err(err) => report.push_step(kind.step_name(), false, format!("{err:#}")),
         }
     } else if !enabled {
         report.push_step(kind.step_name(), true, kind.skipped_by_flag_detail());
     }
+    Ok(())
+}
+
+const POST_LOGIN_VALIDATION_STEP_TIMEOUT: Duration = Duration::from_secs(60);
+
+#[derive(Debug)]
+enum ValidationGuardReason {
+    Cancelled,
+    TimedOut(Duration),
+}
+
+#[derive(Debug)]
+struct ValidationGuardFailure {
+    step: &'static str,
+    reason: ValidationGuardReason,
+}
+
+impl std::fmt::Display for ValidationGuardFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.reason {
+            ValidationGuardReason::Cancelled => write!(
+                formatter,
+                "Post-login validation cancelled during `{}`. Credentials were saved; Ctrl+C was received and saved credentials were kept.",
+                self.step
+            ),
+            ValidationGuardReason::TimedOut(timeout) => write!(
+                formatter,
+                "Post-login validation timed out during `{}` after {} seconds. Credentials were saved; re-run `jcode auth-test` to retry.",
+                self.step,
+                timeout.as_secs()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ValidationGuardFailure {}
+
+struct ValidationCancellation {
+    notify: std::sync::Arc<tokio::sync::Notify>,
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    watcher: tokio::task::JoinHandle<()>,
+}
+
+impl ValidationCancellation {
+    fn start() -> Self {
+        let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signal = std::sync::Arc::clone(&notify);
+        let signal_state = std::sync::Arc::clone(&cancelled);
+        let watcher = tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                signal_state.store(true, std::sync::atomic::Ordering::Release);
+                signal.notify_waiters();
+            }
+        });
+        Self {
+            notify,
+            cancelled,
+            watcher,
+        }
+    }
+
+    async fn cancelled(&self) {
+        while !self
+            .cancelled
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            self.notify.notified().await;
+        }
+    }
+}
+
+impl Drop for ValidationCancellation {
+    fn drop(&mut self) {
+        self.watcher.abort();
+    }
+}
+
+async fn run_validation_step<T, F>(
+    step: &'static str,
+    timeout: Duration,
+    operation: F,
+    cancellation: impl std::future::Future<Output = ()>,
+) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    match tokio::time::timeout(
+        timeout,
+        async {
+            tokio::select! {
+                biased;
+                _ = cancellation => Err(anyhow::Error::new(ValidationGuardFailure {
+                    step,
+                    reason: ValidationGuardReason::Cancelled,
+                })),
+                result = operation => result,
+            }
+        },
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(anyhow::Error::new(ValidationGuardFailure {
+            step,
+            reason: ValidationGuardReason::TimedOut(timeout),
+        })),
+    }
+}
+
+async fn run_validation_step_if_guarded<T, F>(
+    step: &'static str,
+    operation: F,
+    cancellation: Option<&ValidationCancellation>,
+) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    match cancellation {
+        Some(cancellation) => {
+            run_validation_step(
+                step,
+                POST_LOGIN_VALIDATION_STEP_TIMEOUT,
+                operation,
+                cancellation.cancelled(),
+            )
+            .await
+        }
+        None => operation.await,
+    }
+}
+
+fn is_validation_guard_failure(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<ValidationGuardFailure>().is_some()
 }
 
 pub(crate) async fn run_post_login_validation(
@@ -137,8 +295,10 @@ async fn run_post_login_validation_inner(
         );
     }
 
+    let cancellation = ValidationCancellation::start();
+
     let report = if let Some(target) = AuthTestTarget::from_provider_choice(&choice) {
-        populate_auth_test_target_report(
+        populate_auth_test_target_report_with_cancellation(
             target,
             None,
             true,
@@ -146,10 +306,11 @@ async fn run_post_login_validation_inner(
             DEFAULT_AUTH_TEST_PROVIDER_PROMPT,
             DEFAULT_AUTH_TEST_TOOL_PROMPT,
             AuthTestProviderReport::new(target),
+            Some(&cancellation),
         )
-        .await
+        .await?
     } else {
-        populate_generic_auth_test_report(
+        populate_generic_auth_test_report_with_cancellation(
             provider,
             choice,
             None,
@@ -161,8 +322,9 @@ async fn run_post_login_validation_inner(
                 choice.as_arg_value().to_string(),
                 generic_credential_paths_for_provider(provider),
             ),
+            Some(&cancellation),
         )
-        .await
+        .await?
     };
 
     persist_auth_test_report(&report, None);
@@ -590,39 +752,70 @@ async fn populate_auth_test_target_report(
     run_tool_smoke: bool,
     provider_smoke_prompt: &str,
     tool_smoke_prompt: &str,
-    mut report: AuthTestProviderReport,
+    report: AuthTestProviderReport,
 ) -> AuthTestProviderReport {
-    match target {
-        AuthTestTarget::Claude => probe_claude_auth(&mut report).await,
-        AuthTestTarget::Openai => probe_openai_auth(&mut report).await,
-        AuthTestTarget::Gemini => probe_gemini_auth(&mut report).await,
-        AuthTestTarget::Antigravity => probe_antigravity_auth(&mut report).await,
-        AuthTestTarget::Google => probe_google_auth(&mut report).await,
-        AuthTestTarget::Copilot => probe_copilot_auth(&mut report).await,
-        AuthTestTarget::Cursor => probe_cursor_auth(&mut report).await,
-    }
+    populate_auth_test_target_report_with_cancellation(
+        target,
+        model,
+        run_smoke,
+        run_tool_smoke,
+        provider_smoke_prompt,
+        tool_smoke_prompt,
+        report,
+        None,
+    )
+    .await
+    .expect("validation without cancellation cannot fail")
+}
 
-    maybe_run_auth_test_smoke(
+async fn populate_auth_test_target_report_with_cancellation(
+    target: AuthTestTarget,
+    model: Option<&str>,
+    run_smoke: bool,
+    run_tool_smoke: bool,
+    provider_smoke_prompt: &str,
+    tool_smoke_prompt: &str,
+    mut report: AuthTestProviderReport,
+    cancellation: Option<&ValidationCancellation>,
+) -> Result<AuthTestProviderReport> {
+    run_validation_step_if_guarded(
+        "credential_probe",
+        async {
+            match target {
+                AuthTestTarget::Claude => probe_claude_auth(&mut report).await,
+                AuthTestTarget::Openai => probe_openai_auth(&mut report).await,
+                AuthTestTarget::Gemini => probe_gemini_auth(&mut report).await,
+                AuthTestTarget::Antigravity => probe_antigravity_auth(&mut report).await,
+                AuthTestTarget::Google => probe_google_auth(&mut report).await,
+                AuthTestTarget::Copilot => probe_copilot_auth(&mut report).await,
+                AuthTestTarget::Cursor => probe_cursor_auth(&mut report).await,
+            }
+            Ok(())
+        },
+        cancellation,
+    )
+    .await?;
+    maybe_run_auth_test_smoke_with_cancellation(
         &mut report,
         AuthTestSmokeKind::Provider,
         target,
         model,
         run_smoke,
         provider_smoke_prompt,
+        cancellation,
     )
-    .await;
-
-    maybe_run_auth_test_smoke(
+    .await?;
+    maybe_run_auth_test_smoke_with_cancellation(
         &mut report,
         AuthTestSmokeKind::Tool,
         target,
         model,
         run_tool_smoke,
         tool_smoke_prompt,
+        cancellation,
     )
-    .await;
-
-    report
+    .await?;
+    Ok(report)
 }
 
 #[expect(
@@ -637,32 +830,61 @@ async fn populate_generic_auth_test_report(
     run_tool_smoke: bool,
     provider_smoke_prompt: &str,
     tool_smoke_prompt: &str,
-    mut report: AuthTestProviderReport,
+    report: AuthTestProviderReport,
 ) -> AuthTestProviderReport {
+    populate_generic_auth_test_report_with_cancellation(
+        provider,
+        choice,
+        model,
+        run_smoke,
+        run_tool_smoke,
+        provider_smoke_prompt,
+        tool_smoke_prompt,
+        report,
+        None,
+    )
+    .await
+    .expect("validation without cancellation cannot fail")
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Post-login helper mirrors existing auth-test controls while adding cancellation"
+)]
+async fn populate_generic_auth_test_report_with_cancellation(
+    provider: crate::provider_catalog::LoginProviderDescriptor,
+    choice: super::provider_init::ProviderChoice,
+    model: Option<&str>,
+    run_smoke: bool,
+    run_tool_smoke: bool,
+    provider_smoke_prompt: &str,
+    tool_smoke_prompt: &str,
+    mut report: AuthTestProviderReport,
+    cancellation: Option<&ValidationCancellation>,
+) -> Result<AuthTestProviderReport> {
     super::provider_init::apply_login_provider_profile_env(provider);
     probe_generic_provider_auth(provider, &mut report);
-
-    maybe_run_auth_test_smoke_for_choice(
+    maybe_run_auth_test_smoke_for_choice_with_cancellation(
         &mut report,
         AuthTestSmokeKind::Provider,
         &choice,
         model,
         run_smoke,
         provider_smoke_prompt,
+        cancellation,
     )
-    .await;
-
-    maybe_run_auth_test_smoke_for_choice(
+    .await?;
+    maybe_run_auth_test_smoke_for_choice_with_cancellation(
         &mut report,
         AuthTestSmokeKind::Tool,
         &choice,
         model,
         run_tool_smoke,
         tool_smoke_prompt,
+        cancellation,
     )
-    .await;
-
-    report
+    .await?;
+    Ok(report)
 }
 
 fn persist_auth_test_report(report: &AuthTestProviderReport, model: Option<&str>) {
@@ -840,6 +1062,56 @@ fn auth_test_step_stage(
 
 fn auth_test_step_is_skipped(step: &AuthTestStepReport) -> bool {
     step.detail.trim_start().starts_with("Skipped:")
+}
+
+#[cfg(test)]
+mod validation_guard_tests {
+    use super::*;
+    use std::future;
+    use tokio::sync::oneshot;
+
+    #[tokio::test]
+    async fn cancellation_returns_an_actionable_error_for_the_current_step() {
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        let task = tokio::spawn(run_validation_step(
+            "provider_smoke",
+            Duration::from_secs(1),
+            future::pending::<Result<()>>(),
+            async move { cancel_rx.await.expect("cancellation sender dropped") },
+        ));
+
+        cancel_tx.send(()).expect("cancellation receiver is alive");
+        let error = task
+            .await
+            .expect("validation task should finish")
+            .expect_err("cancellation should fail validation");
+        let message = format!("{error:#}");
+        assert!(message.contains("provider_smoke"), "missing step: {message}");
+        assert!(message.contains("Ctrl+C"), "missing cancellation hint: {message}");
+        assert!(
+            message.to_ascii_lowercase().contains("credentials were saved"),
+            "missing persistence hint: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn timeout_returns_an_actionable_error_for_the_current_step() {
+        let error = run_validation_step(
+            "tool_smoke",
+            Duration::from_millis(5),
+            future::pending::<Result<()>>(),
+            future::pending::<()>(),
+        )
+        .await
+        .expect_err("hung validation should time out");
+        let message = format!("{error:#}");
+        assert!(message.contains("tool_smoke"), "missing step: {message}");
+        assert!(message.contains("timed out"), "missing timeout detail: {message}");
+        assert!(
+            message.to_ascii_lowercase().contains("credentials were saved"),
+            "missing persistence hint: {message}"
+        );
+    }
 }
 
 fn auth_test_tool_derived_stage(
