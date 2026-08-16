@@ -361,10 +361,7 @@ fn process_commandline_is_serve(_pid: u32) -> bool {
 fn socket_has_live_listener(path: &Path) -> bool {
     use std::os::unix::net::UnixStream;
 
-    match UnixStream::connect(path) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    UnixStream::connect(path).is_ok()
 }
 
 #[cfg(not(unix))]
