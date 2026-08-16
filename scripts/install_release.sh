@@ -148,7 +148,7 @@ fi
 if "$install_dir/jcode" --no-update server cleanup-stale </dev/null; then
   :
 else
-  echo "Warning: stale jcode server cleanup did not complete; no processes were broadly matched." >&2
+  echo "Warning: stale jcode server cleanup command failed; no processes were retired." >&2
 fi
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$install_dir"; then

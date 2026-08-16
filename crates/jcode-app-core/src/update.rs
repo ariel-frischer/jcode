@@ -1100,8 +1100,8 @@ pub fn download_and_install_blocking_with_progress(
     metadata.installed_from = Some(asset.browser_download_url.clone());
     metadata.last_check = SystemTime::now();
     metadata.save()?;
-    report_stale_server_cleanup("release update install");
     record_release_update_duration(started.elapsed());
+    report_stale_server_cleanup("release update install");
 
     Ok(versioned_path)
 }

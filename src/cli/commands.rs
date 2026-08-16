@@ -2588,8 +2588,18 @@ Re-run with `--force` if you really want to stop the server.";
 /// current shared server, alternate sockets, or unowned processes.
 pub fn run_server_cleanup_stale_command(emit_json: bool) -> Result<()> {
     let report = crate::server::cleanup_stale_managed_servers();
+    let failed = report.metadata_issue.is_some()
+        || report.entries.iter().any(|entry| {
+            matches!(
+                entry.outcome.as_str(),
+                "graceful-signal-failed" | "escalation-signal-failed" | "still-running"
+            )
+        });
     if emit_json {
         println!("{}", serde_json::to_string_pretty(&report)?);
+        if failed {
+            anyhow::bail!("stale server cleanup did not complete successfully");
+        }
         return Ok(());
     }
 
@@ -2597,7 +2607,7 @@ pub fn run_server_cleanup_stale_command(emit_json: bool) -> Result<()> {
         "jcode server cleanup: scanned={} cleaned={} skipped={} socket={}",
         report.scanned, report.cleaned, report.skipped, report.socket
     );
-    if let Some(issue) = report.metadata_issue {
+    if let Some(issue) = report.metadata_issue.as_deref() {
         eprintln!("jcode server cleanup: {issue}");
     }
     for entry in report.entries {
@@ -2605,6 +2615,9 @@ pub fn run_server_cleanup_stale_command(emit_json: bool) -> Result<()> {
             "  {} pid={} version={} git={} decision={} outcome={}",
             entry.name, entry.pid, entry.version, entry.git_hash, entry.decision, entry.outcome
         );
+    }
+    if failed {
+        anyhow::bail!("stale server cleanup did not complete successfully");
     }
     Ok(())
 }

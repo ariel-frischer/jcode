@@ -7,7 +7,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 use crate::storage::jcode_dir;
@@ -68,22 +69,29 @@ impl ServerRegistry {
 
     /// Save the registry to disk
     pub async fn save(&self) -> Result<()> {
+        self.save_sync()
+    }
+
+    /// Synchronously save the registry while holding the same inter-process
+    /// lock used by asynchronous registry writers.
+    pub fn save_sync(&self) -> Result<()> {
         let path = registry_path()?;
 
         // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await?;
-            if let Err(e) = crate::platform::set_directory_permissions_owner_only(parent) {
-                crate::logging::info(&format!(
-                    "Registry save: failed to harden directory permissions for {}: {}",
-                    parent.display(),
-                    e
-                ));
-            }
-        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("server registry has no parent directory"))?;
+        std::fs::create_dir_all(parent)?;
+        let _lock = RegistryFileLock::acquire(&path)?;
 
-        let content = serde_json::to_string_pretty(self)?;
-        fs::write(&path, content).await?;
+        crate::storage::write_json_fast(&path, self)?;
+        if let Err(e) = crate::platform::set_directory_permissions_owner_only(parent) {
+            crate::logging::info(&format!(
+                "Registry save: failed to harden directory permissions for {}: {}",
+                parent.display(),
+                e
+            ));
+        }
         if let Err(e) = crate::platform::set_permissions_owner_only(&path) {
             crate::logging::info(&format!(
                 "Registry save: failed to harden file permissions for {}: {}",
@@ -92,6 +100,62 @@ impl ServerRegistry {
             ));
         }
         Ok(())
+    }
+
+    /// Remove exact server snapshots while holding the registry lock.
+    ///
+    /// Cleanup runs from a snapshot because process inspection and bounded
+    /// termination can take time. Reloading under the write lock and matching
+    /// identity fields prevents that snapshot from clobbering a concurrent
+    /// registration or replacement.
+    pub fn remove_matching_sync(entries: &[ServerInfo]) -> Result<usize> {
+        let path = registry_path()?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("server registry has no parent directory"))?;
+        std::fs::create_dir_all(parent)?;
+        let _lock = RegistryFileLock::acquire(&path)?;
+
+        if !path.exists() {
+            return Ok(0);
+        }
+        let content = std::fs::read_to_string(&path)?;
+        let mut registry: Self = serde_json::from_str(&content)?;
+        let mut removed = 0;
+        for expected in entries {
+            let matches = registry.servers.get(&expected.name).is_some_and(|actual| {
+                actual.id == expected.id
+                    && actual.pid == expected.pid
+                    && actual.socket == expected.socket
+                    && actual.git_hash == expected.git_hash
+                    && actual.version == expected.version
+                    && actual.started_at == expected.started_at
+            });
+            if matches {
+                registry.servers.remove(&expected.name);
+                removed += 1;
+            }
+        }
+
+        if removed == 0 {
+            return Ok(0);
+        }
+        crate::storage::write_json_fast(&path, &registry)?;
+        if let Err(e) = crate::platform::set_directory_permissions_owner_only(parent) {
+            crate::logging::info(&format!(
+                "Registry save: failed to harden directory permissions for {}: {}",
+                parent.display(),
+                e
+            ));
+        }
+        if let Err(e) = crate::platform::set_permissions_owner_only(&path) {
+            crate::logging::info(&format!(
+                "Registry save: failed to harden file permissions for {}: {}",
+                path.display(),
+                e
+            ));
+        }
+        Ok(removed)
     }
 
     /// Register a server
@@ -182,6 +246,41 @@ impl ServerRegistry {
     pub fn remove_session(&mut self, server_name: &str, session_name: &str) {
         if let Some(info) = self.servers.get_mut(server_name) {
             info.sessions.retain(|s| s != session_name);
+        }
+    }
+}
+
+struct RegistryFileLock {
+    #[cfg(unix)]
+    _file: std::fs::File,
+}
+
+impl RegistryFileLock {
+    fn acquire(registry_path: &Path) -> Result<Self> {
+        let lock_path = registry_path.with_extension("lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+
+            let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+            if result != 0 {
+                Err(std::io::Error::last_os_error().into())
+            } else {
+                Ok(Self { _file: file })
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            drop(file);
+            Ok(Self {})
         }
     }
 }

@@ -74,16 +74,15 @@ pub fn cleanup_stale_managed_servers() -> ManagedServerCleanupReport {
             return report;
         }
     };
-    let mut registry: crate::registry::ServerRegistry =
-        match serde_json::from_str(&registry_content) {
-            Ok(registry) => registry,
-            Err(error) => {
-                report.metadata_issue = Some(format!(
-                    "server registry is malformed; no processes were inspected: {error}"
-                ));
-                return report;
-            }
-        };
+    let registry: crate::registry::ServerRegistry = match serde_json::from_str(&registry_content) {
+        Ok(registry) => registry,
+        Err(error) => {
+            report.metadata_issue = Some(format!(
+                "server registry is malformed; no processes were inspected: {error}"
+            ));
+            return report;
+        }
+    };
 
     let versions_dir = match crate::build::builds_dir() {
         Ok(path) => path.join("versions"),
@@ -114,7 +113,7 @@ pub fn cleanup_stale_managed_servers() -> ManagedServerCleanupReport {
         .into_iter()
         .filter_map(|(pid, count)| (count > 1).then_some(pid))
         .collect();
-    let mut removed_names = Vec::new();
+    let mut removed_servers = Vec::new();
 
     for info in registry.servers.values() {
         report.scanned += 1;
@@ -159,6 +158,12 @@ pub fn cleanup_stale_managed_servers() -> ManagedServerCleanupReport {
             report.entries.push(entry);
             continue;
         }
+        if info.pid == std::process::id() {
+            entry.outcome = "current-process".to_string();
+            report.skipped += 1;
+            report.entries.push(entry);
+            continue;
+        }
         let Some(executable) = managed_server_executable(info.pid, &versions_dir) else {
             entry.outcome = "ownership-unproven".to_string();
             report.skipped += 1;
@@ -185,7 +190,7 @@ pub fn cleanup_stale_managed_servers() -> ManagedServerCleanupReport {
             "graceful-exit" | "escalated-exit" | "already-exited"
         ) {
             report.cleaned += 1;
-            removed_names.push(info.name.clone());
+            removed_servers.push(info.clone());
         } else {
             report.skipped += 1;
         }
@@ -196,15 +201,12 @@ pub fn cleanup_stale_managed_servers() -> ManagedServerCleanupReport {
     // Keep the registry from repeatedly presenting processes that cleanup has
     // conclusively retired. This is best effort and never changes the safety
     // decision above.
-    if !removed_names.is_empty() {
-        for name in removed_names {
-            registry.unregister(&name);
-        }
-        if let Err(error) = save_registry_sync(&registry) {
-            report.metadata_issue = Some(format!(
-                "cleaned processes but could not update server registry: {error}"
-            ));
-        }
+    if !removed_servers.is_empty()
+        && let Err(error) = crate::registry::ServerRegistry::remove_matching_sync(&removed_servers)
+    {
+        report.metadata_issue = Some(format!(
+            "cleaned processes but could not update server registry: {error}"
+        ));
     }
 
     report
@@ -365,16 +367,6 @@ fn socket_has_live_listener(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn socket_has_live_listener(_path: &Path) -> bool {
     false
-}
-
-fn save_registry_sync(registry: &crate::registry::ServerRegistry) -> std::io::Result<()> {
-    let path = crate::registry::registry_path().map_err(std::io::Error::other)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("server registry has no parent directory"))?;
-    std::fs::create_dir_all(parent)?;
-    let content = serde_json::to_string_pretty(registry).map_err(std::io::Error::other)?;
-    std::fs::write(path, content)
 }
 
 #[cfg(test)]
