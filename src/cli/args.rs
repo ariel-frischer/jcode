@@ -695,6 +695,14 @@ pub(crate) enum ServerCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// Internal installer/rebuild cleanup for stale managed serve daemons.
+    #[command(hide = true, name = "cleanup-stale")]
+    CleanupStale {
+        /// Emit JSON instead of human-readable text
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

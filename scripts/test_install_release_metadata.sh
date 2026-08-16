@@ -27,18 +27,20 @@ test "${JCODE_BUILD_GIT_DIRTY:-}" = "${TEST_DIRTY:-0}"
 mkdir -p "$TEST_REPO/target/release"
 cat > "$TEST_REPO/target/release/jcode" <<BIN
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "\${JCODE_TEST_LOG:?}"
 if [[ "\${1:-}" == --version ]]; then printf '%s\\n' 'jcode v0.0.0-dev (${TEST_BINARY_HASH:-$JCODE_BUILD_GIT_HASH}, dirty)'; fi
 BIN
 chmod +x "$TEST_REPO/target/release/jcode"
 EOF
 chmod +x "$fake_bin/git" "$fake_bin/cargo"
 run_install() {
-  HOME="$tmp/home" PATH="$fake_bin:/usr/bin:/bin" TEST_REPO="$fixture" JCODE_RELEASE_PROFILE=release \
+  HOME="$tmp/home" PATH="$fake_bin:/usr/bin:/bin" TEST_REPO="$fixture" JCODE_TEST_LOG="$tmp/jcode.log" JCODE_RELEASE_PROFILE=release \
     JCODE_INSTALL_DIR="$tmp/launcher" JCODE_SKIP_SERVER_RELOAD=1 "$fixture/scripts/install_release.sh"
 }
 TEST_DIRTY=1 run_install >/dev/null
 test -x "$tmp/home/.jcode/builds/versions/abc123def-dirty/jcode"
 test "$(cat "$tmp/home/.jcode/builds/current-version")" = abc123def-dirty
+grep -Fxq -- '--no-update server cleanup-stale' "$tmp/jcode.log"
 rm -rf "$tmp/home" "$tmp/launcher"
 if TEST_BINARY_HASH=stale999 TEST_DIRTY=0 run_install >"$tmp/out" 2>"$tmp/err"; then
   echo "installer accepted a binary with stale metadata" >&2; exit 1

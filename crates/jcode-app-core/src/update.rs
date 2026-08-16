@@ -317,6 +317,7 @@ fn install_main_source_update_blocking(latest_sha: &str) -> Result<PathBuf> {
     metadata.installed_from = Some("source".to_string());
     metadata.last_check = SystemTime::now();
     metadata.save()?;
+    report_stale_server_cleanup("source update install");
 
     Ok(path)
 }
@@ -450,6 +451,20 @@ pub fn prepare_update_blocking() -> Result<PreparedUpdate> {
 fn short_update_error(context: &str, error: &anyhow::Error) -> String {
     crate::logging::warn(&format!("update: {}: {:#}", context, error));
     summarize_update_error(&format!("{:#}", error))
+}
+
+fn report_stale_server_cleanup(reason: &str) {
+    let report = crate::server::cleanup_stale_managed_servers();
+    if let Some(issue) = report.metadata_issue {
+        crate::logging::warn(&format!(
+            "update: stale server cleanup after {reason} was skipped: {issue}"
+        ));
+    } else if report.cleaned > 0 {
+        crate::logging::info(&format!(
+            "update: cleaned {} stale managed server process(es) after {reason}",
+            report.cleaned
+        ));
+    }
 }
 
 pub fn spawn_background_session_update(session_id: String) {
@@ -1086,6 +1101,7 @@ pub fn download_and_install_blocking_with_progress(
     metadata.last_check = SystemTime::now();
     metadata.save()?;
     record_release_update_duration(started.elapsed());
+    report_stale_server_cleanup("release update install");
 
     Ok(versioned_path)
 }

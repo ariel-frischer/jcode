@@ -2584,6 +2584,44 @@ Re-run with `--force` if you really want to stop the server.";
     Ok(())
 }
 
+/// Retire stale daemons from superseded managed builds without touching the
+/// current shared server, alternate sockets, or unowned processes.
+pub fn run_server_cleanup_stale_command(emit_json: bool) -> Result<()> {
+    let report = crate::server::cleanup_stale_managed_servers();
+    let failed = report.metadata_issue.is_some()
+        || report.entries.iter().any(|entry| {
+            matches!(
+                entry.outcome.as_str(),
+                "graceful-signal-failed" | "escalation-signal-failed" | "still-running"
+            )
+        });
+    if emit_json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if failed {
+            anyhow::bail!("stale server cleanup did not complete successfully");
+        }
+        return Ok(());
+    }
+
+    println!(
+        "jcode server cleanup: scanned={} cleaned={} skipped={} socket={}",
+        report.scanned, report.cleaned, report.skipped, report.socket
+    );
+    if let Some(issue) = report.metadata_issue.as_deref() {
+        eprintln!("jcode server cleanup: {issue}");
+    }
+    for entry in report.entries {
+        println!(
+            "  {} pid={} version={} git={} decision={} outcome={}",
+            entry.name, entry.pid, entry.version, entry.git_hash, entry.decision, entry.outcome
+        );
+    }
+    if failed {
+        anyhow::bail!("stale server cleanup did not complete successfully");
+    }
+    Ok(())
+}
+
 pub(crate) struct RunSingleMessageOptions<'a> {
     pub(crate) reasoning_effort: Option<&'a str>,
     pub(crate) profile_run_options: Option<&'a super::profile::ProfileRunOptions>,

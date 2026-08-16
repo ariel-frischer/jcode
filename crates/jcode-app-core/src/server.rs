@@ -36,6 +36,7 @@ mod headless;
 mod jade_relay;
 mod lifecycle;
 mod live_turn;
+mod managed_cleanup;
 mod provider_control;
 mod reload;
 mod reload_recovery;
@@ -598,6 +599,7 @@ pub use self::reload_state::{
 };
 
 pub use self::lifecycle::configure_temporary_server;
+pub use self::managed_cleanup::{ManagedServerCleanupReport, cleanup_stale_managed_servers};
 #[cfg(unix)]
 pub use self::socket::spawn_server_notify;
 #[cfg(unix)]

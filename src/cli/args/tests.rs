@@ -23,6 +23,18 @@ fn server_start_and_internal_keepalive_parse() {
 }
 
 #[test]
+fn server_cleanup_stale_parses_json() {
+    let args = Args::try_parse_from(["jcode", "server", "cleanup-stale", "--json"])
+        .expect("server cleanup-stale should parse");
+    assert!(matches!(
+        args.command,
+        Some(Command::Server {
+            action: ServerCommand::CleanupStale { json: true }
+        })
+    ));
+}
+
+#[test]
 fn server_promote_parses_default_and_explicit_version() {
     let current = Args::try_parse_from(["jcode", "server", "promote", "--json"])
         .expect("server promote should default to current");

@@ -137,6 +137,11 @@ new binary:
 2. It runs `jcode server reload`, which reloads only when the installed binary
    is newer than the running daemon.
 3. The server execs the new binary on the same socket and clients reconnect.
+4. It runs `jcode server cleanup-stale` through the same cleanup path used by
+   rebuilds. Cleanup only considers registry entries whose detached `serve`
+   process is provably running from the managed immutable build store. The
+   active shared listener, alternate sockets, explicit `JCODE_SOCKET` services,
+   and entries with incomplete ownership metadata are preserved.
 
 This is safe to run while other sessions are connected. Their persisted session
 state and session IDs are retained, and clients resume after reconnecting. The
