@@ -15,6 +15,7 @@ mod debugger;
 mod discover;
 mod discover_secrets;
 mod edit;
+mod feedback;
 mod gmail;
 mod goal;
 pub mod inflight;
@@ -211,6 +212,12 @@ impl Registry {
                 websearch::WebSearchTool::new,
             );
             Self::insert_tool_timed(&mut m, &mut timings, "invalid", invalid::InvalidTool::new);
+            Self::insert_tool_timed(
+                &mut m,
+                &mut timings,
+                "maintainer_feedback",
+                feedback::MaintainerFeedbackTool::new,
+            );
             Self::insert_tool_timed(
                 &mut m,
                 &mut timings,
