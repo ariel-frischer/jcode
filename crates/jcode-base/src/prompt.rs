@@ -40,11 +40,12 @@ pub struct PromptCapabilities {
     pub mermaid: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct PromptBuildOptions<'a> {
     capabilities: PromptCapabilities,
     profile_overlay: Option<&'a crate::config::SessionPromptOverlay>,
     skill_policy: Option<&'a crate::config::SkillPolicy>,
+    agents_md: Option<(Option<String>, ContextInfo)>,
 }
 
 impl Default for PromptCapabilities {
@@ -464,6 +465,7 @@ pub fn build_system_prompt_full_with_overlay(
             capabilities: PromptCapabilities::current(),
             profile_overlay,
             skill_policy: None,
+            agents_md: None,
         },
     )
 }
@@ -489,6 +491,7 @@ pub fn build_system_prompt_full_with_overlay_and_policy(
             capabilities: PromptCapabilities::current(),
             profile_overlay,
             skill_policy,
+            agents_md: None,
         },
     )
 }
@@ -511,6 +514,7 @@ pub fn build_system_prompt_full_with_capabilities(
             capabilities,
             profile_overlay: None,
             skill_policy: None,
+            agents_md: None,
         },
     )
 }
@@ -527,6 +531,7 @@ fn build_system_prompt_full_with_overlay_and_capabilities(
         capabilities,
         profile_overlay,
         skill_policy,
+        agents_md,
     } = options;
     let mut parts = base_system_prompt_parts(capabilities, working_dir);
     let mut info = ContextInfo {
@@ -543,7 +548,8 @@ fn build_system_prompt_full_with_overlay_and_capabilities(
     }
 
     // Add AGENTS.md instructions with tracking (from working_dir or cwd)
-    let (md_content, md_info) = load_agents_md_files_from_dir(working_dir);
+    let (md_content, md_info) =
+        agents_md.unwrap_or_else(|| load_agents_md_files_from_dir(working_dir));
     if let Some(content) = md_content {
         parts.push(content);
     }
@@ -633,6 +639,7 @@ pub fn build_system_prompt_split_with_overlay(
             capabilities: PromptCapabilities::current(),
             profile_overlay,
             skill_policy: None,
+            agents_md: None,
         },
     )
 }
@@ -657,6 +664,7 @@ pub fn build_system_prompt_split_with_overlay_and_policy(
             capabilities: PromptCapabilities::current(),
             profile_overlay,
             skill_policy,
+            agents_md: None,
         },
     )
 }
@@ -679,8 +687,58 @@ pub fn build_system_prompt_split_with_capabilities(
             capabilities,
             profile_overlay: None,
             skill_policy: None,
+            agents_md: None,
         },
     )
+}
+
+/// Build a split prompt using an already captured AGENTS.md snapshot.
+///
+/// Long-lived agents use this to keep the provider-cache prefix stable when a
+/// tool edits AGENTS.md during the session.
+pub fn build_system_prompt_split_with_agents_md(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    agents_md: (Option<String>, ContextInfo),
+) -> (SplitSystemPrompt, ContextInfo) {
+    build_system_prompt_split_with_capabilities_and_agents_md(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        PromptCapabilities::current(),
+        agents_md,
+    )
+}
+
+fn build_system_prompt_split_with_capabilities_and_agents_md(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    capabilities: PromptCapabilities,
+    agents_md: (Option<String>, ContextInfo),
+) -> (SplitSystemPrompt, ContextInfo) {
+    let (md_content, md_info) = agents_md;
+    let (split, info) = build_system_prompt_split_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        PromptBuildOptions {
+            capabilities,
+            profile_overlay: None,
+            skill_policy: None,
+            agents_md: Some((md_content, md_info)),
+        },
+    );
+    (split, info)
 }
 
 fn build_system_prompt_split_with_overlay_and_capabilities(
@@ -695,6 +753,7 @@ fn build_system_prompt_split_with_overlay_and_capabilities(
         capabilities,
         profile_overlay,
         skill_policy,
+        agents_md,
     } = options;
     let mut static_parts = base_system_prompt_parts(capabilities, working_dir);
     let mut dynamic_parts = Vec::new();
@@ -714,7 +773,8 @@ fn build_system_prompt_split_with_overlay_and_capabilities(
     }
 
     // Add AGENTS.md instructions (static per project)
-    let (md_content, md_info) = load_agents_md_files_from_dir(working_dir);
+    let (md_content, md_info) =
+        agents_md.unwrap_or_else(|| load_agents_md_files_from_dir(working_dir));
     if let Some(content) = md_content {
         static_parts.push(content);
     }
