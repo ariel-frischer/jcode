@@ -1671,6 +1671,33 @@ fn test_remote_anthropic_api_key_accrues_cost_from_token_usage() {
 }
 
 #[test]
+fn test_remote_openrouter_uses_reported_cost_over_catalog_estimate() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.remote_provider_name = Some("OpenRouter".to_string());
+    app.remote_provider_model = Some("openai/gpt-5.4".to_string());
+    app.remote_resolved_credential = Some(jcode_provider_core::ResolvedCredential::ApiKey);
+
+    app.handle_server_event(
+        crate::protocol::ServerEvent::TokenUsage {
+            input: 100_000,
+            output: 20_000,
+            cache_read_input: Some(80_000),
+            cache_creation_input: Some(10_000),
+            reported_cost_usd: Some(0.00123),
+        },
+        &mut remote,
+    );
+
+    // The UI's public remote event path must honor OpenRouter's actual charge,
+    // not the static/model-catalog estimate for the requested model.
+    assert!((app.cost.total_cost - 0.00123).abs() < 1e-7);
+}
+
+#[test]
 fn test_resumed_session_seeds_cost_from_history_token_totals() {
     // Reopening an older session restores token totals from history but never
     // ran the live per-call cost path, so the cost widget showed $0. The resume
