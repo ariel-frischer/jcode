@@ -240,6 +240,18 @@ impl App {
             is_anthropic,
         };
 
+        if provider_name.contains("openrouter")
+            && let Some(cost) = self
+                .cost
+                .reported_cost_usd
+                .filter(|cost| cost.is_finite() && *cost >= 0.0)
+        {
+            let cost = cost as f32;
+            self.cost.total_cost += cost;
+            self.record_api_key_spend(cost);
+            return;
+        }
+
         let call_cost = pricing.cost_for_usage(
             self.streaming.streaming_input_tokens,
             self.streaming.streaming_output_tokens,

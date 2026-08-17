@@ -1046,6 +1046,7 @@ impl Agent {
                 output_tokens: usage_output.unwrap_or(0),
                 cache_read_input_tokens: usage_cache_read,
                 cache_creation_input_tokens: usage_cache_creation,
+                reported_cost_usd: usage_reported_cost,
             };
             let mut safety_stopped_after_usage = self.run_safety_observe_usage();
 
