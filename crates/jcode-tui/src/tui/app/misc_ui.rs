@@ -240,11 +240,9 @@ impl App {
             is_anthropic,
         };
 
+        let reported_cost = self.cost.reported_cost_usd.take();
         if provider_name.contains("openrouter")
-            && let Some(cost) = self
-                .cost
-                .reported_cost_usd
-                .filter(|cost| cost.is_finite() && *cost >= 0.0)
+            && let Some(cost) = reported_cost.filter(|cost| cost.is_finite() && *cost >= 0.0)
         {
             let cost = cost as f32;
             self.cost.total_cost += cost;
