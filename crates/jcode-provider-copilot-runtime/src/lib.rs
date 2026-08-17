@@ -738,6 +738,7 @@ impl CopilotApiProvider {
                                     input_tokens: Some(input_tokens),
                                     output_tokens: Some(output_tokens),
                                     cache_creation_input_tokens: None,
+                                    reported_cost_usd: None,
                                     cache_read_input_tokens: None,
                                 }))
                                 .await;

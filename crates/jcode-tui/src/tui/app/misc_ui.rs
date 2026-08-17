@@ -240,6 +240,18 @@ impl App {
             is_anthropic,
         };
 
+        if provider_name.contains("openrouter")
+            && let Some(cost) = self
+                .cost
+                .reported_cost_usd
+                .filter(|cost| cost.is_finite() && *cost >= 0.0)
+        {
+            let cost = cost as f32;
+            self.cost.total_cost += cost;
+            self.record_api_key_spend(cost);
+            return;
+        }
+
         let call_cost = pricing.cost_for_usage(
             self.streaming.streaming_input_tokens,
             self.streaming.streaming_output_tokens,
@@ -255,8 +267,8 @@ impl App {
     /// Local turns bill once at `finish_turn` via [`App::update_cost_impl`], but
     /// the default interactive TUI is a *remote* client: it receives per-call
     /// `ServerEvent::TokenUsage` and never runs the local cost path, so without
-    /// this the cost figure was stuck at `$0`. The server does not report a
-    /// dollar cost, only tokens, so the client prices each call itself.
+    /// this the cost figure was stuck at `$0`. OpenRouter may report an
+    /// authoritative per-request cost; otherwise the client prices tokens.
     ///
     /// `input`/`output` are this call's totals and `*_delta` are the new tokens
     /// since the previous usage snapshot for the same call, so a streaming call
@@ -267,12 +279,20 @@ impl App {
         output_delta: u64,
         cache_read_delta: u64,
         cache_creation_delta: u64,
+        reported_cost_usd: Option<f64>,
     ) {
         if input_delta == 0
             && output_delta == 0
             && cache_read_delta == 0
             && cache_creation_delta == 0
+            && reported_cost_usd.is_none()
         {
+            return;
+        }
+        if let Some(cost) = reported_cost_usd.filter(|cost| cost.is_finite() && *cost >= 0.0) {
+            let cost = cost as f32;
+            self.cost.total_cost += cost;
+            self.record_api_key_spend(cost);
             return;
         }
         let Some(pricing) = self.resolve_remote_cost_pricing() else {

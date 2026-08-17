@@ -818,6 +818,7 @@ impl Provider for GeminiProvider {
                         output_tokens: usage.candidates_token_count,
                         cache_read_input_tokens: usage.cached_content_token_count,
                         cache_creation_input_tokens: None,
+                        reported_cost_usd: None,
                     }))
                     .await;
             }

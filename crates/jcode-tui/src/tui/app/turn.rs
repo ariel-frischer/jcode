@@ -622,7 +622,11 @@ impl App {
                                         output_tokens,
                                         cache_read_input_tokens,
                                         cache_creation_input_tokens,
+                                        reported_cost_usd,
                                     } => {
+                                        if reported_cost_usd.is_some() {
+                                            self.cost.reported_cost_usd = reported_cost_usd;
+                                        }
                                         let mut usage_changed = self
                                             .apply_stream_usage_input_report(
                                                 input_tokens,
