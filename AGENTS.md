@@ -21,6 +21,10 @@
   or other agents yourself; tell the user and let them decide how to proceed.
 
 ## Install Notes
+- After landing a merge into `dev`, automatically install the newer build with
+  `scripts/install_release.sh --fast` and gracefully reload the shared server.
+  Keep effects on running Jcode minimal; a brief client disconnect/reconnect is
+  allowable, but do not force-stop the server.
 - `~/.local/bin/jcode` is the launcher symlink used from `PATH`.
 - `~/.jcode/builds/current/jcode` is the active local/source-build channel; self-dev builds and `scripts/install_release.sh` point the launcher here.
 - `~/.jcode/builds/stable/jcode` is the stable release channel; `scripts/install.sh` installs this and points the launcher here.
