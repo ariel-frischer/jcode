@@ -357,6 +357,7 @@ impl Agent {
             let mut usage_output: Option<u64> = None;
             let mut usage_cache_read: Option<u64> = None;
             let mut usage_cache_creation: Option<u64> = None;
+            let mut usage_reported_cost: Option<f64> = None;
             let mut saw_message_end = false;
             let mut stop_reason: Option<String> = None;
             let mut sdk_tool_results: std::collections::HashMap<String, (String, bool)> =
@@ -703,6 +704,7 @@ impl Agent {
                         output_tokens,
                         cache_read_input_tokens,
                         cache_creation_input_tokens,
+                        reported_cost_usd,
                     } => {
                         if let Some(input) = input_tokens {
                             usage_input = Some(input);
@@ -715,6 +717,9 @@ impl Agent {
                         }
                         if cache_creation_input_tokens.is_some() {
                             usage_cache_creation = cache_creation_input_tokens;
+                        }
+                        if reported_cost_usd.is_some() {
+                            usage_reported_cost = reported_cost_usd;
                         }
                         if let Some(input) = usage_input {
                             self.update_compaction_usage_from_stream(
@@ -1031,6 +1036,7 @@ impl Agent {
                     output: usage_output.unwrap_or(0),
                     cache_read_input: usage_cache_read,
                     cache_creation_input: usage_cache_creation,
+                    reported_cost_usd: usage_reported_cost,
                 });
             }
 

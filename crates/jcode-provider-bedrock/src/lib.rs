@@ -1301,6 +1301,7 @@ impl Provider for BedrockProvider {
                                         output_tokens: Some(usage.output_tokens() as u64),
                                         cache_read_input_tokens: None,
                                         cache_creation_input_tokens: None,
+                                        reported_cost_usd: None,
                                     }))
                                     .await;
                             }

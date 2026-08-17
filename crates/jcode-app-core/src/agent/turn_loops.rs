@@ -459,6 +459,7 @@ impl Agent {
                         output_tokens,
                         cache_read_input_tokens,
                         cache_creation_input_tokens,
+                        reported_cost_usd: _,
                     } => {
                         if let Some(input) = input_tokens {
                             usage_input = Some(input);
