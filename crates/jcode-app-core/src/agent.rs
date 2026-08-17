@@ -244,6 +244,9 @@ pub struct Agent {
     mcp_late_register_resolved: bool,
     /// Override system prompt (used by ambient mode to inject a custom prompt)
     system_prompt_override: Option<String>,
+    /// AGENTS.md is session bootstrap input. Keep the captured text stable so
+    /// tool writes do not mutate the provider's cacheable prefix mid-session.
+    agents_md_snapshot: (Option<String>, crate::prompt::ContextInfo),
     /// Immutable prompt context selected for this session profile.
     #[allow(dead_code)] // Consumed by the profile-aware prompting seam.
     session_prompt_overlay: crate::config::SessionPromptOverlay,
@@ -275,6 +278,15 @@ pub struct Agent {
 }
 
 impl Agent {
+    fn refresh_agents_md_snapshot(&mut self) {
+        let working_dir = self
+            .session
+            .working_dir
+            .as_deref()
+            .map(std::path::Path::new);
+        self.agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir(working_dir);
+    }
+
     fn should_track_client_cache(&self) -> bool {
         match std::env::var("JCODE_TRACK_CLIENT_CACHE") {
             Ok(value) => {
@@ -334,6 +346,8 @@ impl Agent {
             }
         }
         let initial_provider_model = provider.model();
+        let working_dir = session.working_dir.as_deref().map(std::path::Path::new);
+        let agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir(working_dir);
         let agent = Self {
             provider,
             registry,
@@ -360,6 +374,7 @@ impl Agent {
             locked_tools: None,
             mcp_late_register_resolved: false,
             system_prompt_override: None,
+            agents_md_snapshot,
             session_prompt_overlay,
             session_profile_name,
             skill_policy: None,
