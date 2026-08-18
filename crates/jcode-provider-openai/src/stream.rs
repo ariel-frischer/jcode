@@ -875,6 +875,7 @@ fn extract_usage_from_response(response: &Value) -> Option<StreamEvent> {
             output_tokens,
             cache_read_input_tokens,
             cache_creation_input_tokens: None,
+            reported_cost_usd: None,
         })
     } else {
         None

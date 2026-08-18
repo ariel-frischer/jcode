@@ -752,6 +752,8 @@ pub enum StreamEvent {
         output_tokens: Option<u64>,
         cache_read_input_tokens: Option<u64>,
         cache_creation_input_tokens: Option<u64>,
+        /// Provider-reported USD cost for this completed request, when available.
+        reported_cost_usd: Option<f64>,
     },
     /// Active transport/connection type for this stream
     ConnectionType { connection: String },

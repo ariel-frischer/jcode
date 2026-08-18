@@ -436,6 +436,21 @@ impl OpenRouterStream {
                 let cache_creation_input_tokens = usage
                     .get("cache_creation_input_tokens")
                     .and_then(|t| t.as_u64());
+                let cache_creation_input_tokens = cache_creation_input_tokens.or_else(|| {
+                    usage
+                        .get("prompt_tokens_details")
+                        .and_then(|details| details.get("cache_write_tokens"))
+                        .and_then(|tokens| tokens.as_u64())
+                });
+
+                // OpenRouter's usage.cost is authoritative: it includes the
+                // selected upstream provider, BYOK discounts, and cache rates.
+                // Reject invalid values at the response boundary so callers can
+                // safely fall back to their normal catalog pricing.
+                let reported_cost_usd = usage
+                    .get("cost")
+                    .and_then(|value| value.as_f64())
+                    .filter(|cost| cost.is_finite() && *cost >= 0.0);
 
                 // Refresh cache pin when we see cache activity
                 if (cache_read_input_tokens.is_some() || cache_creation_input_tokens.is_some())
@@ -453,6 +468,7 @@ impl OpenRouterStream {
                         output_tokens,
                         cache_read_input_tokens,
                         cache_creation_input_tokens,
+                        reported_cost_usd,
                     });
                 }
             }
@@ -696,6 +712,46 @@ mod tests {
             text
         });
         assert_eq!(text, "tail");
+    }
+
+    #[test]
+    fn usage_preserves_authoritative_cost_and_cache_write_tokens() {
+        let mut stream = test_stream();
+        stream.buffer = concat!(
+            "data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20,",
+            "\"cost\":0.00123,\"prompt_tokens_details\":{\"cached_tokens\":80,",
+            "\"cache_write_tokens\":40}}}\n\n"
+        )
+        .to_string();
+
+        let event = stream.parse_next_event().expect("usage event");
+        assert!(matches!(
+            event,
+            StreamEvent::TokenUsage {
+                input_tokens: Some(100),
+                output_tokens: Some(20),
+                cache_read_input_tokens: Some(80),
+                cache_creation_input_tokens: Some(40),
+                reported_cost_usd: Some(cost),
+            } if (cost - 0.00123).abs() < f64::EPSILON
+        ));
+    }
+
+    #[test]
+    fn invalid_reported_cost_is_ignored_for_fallback_pricing() {
+        let mut stream = test_stream();
+        stream.buffer =
+            "data: {\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"cost\":-1}}\n\n"
+                .to_string();
+
+        let event = stream.parse_next_event().expect("usage event");
+        assert!(matches!(
+            event,
+            StreamEvent::TokenUsage {
+                reported_cost_usd: None,
+                ..
+            }
+        ));
     }
 
     #[test]

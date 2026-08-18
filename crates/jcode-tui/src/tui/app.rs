@@ -848,6 +848,7 @@ struct StreamingProgress {
 struct CostState {
     // Total cost in USD (for API-key providers)
     total_cost: f32,
+    reported_cost_usd: Option<f64>,
     // Cached pricing (input $/1M tokens, output $/1M tokens)
     cached_prompt_price: Option<f32>,
     cached_completion_price: Option<f32>,

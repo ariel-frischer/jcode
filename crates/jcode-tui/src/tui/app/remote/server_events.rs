@@ -764,6 +764,7 @@ pub(in crate::tui::app) fn handle_server_event(
             output,
             cache_read_input,
             cache_creation_input,
+            reported_cost_usd,
         } => {
             let previous_input = app.streaming.streaming_input_tokens;
             let previous_output = app.streaming.streaming_output_tokens;
@@ -797,6 +798,7 @@ pub(in crate::tui::app) fn handle_server_event(
                     output,
                     app.streaming.streaming_cache_read_tokens.unwrap_or(0),
                     app.streaming.streaming_cache_creation_tokens.unwrap_or(0),
+                    reported_cost_usd,
                 );
                 app.last_api_completed = Some(Instant::now());
                 app.last_api_completed_provider = Some(<App as TuiState>::provider_name(app));
@@ -833,6 +835,7 @@ pub(in crate::tui::app) fn handle_server_event(
                         .streaming_cache_creation_tokens
                         .unwrap_or(0)
                         .saturating_sub(previous_cache_creation.unwrap_or(0)),
+                    None,
                 );
 
                 let had_cache_telemetry =

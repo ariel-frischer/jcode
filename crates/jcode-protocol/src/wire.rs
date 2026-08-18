@@ -884,6 +884,8 @@ pub enum ServerEvent {
         cache_read_input: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_creation_input: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reported_cost_usd: Option<f64>,
     },
 
     /// Prompt-shape signature for the API request that will later report token
