@@ -2158,6 +2158,7 @@ async fn stream_response(
                 output_tokens: sse_state.output_tokens,
                 cache_read_input_tokens: sse_state.cache_read_input_tokens,
                 cache_creation_input_tokens: sse_state.cache_creation_input_tokens,
+                reported_cost_usd: None,
             }))
             .await;
     }

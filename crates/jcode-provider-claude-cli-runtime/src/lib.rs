@@ -379,6 +379,7 @@ impl ClaudeEventTranslator {
                             output_tokens,
                             cache_read_input_tokens,
                             cache_creation_input_tokens,
+                            reported_cost_usd: None,
                         }];
                     }
                 }
@@ -432,6 +433,7 @@ impl ClaudeEventTranslator {
                         output_tokens: usage.output_tokens,
                         cache_read_input_tokens: usage.cache_read_input_tokens,
                         cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                        reported_cost_usd: None,
                     }];
                 }
                 Vec::new()
@@ -582,6 +584,7 @@ impl CliOutputParser {
                         output_tokens: usage.output_tokens,
                         cache_read_input_tokens: usage.cache_read_input_tokens,
                         cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                        reported_cost_usd: None,
                     });
                 }
                 if let Some(sid) = session_id {
