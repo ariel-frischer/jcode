@@ -815,6 +815,7 @@ async fn consume_native_stream(
                     output_tokens,
                     cache_read_input_tokens,
                     cache_creation_input_tokens,
+                    ..
                 } => {
                     if let Some(value) = input_tokens {
                         outcome.input_tokens = value;
