@@ -2739,8 +2739,16 @@ pub(crate) async fn run_single_message_command(
         run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
         run_safety::print_plain_stop(&agent);
     }
+    .await;
 
-    Ok(())
+    // `Agent::new` and session restore both register this process as the active
+    // owner. Unlike the interactive lifecycle, `jcode run` has no later quit
+    // path to close the session. Finalize after output has been emitted, while
+    // returning the original command result unchanged. This prevents a normal
+    // one-shot exit from looking like a stale-PID crash on the next startup
+    // (issue #988).
+    agent.mark_closed();
+    result
 }
 
 async fn run_single_message_command_schema(
