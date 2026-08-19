@@ -92,6 +92,45 @@ fn test_relative_file_preview_falls_back_to_process_working_directory() {
 }
 
 #[test]
+fn test_click_on_relative_file_uses_process_working_directory_without_session_cwd() {
+    let _render_lock = scroll_render_test_lock();
+    let mut app = create_test_app();
+    app.display_messages = vec![DisplayMessage::assistant("`Cargo.toml`")];
+    app.bump_display_messages_version();
+
+    let backend = ratatui::backend::TestBackend::new(90, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find("Cargo.toml")?;
+            Some((line[..byte].chars().count() as u16 + 3, row))
+        })
+        .expect("relative file must be visible");
+
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_mouse_event(MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::empty(),
+        });
+    }
+
+    assert_eq!(app.inline_file_previews.len(), 1);
+}
+
+#[test]
 fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
