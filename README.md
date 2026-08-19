@@ -28,6 +28,52 @@ The most intelligent harness
 
 ---
 
+## Ariel's personal fork
+
+This repository is my personal Jcode fork, based on the upstream project at
+[1jehuang/jcode](https://github.com/1jehuang/jcode). I will try to keep it
+reasonably synchronized with upstream while preserving features and workflow
+improvements that are useful to me. It is therefore not intended to be a
+drop-in replacement for, or a fully equivalent distribution of, upstream Jcode.
+
+### Custom features and improvements
+
+In addition to upstream Jcode, this fork currently includes or tracks personal
+work around:
+
+- **First-class agent workflows:** durable session handoff and continuation,
+  named session profiles, richer self-development workflows, and safety-aware
+  `jcode run` behavior for headless automation.
+- **Memory and retrieval:** semantic agent memory, ambient consolidation,
+  session search, and a memory sidecar workflow for relevance-aware recall.
+- **Agent collaboration:** native swarm coordination, worker messaging and
+  status visibility, shared-repository notifications, and runtime model-route
+  display.
+- **Developer tooling:** a built-in DAP debugger, architecture and Mermaid
+  rendering workflows, browser automation, agent-oriented grep, and richer
+  session inspection and feedback tools.
+- **Provider and API polish:** provider failure codes, reported-cost tracking,
+  model ordering improvements, additional OAuth and OpenAI-compatible provider
+  flows, and the canonical Go SDK maintained alongside this fork.
+- **TUI quality-of-life improvements:** clickable inline file previews,
+  relative-path fallbacks, alignment controls, compact widgets, custom
+  scrollback, and improved startup, handoff, and session behavior.
+
+The feature list is intentionally a high-level summary rather than a promise
+that every item is unique to this fork or enabled in every build. The commit
+history is the source of truth for the current delta. Upstream changes remain
+the priority when synchronizing, while personal features are kept when they do
+not conflict with intentional upstream changes.
+
+### Go SDK
+
+This fork uses and maintains the companion Go SDK at
+[ariel-frischer/jcode-go](https://github.com/ariel-frischer/jcode-go). The SDK
+provides a typed client for creating, attaching to, and streaming events from
+Jcode sessions.
+
+---
+
 <div align="center">
 
 ## Installation
