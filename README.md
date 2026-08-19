@@ -52,10 +52,19 @@ The clearest examples of my custom delta include:
   tool/diff preview to open or collapse it in the TUI. The fork also fixes
   relative-path resolution when the displayed path is relative to the session
   workspace rather than the client process.
-- **Agent workflow behavior:** configurable fresh-session handoff and
-  continuation, named session profiles, safer bounded `jcode run` execution,
-  restored prompt state across handoff/resume, and improvements to startup
-  input targeting during child-session handoff.
+- **Named session profiles:** reusable named policies for a session that bundle
+  the provider, model, reasoning effort, tools, skills, and additive
+  instructions. Profiles can be selected from the CLI or TUI, inherited by
+  child agents and swarm workers, inspected without exposing credentials, and
+  restored from a credential-free snapshot that detects profile drift.
+- **Fresh-session handoff and continuation:** a special workflow for moving
+  work into a new session while carrying forward the relevant context. It can
+  be configured for automatic or agent-directed handoff, preserves summaries
+  and prompt state, and uses startup barriers so input is not sent to the wrong
+  parent or child session.
+- **Headless and session workflow fixes:** safer bounded `jcode run`
+  execution, restored prompt state across resume, and improvements to startup
+  behavior around child-session handoff.
 - **Provider and session fixes:** OpenRouter reported-cost tracking and its
   downstream consumers, safer legacy provider-cost handling, redacted provider
   failure codes, and fixes that prevent stale provider rerouting on restore.
