@@ -136,6 +136,7 @@ fn every_api_event_has_one_explicit_publication_contract() {
             ApiEvent::History {
                 session_id: "s".into(),
                 messages: vec![],
+                images: vec![],
             },
             "history",
         ),
@@ -194,6 +195,13 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 error: None,
             },
             "tool_done",
+        ),
+        (
+            ApiEvent::SidePaneImages {
+                session_id: "s".into(),
+                images: vec![],
+            },
+            "side_pane_images",
         ),
         (
             ApiEvent::TokenUsage {
@@ -255,6 +263,7 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 session_id: "s".into(),
                 provider: None,
                 model: None,
+                reasoning_effort: None,
             },
             "model_info",
         ),
@@ -271,6 +280,7 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 session_id: "s".into(),
                 provider: None,
                 model: None,
+                reasoning_effort: None,
                 routes: vec![],
             },
             "runtime_info",

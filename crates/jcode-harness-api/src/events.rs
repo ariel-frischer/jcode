@@ -328,6 +328,7 @@ impl ApiEvent {
             Self::ToolInputDelta { .. } => owned("tool_input_delta", Content),
             Self::ToolExec { .. } => owned("tool_exec", ToolEffect),
             Self::ToolDone { .. } => owned("tool_done", Content),
+            Self::SidePaneImages { .. } => owned("side_pane_images", Content),
             Self::TokenUsage { .. } => owned("token_usage", Content),
             Self::TurnDone { .. } => owned("turn_done", Terminal),
             Self::BackgroundProgress { .. } => owned("background_progress", Advisory),

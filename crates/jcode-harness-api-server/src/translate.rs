@@ -906,7 +906,7 @@ impl BridgeState {
                 name: event["name"].as_str().unwrap_or("").to_string(),
                 output: event["output"].as_str().unwrap_or("").to_string(),
                 error: event["error"].as_str().map(str::to_string),
-            })],
+            }),
             "side_pane_images" => vec![ServerFrame::event(ApiEvent::SidePaneImages {
                 session_id: event["session_id"]
                     .as_str()
@@ -919,7 +919,7 @@ impl BridgeState {
                 input: event["input"].as_u64().unwrap_or(0),
                 output: event["output"].as_u64().unwrap_or(0),
                 cache_read_input: event["cache_read_input"].as_u64(),
-            }),
+            })],
             "done" => {
                 let id = event["id"].as_u64().unwrap_or(0);
                 // Subscribe and other requests also emit `done`; only a
