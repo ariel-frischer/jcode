@@ -80,6 +80,18 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
 }
 
 #[test]
+fn test_relative_file_preview_falls_back_to_process_working_directory() {
+    let _render_lock = scroll_render_test_lock();
+    let mut app = create_test_app();
+    app.display_messages = vec![DisplayMessage::assistant("`Cargo.toml`")];
+    app.bump_display_messages_version();
+    let opened = app.try_toggle_inline_file_preview("Cargo.toml", 0);
+
+    assert!(opened, "relative paths should resolve without a session working directory");
+    assert_eq!(app.inline_file_previews.len(), 1);
+}
+
+#[test]
 fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");

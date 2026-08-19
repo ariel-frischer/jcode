@@ -1,0 +1,153 @@
+feature:
+  branch: "009-fix-inline-file-paths"
+  created: "2026-08-19"
+  status: "Draft"
+  input: >-
+    Fix inline file paths such as docs/myfile.md being misclassified as links in
+    the inline file reader. Preserve genuine URL handling and add focused
+    regression tests.
+
+user_stories:
+  - id: "US-001"
+    title: "Open inline file paths as files"
+    priority: "P1"
+    as_a: "Jcode user"
+    i_want: "to activate repository-relative file paths such as docs/myfile.md from the inline reader"
+    so_that: "the referenced file opens in the file preview instead of being treated as an external link"
+    why_this_priority: "Opening referenced repository files is the primary interaction and the reported regression blocks it."
+    independent_test: "Render a message containing an existing repository-relative path, activate the path, and verify the file preview state and status message."
+    acceptance_scenarios:
+      - given: "The session working directory contains docs/myfile.md"
+        when: "The user activates docs/myfile.md in the inline reader"
+        then: "Jcode resolves it relative to the session working directory and opens the file preview rather than reporting that a link was opened."
+      - given: "A supported local file path includes a query or fragment suffix"
+        when: "The user activates the path"
+        then: "Jcode resolves the file portion for opening without treating the suffix as part of the filesystem path."
+
+  - id: "US-002"
+    title: "Preserve genuine URL behavior"
+    priority: "P1"
+    as_a: "Jcode user"
+    i_want: "to activate genuine supported URLs from the inline reader"
+    so_that: "web, mail, and file URL workflows continue to use their existing link-opening behavior"
+    why_this_priority: "The fix must not regress the existing URL contract while correcting local path classification."
+    independent_test: "Render supported URL fixtures, activate each target, and verify the existing URL opener is selected with the unchanged target."
+    acceptance_scenarios:
+      - given: "The inline reader contains an http or https URL"
+        when: "The user activates the URL"
+        then: "Jcode keeps the existing URL-opening behavior and does not attempt inline file preview resolution."
+      - given: "The inline reader contains an existing supported mailto or file URL"
+        when: "The user activates the URL"
+        then: "Jcode preserves the existing scheme-specific link behavior."
+
+  - id: "US-003"
+    title: "Handle unavailable paths safely"
+    priority: "P1"
+    as_a: "Jcode user"
+    i_want: "unavailable or invalid file-looking targets to fail with an actionable result"
+    so_that: "a mistaken reference does not launch an unintended external link or leave the interaction ambiguous"
+    why_this_priority: "Safe fallback behavior prevents path classification changes from broadening what Jcode opens."
+    independent_test: "Activate missing, unreadable, and unsupported path fixtures and verify the expected status feedback without an external URL launch."
+    acceptance_scenarios:
+      - given: "A relative target does not resolve to a regular file"
+        when: "The user activates it"
+        then: "Jcode reports that the file cannot be opened and does not report a successful external link open."
+      - given: "A target resolves outside the permitted repository or working-directory boundary"
+        when: "The user activates it"
+        then: "Jcode refuses the file preview with an actionable status and does not open the path externally."
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "MUST classify supported local relative and absolute file paths before generic external-link handling when the activated target is a file reference."
+      acceptance_criteria: "A focused interaction test activates docs/myfile.md and confirms the file-preview path is selected instead of the generic link status."
+    - id: "FR-002"
+      description: "MUST resolve relative file paths against the active session working directory and preserve any existing safe path-boundary checks."
+      acceptance_criteria: "Tests use a temporary session working directory with a nested docs/myfile.md fixture and verify the resolved file is the one previewed."
+    - id: "FR-003"
+      description: "MUST preserve existing handling for valid http, https, mailto, and file URLs, including URL trimming behavior already supported by the reader."
+      acceptance_criteria: "URL regression tests verify each supported scheme reaches the existing URL opener with the expected normalized target and never the file-preview path."
+    - id: "FR-004"
+      description: "MUST provide an actionable fallback for missing, unreadable, oversized, or disallowed local file targets without silently opening them as external links."
+      acceptance_criteria: "Focused negative tests verify an explanatory status for each unavailable-file condition and no successful external-link status."
+    - id: "FR-005"
+      description: "MUST add focused automated regression coverage for local file paths and genuine URLs at the classification and activation boundary."
+      acceptance_criteria: "The targeted test suite contains passing cases for docs/myfile.md, a supported URL, and an unavailable path, with no unrelated behavior changes."
+
+  non_functional:
+    - id: "NFR-001"
+      category: "code_quality"
+      description: "The change MUST remain limited to the inline target classification/opening path and its focused tests."
+      measurable_target: "The reviewed diff contains no unrelated refactors, dependency changes, or broad formatting changes."
+    - id: "NFR-002"
+      category: "usability"
+      description: "Failure feedback for unavailable local targets MUST identify that the file could not be opened and distinguish it from successful URL activation."
+      measurable_target: "Every negative activation fixture produces one actionable status message and zero false success messages."
+
+success_criteria:
+  - id: "SC-001"
+    description: "Users can activate an existing repository-relative Markdown path and see its contents in the inline file reader."
+    metric: "Passing focused local-path activation scenarios"
+    target: "100% of supported local-path fixtures, including docs/myfile.md"
+  - id: "SC-002"
+    description: "Existing supported URL interactions continue to open through their established URL workflow."
+    metric: "Passing URL preservation regression scenarios"
+    target: "100% of http, https, mailto, and file URL fixtures"
+  - id: "SC-003"
+    description: "Invalid or unavailable file-looking targets produce clear failure feedback without unintended external navigation."
+    metric: "Passing negative activation scenarios"
+    target: "100% of missing, unreadable, oversized, and disallowed-path fixtures"
+
+key_entities:
+  - name: "Inline target"
+    description: "The text target selected by the user in an inline transcript."
+    attributes:
+      - "display text and target value"
+      - "target classification"
+      - "screen location"
+  - name: "Local file reference"
+    description: "A relative or absolute path that may resolve to a readable file in the active workspace context."
+    attributes:
+      - "path text without optional query or fragment suffix"
+      - "session working directory"
+      - "resolved file status"
+  - name: "External URL"
+    description: "A supported URL target that must retain the existing link-opening workflow."
+    attributes:
+      - "scheme"
+      - "normalized target"
+      - "URL-opening result"
+
+edge_cases:
+  - scenario: "A repository-relative path contains nested directories and a Markdown extension, such as docs/myfile.md."
+    expected_behavior: "The target is recognized as a local file reference and opens the matching file preview."
+  - scenario: "A Markdown file target includes a fragment or query suffix."
+    expected_behavior: "The file portion is resolved according to existing behavior, while URL classification is not triggered by the suffix."
+  - scenario: "A URL is followed by sentence punctuation or delimiters."
+    expected_behavior: "Existing URL trimming and parsing behavior remains unchanged."
+  - scenario: "A path-looking target is missing, unreadable, oversized, or outside the permitted boundary."
+    expected_behavior: "Jcode returns actionable failure feedback and does not claim that an external link was opened."
+
+assumptions:
+  - "The existing inline reader and URL opener are the canonical interaction surfaces; this specification does not introduce a new navigation model."
+  - "Supported URL schemes remain the schemes currently recognized by the reader: http, https, mailto, and file."
+  - "Relative paths are evaluated from the active session working directory, and existing file-size and text-readability limits remain in force."
+  - "No clarification is needed because the requested example and current reader behavior define a reasonable local-path-versus-URL boundary."
+
+constraints:
+  - "The implementation must preserve backward-compatible URL behavior and existing safe path-boundary checks."
+  - "Validation must use deterministic local fixtures and must not require live browser, network, or production-adjacent checks."
+  - "The change must comply with the repository constitution, especially surgical scope, backward compatibility, and focused behavioral tests."
+
+out_of_scope:
+  - "Adding new URL schemes or changing the external URL opener."
+  - "Redesigning Markdown parsing, rendering, or the inline file preview UI."
+  - "Changing repository path permissions, workspace trust policy, or file-size/readability limits beyond what is required to correct classification."
+  - "Adding broad end-to-end or live browser coverage when focused local regression tests cover the contract."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-19T04:47:44Z"
+  artifact_type: "spec"

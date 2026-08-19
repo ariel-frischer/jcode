@@ -1,0 +1,261 @@
+tasks:
+  branch: "agent/jcode-w4q-inline-file-link"
+  created: "2026-08-19"
+  spec_path: "specs/009-fix-inline-file-paths/spec.yaml"
+  plan_path: "specs/009-fix-inline-file-paths/plan.yaml"
+
+summary:
+  total_tasks: 13
+  total_phases: 6
+  parallel_opportunities: 2
+  estimated_complexity: "medium"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Prepare the existing jcode-tui test seams and deterministic local fixtures without expanding dependencies."
+    tasks:
+      - id: "T001"
+        title: "Prepare deterministic inline-link fixture and test seams"
+        status: "Pending"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/Cargo.toml, crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "The existing tempfile-based test setup can create nested docs/myfile.md, missing, oversized, non-text, and outside-root fixtures under a temporary session working directory."
+          - "The existing viewport snapshot helpers and try_open_link_at_with opener seam are available for deterministic click-precedence assertions."
+          - "No new dependency, renderer, URL-opener, or unrelated test-harness change is introduced."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Lock the shared URL-first extraction contract and the click-time classification boundary before story-specific behavior changes."
+    tasks:
+      - id: "T002"
+        title: "Write shared inline-target classification and URL contract tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests cover plain repository-relative paths such as docs/myfile.md, Markdown-link targets with query or fragment suffixes, and display-column hit testing."
+          - "Tests preserve http, https, mailto, and file URL extraction plus existing sentence-punctuation and delimiter trimming."
+          - "The new classification assertions fail before the click-boundary implementation and do not require a live browser or network."
+      - id: "T003"
+        title: "Implement shared click-time target classification boundary"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/navigation.rs, crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Click handling evaluates Markdown-link and supported URL targets before local filesystem access, while routing file-looking candidates to the inline-preview handler."
+          - "Filesystem access strips optional query or fragment suffixes, and genuine http, https, mailto, and file URLs never enter the local-file branch."
+          - "A file-looking target remains handled when its later resolution fails, so it cannot fall through to generic external-link opening."
+
+  - number: 3
+    title: "User Story 1 - Open inline file paths as files"
+    purpose: "Resolve session-relative local targets and show their bounded contents in the existing inline file preview."
+    story_reference: "US-001"
+    independent_test: "Render an existing docs/myfile.md target in a temporary session, click it, and verify the preview content, display path, and status notice."
+    tasks:
+      - id: "T004"
+        title: "Add URL-module regression tests for local path targets and suffix normalization"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Parser tests recognize nested relative paths, simple extension paths, and Markdown-link targets without changing the visible target text."
+          - "Tests assert that query and fragment suffixes remain in the extracted target while the filesystem portion is identifiable for activation."
+          - "Existing supported URL extraction tests remain unchanged and passing."
+      - id: "T005"
+        title: "Add local preview click and fixture regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Tests create a temporary docs/myfile.md, assign its directory to session.working_dir, and verify successful preview content, Markdown detection, display path, and expanded status."
+          - "A target with a query or fragment opens the same file while retaining the original target for the preview label and collapse key."
+          - "The rendered click regression proves a local target is selected from transcript coordinates before generic link handling."
+      - id: "T006"
+        title: "Implement session-relative local file resolution and inline preview activation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T004", "T005"]
+        acceptance_criteria:
+          - "Relative targets resolve from the active session working directory and absolute targets are canonicalized before access."
+          - "The canonical resolved path must remain within the permitted workspace root, refer to a regular file, and obey the existing 512 KiB and UTF-8 readability limits."
+          - "Successful activation stores the bounded content in existing per-message preview state and preserves current collapse behavior."
+      - id: "T007"
+        title: "Wire valid local targets through chat click precedence"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/navigation.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "A clicked docs/myfile.md target reaches try_toggle_inline_file_preview before repository Markdown side-panel or generic external-link handling."
+          - "The dispatch uses the originating transcript message index so preview state is attached to the clicked message."
+          - "A successful local activation reports the existing file-preview status and does not report that an external link was opened."
+
+  - number: 4
+    title: "User Story 2 - Preserve genuine URL behavior"
+    purpose: "Keep all currently supported URL schemes and normalization on the established external-link workflow."
+    story_reference: "US-002"
+    independent_test: "Activate http, https, mailto, and file URL fixtures through the existing opener seam and verify each normalized target is passed unchanged without preview state."
+    tasks:
+      - id: "T008"
+        title: "Add supported URL preservation regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs, crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_02.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Tests cover http, https, mailto, and file URLs with trailing punctuation or delimiters and assert the existing normalized target."
+          - "The opener seam receives each genuine URL while inline_file_previews remains unchanged and no local-file status is emitted."
+          - "The tests do not invoke a real browser, mail client, or filesystem URL opener."
+      - id: "T009"
+        title: "Preserve URL-first extraction and external opener behavior"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs, crates/jcode-tui/src/tui/app/navigation.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Existing URL regex ordering, URL parsing, trimming, and normalized target values remain backward compatible."
+          - "Supported URL schemes bypass local preview resolution, including file:// URLs that resemble local paths after scheme parsing."
+          - "Successful and failed external opener statuses retain their existing wording and target values."
+
+  - number: 5
+    title: "User Story 3 - Handle unavailable paths safely"
+    purpose: "Consume invalid local references with clear status feedback and never broaden them into unintended external navigation."
+    story_reference: "US-003"
+    independent_test: "Activate missing, unreadable, oversized, absent-working-directory, and outside-root targets and verify a handled failure status with no external opener success."
+    tasks:
+      - id: "T010"
+        title: "Add unavailable local-target and boundary regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs, crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_02.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Tests cover missing, non-regular or unreadable, oversized, and non-UTF-8 targets with one actionable file-failure status each."
+          - "Tests cover traversal or absolute targets outside the canonical session workspace and verify preview refusal."
+          - "A relative target without session.working_dir is handled with an explicit resolution failure and does not fall through to generic opening."
+      - id: "T011"
+        title: "Implement handled failure outcomes for unavailable local files"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "Path-looking targets are consumed before is_file or metadata checks, so missing files return true and never trigger external-link fallback."
+          - "Missing working directory, canonicalization failure, boundary refusal, non-regular files, metadata errors, size violations, and text-read errors each produce actionable status feedback."
+          - "Unavailable targets do not mutate inline preview content and do not report a successful external link open."
+      - id: "T012"
+        title: "Finalize navigation no-fallback behavior for failed local activation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/navigation.rs"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "try_open_link_at returns after a handled local failure and does not call open_path_or_url_detached for that target."
+          - "Genuine supported URLs still reach the existing opener after the local classification branch declines them."
+          - "The negative-path dispatch tests distinguish file-failure notices from successful external-link notices."
+
+  - number: 6
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Run deterministic validation and review the final scope against the specification and constitution."
+    tasks:
+      - id: "T013"
+        title: "Run focused jcode-tui validation and review the final diff"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs, crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/navigation.rs, crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs, crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_02.rs, crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Focused URL, inline-preview, and interaction tests pass, followed by the serialized crate check `cargo test -p jcode-tui`."
+          - "The reviewed diff is limited to inline target extraction, local preview activation, navigation dispatch, and focused tests; it adds no dependencies or unrelated formatting."
+          - "Validation uses deterministic local fixtures only and records any skipped broader guardrail as outside this artifact's scope."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-002"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: []
+
+parallel_execution:
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T004", "T005"]
+        rationale: "URL parser tests and rendered/local-preview fixture tests touch separate focused test surfaces and share only the completed classification boundary."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Shared classification contracts plus session-relative local path activation for docs/myfile.md, query/fragment suffixes, bounded previews, and click-time precedence."
+    validation: "Run the focused URL, inline-file-preview, and interaction tests, then `cargo test -p jcode-tui` with deterministic temporary fixtures."
+  incremental_delivery:
+    - milestone: "Classification Foundation Ready"
+      phases: [1, 2]
+      deliverable: "The URL-first target contract and local-path click boundary are covered by deterministic tests and executable seams."
+    - milestone: "Local Preview MVP Complete"
+      phases: [1, 2, 3]
+      deliverable: "Existing repository-relative file paths open in the inline reader with suffix normalization and workspace-safe resolution."
+    - milestone: "URL Compatibility Complete"
+      phases: [1, 2, 3, 4]
+      deliverable: "Supported http, https, mailto, and file URLs retain their established opener and status behavior."
+    - milestone: "Safe Failure Delivery Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Unavailable local targets fail visibly without external fallback, and focused crate validation confirms the scoped diff."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-19T04:54:29Z"
+  artifact_type: "tasks"

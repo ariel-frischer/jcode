@@ -1,0 +1,242 @@
+plan:
+  branch: "agent/jcode-w4q-inline-file-link"
+  created: "2026-08-19"
+  spec_path: "specs/009-fix-inline-file-paths/spec.yaml"
+
+summary: |
+  Fix click-time dispatch for inline file-looking targets in the Rust TUI without
+  changing the established URL parser or external opener. The target extractor
+  will continue to recognize Markdown links and supported http, https, mailto,
+  and file URLs first, while the activation path will normalize local targets,
+  resolve relative paths from the active session working directory, and enforce
+  the existing workspace boundary before opening a preview.
+
+  A path-looking target will be treated as handled even when it is missing,
+  unreadable, oversized, or disallowed, so it produces actionable status
+  feedback instead of falling through to generic external-link handling. The
+  implementation remains in the existing `jcode-tui` modules and adds focused
+  unit and interaction regressions for local paths, query/fragment suffixes,
+  supported URL schemes, and unavailable files. No new dependencies, storage,
+  navigation model, or browser behavior are introduced.
+
+technical_context:
+  language: "Rust 2024"
+  framework: "Ratatui 0.30 with Crossterm 0.29"
+  primary_dependencies:
+    - name: "std::path and std::fs"
+      version: "Rust standard library"
+      purpose: "Normalize, resolve, canonicalize, bound, inspect, and read local file targets."
+    - name: "regex"
+      version: "1"
+      purpose: "Reuse the existing inline target extraction regexes for supported URLs and file paths."
+    - name: "url"
+      version: "2"
+      purpose: "Preserve validation and normalization of existing URL candidates."
+    - name: "tempfile"
+      version: "3"
+      purpose: "Create deterministic workspace fixtures for focused file activation tests."
+  storage: "None; preview content and session working-directory state remain in-memory App state."
+  testing:
+    framework: "Cargo unit and integration tests"
+    approach: "Focused `jcode-tui` unit tests for target extraction and activation, plus deterministic terminal interaction tests for click precedence, URL preservation, and safe negative outcomes."
+  target_platform: "Jcode desktop platforms supported by the existing Rust path and TUI layers, including Linux, macOS, and Windows."
+  project_type: "CLI/TUI application"
+  performance_goals: "Keep click handling bounded to the existing target scan and one local metadata/read operation; preserve the 512 KiB inline-preview limit and avoid network or browser work for local targets."
+  constraints:
+    - "Limit the diff to inline target extraction, local preview activation, related navigation dispatch, and focused regression tests."
+    - "Preserve existing http, https, mailto, and file URL behavior, including URL trimming and the established detached opener."
+    - "Resolve relative paths from the active session working directory and refuse paths outside the permitted canonical workspace boundary."
+    - "Retain existing file-size and text-readability limits and return actionable status feedback for unavailable local targets."
+    - "Use deterministic local fixtures only; do not require live browser, network, or production-adjacent validation."
+    - "Do not add dependencies, change Markdown rendering, or redesign the inline preview UI."
+  scale_scope: "One clicked transcript target at a time in a local Jcode session; previews remain bounded by the existing per-file size limit and per-message in-memory state."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan limits implementation to `jcode-tui` target extraction, activation dispatch, and focused tests, matching the spec non-goals."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Supported URL schemes and the existing detached opener remain unchanged; only local path classification and failure fallback are corrected."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "The change stays within the existing presentation-layer modules and uses current standard-library and crate dependencies without new cross-layer edges."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "The plan maps local success, URL compatibility, query/fragment normalization, and each unavailable-file condition to deterministic tests."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Missing, unreadable, oversized, and out-of-bound targets are consumed with explicit status messages and cannot fall through to external opening."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Validation proceeds from the artifact validator and focused `jcode-tui` tests before any broader serialized guardrails."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The plan uses local deterministic tests against the changed crate and does not rely on the shared daemon or live external side effects."
+
+research_findings:
+  decisions:
+    - topic: "Inline target extraction order"
+      decision: "Keep Markdown-link and supported-URL extraction ahead of the existing file-path regex, then route the selected target through local-file activation before generic opening."
+      rationale: "The current extractor already preserves URL trimming and scheme recognition; the regression is at click-time fallback when a path is not opened as a preview."
+      alternatives_considered:
+        - "Replace the existing URL regex and parser with a unified target classifier"
+        - "Only recognize paths after generic external-link opening"
+    - topic: "Local path resolution and boundary enforcement"
+      decision: "Strip query and fragment suffixes for filesystem access, resolve relative paths against the active session working directory, canonicalize the result, and reject targets outside the permitted workspace root."
+      rationale: "This matches the spec's session-relative contract and existing Markdown-link boundary checks while preventing absolute or traversal paths from becoming unintended external opens."
+      alternatives_considered:
+        - "Use the process current directory as a fallback for missing session working-directory state"
+        - "Allow every readable absolute path without workspace containment"
+    - topic: "Unavailable local target behavior"
+      decision: "Classify path-looking targets as handled before generic opening and report missing, non-regular, unreadable, oversized, or disallowed files through the existing status-notice surface."
+      rationale: "Returning false for these cases is what currently causes the misclassification to become a successful or attempted external-link action."
+      alternatives_considered:
+        - "Fall through to the detached opener when the file does not exist"
+        - "Silently ignore invalid targets and leave the previous status unchanged"
+    - topic: "Regression test placement"
+      decision: "Extend the existing `jcode-tui` URL and inline-file-preview tests, adding terminal click coverage where dispatch order matters."
+      rationale: "These modules already own target extraction, preview state, fixture setup, and status assertions, so new tests stay close to the contract without broad end-to-end dependencies."
+      alternatives_considered:
+        - "Add a new cross-crate test harness"
+        - "Rely only on manual browser or terminal checks"
+
+data_model:
+  entities:
+    - name: "Inline target"
+      description: "The target text selected from a transcript line and passed to click-time navigation."
+      fields:
+        - name: "display_target"
+          type: "String"
+          description: "Target returned by Markdown-link, URL, or file-path extraction."
+          constraints: "Must preserve the existing normalized URL target or visible local path text."
+        - name: "classification"
+          type: "InlineTargetKind"
+          description: "Local file reference, supported external URL, or unsupported/non-actionable target."
+          constraints: "URL schemes are evaluated before local filesystem access."
+        - name: "message_index"
+          type: "usize"
+          description: "Transcript message owning the clicked target for preview state lookup."
+          constraints: "Must resolve to an existing display message before mutating preview state."
+        - name: "screen_location"
+          type: "CopySelectionPoint"
+          description: "Rendered chat position used to identify the clicked target."
+          constraints: "Only transcript and side-pane locations that already participate in link hit testing are actionable."
+      relationships:
+        - target: "Local file reference"
+          type: "one-to-one"
+          description: "A local target is normalized and resolved before preview activation."
+        - target: "External URL"
+          type: "one-to-one"
+          description: "A supported URL bypasses local preview resolution and uses the existing opener."
+    - name: "Local file reference"
+      description: "A relative or absolute target that may resolve to a readable file inside the active workspace boundary."
+      fields:
+        - name: "path_text"
+          type: "String"
+          description: "Filesystem portion of the target after removing an optional query or fragment suffix."
+          constraints: "Must not include URL schemes; relative values resolve against session working_dir."
+        - name: "resolved_path"
+          type: "PathBuf"
+          description: "Canonical path used for boundary, metadata, and text-readability checks."
+          constraints: "Must remain within the permitted canonical workspace root and refer to a regular file."
+        - name: "availability"
+          type: "LocalFileAvailability"
+          description: "Resolved, missing, disallowed, oversized, unreadable, or otherwise unavailable state."
+          constraints: "Every unavailable state produces one actionable status and no external-link success status."
+        - name: "preview_content"
+          type: "String"
+          description: "Bounded UTF-8 content retained for the existing inline preview."
+          constraints: "Read only when the file is regular, within limits, and valid text."
+      relationships:
+        - target: "Inline file preview"
+          type: "one-to-one"
+          description: "A successfully resolved reference projects into the existing per-message preview state."
+    - name: "External URL"
+      description: "A supported http, https, mailto, or file URL handled by the existing link-opening workflow."
+      fields:
+        - name: "scheme"
+          type: "String"
+          description: "URL scheme recognized by the current extractor."
+          constraints: "Only http, https, mailto, and file are in scope."
+        - name: "normalized_target"
+          type: "String"
+          description: "URL after existing sentence-punctuation and delimiter trimming."
+          constraints: "Must be passed unchanged to the existing opener."
+        - name: "opening_result"
+          type: "Result"
+          description: "Existing opened-link or failed-link status outcome."
+          constraints: "Must never be replaced by local file-preview status for a genuine supported URL."
+      relationships:
+        - target: "Inline target"
+          type: "many-to-one"
+          description: "Each clicked supported URL originates from one extracted inline target."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/009-fix-inline-file-paths/spec.yaml"
+      description: "Feature requirements, acceptance scenarios, constraints, and non-goals."
+    - path: "specs/009-fix-inline-file-paths/plan.yaml"
+      description: "Implementation architecture, research decisions, sequencing, and validation evidence to be produced."
+  source_code:
+    - path: "crates/jcode-tui/src/tui/ui/url.rs"
+      description: "Existing Markdown-link, supported-URL, and local file-path extraction plus focused parser tests."
+    - path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+      description: "Local target normalization, session-relative resolution, workspace-boundary checks, bounded text loading, and status feedback."
+    - path: "crates/jcode-tui/src/tui/app/navigation.rs"
+      description: "Click-time precedence that gives handled local targets priority over generic external-link opening while preserving URL behavior."
+  tests:
+    - path: "crates/jcode-tui/src/tui/ui/url.rs"
+      description: "Unit coverage for plain and Markdown-linked paths, supported URL schemes, and existing trimming behavior."
+    - path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+      description: "Deterministic local fixture tests for valid previews, suffix normalization, missing/unreadable/oversized targets, and boundary refusal."
+    - path: "crates/jcode-tui/src/tui/ui_tests/basic/interaction_links.rs"
+      description: "Focused rendered hit-testing coverage for path targets and unchanged URL target extraction where screen coordinates matter."
+
+implementation_phases:
+  - phase: 1
+    name: "Lock classification and fixture contracts"
+    goal: "Capture the existing URL contract and the intended local-path activation boundary in focused deterministic tests."
+    deliverables:
+      - "Parser tests for docs/myfile.md-style targets, Markdown-link query/fragment suffixes, and unchanged http/https/mailto/file URL trimming."
+      - "Temporary workspace fixtures for nested files, missing paths, oversized files, non-text files, and out-of-bound targets."
+      - "A direct regression demonstrating that a path-looking target must not fall through to generic external-link handling."
+  - phase: 2
+    name: "Implement safe local activation precedence"
+    goal: "Correct the click-time classification and local preview resolution while preserving existing URL opening behavior."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Filesystem target normalization that removes optional query/fragment suffixes without changing the display target."
+      - "Session-relative and absolute-path resolution with canonical workspace-boundary enforcement."
+      - "Handled status outcomes for missing, non-regular, unreadable, oversized, and disallowed files, preventing external opener fallback."
+      - "Existing successful inline preview and collapse behavior retained for supported local files."
+  - phase: 3
+    name: "Validate compatibility and delivery gates"
+    goal: "Run the smallest deterministic checks first, then verify the focused crate behavior and artifact scope."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Focused `jcode-tui` URL and inline-file-preview tests covering all acceptance scenarios."
+      - "Serialized broader repository validation only as required by the repository guardrails, with no live browser or network checks."
+      - "Final diff review confirming no dependency, renderer, URL-opener, or unrelated formatting changes."
+
+open_questions:
+  - question: "What should happen when a relative path is clicked without an active session working directory?"
+    context: "The existing preview path requires session.working_dir, while generic opening could otherwise interpret the text against the process directory."
+    proposed_resolution: "Treat the target as a handled local reference, report that it cannot be resolved without an active working directory, and do not fall through to external opening."
+  - question: "How should absolute local paths be constrained?"
+    context: "The spec permits supported absolute paths but requires refusal outside the permitted repository or working-directory boundary."
+    proposed_resolution: "Use the canonical active session working directory as the permitted root and refuse canonical absolute targets that do not remain beneath it; preserve the existing status-notice failure surface."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-19T04:50:25Z"
+  artifact_type: "plan"
