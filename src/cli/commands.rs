@@ -2729,15 +2729,18 @@ pub(crate) async fn run_single_message_command(
     run_safety::install(&mut agent, safety_candidates)?;
     let message = prepare_run_message(message, agent.session_id());
 
-    if emit_json {
-        let text = run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
-        let report = run_safety::report(&agent, &provider, text);
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    } else if emit_ndjson {
-        run_single_message_command_ndjson(&mut agent, provider.clone(), &message).await?;
-    } else {
-        run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
-        run_safety::print_plain_stop(&agent);
+    let result: Result<()> = async {
+        if emit_json {
+            let text = run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
+            let report = run_safety::report(&agent, &provider, text);
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else if emit_ndjson {
+            run_single_message_command_ndjson(&mut agent, provider.clone(), &message).await?;
+        } else {
+            run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
+            run_safety::print_plain_stop(&agent);
+        }
+        Ok(())
     }
     .await;
 
