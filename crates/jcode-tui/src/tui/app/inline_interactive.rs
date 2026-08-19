@@ -262,6 +262,32 @@ fn model_picker_is_favorite(
         .contains(&model_picker_usage_key(model_name, route, effort))
 }
 
+fn model_picker_entry_sort(a: &PickerEntry, b: &PickerEntry) -> std::cmp::Ordering {
+    let rank = |entry: &PickerEntry| {
+        (
+            !entry.is_favorite,
+            !entry.is_current,
+            !entry
+                .options
+                .iter()
+                .any(|option| option.detail.contains("recently added")),
+            std::cmp::Reverse(entry.usage_score),
+            !entry.recommended,
+            if entry.recommended {
+                entry.recommendation_rank
+            } else {
+                usize::MAX
+            },
+            !entry.options.first().map(|route| route.available).unwrap_or(false),
+            entry.old,
+            entry.name.clone(),
+            entry.active_option().map(|route| route.provider.clone()),
+            entry.active_option().map(|route| route.api_method.clone()),
+        )
+    };
+    rank(a).cmp(&rank(b))
+}
+
 /// Return the filtered position of the favorite after the current model in a
 /// stable identity order. The runtime picker itself is sorted with the current
 /// model first, so using its row order after reopening the picker can only
@@ -1709,76 +1735,7 @@ impl App {
             }
         }
 
-        entries.sort_by(|a, b| {
-            let a_current = if a.is_current { 0u8 } else { 1 };
-            let b_current = if b.is_current { 0u8 } else { 1 };
-            let a_recent = if a
-                .options
-                .iter()
-                .any(|option| option.detail.contains("recently added"))
-            {
-                0u8
-            } else {
-                1
-            };
-            let b_recent = if b
-                .options
-                .iter()
-                .any(|option| option.detail.contains("recently added"))
-            {
-                0u8
-            } else {
-                1
-            };
-            let a_rec = if a.recommended { 0u8 } else { 1 };
-            let b_rec = if b.recommended { 0u8 } else { 1 };
-            let a_favorite = if a.is_favorite { 0u8 } else { 1 };
-            let b_favorite = if b.is_favorite { 0u8 } else { 1 };
-            let a_usage = std::cmp::Reverse(a.usage_score);
-            let b_usage = std::cmp::Reverse(b.usage_score);
-            let a_rec_rank = if a.recommended {
-                a.recommendation_rank
-            } else {
-                usize::MAX
-            };
-            let b_rec_rank = if b.recommended {
-                b.recommendation_rank
-            } else {
-                usize::MAX
-            };
-            let a_avail = if a.options.first().map(|r| r.available).unwrap_or(false) {
-                0u8
-            } else {
-                1
-            };
-            let b_avail = if b.options.first().map(|r| r.available).unwrap_or(false) {
-                0u8
-            } else {
-                1
-            };
-            let a_old = if a.old { 1u8 } else { 0 };
-            let b_old = if b.old { 1u8 } else { 0 };
-            a_favorite
-                .cmp(&b_favorite)
-                .then(a_current.cmp(&b_current))
-                .then(a_recent.cmp(&b_recent))
-                .then(a_usage.cmp(&b_usage))
-                .then(a_rec.cmp(&b_rec))
-                .then(a_rec_rank.cmp(&b_rec_rank))
-                .then(a_avail.cmp(&b_avail))
-                .then(a_old.cmp(&b_old))
-                .then(a.name.cmp(&b.name))
-                .then_with(|| {
-                    a.active_option()
-                        .map(|route| route.provider.as_str())
-                        .cmp(&b.active_option().map(|route| route.provider.as_str()))
-                })
-                .then_with(|| {
-                    a.active_option()
-                        .map(|route| route.api_method.as_str())
-                        .cmp(&b.active_option().map(|route| route.api_method.as_str()))
-                })
-        });
+        entries.sort_by(model_picker_entry_sort);
         let entries_ms = entries_started.elapsed().as_millis();
         let total_ms = picker_started.elapsed().as_millis();
 
@@ -3690,7 +3647,7 @@ mod tests {
         filter_routes_by_provider_allowlist, key_char_eq_ignore_ascii_case,
         model_picker_effort_matches_default, model_picker_route_is_current,
         model_picker_route_is_default, model_picker_route_is_recommended,
-        next_model_favorite_after_current, picker_is_runtime_model_picker,
+        model_picker_entry_sort, next_model_favorite_after_current, picker_is_runtime_model_picker,
         remote_model_catalog_cache_is_fresh, remote_model_catalog_cache_origin,
         remote_model_catalog_snapshot_is_safe, route_supports_reasoning_effort,
     };
@@ -3739,13 +3696,7 @@ mod tests {
         let mut current = picker_entry("current", "test", 0);
         current.is_current = true;
         let mut entries = vec![current, favorite];
-        entries.sort_by(|a, b| {
-            let a_favorite = if a.is_favorite { 0u8 } else { 1 };
-            let b_favorite = if b.is_favorite { 0u8 } else { 1 };
-            let a_current = if a.is_current { 0u8 } else { 1 };
-            let b_current = if b.is_current { 0u8 } else { 1 };
-            a_favorite.cmp(&b_favorite).then(a_current.cmp(&b_current))
-        });
+        entries.sort_by(model_picker_entry_sort);
         assert_eq!(entries[0].name, "favorite");
     }
 
