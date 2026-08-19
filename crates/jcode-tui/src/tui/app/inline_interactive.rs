@@ -1758,9 +1758,9 @@ impl App {
             };
             let a_old = if a.old { 1u8 } else { 0 };
             let b_old = if b.old { 1u8 } else { 0 };
-            a_current
-                .cmp(&b_current)
-                .then(a_favorite.cmp(&b_favorite))
+            a_favorite
+                .cmp(&b_favorite)
+                .then(a_current.cmp(&b_current))
                 .then(a_recent.cmp(&b_recent))
                 .then(a_usage.cmp(&b_usage))
                 .then(a_rec.cmp(&b_rec))
@@ -3730,6 +3730,23 @@ mod tests {
 
     fn picker_option(provider: &str) -> PickerOption {
         picker_option_with_method(provider, "test")
+    }
+
+    #[test]
+    fn model_picker_favorites_sort_before_current_and_other_models() {
+        let mut favorite = picker_entry("favorite", "test", 0);
+        favorite.is_favorite = true;
+        let mut current = picker_entry("current", "test", 0);
+        current.is_current = true;
+        let mut entries = vec![current, favorite];
+        entries.sort_by(|a, b| {
+            let a_favorite = if a.is_favorite { 0u8 } else { 1 };
+            let b_favorite = if b.is_favorite { 0u8 } else { 1 };
+            let a_current = if a.is_current { 0u8 } else { 1 };
+            let b_current = if b.is_current { 0u8 } else { 1 };
+            a_favorite.cmp(&b_favorite).then(a_current.cmp(&b_current))
+        });
+        assert_eq!(entries[0].name, "favorite");
     }
 
     #[test]
