@@ -56,10 +56,16 @@ impl App {
         let path = if candidate.is_absolute() {
             candidate.to_path_buf()
         } else {
-            let Some(working_dir) = self.session.working_dir.as_deref() else {
+            let Some(working_dir) = self
+                .session
+                .working_dir
+                .as_deref()
+                .map(std::path::PathBuf::from)
+                .or_else(|| std::env::current_dir().ok())
+            else {
                 return false;
             };
-            std::path::Path::new(working_dir).join(candidate)
+            working_dir.join(candidate)
         };
         if !path.is_file() {
             return false;
