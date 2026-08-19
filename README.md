@@ -36,33 +36,41 @@ reasonably synchronized with upstream while preserving features and workflow
 improvements that are useful to me. It is therefore not intended to be a
 drop-in replacement for, or a fully equivalent distribution of, upstream Jcode.
 
-### Custom features and improvements
+### Custom features and fixes
 
-In addition to upstream Jcode, this fork currently includes or tracks personal
-work around:
+This section is intentionally limited to additions, behavior changes, and bug
+fixes that I have made or maintained in this fork. It does **not** restate the
+many features that are already part of regular upstream Jcode, such as the
+general swarm, debugger, browser, diagram, and provider surfaces.
 
-- **First-class agent workflows:** durable session handoff and continuation,
-  named session profiles, richer self-development workflows, and safety-aware
-  `jcode run` behavior for headless automation.
-- **Memory and retrieval:** semantic agent memory, ambient consolidation,
-  session search, and a memory sidecar workflow for relevance-aware recall.
-- **Agent collaboration:** native swarm coordination, worker messaging and
-  status visibility, shared-repository notifications, and runtime model-route
-  display.
-- **Developer tooling:** a built-in DAP debugger, architecture and Mermaid
-  rendering workflows, browser automation, agent-oriented grep, and richer
-  session inspection and feedback tools.
-- **Provider and API polish:** provider failure codes, reported-cost tracking,
-  model ordering improvements, additional OAuth and OpenAI-compatible provider
-  flows, and the canonical Go SDK maintained alongside this fork.
-- **TUI quality-of-life improvements:** clickable inline file previews,
-  relative-path fallbacks, alignment controls, compact widgets, custom
-  scrollback, and improved startup, handoff, and session behavior.
+The clearest examples of my custom delta include:
 
-The feature list is intentionally a high-level summary rather than a promise
-that every item is unique to this fork or enabled in every build. The commit
-history is the source of truth for the current delta. Upstream changes remain
-the priority when synchronizing, while personal features are kept when they do
+- **Interactive TUI controls:** a `Ctrl+P` command palette and model-picker
+  flow, including remote-session support, plus related picker behavior such as
+  keeping favorite models at the top and improving model-switch notices.
+- **Clickable inline document previews:** click a file shown in an inline
+  tool/diff preview to open or collapse it in the TUI. The fork also fixes
+  relative-path resolution when the displayed path is relative to the session
+  workspace rather than the client process.
+- **Agent workflow behavior:** configurable fresh-session handoff and
+  continuation, named session profiles, safer bounded `jcode run` execution,
+  restored prompt state across handoff/resume, and improvements to startup
+  input targeting during child-session handoff.
+- **Provider and session fixes:** OpenRouter reported-cost tracking and its
+  downstream consumers, safer legacy provider-cost handling, redacted provider
+  failure codes, and fixes that prevent stale provider rerouting on restore.
+- **Agent-oriented development tools:** the `agentgrep` context-saving search
+  workflow, session librarian and feedback workflows, memory-sidecar work, and
+  the companion Go SDK maintained for this fork.
+- **Operational and process fixes:** foreground process-group ownership and
+  cancellation cleanup, prevention of orphaned `jcode serve` processes during
+  reinstall, and startup/reload behavior intended for my self-development
+  workflow.
+
+This is a representative list, not a claim that every upstream commit is
+absent here or that every item is enabled in every build. The commit history is
+the source of truth for the current fork delta. I will continue synchronizing
+with upstream while keeping these personal additions and fixes where they do
 not conflict with intentional upstream changes.
 
 ### Go SDK
