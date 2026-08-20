@@ -69,6 +69,14 @@ The clearest examples of my custom delta include:
   prompt with the outcome, decisions, risks, next steps, relevant files, and
   Bead ID. Configure it under `[handoff]` in `~/.jcode/config.toml`, for example
   `poke_enabled = true`; the default remains disabled.
+
+  The rationale is context quality first: completed milestones become irrelevant
+  context that can dilute attention and make later work less reliable. A fresh
+  session keeps the next milestone focused while preserving durable todos and a
+  deliberate continuation prompt. It can also reduce repeated prompt processing
+  and token usage over long runs, but the primary goal is better reasoning quality,
+  not an automatic cost optimization. The poke is intentionally advisory so the
+  agent can defer handoff when continuity is more valuable.
 - **Headless and session workflow fixes:** safer bounded `jcode run`
   execution, restored prompt state across resume, and improvements to startup
   behavior around child-session handoff.
