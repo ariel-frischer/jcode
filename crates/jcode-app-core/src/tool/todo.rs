@@ -927,14 +927,22 @@ impl Tool for TodoTool {
                     todos: todos.clone(),
                 }));
 
-                build_todo_output(
+                let closed_groups = crate::todo::groups_closed_by_update(&previous, &todos);
+                let mut output = build_todo_output(
                     todos,
                     plan,
                     goals,
                     concise_plan_change,
                     concise_goal_changes,
                     nudges,
-                )
+                )?;
+                if let Some(metadata) = output.metadata.as_mut().and_then(Value::as_object_mut) {
+                    metadata.insert(
+                        "closed_groups".to_string(),
+                        serde_json::to_value(closed_groups)?,
+                    );
+                }
+                Ok(output)
             })()
         } else {
             (|| {

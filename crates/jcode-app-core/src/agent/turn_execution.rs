@@ -89,6 +89,7 @@ impl Agent {
 
         self.current_turn_system_reminder =
             system_reminder.filter(|value| !value.trim().is_empty());
+        self.handoff_poke_cooldown = self.handoff_poke_cooldown.saturating_sub(1);
 
         self.append_user_context_message_with_display_role(user_message, images, display_role)?;
         crate::telemetry::record_turn();

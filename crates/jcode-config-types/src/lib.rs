@@ -458,6 +458,14 @@ pub struct HandoffConfig {
     pub agent_requires_confirmation: bool,
     pub auto_start: bool,
     pub max_chain_transitions: usize,
+    /// Enable advisory reminders to hand off at context/todo milestones.
+    pub poke_enabled: bool,
+    /// Context usage at which a completed todo boundary becomes noteworthy.
+    pub poke_soft_floor: f32,
+    /// Context usage at which the current todo should be finished before handoff.
+    pub poke_hard_threshold: f32,
+    /// Whether session transitions copy the current todo list by default.
+    pub copy_todos: bool,
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions: Option<String>,
     #[serde(skip_serializing_if = "option_string_is_empty")]
@@ -471,6 +479,10 @@ impl Default for HandoffConfig {
             agent_requires_confirmation: false,
             auto_start: true,
             max_chain_transitions: 8,
+            poke_enabled: false,
+            poke_soft_floor: 0.40,
+            poke_hard_threshold: 0.70,
+            copy_todos: true,
             instructions: None,
             instructions_file: None,
         }
@@ -486,6 +498,10 @@ pub struct HandoffProfileConfig {
     pub agent_requires_confirmation: Option<bool>,
     pub auto_start: Option<bool>,
     pub max_chain_transitions: Option<usize>,
+    pub poke_enabled: Option<bool>,
+    pub poke_soft_floor: Option<f32>,
+    pub poke_hard_threshold: Option<f32>,
+    pub copy_todos: Option<bool>,
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions: Option<String>,
     #[serde(skip_serializing_if = "option_string_is_empty")]

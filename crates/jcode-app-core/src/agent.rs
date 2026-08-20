@@ -208,6 +208,8 @@ pub struct Agent {
     /// Transient reminder injected into provider requests for the current turn only.
     /// Not persisted to session history.
     current_turn_system_reminder: Option<String>,
+    /// Cooldown turns remaining after an advisory handoff reminder.
+    handoff_poke_cooldown: usize,
     /// Tool call ids observed in the current session transcript.
     tool_call_ids: HashSet<String>,
     /// Tool result ids observed in the current session transcript.
@@ -279,6 +281,58 @@ pub struct Agent {
 }
 
 impl Agent {
+    pub(crate) fn maybe_add_handoff_poke(&mut self, closed_groups: &[Option<String>]) {
+        if self.handoff_poke_cooldown > 0 || closed_groups.is_empty() {
+            return;
+        }
+        let Ok(policy) = crate::config::config().resolve_handoff_policy(
+            self.session.profile_name.as_deref(),
+            crate::storage::jcode_dir().ok().as_deref(),
+        ) else {
+            return;
+        };
+        if !policy.enabled || !policy.poke_enabled {
+            return;
+        }
+        let messages = self.session.provider_messages();
+        let compaction = self.registry.compaction();
+        let Ok(manager) = compaction.try_read() else {
+            return;
+        };
+        if manager.is_compacting() {
+            return;
+        }
+        let mut depth = 0usize;
+        let mut cursor = self.session.parent_id.clone();
+        while let Some(parent_id) = cursor {
+            depth += 1;
+            if depth >= policy.max_chain_transitions {
+                return;
+            }
+            cursor = crate::session::Session::load(&parent_id)
+                .ok()
+                .and_then(|session| session.parent_id);
+        }
+        let usage = manager.context_usage_with(&messages);
+        if usage < policy.poke_soft_floor {
+            return;
+        }
+        let group = closed_groups
+            .iter()
+            .find_map(|group| group.as_deref())
+            .unwrap_or("the current todo group");
+        let urgency = if usage >= policy.poke_hard_threshold {
+            "Finish the current item, then hand off before starting another milestone."
+        } else {
+            "Consider handing off before starting another milestone."
+        };
+        self.current_turn_system_reminder = Some(format!(
+            "A todo group ({group}) just completed at {:.1}% context usage. {urgency} Use session_transition if a fresh session would keep the next milestone focused.",
+            usage * 100.0
+        ));
+        self.handoff_poke_cooldown = 3;
+    }
+
     fn refresh_agents_md_snapshot(&mut self) {
         let working_dir = self
             .session
@@ -363,6 +417,7 @@ impl Agent {
             last_status_detail: None,
             pending_alerts: Vec::new(),
             current_turn_system_reminder: None,
+            handoff_poke_cooldown: 0,
             tool_call_ids: HashSet::new(),
             tool_result_ids: HashSet::new(),
             tool_output_scan_index: 0,

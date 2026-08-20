@@ -880,7 +880,7 @@ pub(super) async fn handle_handoff(
     };
     let prompt = prompt.and_then(|prompt| (!prompt.trim().is_empty()).then_some(prompt));
     let (prompt, compaction, copy_todos) = if prompt.is_some() {
-        (prompt, None, false)
+        (prompt, None, policy.copy_todos)
     } else {
         let provider = {
             let agent_guard = agent.lock().await;
@@ -920,7 +920,7 @@ pub(super) async fn handle_handoff(
             }
         };
         let prompt = generated_handoff_prompt(&client_session_id, compaction.as_ref());
-        (Some(prompt), compaction, true)
+        (Some(prompt), compaction, policy.copy_todos)
     };
     let auto_start = auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
     match create_handoff_child_session_with_compaction(
