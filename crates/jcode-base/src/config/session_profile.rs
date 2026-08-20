@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 const MAX_HANDOFF_INSTRUCTIONS_FILE_BYTES: u64 = 64 * 1024;
 
 /// Effective fresh-session handoff policy for one session.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedHandoffPolicy {
     pub enabled: bool,
     pub agent_enabled: bool,

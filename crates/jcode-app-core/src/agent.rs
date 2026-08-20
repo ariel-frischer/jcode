@@ -298,7 +298,8 @@ impl Agent {
         if !policy.enabled || !policy.poke_enabled {
             return;
         }
-        let messages = self.session.provider_messages();
+        let parent_id = self.session.parent_id.clone();
+        let messages = self.session.provider_messages().to_vec();
         let compaction = self.registry.compaction();
         let Ok(manager) = compaction.try_read() else {
             return;
@@ -307,7 +308,7 @@ impl Agent {
             return;
         }
         let mut depth = 0usize;
-        let mut cursor = self.session.parent_id.clone();
+        let mut cursor = parent_id;
         while let Some(parent_id) = cursor {
             depth += 1;
             if depth >= policy.max_chain_transitions {

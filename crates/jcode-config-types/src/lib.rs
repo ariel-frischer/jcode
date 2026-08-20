@@ -408,7 +408,7 @@ impl Default for CompactionConfig {
 /// type. Keeping this contract in the dependency-light config-types crate
 /// allows configuration loading to share it without depending on runtime,
 /// provider, or prompt code.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct SessionProfileConfig {
     /// Provider identifier or route selected for the session.
@@ -450,7 +450,7 @@ pub struct SessionProfileConfig {
     pub handoff: Option<HandoffProfileConfig>,
 }
 /// Global policy for manual and agent-initiated fresh-session handoffs.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct HandoffConfig {
     pub enabled: bool,
@@ -490,7 +490,7 @@ impl Default for HandoffConfig {
 }
 
 /// Optional per-profile overrides for [`HandoffConfig`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct HandoffProfileConfig {
     pub enabled: Option<bool>,

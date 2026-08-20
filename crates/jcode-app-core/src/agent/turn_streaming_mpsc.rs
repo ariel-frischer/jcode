@@ -1550,7 +1550,7 @@ impl Agent {
                                     .metadata
                                     .as_ref()
                                     .and_then(|metadata| metadata.get("next_pending"))
-                                    .and_then(Value::as_str);
+                                    .and_then(serde_json::Value::as_str);
                                 self.maybe_add_handoff_poke(&groups, next_pending);
                             }
                             let _ = event_tx.send(ServerEvent::ToolDone {
