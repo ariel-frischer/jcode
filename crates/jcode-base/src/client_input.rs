@@ -23,6 +23,39 @@ pub fn save_startup_draft_for_session(session_id: &str, input: String) {
     save_startup_input_for_session(session_id, input, Vec::new(), false);
 }
 
+/// Persist a startup message that should be submitted automatically without
+/// occupying the destination client's editable composer.
+pub fn save_startup_queued_message_for_session(session_id: &str, input: String) {
+    if input.trim().is_empty() {
+        return;
+    }
+    if let Ok(jcode_dir) = crate::storage::jcode_dir() {
+        let path = jcode_dir.join(format!("client-input-{}", session_id));
+        let data = serde_json::json!({
+            "cursor": 0,
+            "input": "",
+            "pending_images": [],
+            "submit_on_restore": false,
+            "queued_messages": [input],
+            "hidden_queued_system_messages": [],
+            "startup_status_notice": "Handoff prompt queued",
+            "startup_display_message_title": serde_json::Value::Null,
+            "startup_display_message": serde_json::Value::Null,
+            "interleave_message": serde_json::Value::Null,
+            "pending_soft_interrupts": [],
+            "pending_soft_interrupt_resend": [],
+            "rate_limit_pending_message": serde_json::Value::Null,
+            "rate_limit_reset_in_ms": serde_json::Value::Null,
+            "observe_mode_enabled": false,
+            "observe_page_markdown": "",
+            "observe_page_updated_at_ms": 0,
+            "split_view_enabled": false,
+            "todos_view_enabled": false,
+        });
+        let _ = std::fs::write(&path, data.to_string());
+    }
+}
+
 fn save_startup_input_for_session(
     session_id: &str,
     input: String,

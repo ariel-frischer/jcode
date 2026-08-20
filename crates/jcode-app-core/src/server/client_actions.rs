@@ -778,7 +778,7 @@ fn create_handoff_child_session_with_compaction(
     child.save()?;
     if let Some(prompt) = prompt {
         if auto_start {
-            crate::client_input::save_startup_submission_for_session(&child.id, prompt, Vec::new());
+            crate::client_input::save_startup_queued_message_for_session(&child.id, prompt);
         } else {
             crate::client_input::save_startup_draft_for_session(&child.id, prompt);
         }

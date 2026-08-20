@@ -79,10 +79,9 @@ fn ensure_test_jcode_home_if_unset() {
 fn session_handoff_ready_restores_destination_startup_context_before_resume() {
     ensure_test_jcode_home_if_unset();
     let destination = "session_handoff_context_test";
-    crate::client_input::save_startup_submission_for_session(
+    crate::client_input::save_startup_queued_message_for_session(
         destination,
         "continue from the handoff summary".to_string(),
-        Vec::new(),
     );
 
     let mut app = create_test_app();
@@ -118,10 +117,9 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
 fn session_handoff_ready_preserves_existing_composer_input() {
     ensure_test_jcode_home_if_unset();
     let destination = "session_handoff_existing_input_test";
-    crate::client_input::save_startup_submission_for_session(
+    crate::client_input::save_startup_queued_message_for_session(
         destination,
         "continue from the handoff summary".to_string(),
-        Vec::new(),
     );
 
     let mut app = create_test_app();

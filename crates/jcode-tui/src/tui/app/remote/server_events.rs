@@ -2850,24 +2850,17 @@ pub(in crate::tui::app) fn handle_server_event(
             app.pending_handoff_resume_notice = Some(format!(
                 "Previous session handoff from:\n  jcode --resume {source_session_id}",
             ));
-            // The handoff prompt is an automatic submission, not an editable
-            // draft. Keep it in the follow-up queue so the destination can
-            // submit it after attaching, without replacing whatever the user
-            // currently has in the composer.
-            let visible_input = app.input.clone();
-            let visible_cursor = app.cursor_pos;
+            let existing_input = app.input.clone();
+            let existing_cursor = app.cursor_pos;
             let context_restored = if let Some(restored) =
                 App::restore_input_for_reload(&new_session_id)
             {
-                let submit_on_restore = restored.submit_on_restore;
+                let restores_queued_context = !restored.queued_messages.is_empty()
+                    || !restored.hidden_queued_system_messages.is_empty();
                 app.apply_restored_reload_input(restored);
-                if auto_start && submit_on_restore {
-                    let handoff_prompt = std::mem::take(&mut app.input);
-                    if !handoff_prompt.trim().is_empty() {
-                        app.queued_messages.insert(0, handoff_prompt);
-                    }
-                    app.input = visible_input;
-                    app.cursor_pos = visible_cursor.min(app.input.len());
+                if restores_queued_context {
+                    app.input = existing_input;
+                    app.cursor_pos = existing_cursor.min(app.input.len());
                     app.submit_input_on_startup = false;
                 }
                 true

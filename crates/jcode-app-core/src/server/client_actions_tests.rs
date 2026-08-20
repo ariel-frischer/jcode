@@ -332,8 +332,9 @@ fn handoff_child_persists_prompt_for_destination_startup() {
         &std::fs::read_to_string(&submitted_path).expect("read submitted startup context"),
     )
     .expect("parse submitted startup context");
-    assert_eq!(submitted["input"], "continue with the handoff");
-    assert_eq!(submitted["submit_on_restore"], true);
+    assert_eq!(submitted["input"], "");
+    assert_eq!(submitted["submit_on_restore"], false);
+    assert_eq!(submitted["queued_messages"][0], "continue with the handoff");
 
     let (draft_child_id, _) = create_handoff_child_session(
         &parent.id,
