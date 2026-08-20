@@ -142,7 +142,7 @@ impl Tool for SessionTransitionTool {
             &input.relevant_files,
         )?;
         let auto_start = input.auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
-        let copy_todos = input.copy_todos.unwrap_or(true);
+        let copy_todos = input.copy_todos.unwrap_or(policy.copy_todos);
         PENDING
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())

@@ -921,20 +921,33 @@ impl Tool for TodoTool {
                     ));
                 }
                 record_todo_telemetry(&previous, &todos, &goals, &plan);
+                let next_pending = todos
+                    .iter()
+                    .find(|todo| todo.status == "pending" || todo.status == "in_progress")
+                    .map(|todo| todo.content.clone());
 
                 Bus::global().publish(BusEvent::TodoUpdated(TodoEvent {
                     session_id: ctx.session_id.clone(),
                     todos: todos.clone(),
                 }));
 
-                build_todo_output(
+                let closed_groups = crate::todo::groups_closed_by_update(&previous, &todos);
+                let mut output = build_todo_output(
                     todos,
                     plan,
                     goals,
                     concise_plan_change,
                     concise_goal_changes,
                     nudges,
-                )
+                )?;
+                if let Some(metadata) = output.metadata.as_mut().and_then(Value::as_object_mut) {
+                    metadata.insert(
+                        "closed_groups".to_string(),
+                        serde_json::to_value(closed_groups)?,
+                    );
+                    metadata.insert("next_pending".to_string(), serde_json::to_value(next_pending)?);
+                }
+                Ok(output)
             })()
         } else {
             (|| {

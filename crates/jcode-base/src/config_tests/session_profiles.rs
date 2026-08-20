@@ -20,6 +20,10 @@ fn handoff_defaults_are_enabled_and_bounded() {
     assert!(!policy.agent_requires_confirmation);
     assert!(policy.auto_start);
     assert_eq!(policy.max_chain_transitions, 8);
+    assert!(!policy.poke_enabled);
+    assert_eq!(policy.poke_soft_floor, 0.40);
+    assert_eq!(policy.poke_hard_threshold, 0.70);
+    assert!(policy.copy_todos);
     assert_eq!(policy.instructions, None);
 }
 
@@ -39,6 +43,10 @@ instructions_file = "global.md"
 agent_enabled = false
 auto_start = false
 max_chain_transitions = 3
+poke_enabled = true
+poke_soft_floor = 0.5
+poke_hard_threshold = 0.8
+copy_todos = false
 instructions = "profile inline"
 instructions_file = "profile.md"
 "#,
@@ -51,6 +59,10 @@ instructions_file = "profile.md"
     assert!(!policy.agent_enabled);
     assert!(!policy.auto_start);
     assert_eq!(policy.max_chain_transitions, 3);
+    assert!(policy.poke_enabled);
+    assert_eq!(policy.poke_soft_floor, 0.5);
+    assert_eq!(policy.poke_hard_threshold, 0.8);
+    assert!(!policy.copy_todos);
     assert_eq!(
         policy.instructions.as_deref(),
         Some("global inline\n\nglobal file\n\nprofile inline\n\nprofile file")

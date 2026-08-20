@@ -21,6 +21,10 @@ pub struct ResolvedHandoffPolicy {
     pub agent_requires_confirmation: bool,
     pub auto_start: bool,
     pub max_chain_transitions: usize,
+    pub poke_enabled: bool,
+    pub poke_soft_floor: f32,
+    pub poke_hard_threshold: f32,
+    pub copy_todos: bool,
     pub instructions: Option<String>,
 }
 
@@ -601,9 +605,27 @@ impl Config {
         let max_chain_transitions = profile_handoff
             .and_then(|handoff| handoff.max_chain_transitions)
             .unwrap_or(self.handoff.max_chain_transitions);
+        let poke_enabled = profile_handoff
+            .and_then(|handoff| handoff.poke_enabled)
+            .unwrap_or(self.handoff.poke_enabled);
+        let poke_soft_floor = profile_handoff
+            .and_then(|handoff| handoff.poke_soft_floor)
+            .unwrap_or(self.handoff.poke_soft_floor);
+        let poke_hard_threshold = profile_handoff
+            .and_then(|handoff| handoff.poke_hard_threshold)
+            .unwrap_or(self.handoff.poke_hard_threshold);
+        let copy_todos = profile_handoff
+            .and_then(|handoff| handoff.copy_todos)
+            .unwrap_or(self.handoff.copy_todos);
 
         if max_chain_transitions == 0 {
             anyhow::bail!("handoff.max_chain_transitions must be at least 1");
+        }
+        if !(0.0..=1.0).contains(&poke_soft_floor)
+            || !(0.0..=1.0).contains(&poke_hard_threshold)
+            || poke_soft_floor > poke_hard_threshold
+        {
+            anyhow::bail!("handoff poke thresholds must satisfy 0 <= soft <= hard <= 1");
         }
 
         if !enabled {
@@ -613,6 +635,10 @@ impl Config {
                 agent_requires_confirmation,
                 auto_start,
                 max_chain_transitions,
+                poke_enabled,
+                poke_soft_floor,
+                poke_hard_threshold,
+                copy_todos,
                 instructions: None,
             });
         }
@@ -641,6 +667,10 @@ impl Config {
             agent_requires_confirmation,
             auto_start,
             max_chain_transitions,
+            poke_enabled,
+            poke_soft_floor,
+            poke_hard_threshold,
+            copy_todos,
             instructions: (!instruction_parts.is_empty()).then(|| instruction_parts.join("\n\n")),
         })
     }
