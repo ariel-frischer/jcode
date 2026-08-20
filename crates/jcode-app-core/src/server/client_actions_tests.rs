@@ -428,13 +428,18 @@ async fn no_argument_handoff_persists_summary_for_destination_startup() {
             .expect("no-argument handoff should persist destination startup context"),
     )
     .expect("parse persisted handoff startup context");
-    let startup_input = startup["input"]
+    assert_eq!(startup["input"], "");
+    assert_eq!(startup["submit_on_restore"], false);
+    let queued = startup["queued_messages"]
+        .as_array()
+        .expect("handoff startup context should contain a queued message");
+    assert_eq!(queued.len(), 1);
+    let queued_prompt = queued[0]
         .as_str()
-        .expect("handoff startup context should contain text");
-    assert!(startup_input.contains("Generated handoff summary"));
-    assert!(startup_input.contains("Next steps:"));
-    assert!(startup_input.contains("Review the generated handoff next steps"));
-    assert_eq!(startup["submit_on_restore"], true);
+        .expect("queued handoff prompt should be text");
+    assert!(queued_prompt.contains("Generated handoff summary"));
+    assert!(queued_prompt.contains("Next steps:"));
+    assert!(queued_prompt.contains("Review the generated handoff next steps"));
 
     let child = crate::session::Session::load(&child_id).expect("load handoff child");
     assert!(child.messages.is_empty());
