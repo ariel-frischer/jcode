@@ -487,6 +487,10 @@ impl OpenRouterStream {
 }
 
 fn parse_reported_cost(value: &Value) -> Option<f64> {
+    // OpenRouter documents `usage.cost` as the total amount charged. Keep this
+    // conversion at the response boundary because provider-compatible proxies
+    // have returned both JSON numbers and decimal strings. Invalid values must
+    // remain `None`, so callers use token pricing rather than billing nonsense.
     let cost = value
         .as_f64()
         .or_else(|| value.as_str().and_then(|raw| raw.trim().parse().ok()))?;
@@ -778,6 +782,29 @@ mod tests {
                 ..
             } if (cost - 0.00042).abs() < f64::EPSILON
         ));
+    }
+
+    #[test]
+    fn reported_cost_parser_accepts_decimal_forms_and_rejects_invalid_values() {
+        let accepted = [
+            (serde_json::json!(0), 0.0),
+            (serde_json::json!(0.00123), 0.00123),
+            (serde_json::json!(" 0.00456 "), 0.00456),
+        ];
+        for (value, expected) in accepted {
+            let actual = parse_reported_cost(&value).expect("valid reported cost");
+            assert!((actual - expected).abs() < f64::EPSILON, "value={value}");
+        }
+
+        for value in [
+            serde_json::json!(-0.01),
+            serde_json::json!(""),
+            serde_json::json!("not-a-cost"),
+            serde_json::json!(null),
+            serde_json::json!({"amount": 1}),
+        ] {
+            assert_eq!(parse_reported_cost(&value), None, "value={value}");
+        }
     }
 
     #[test]
