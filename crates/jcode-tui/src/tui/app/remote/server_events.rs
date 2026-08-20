@@ -1867,6 +1867,9 @@ pub(in crate::tui::app) fn handle_server_event(
                             })
                             .collect();
                         app.replace_display_messages(restored_messages);
+                        if let Some(notice) = app.pending_handoff_resume_notice.take() {
+                            app.push_display_message(DisplayMessage::system(notice));
+                        }
                         // A same-session forced re-apply (rewind / rewind-undo
                         // truncation, or a deferred bootstrap) rebuilds the
                         // transcript without running the session_changed
@@ -2838,11 +2841,15 @@ pub(in crate::tui::app) fn handle_server_event(
             false
         }
         ServerEvent::SessionHandoffReady {
+            source_session_id,
             new_session_id,
             new_session_name,
             auto_start,
             ..
         } => {
+            app.pending_handoff_resume_notice = Some(format!(
+                "Previous session handoff from:\n  jcode --resume {source_session_id}",
+            ));
             let context_restored = if let Some(restored) =
                 App::restore_input_for_reload(&new_session_id)
             {

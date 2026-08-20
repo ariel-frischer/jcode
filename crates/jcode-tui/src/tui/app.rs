@@ -1246,6 +1246,10 @@ pub struct App {
     runtime_mode: AppRuntimeMode,
     // Remote rewind/undo request waiting for the server's replacement History payload.
     pending_remote_rewind_notice: Option<PendingRemoteRewindNotice>,
+    // Display-only reminder captured before a handoff switches sessions. It is
+    // appended after destination history loads so it cannot become provider
+    // context or be lost when the transcript is replaced.
+    pending_handoff_resume_notice: Option<String>,
     // History-recovery watchdog for the "stuck on loading session…" bug. When a
     // remote (re)connect never receives the bootstrap `History` event, every
     // prompt path is gated behind `has_loaded_history()` and the session is

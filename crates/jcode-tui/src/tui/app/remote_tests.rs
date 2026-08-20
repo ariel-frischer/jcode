@@ -108,6 +108,10 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
         remote.resume_in_flight(),
         "SessionHandoffReady must arm the resume barrier before the next tick consumes the target"
     );
+    assert!(
+        app.display_messages().is_empty(),
+        "handoff reminder should wait for destination history rather than appearing in the source transcript"
+    );
 }
 
 #[test]
