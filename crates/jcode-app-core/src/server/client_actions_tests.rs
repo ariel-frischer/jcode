@@ -209,7 +209,7 @@ fn handoff_child_is_clean_and_preserves_only_operational_session_state() {
     });
     parent.save().expect("save parent");
 
-    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8)
+    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8, true)
         .expect("create clean handoff child");
     let child = crate::session::Session::load(&child_id).expect("load child");
 
@@ -223,7 +223,7 @@ fn handoff_child_is_clean_and_preserves_only_operational_session_state() {
     assert_eq!(child.reasoning_effort, parent.reasoning_effort);
     assert_eq!(child.profile_name, parent.profile_name);
     assert_eq!(child.status, crate::session::SessionStatus::Closed);
-    let chain_error = create_handoff_child_session(&child.id, None, false, 1)
+    let chain_error = create_handoff_child_session(&child.id, None, false, 1, true)
         .expect_err("a second transition must exceed a one-transition chain limit");
     assert!(chain_error.to_string().contains("chain limit reached"));
 
@@ -276,7 +276,7 @@ fn agent_initiated_handoff_carries_open_todos_into_the_child() {
     ];
     crate::todo::save_todos(&parent.id, &todos).expect("save parent todos");
 
-    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8)
+    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8, true)
         .expect("create handoff child");
 
     let carried = crate::todo::load_todos(&child_id).expect("load child todos");
@@ -286,6 +286,15 @@ fn agent_initiated_handoff_carries_open_todos_into_the_child() {
         "agent-initiated handoff must carry the todo list like the user-initiated path"
     );
     assert!(carried.iter().any(|todo| todo.id == "next-1"));
+
+    let (opted_out_id, _) = create_handoff_child_session(&parent.id, None, false, 8, false)
+        .expect("create handoff child without todos");
+    assert!(
+        crate::todo::load_todos(&opted_out_id)
+            .expect("load opted-out child todos")
+            .is_empty(),
+        "copy_todos=false must leave the fresh session without carried todos"
+    );
 
     if let Some(prev_home) = prev_home {
         crate::env::set_var("JCODE_HOME", prev_home);
@@ -313,6 +322,7 @@ fn handoff_child_persists_prompt_for_destination_startup() {
         Some("continue with the handoff".to_string()),
         true,
         8,
+        true,
     )
     .expect("create submitted handoff child");
     let submitted_path = temp
@@ -330,6 +340,7 @@ fn handoff_child_persists_prompt_for_destination_startup() {
         Some("review the handoff first".to_string()),
         false,
         8,
+        true,
     )
     .expect("create draft handoff child");
     let draft_path = temp.path().join(format!("client-input-{draft_child_id}"));

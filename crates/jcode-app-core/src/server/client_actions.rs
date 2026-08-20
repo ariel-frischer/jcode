@@ -725,6 +725,7 @@ pub(super) fn create_handoff_child_session(
     prompt: Option<String>,
     auto_start: bool,
     max_chain_transitions: usize,
+    copy_todos: bool,
 ) -> anyhow::Result<(String, String)> {
     create_handoff_child_session_with_compaction(
         parent_session_id,
@@ -732,7 +733,7 @@ pub(super) fn create_handoff_child_session(
         auto_start,
         max_chain_transitions,
         None,
-        true,
+        copy_todos,
     )
 }
 

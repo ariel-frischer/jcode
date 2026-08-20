@@ -3131,6 +3131,7 @@ async fn start_processing_message(
                 pending.prompt,
                 pending.auto_start,
                 pending.max_chain_transitions,
+                pending.copy_todos,
             ) {
                 Ok((new_session_id, new_session_name)) => {
                     let _ = tx.send(ServerEvent::SessionHandoffReady {

@@ -59,6 +59,7 @@ pub(crate) struct PendingSessionTransition {
     pub prompt: Option<String>,
     pub auto_start: bool,
     pub max_chain_transitions: usize,
+    pub copy_todos: bool,
 }
 
 static PENDING: LazyLock<Mutex<HashMap<String, PendingSessionTransition>>> =
@@ -83,6 +84,8 @@ struct Input {
     relevant_files: Vec<String>,
     #[serde(default)]
     auto_start: Option<bool>,
+    #[serde(default)]
+    copy_todos: Option<bool>,
     #[serde(default)]
     confirmed: bool,
 }
@@ -114,6 +117,7 @@ impl Tool for SessionTransitionTool {
                 "bead_id": {"type": "string", "description": "Optional durable Bead identifier for the next session to inspect."},
                 "relevant_files": {"type": "array", "items": {"type": "string"}, "maxItems": 32, "description": "Optional bounded list of paths relevant to the next task."},
                 "auto_start": {"type": "boolean", "description": "Submit the prompt after switching. Defaults to the effective handoff policy."},
+                "copy_todos": {"type": "boolean", "description": "Carry the current todo list into the fresh session. Defaults to true. Set false only when the next task is unrelated and the existing todos would be noise."},
                 "confirmed": {"type": "boolean", "description": "Required only when agent_requires_confirmation is enabled."}
             }
         })
@@ -138,6 +142,7 @@ impl Tool for SessionTransitionTool {
             &input.relevant_files,
         )?;
         let auto_start = input.auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
+        let copy_todos = input.copy_todos.unwrap_or(true);
         PENDING
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -147,6 +152,7 @@ impl Tool for SessionTransitionTool {
                     prompt,
                     auto_start,
                     max_chain_transitions: policy.max_chain_transitions,
+                    copy_todos,
                 },
             );
         Ok(ToolOutput::new(
@@ -239,6 +245,30 @@ mod tests {
         assert!(prompt.contains("docs/proposals/FRESH_SESSION_HANDOFF.md"));
         assert!(pending.auto_start);
         assert_eq!(pending.max_chain_transitions, 3);
+        assert!(
+            pending.copy_todos,
+            "todos must carry by default when copy_todos is omitted"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn copy_todos_can_be_opted_out_per_handoff() {
+        let _environment = crate::storage::lock_test_env();
+        let (_directory, _home) = isolated_config("[handoff]\n");
+        let mut session = crate::session::Session::create(None, None);
+        session.save().expect("save source session");
+        let session_id = session.id.clone();
+
+        SessionTransitionTool::new()
+            .execute(
+                json!({"prompt": "unrelated next task", "copy_todos": false}),
+                context(session_id.clone()),
+            )
+            .await
+            .expect("transition should stage");
+
+        let pending = take_pending(&session_id).expect("staged transition");
+        assert!(!pending.copy_todos);
     }
 
     #[tokio::test(flavor = "current_thread")]
