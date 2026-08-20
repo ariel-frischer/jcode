@@ -766,6 +766,21 @@ mod tests {
     }
 
     #[test]
+    fn string_reported_cost_is_normalized() {
+        let mut stream = test_stream();
+        stream.buffer = "data: {\"usage\":{\"cost\":\"0.00042\"}}\n\n".to_string();
+
+        let event = stream.parse_next_event().expect("usage event");
+        assert!(matches!(
+            event,
+            StreamEvent::TokenUsage {
+                reported_cost_usd: Some(cost),
+                ..
+            } if (cost - 0.00042).abs() < f64::EPSILON
+        ));
+    }
+
+    #[test]
     fn cost_is_preserved_when_proxy_omits_token_counters() {
         let mut stream = test_stream();
         stream.buffer = "data: {\"usage\":{\"cost\":0.00042}}\n\n".to_string();
