@@ -1659,10 +1659,20 @@ pub(in crate::tui::app) fn handle_server_event(
                 app.status = ProcessingStatus::Idle;
                 app.follow_chat_bottom();
                 if prev_session_id.is_some() {
-                    app.queued_messages.clear();
+                    // A session handoff restores its first prompt before the
+                    // ResumeSession/History pair retargets this connection.
+                    // Keep that staged prompt alive until the destination
+                    // history has arrived and the normal follow-up dispatcher
+                    // can send it. Other session switches must still discard
+                    // queues belonging to the session being left.
+                    if app.pending_handoff_resume_notice.is_none() {
+                        app.queued_messages.clear();
+                    }
                     app.interleave_message = None;
                     app.interleave_images.clear();
-                    app.clear_pending_soft_interrupt_tracking();
+                    if app.pending_handoff_resume_notice.is_none() {
+                        app.clear_pending_soft_interrupt_tracking();
+                    }
                 }
                 app.remote_total_tokens = None;
                 app.remote_token_usage_totals = None;
