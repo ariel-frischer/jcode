@@ -101,9 +101,9 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
         &mut remote,
     );
 
-    assert_eq!(app.input, "continue from the handoff summary");
-    assert!(app.submit_input_on_startup);
-    assert_eq!(app.cursor_pos, app.input.len());
+    assert!(app.input.is_empty());
+    assert!(!app.submit_input_on_startup);
+    assert_eq!(app.queued_messages, ["continue from the handoff summary"]);
     assert!(
         remote.resume_in_flight(),
         "SessionHandoffReady must arm the resume barrier before the next tick consumes the target"
@@ -112,6 +112,40 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
         app.display_messages().is_empty(),
         "handoff reminder should wait for destination history rather than appearing in the source transcript"
     );
+}
+
+#[test]
+fn session_handoff_ready_preserves_existing_composer_input() {
+    ensure_test_jcode_home_if_unset();
+    let destination = "session_handoff_existing_input_test";
+    crate::client_input::save_startup_submission_for_session(
+        destination,
+        "continue from the handoff summary".to_string(),
+        Vec::new(),
+    );
+
+    let mut app = create_test_app();
+    app.input = "keep this draft".to_string();
+    app.cursor_pos = app.input.len();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    app.handle_server_event(
+        ServerEvent::SessionHandoffReady {
+            id: 3,
+            source_session_id: app.session.id.clone(),
+            new_session_id: destination.to_string(),
+            new_session_name: "cedar".to_string(),
+            auto_start: true,
+        },
+        &mut remote,
+    );
+
+    assert_eq!(app.input, "keep this draft");
+    assert_eq!(app.cursor_pos, app.input.len());
+    assert!(!app.submit_input_on_startup);
+    assert_eq!(app.queued_messages, ["continue from the handoff summary"]);
 }
 
 #[test]
