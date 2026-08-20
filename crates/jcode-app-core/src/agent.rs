@@ -54,6 +54,7 @@ pub use jcode_agent_runtime::{
 };
 
 const JCODE_NATIVE_TOOLS: &[&str] = &["selfdev", "communicate"];
+pub(crate) const FRESH_SESSION_HANDOFF_GUIDANCE: &str = "# Fresh-session handoff policy\n\nA fresh-session handoff resets active context between milestones. It is advisory: use session_transition only after saving durable state. The handoff prompt is the next session's source of truth, so make it a compact, factual, self-contained briefing rather than a vague request. Use this structure:\n\n- Goal: the outcome still being pursued and the current milestone.\n- Constraints and preferences: user requirements, repository rules, safety boundaries, and non-goals.\n- Progress: what was completed, what was verified, and what remains.\n- Key decisions: approaches chosen and important alternatives rejected.\n- Critical context: relevant architecture, APIs, errors, environment assumptions, and context/compaction state that the next session cannot infer safely.\n- Unresolved risks and questions: uncertainties, blockers, and likely failure modes.\n- Next steps: the exact next few actions in dependency order.\n- Relevant files: paths and why each matters.\n- Durable tracking: Bead ID, milestone, or other external state to inspect.\n\nMention the parent session only when useful for lineage; Jcode already records parent-session tracking. Do not claim tests or edits that were not actually performed. Keep the prompt actionable and bounded. Copied todos provide the checklist, but reconcile them with the progress and next steps rather than duplicating stale items.";
 static RECOVERED_TEXT_WRAPPED_TOOL_CALLS: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 static JCODE_REPO_SOURCE_STATE: LazyLock<(Option<String>, Option<bool>)> = LazyLock::new(|| {
@@ -396,9 +397,7 @@ impl Agent {
                 if !policy.enabled || !policy.agent_enabled {
                     disabled_tools.insert("session_transition".to_string());
                 } else if policy.poke_enabled || policy.instructions.is_some() {
-                    let mut handoff = String::from(
-                        "# Fresh-session handoff policy\n\nA fresh-session handoff resets active context between milestones. It is advisory: use session_transition only after saving durable state. Give the next session a concise continuation prompt with the current outcome, key decisions, unresolved risks, exact next few steps, relevant files, and Bead ID. Keep it actionable and bounded; copied todos provide the checklist.",
-                    );
+                    let mut handoff = String::from(FRESH_SESSION_HANDOFF_GUIDANCE);
                     if let Some(instructions) = policy.instructions {
                         handoff.push_str("\n\n");
                         handoff.push_str(&instructions);
