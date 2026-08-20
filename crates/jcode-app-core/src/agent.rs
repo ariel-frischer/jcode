@@ -336,7 +336,7 @@ impl Agent {
             .map(|item| format!(" Next pending item: {item}."))
             .unwrap_or_default();
         self.current_turn_system_reminder = Some(format!(
-            "A todo group ({group}) just completed at {:.1}% context usage. {urgency}{next} Use session_transition if a fresh session would keep the next milestone focused.",
+            "Handoff available: {group} completed at {:.1}% context. {urgency}{next}",
             usage * 100.0,
         ));
         self.handoff_poke_cooldown = 3;
@@ -395,8 +395,14 @@ impl Agent {
             Ok(policy) => {
                 if !policy.enabled || !policy.agent_enabled {
                     disabled_tools.insert("session_transition".to_string());
-                } else if let Some(instructions) = policy.instructions {
-                    let handoff = format!("# Fresh-session handoff policy\n\n{instructions}");
+                } else if policy.poke_enabled || policy.instructions.is_some() {
+                    let mut handoff = String::from(
+                        "# Fresh-session handoff policy\n\nA fresh-session handoff resets active context between milestones. It is advisory: use session_transition only after saving durable state. Give the next session a concise continuation prompt with the current outcome, key decisions, unresolved risks, exact next few steps, relevant files, and Bead ID. Keep it actionable and bounded; copied todos provide the checklist.",
+                    );
+                    if let Some(instructions) = policy.instructions {
+                        handoff.push_str("\n\n");
+                        handoff.push_str(&instructions);
+                    }
                     session_prompt_overlay.instructions =
                         Some(match session_prompt_overlay.instructions {
                             Some(existing) => format!("{existing}\n\n{handoff}"),
