@@ -145,6 +145,85 @@ fn session_handoff_ready_restores_editable_draft_without_auto_submit() {
 }
 
 #[test]
+fn session_handoff_notice_is_added_after_destination_history_as_display_only_text() {
+    ensure_test_jcode_home_if_unset();
+    let destination = "session_handoff_notice_destination";
+    let mut app = create_test_app();
+    let source = app.session.id.clone();
+    crate::client_input::save_startup_draft_for_session(
+        destination,
+        "review the handoff before submitting".to_string(),
+    );
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    app.handle_server_event(
+        ServerEvent::SessionHandoffReady {
+            id: 4,
+            source_session_id: source.clone(),
+            new_session_id: destination.to_string(),
+            new_session_name: "notice-destination".to_string(),
+            auto_start: false,
+        },
+        &mut remote,
+    );
+    assert!(app.display_messages().is_empty());
+
+    app.handle_server_event(
+        ServerEvent::History {
+            id: 5,
+            session_id: destination.to_string(),
+            messages: vec![],
+            images: vec![],
+            provider_name: None,
+            provider_model: None,
+            subagent_model: None,
+            autoreview_enabled: None,
+            autojudge_enabled: None,
+            available_models: vec![],
+            available_model_routes: vec![],
+            mcp_servers: vec![],
+            skills: vec![],
+            total_tokens: None,
+            token_usage_totals: None,
+            all_sessions: vec![],
+            client_count: None,
+            is_canary: None,
+            server_version: None,
+            server_name: None,
+            server_icon: None,
+            server_has_update: None,
+            was_interrupted: None,
+            reload_recovery: None,
+            connection_type: None,
+            status_detail: None,
+            upstream_provider: None,
+            resolved_credential: None,
+            reasoning_effort: None,
+            service_tier: None,
+            compaction_mode: crate::config::CompactionMode::Reactive,
+            activity: None,
+            side_panel: crate::side_panel::SidePanelSnapshot::default(),
+        },
+        &mut remote,
+    );
+
+    let notice = app
+        .display_messages()
+        .last()
+        .expect("destination bootstrap should show the handoff notice");
+    assert_eq!(notice.role, "system");
+    assert!(notice.content.contains("Previous session handoff from:"));
+    assert!(notice.content.contains(&format!("jcode --resume {source}")));
+    assert!(
+        !app.display_messages()
+            .iter()
+            .any(|message| message.role == "user" && message.content.contains("jcode --resume"))
+    );
+}
+
+#[test]
 fn session_handoff_ready_reports_missing_context_actionably() {
     ensure_test_jcode_home_if_unset();
     let mut app = create_test_app();
