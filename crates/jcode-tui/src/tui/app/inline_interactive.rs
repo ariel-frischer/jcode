@@ -278,7 +278,11 @@ fn model_picker_entry_sort(a: &PickerEntry, b: &PickerEntry) -> std::cmp::Orderi
             } else {
                 usize::MAX
             },
-            !entry.options.first().map(|route| route.available).unwrap_or(false),
+            !entry
+                .options
+                .first()
+                .map(|route| route.available)
+                .unwrap_or(false),
             entry.old,
             entry.name.clone(),
             entry.active_option().map(|route| route.provider.clone()),
@@ -3645,11 +3649,12 @@ mod tests {
         REMOTE_MODEL_CATALOG_CACHE_MAX_AGE_SECS, REMOTE_MODEL_CATALOG_CACHE_VERSION,
         REMOTE_MODEL_CATALOG_MAX_DETAIL_BYTES, RemoteModelCatalogCache,
         filter_routes_by_provider_allowlist, key_char_eq_ignore_ascii_case,
-        model_picker_effort_matches_default, model_picker_route_is_current,
-        model_picker_route_is_default, model_picker_route_is_recommended,
-        model_picker_entry_sort, next_model_favorite_after_current, picker_is_runtime_model_picker,
-        remote_model_catalog_cache_is_fresh, remote_model_catalog_cache_origin,
-        remote_model_catalog_snapshot_is_safe, route_supports_reasoning_effort,
+        model_picker_effort_matches_default, model_picker_entry_sort,
+        model_picker_route_is_current, model_picker_route_is_default,
+        model_picker_route_is_recommended, next_model_favorite_after_current,
+        picker_is_runtime_model_picker, remote_model_catalog_cache_is_fresh,
+        remote_model_catalog_cache_origin, remote_model_catalog_snapshot_is_safe,
+        route_supports_reasoning_effort,
     };
     use crate::tui::{
         AgentModelTarget, App, InlineInteractiveState, PickerAction, PickerEntry, PickerKind,

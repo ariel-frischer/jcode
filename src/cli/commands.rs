@@ -2731,7 +2731,8 @@ pub(crate) async fn run_single_message_command(
 
     let result: Result<()> = async {
         if emit_json {
-            let text = run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
+            let text =
+                run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
             let report = run_safety::report(&agent, &provider, text);
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else if emit_ndjson {
