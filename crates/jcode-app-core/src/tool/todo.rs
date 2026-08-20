@@ -945,7 +945,10 @@ impl Tool for TodoTool {
                         "closed_groups".to_string(),
                         serde_json::to_value(closed_groups)?,
                     );
-                    metadata.insert("next_pending".to_string(), serde_json::to_value(next_pending)?);
+                    metadata.insert(
+                        "next_pending".to_string(),
+                        serde_json::to_value(next_pending)?,
+                    );
                 }
                 Ok(output)
             })()
