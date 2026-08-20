@@ -8,6 +8,29 @@ use async_trait::async_trait;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+#[test]
+fn fresh_session_handoff_guidance_requires_structured_carryover() {
+    for field in [
+        "Goal:",
+        "Constraints and preferences:",
+        "Progress:",
+        "Key decisions:",
+        "Critical context:",
+        "Unresolved risks and questions:",
+        "Next steps:",
+        "Relevant files:",
+        "Durable tracking:",
+        "parent-session tracking",
+        "context/compaction state",
+        "Copied todos provide the checklist",
+    ] {
+        assert!(
+            super::FRESH_SESSION_HANDOFF_GUIDANCE.contains(field),
+            "handoff guidance lost required field: {field}"
+        );
+    }
+}
+
 #[path = "agent_tests/run_safety.rs"]
 mod run_safety;
 
