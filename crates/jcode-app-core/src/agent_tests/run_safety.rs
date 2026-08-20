@@ -167,6 +167,7 @@ impl Provider for UsageAndToolProvider {
                     output_tokens: Some(0),
                     cache_read_input_tokens: None,
                     cache_creation_input_tokens: None,
+                    reported_cost_usd: None,
                 }))
                 .await;
             let _ = tx

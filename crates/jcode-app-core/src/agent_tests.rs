@@ -1325,6 +1325,7 @@ fn seed_transient_session_state(agent: &mut Agent) {
         output_tokens: 17,
         cache_read_input_tokens: Some(3),
         cache_creation_input_tokens: Some(5),
+        reported_cost_usd: None,
     };
     agent.locked_tools = Some(vec![ToolDefinition {
         name: "test_tool".to_string(),
