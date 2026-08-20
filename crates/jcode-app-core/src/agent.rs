@@ -281,7 +281,11 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub(crate) fn maybe_add_handoff_poke(&mut self, closed_groups: &[Option<String>]) {
+    pub(crate) fn maybe_add_handoff_poke(
+        &mut self,
+        closed_groups: &[Option<String>],
+        next_pending: Option<&str>,
+    ) {
         if self.handoff_poke_cooldown > 0 || closed_groups.is_empty() {
             return;
         }
@@ -326,9 +330,13 @@ impl Agent {
         } else {
             "Consider handing off before starting another milestone."
         };
+        let next = next_pending
+            .filter(|item| !item.trim().is_empty())
+            .map(|item| format!(" Next pending item: {item}."))
+            .unwrap_or_default();
         self.current_turn_system_reminder = Some(format!(
-            "A todo group ({group}) just completed at {:.1}% context usage. {urgency} Use session_transition if a fresh session would keep the next milestone focused.",
-            usage * 100.0
+            "A todo group ({group}) just completed at {:.1}% context usage. {urgency}{next} Use session_transition if a fresh session would keep the next milestone focused.",
+            usage * 100.0,
         ));
         self.handoff_poke_cooldown = 3;
     }

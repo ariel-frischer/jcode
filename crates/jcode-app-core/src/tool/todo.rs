@@ -921,6 +921,10 @@ impl Tool for TodoTool {
                     ));
                 }
                 record_todo_telemetry(&previous, &todos, &goals, &plan);
+                let next_pending = todos
+                    .iter()
+                    .find(|todo| todo.status == "pending" || todo.status == "in_progress")
+                    .map(|todo| todo.content.clone());
 
                 Bus::global().publish(BusEvent::TodoUpdated(TodoEvent {
                     session_id: ctx.session_id.clone(),
@@ -941,6 +945,7 @@ impl Tool for TodoTool {
                         "closed_groups".to_string(),
                         serde_json::to_value(closed_groups)?,
                     );
+                    metadata.insert("next_pending".to_string(), serde_json::to_value(next_pending)?);
                 }
                 Ok(output)
             })()
