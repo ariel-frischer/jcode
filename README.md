@@ -61,7 +61,14 @@ The clearest examples of my custom delta include:
   work into a new session while carrying forward the relevant context. It can
   be configured for automatic or agent-directed handoff, preserves summaries
   and prompt state, and uses startup barriers so input is not sent to the wrong
-  parent or child session.
+  parent or child session. This fork also includes an optional **handoff-poke**:
+  when a todo group completes near a configured context threshold, Jcode gives
+  the agent a concise advisory reminder with the current context percentage and
+  next pending item. It never forces a transition. When enabled, the session
+  prompt explains why handoff helps and how to leave a bounded continuation
+  prompt with the outcome, decisions, risks, next steps, relevant files, and
+  Bead ID. Configure it under `[handoff]` in `~/.jcode/config.toml`, for example
+  `poke_enabled = true`; the default remains disabled.
 - **Headless and session workflow fixes:** safer bounded `jcode run`
   execution, restored prompt state across resume, and improvements to startup
   behavior around child-session handoff.
