@@ -64,4 +64,85 @@ Jcode's built-in handoff guidance now explicitly asks the agent to produce this 
 - [Claude Code session management](https://code.claude.com/docs/en/sessions)
 - [Codex CLI documentation](https://developers.openai.com/codex/cli/features/)
 
+## Ralph loops and context reset strategies
+
+Ralph implementations are not all doing the same thing. The public examples reviewed fall into three useful designs.
+
+### 1. Same-session stop-hook loop: Claude Code Ralph Wiggum
+
+Anthropic's official `ralph-wiggum` plugin uses a Claude Code **Stop hook**. The user starts `/ralph-loop` once. When Claude tries to stop, the hook:
+
+1. reads `.claude/ralph-loop.local.md`;
+2. checks the iteration counter and optional completion promise;
+3. extracts the latest assistant output from the transcript;
+4. blocks the stop event;
+5. feeds the original prompt back into the **same session**;
+6. repeats until the promise matches or the iteration limit is reached.
+
+This is deliberately not a handoff. The transcript remains the memory, while the repository and git history provide external persistence. It can automatically benefit from Claude's own compaction behavior, but the loop itself does not create a fresh context at each iteration. The official hook has corruption and missing-transcript escape hatches and atomically updates its iteration state, which are important safety details.
+
+Source: [Anthropic Claude Code Ralph Wiggum plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum), especially [`stop-hook.sh`](https://raw.githubusercontent.com/anthropics/claude-code/main/plugins/ralph-wiggum/hooks/stop-hook.sh).
+
+### 2. Fresh-process loop with file memory: snarktank/ralph
+
+The popular `snarktank/ralph` implementation runs one story per iteration by spawning a **new Amp or Claude Code instance**. Its loop selects the highest-priority incomplete story, invokes the agent, expects tests and quality checks, commits successful work, marks the story complete in `prd.json`, and appends learnings to `progress.txt`.
+
+Its memory boundary is explicit and file-based:
+
+- `prd.json` stores story status and acceptance state;
+- `progress.txt` stores append-only learnings;
+- git history stores completed changes;
+- `AGENTS.md` can be updated with durable repository discoveries.
+
+This is structurally close to handoff, but the continuation message is mostly a fixed prompt plus files, not a model-generated handoff document. Its README recommends Amp's automatic handoff at 90% context for stories that exceed one window, so it combines fresh iterations with provider-level auto-handoff when needed.
+
+Source: [snarktank/ralph](https://github.com/snarktank/ralph).
+
+### 3. Minimal file-backed fresh loop: iannuttall/ralph
+
+The archived `iannuttall/ralph` project uses a similar fresh-agent model and supports Codex, Claude, Droid, and OpenCode runners. Each iteration reads on-disk state and commits one story. State lives under `.ralph/`, including `progress.md`, guardrails, activity, errors, and run logs. It also supports stale `in_progress` story recovery after a timeout.
+
+Source: [iannuttall/ralph](https://github.com/iannuttall/ralph).
+
+### What this suggests
+
+The common pattern is **not** “let one agent keep going forever.” Mature implementations put a boundary around iteration:
+
+- same-session hooks are simple and cheap, but accumulate transcript state and depend on compaction;
+- fresh-process loops reset model context, but require durable external state;
+- robust systems use a bounded story, explicit acceptance checks, iteration limits, and a recovery path for stale or corrupted state.
+
+Ralph systems generally do not use a rich generated handoff on every iteration. Instead, they rely on a small task ledger plus repository artifacts. That is efficient, but it can lose nuanced decisions, unresolved risks, and environment context unless the progress file or task artifact is maintained carefully.
+
+## Handoff + Ralph + Beads design direction for Jcode
+
+Jcode can combine the strongest parts of these approaches:
+
+1. **Bound the unit of work:** let Beads or todo groups define the next milestone, not an unbounded global prompt.
+2. **Use handoff as the context boundary:** when the group is complete or context pressure crosses a threshold, generate the structured briefing already required by Jcode's handoff guidance.
+3. **Persist before reset:** save the Bead/todo state, relevant files, verification evidence, decisions, risks, and next steps before creating the child session.
+4. **Start a fresh session:** carry the structured prompt, parent lineage, Bead ID, relevant files, and todos into the next session.
+5. **Require acceptance before advancing:** the child must run the relevant checks and only then complete the next Bead/todo group.
+6. **Keep escape hatches:** enforce maximum handoff depth and iteration count, stop on repeated failures, preserve a blocked state, and never treat a completion phrase alone as proof.
+
+The likely best Jcode model is therefore a **bounded fresh-session Ralph loop**, rather than an infinite same-session loop:
+
+```text
+select next Bead/todo group
+        ↓
+work until acceptance or context threshold
+        ↓
+persist durable state and verification evidence
+        ↓
+generate structured handoff
+        ↓
+start child session with prompt + Bead + todos
+        ↓
+run acceptance checks
+        ↓
+complete, block, or hand off again within bounded limits
+```
+
+Automatic compaction remains useful inside one session, but it should not be the only reset mechanism. Compaction is optimized for preserving enough conversational continuity; an explicit handoff is optimized for changing the unit of work and making the next session's contract legible. Combining both gives a useful hierarchy: compact for short-term continuity, hand off for milestone boundaries, and use Beads/git/files as durable truth.
+
 The comparison is based on public documentation and repository material available on the research date. Features change quickly, so claims about absence mean “not found in the reviewed official material,” not proof that no plugin or undocumented workflow exists.
