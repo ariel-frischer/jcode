@@ -732,7 +732,7 @@ pub(super) fn create_handoff_child_session(
         auto_start,
         max_chain_transitions,
         None,
-        false,
+        true,
     )
 }
 

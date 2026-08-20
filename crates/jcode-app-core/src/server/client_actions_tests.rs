@@ -235,6 +235,66 @@ fn handoff_child_is_clean_and_preserves_only_operational_session_state() {
 }
 
 #[test]
+fn agent_initiated_handoff_carries_open_todos_into_the_child() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let prev_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp.path());
+
+    let mut parent = crate::session::Session::create_with_id(
+        "session_parent_handoff_todo_test".to_string(),
+        None,
+        None,
+    );
+    parent.save().expect("save parent");
+
+    let todos = vec![
+        crate::todo::TodoItem {
+            content: "finished milestone".to_string(),
+            status: "completed".to_string(),
+            priority: "high".to_string(),
+            id: "done-1".to_string(),
+            group: None,
+            confidence: None,
+            completion_confidence: None,
+            confidence_history: Vec::new(),
+            blocked_by: Vec::new(),
+            assigned_to: None,
+        },
+        crate::todo::TodoItem {
+            content: "next milestone".to_string(),
+            status: "pending".to_string(),
+            priority: "high".to_string(),
+            id: "next-1".to_string(),
+            group: None,
+            confidence: None,
+            completion_confidence: None,
+            confidence_history: Vec::new(),
+            blocked_by: Vec::new(),
+            assigned_to: None,
+        },
+    ];
+    crate::todo::save_todos(&parent.id, &todos).expect("save parent todos");
+
+    let (child_id, _) = create_handoff_child_session(&parent.id, None, false, 8)
+        .expect("create handoff child");
+
+    let carried = crate::todo::load_todos(&child_id).expect("load child todos");
+    assert_eq!(
+        carried.len(),
+        2,
+        "agent-initiated handoff must carry the todo list like the user-initiated path"
+    );
+    assert!(carried.iter().any(|todo| todo.id == "next-1"));
+
+    if let Some(prev_home) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
+#[test]
 fn handoff_child_persists_prompt_for_destination_startup() {
     let _guard = crate::storage::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
