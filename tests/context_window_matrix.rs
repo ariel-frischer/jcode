@@ -75,6 +75,14 @@ fn resolved_windows_are_always_plausible() {
             "{model} via {provider:?} resolved an implausibly large window: {resolved}"
         );
     }
+
+    for model in ["openai/gpt-5.6-luna", "openai/gpt-5.6-luna:batch"] {
+        assert_eq!(
+            context_limit_for_model_with_provider(model, Some("openrouter")),
+            Some(1_050_000),
+            "{model} should match OpenRouter's advertised 1.05M context window"
+        );
+    }
 }
 
 /// Invariant: an explicitly configured or cached window beats every generic

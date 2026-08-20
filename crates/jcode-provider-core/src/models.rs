@@ -283,6 +283,14 @@ pub fn context_limit_for_model_with_provider_and_cache(
         return Some(1_000_000);
     }
 
+    // OpenRouter's live catalog advertises GPT-5.6 Luna with a 1.05M-token
+    // context window. Keep the provider-core fallback aligned with that
+    // catalog so model capability lookups do not fall through to the older
+    // 272K GPT-5 default when the OpenRouter runtime cache is unavailable.
+    if model.starts_with("gpt-5.6-luna") {
+        return Some(1_050_000);
+    }
+
     // Most GPT-5.x codex/reasoning models: 272k per Codex backend API.
     if model.starts_with("gpt-5") {
         return Some(272_000);
