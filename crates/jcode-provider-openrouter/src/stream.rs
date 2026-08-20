@@ -447,10 +447,7 @@ impl OpenRouterStream {
                 // selected upstream provider, BYOK discounts, and cache rates.
                 // Reject invalid values at the response boundary so callers can
                 // safely fall back to their normal catalog pricing.
-                let reported_cost_usd = usage
-                    .get("cost")
-                    .and_then(|value| value.as_f64())
-                    .filter(|cost| cost.is_finite() && *cost >= 0.0);
+                let reported_cost_usd = usage.get("cost").and_then(parse_reported_cost);
 
                 // Refresh cache pin when we see cache activity
                 if (cache_read_input_tokens.is_some() || cache_creation_input_tokens.is_some())
@@ -459,9 +456,16 @@ impl OpenRouterStream {
                     self.refresh_cache_pin(provider);
                 }
 
+                // Some OpenRouter-compatible proxies omit token counters while
+                // still returning the authoritative request cost. Preserve that
+                // cost rather than letting the TUI estimate it with generic
+                // pricing, which can be orders of magnitude too high for large
+                // cached contexts (for example GPT-5.6 Luna).
                 if input_tokens.is_some()
                     || output_tokens.is_some()
                     || cache_read_input_tokens.is_some()
+                    || cache_creation_input_tokens.is_some()
+                    || reported_cost_usd.is_some()
                 {
                     self.pending.push_back(StreamEvent::TokenUsage {
                         input_tokens,
@@ -480,6 +484,13 @@ impl OpenRouterStream {
 
         None
     }
+}
+
+fn parse_reported_cost(value: &Value) -> Option<f64> {
+    let cost = value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|raw| raw.trim().parse().ok()))?;
+    cost.is_finite().then_some(cost).filter(|cost| *cost >= 0.0)
 }
 
 impl Stream for OpenRouterStream {
@@ -751,6 +762,24 @@ mod tests {
                 reported_cost_usd: None,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn cost_is_preserved_when_proxy_omits_token_counters() {
+        let mut stream = test_stream();
+        stream.buffer = "data: {\"usage\":{\"cost\":0.00042}}\n\n".to_string();
+
+        let event = stream.parse_next_event().expect("usage event");
+        assert!(matches!(
+            event,
+            StreamEvent::TokenUsage {
+                input_tokens: None,
+                output_tokens: None,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+                reported_cost_usd: Some(cost),
+            } if (cost - 0.00042).abs() < f64::EPSILON
         ));
     }
 
