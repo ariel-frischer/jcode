@@ -692,9 +692,12 @@ jcode supports interactive TUI use, non-interactive runs, persistent server/clie
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
 The TUI `@` file picker is enabled by default and discovers suggestions in bounded
-background batches so typing remains responsive. Set `enabled = false` to keep ordinary
-`@` input without filesystem-backed suggestions. It skips common generated and dependency
-directories by default. Add custom gitignore-style patterns in `~/.jcode/config.toml`:
+background batches so typing remains responsive. Sending an existing `@path` includes the
+full UTF-8 file contents in the model-facing message while keeping the compact `@path` in
+the visible transcript. Missing, binary, or oversized paths remain literal so the agent can
+handle them normally. Set `enabled = false` to keep ordinary `@` input without filesystem-backed
+suggestions or submit-time expansion. It skips common generated and dependency directories by
+default. Add custom gitignore-style patterns in `~/.jcode/config.toml`:
 
 ```toml
 [file_mentions]

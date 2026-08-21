@@ -86,7 +86,7 @@ pub(in crate::tui::app) fn history_matches_pending_startup_prompt(app: &App) -> 
 pub(in crate::tui::app) async fn submit_prepared_remote_input(
     app: &mut App,
     remote: &mut RemoteConnection,
-    prepared: input::PreparedInput,
+    mut prepared: input::PreparedInput,
 ) -> Result<()> {
     if app.remote_model_switch_in_flight || app.auth_catalog_refresh_pending {
         app.pending_prompt_after_model_switch = Some(prepared);
@@ -118,6 +118,12 @@ pub(in crate::tui::app) async fn submit_prepared_remote_input(
         submit_remote_input_shell(app, remote, prepared.raw_input, command.to_string()).await?;
         return Ok(());
     }
+
+    prepared.expanded = input::expand_file_mentions(
+        &prepared.expanded,
+        app.session.working_dir.as_deref(),
+        crate::config::config().file_mentions.enabled,
+    );
 
     app.commit_pending_streaming_assistant_message();
     // A manually submitted prompt supersedes any armed post-error fallback
@@ -231,9 +237,14 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
 pub(in crate::tui::app) async fn route_prepared_input_to_new_remote_session(
     app: &mut App,
     remote: &mut RemoteConnection,
-    prepared: input::PreparedInput,
+    mut prepared: input::PreparedInput,
 ) -> Result<()> {
     app.route_next_prompt_to_new_session = false;
+    prepared.expanded = input::expand_file_mentions(
+        &prepared.expanded,
+        app.session.working_dir.as_deref(),
+        crate::config::config().file_mentions.enabled,
+    );
     app.pending_split_startup_message = None;
     app.pending_split_prompt = Some(PendingSplitPrompt {
         content: prepared.expanded,

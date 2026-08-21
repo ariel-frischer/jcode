@@ -62,6 +62,40 @@ fn file_mentions_default_enabled_and_can_be_disabled_without_scanning() {
 }
 
 #[test]
+fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("docs")).expect("docs directory");
+        std::fs::write(temp.path().join("docs/context.md"), "full context\n")
+            .expect("context file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "Explain @docs/context.md".to_owned();
+        app.cursor_pos = app.input.len();
+
+        app.submit_input();
+
+        let displayed = app
+            .display_messages()
+            .iter()
+            .rev()
+            .find(|message| message.role == "user")
+            .expect("displayed user message");
+        assert_eq!(displayed.content, "Explain @docs/context.md");
+        let submitted = app.session.messages.last().expect("submitted message");
+        assert!(matches!(
+            submitted.content.as_slice(),
+            [ContentBlock::Text { text, .. }]
+                if text == "Explain <file path=\"docs/context.md\">\nfull context\n\n</file>"
+        ));
+    });
+}
+
+#[test]
 fn stale_file_mention_generations_are_discarded() {
     let _env_lock = crate::storage::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
