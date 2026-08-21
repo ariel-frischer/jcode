@@ -1196,53 +1196,11 @@ impl App {
                 );
                 return;
             }
-            // Names-only remote catalog: synthesize properly classified
-            // provider routes (Comtegra/Copilot/Bedrock/Gemini/OpenRouter/…)
-            // rather than a generic "remote-catalog" placeholder. The full
-            // fallback reads per-model disk caches and auth state, which can
-            // take seconds on a large catalog, so for big catalogs open
-            // instantly with lightweight names-only routes and upgrade in the
-            // background. Small catalogs stay synchronous so the first paint
-            // already has effort-expanded, provider-classified rows.
-            const SYNC_REMOTE_FALLBACK_MAX_MODELS: usize = 64;
-            if self.remote_available_entries.len() <= SYNC_REMOTE_FALLBACK_MAX_MODELS {
-                self.build_remote_model_routes_fallback()
-            } else {
-                let routes = self.build_remote_model_routes_lightweight_fallback(&current_model);
-                let routes_ms = routes_started.elapsed().as_millis();
-                self.open_model_picker_with_routes(
-                    cache_signature.clone(),
-                    picker_started,
-                    routes,
-                    routes_ms,
-                    preserve_input,
-                    false,
-                );
-                if self.inline_interactive_state.is_some() {
-                    self.set_status_notice("Updating model routes…");
-                } else {
-                    self.open_loading_model_picker(&current_model);
-                }
-                let remote_provider_name = self.remote_provider_name.clone();
-                let remote_available_entries = self.remote_available_entries.clone();
-                self.start_model_picker_route_load_with(
-                    cache_signature,
-                    picker_started,
-                    move || {
-                        let mut routes = crate::provider::remote_model_routes_fallback(
-                            remote_provider_name.as_deref(),
-                            &remote_available_entries,
-                        );
-                        Self::extend_remote_routes_for_uncovered_models_static(
-                            remote_provider_name.as_deref(),
-                            &remote_available_entries,
-                            &mut routes,
-                        );
-                        routes
-                    },
-                );
-                return;
-            }
+            // Names-only remote catalogs must be fully classified before the
+            // picker becomes interactive. A lightweight first paint lets the
+            // user type against incomplete rows, then replaces their filtered
+            // list after favorites and effort variants arrive.
+            self.build_remote_model_routes_fallback()
         } else {
             self.simplified_model_routes_for_picker(&current_model)
         };
@@ -1295,38 +1253,6 @@ impl App {
             preview: false,
         });
         self.set_status_notice("Updating model list…");
-    }
-
-    /// Run an arbitrary route builder off the UI thread and deliver the result
-    /// through the pending-load channel polled by `poll_model_picker_load`.
-    fn start_model_picker_route_load_with(
-        &mut self,
-        signature: ModelPickerCacheSignature,
-        picker_started: std::time::Instant,
-        build_routes: impl FnOnce() -> Vec<crate::provider::ModelRoute> + Send + 'static,
-    ) {
-        self.model_picker_load_request_id = self.model_picker_load_request_id.wrapping_add(1);
-        let request_id = self.model_picker_load_request_id;
-        let (tx, rx) = std::sync::mpsc::channel();
-        let build = move || {
-            let routes_started = std::time::Instant::now();
-            let routes = build_routes();
-            let routes_ms = routes_started.elapsed().as_millis();
-            let _ = tx.send(Ok(ModelPickerRoutesResult { routes, routes_ms }));
-        };
-
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn_blocking(build);
-        } else {
-            std::thread::spawn(build);
-        }
-
-        self.pending_model_picker_load = Some(PendingModelPickerLoad {
-            request_id,
-            signature,
-            picker_started,
-            receiver: rx,
-        });
     }
 
     pub(super) fn poll_model_picker_load(&mut self) -> bool {
