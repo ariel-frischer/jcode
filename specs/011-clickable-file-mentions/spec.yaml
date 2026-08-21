@@ -30,12 +30,12 @@ user_stories:
     why_this_priority: "Path resolution crosses a filesystem trust boundary, so missing, unreadable, and unsafe targets require explicit safe behavior."
     independent_test: "Click missing, unreadable, directory, malformed, and disallowed-path mention fixtures and verify the viewer does not open an unintended target while the session remains usable."
     acceptance_scenarios:
-      - given: "An @filepath mention does not resolve to a readable regular file from the session working directory"
+      - given: "An @filepath mention does not resolve to a readable regular file under the existing inline viewer rules"
         when: "The user clicks it"
         then: "Jcode leaves the current view intact or shows actionable failure feedback and does not launch it through URL handling."
-      - given: "A mention attempts path traversal or otherwise falls outside the permitted session path boundary"
+      - given: "A mention uses an absolute path or parent-directory component"
         when: "The user clicks it"
-        then: "Jcode refuses the file open safely and does not expose or externally open the disallowed path."
+        then: "Jcode applies the existing inline viewer path policy without inventing a stricter or broader filesystem boundary."
 
   - id: "US-003"
     title: "Read clicked files clearly"
@@ -99,9 +99,9 @@ requirements:
       testable: true
       acceptance_criteria: "A multi-session fixture gives sessions different working directories and verifies that each click opens the file relative to the originating session CWD."
     - id: "FR-003"
-      description: "MUST reject missing, unreadable, non-regular, malformed, and disallowed @filepath targets safely, without routing them to generic URL opening or opening an unintended path."
+      description: "MUST reject missing, unreadable, non-regular, and malformed @filepath targets safely, without routing them to generic URL opening or opening an unintended path; absolute and parent-relative paths MUST retain the existing inline viewer policy."
       testable: true
-      acceptance_criteria: "Negative path fixtures verify no inline viewer is opened for invalid targets, no external-link success is reported, and the session remains interactive with actionable feedback where applicable."
+      acceptance_criteria: "Negative path fixtures verify no inline viewer is opened for invalid targets, no external-link success is reported, and existing valid absolute/parent-relative behavior is unchanged."
     - id: "FR-004"
       description: "MUST preserve genuine URL click handling, including messages containing both URLs and @filepath mentions."
       testable: true
@@ -111,9 +111,9 @@ requirements:
       testable: true
       acceptance_criteria: "Interaction tests cover pointer and keyboard selection, scroll movement, inline-preview activation, and metadata fixtures and show no changed behavior outside valid file-mention hits."
     - id: "FR-006"
-      description: "MUST render clicked file contents using existing syntax highlighting when that capability is already available for the file, without adding packages or a new highlighting dependency."
+      description: "MUST NOT add a package or new syntax-highlighting path; existing markdown highlighting may remain unchanged, while ordinary clicked source and text file bodies use the viewer's clear normal foreground."
       testable: true
-      acceptance_criteria: "Supported-language fixtures show the existing highlighting output and dependency inspection shows no package additions."
+      acceptance_criteria: "Dependency inspection shows no package additions, markdown rendering remains unchanged, and ordinary source/text preview fixtures use the normal foreground."
     - id: "FR-007"
       description: "MUST render clicked file contents with the active theme's normal high-contrast foreground when syntax highlighting is unavailable, instead of dim grey or background-like text."
       testable: true
@@ -130,8 +130,8 @@ requirements:
   non_functional:
     - id: "NFR-001"
       category: "security"
-      description: "File mention activation MUST remain bounded by the existing safe session path and filesystem permission rules."
-      measurable_target: "100% of traversal, outside-CWD, missing, unreadable, directory, and malformed fixtures are refused without unintended open or external navigation."
+      description: "File mention activation MUST reuse the existing inline viewer path and filesystem permission rules without silently broadening or narrowing them."
+      measurable_target: "100% of missing, unreadable, directory, malformed, absolute-path, and parent-relative fixtures preserve existing viewer behavior without unintended external navigation."
     - id: "NFR-002"
       category: "usability"
       description: "Clicked file content MUST remain legible in the active light or dark theme and MUST NOT use a low-contrast default style when no highlighting is available."
@@ -156,9 +156,9 @@ success_criteria:
       metric: "Cross-session CWD resolution scenarios"
       target: "100% of multi-session CWD fixtures resolve to the expected file"
     - id: "SC-003"
-      description: "Invalid file-looking mentions never cause unintended external navigation or unsafe file access."
-      metric: "Negative path activation scenarios"
-      target: "100% of missing, unreadable, non-regular, malformed, traversal, and disallowed fixtures are safely rejected"
+      description: "Invalid file-looking mentions never cause unintended external navigation, while valid absolute and parent-relative paths retain existing inline viewer behavior."
+      metric: "Negative and compatibility path activation scenarios"
+      target: "100% of missing, unreadable, non-regular, and malformed fixtures are safely rejected, with valid existing path-policy fixtures unchanged"
     - id: "SC-004"
       description: "Users can read opened files clearly regardless of whether highlighting is available or which supported theme is active."
       metric: "Readability and theme scenarios"
@@ -207,8 +207,8 @@ edge_cases:
     expected_behavior: "The click uses the originating session context and opens the expected file regardless of message kind."
   - scenario: "A file mention is adjacent to punctuation, inline markup, a URL, or another clickable span."
     expected_behavior: "Hit testing selects only the intended target, preserves URL behavior, and does not expand the file target into surrounding punctuation or text."
-  - scenario: "A mention points to a missing file, directory, unreadable file, malformed path, traversal path, or path outside the allowed boundary."
-    expected_behavior: "The click is safely rejected with no unintended viewer or URL open, and the TUI remains usable."
+  - scenario: "A mention points to a missing file, directory, unreadable file, malformed path, absolute path, or parent-relative path."
+    expected_behavior: "Invalid targets are rejected with no unintended viewer or URL open; valid absolute and parent-relative targets retain the existing inline viewer policy, and the TUI remains usable."
   - scenario: "The same message is viewed while text selection or scrolling is active."
     expected_behavior: "Selection and scrolling retain their existing behavior, and a click only opens a file when it is an unambiguous file-target activation."
   - scenario: "A message contains metadata or an inline preview that visually resembles ordinary content."
@@ -229,7 +229,7 @@ assumptions:
 constraints:
   - "The implementation must preserve genuine URL clicks, selection, scrolling, inline previews, metadata distinction, and light/dark behavior."
   - "The implementation must not add packages or dependencies and must prefer existing syntax highlighting when already available."
-  - "The implementation must use session-CWD path resolution and existing safe filesystem boundaries."
+  - "The implementation must use session-CWD resolution for relative mentions and preserve the existing inline viewer policy for absolute and parent-relative paths."
   - "Validation must include focused automated tests and built-binary TUI evidence without requiring live network or production infrastructure."
   - "The change must remain limited to the coordinated file-mention activation and file-content readability capability plus its tests and validation."
 

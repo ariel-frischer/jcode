@@ -1,0 +1,208 @@
+tasks:
+  branch: "agent/jcode-910-9xb"
+  created: "2026-08-21"
+  spec_path: "specs/011-clickable-file-mentions/spec.yaml"
+  plan_path: "specs/011-clickable-file-mentions/plan.yaml"
+
+summary:
+  total_tasks: 9
+  total_phases: 5
+  parallel_opportunities: 0
+  estimated_complexity: "medium"
+
+phases:
+  - number: 1
+    title: "Specification Recovery and Characterization"
+    purpose: "Lock the clarified no-dependency and existing-path-policy contracts before source edits."
+    tasks:
+      - id: "T001"
+        title: "Validate repaired spec and plan artifacts"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/011-clickable-file-mentions/"
+        dependencies: []
+        acceptance_criteria:
+          - "spec.yaml and plan.yaml pass the current autospec artifact validator"
+          - "The artifacts do not invent a session-CWD sandbox or a new syntax-highlighting path"
+
+  - number: 2
+    title: "User Story 1 and 2 - Click and Safe Invalid Handling"
+    purpose: "Make @filepath mentions open through the existing viewer while invalid mentions stay local."
+    story_reference: "US-001, US-002"
+    independent_test: "Parser and rendered-click fixtures cover valid nested, absolute, parent-relative, missing, directory, malformed, email, punctuation, and Unicode-prefix cases."
+    tasks:
+      - id: "T002"
+        title: "Add @filepath token boundary unit tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Clicking any display column inside @docs/guide.md returns docs/guide.md"
+          - "The @ prefix is part of the hit region but is removed from the target"
+          - "Emails and embedded identifier @ characters are not mentions"
+          - "Unicode prefixes and trailing punctuation retain exact hit boundaries"
+      - id: "T003"
+        title: "Implement @filepath target extraction"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Recognition precedes generic plain-path matching and preserves URL and Markdown-link behavior"
+          - "Nested, bare, absolute, and parent-relative picker-compatible tokens are returned with their syntactic @ marker for navigation to strip before viewer resolution"
+      - id: "T004"
+        title: "Add rendered session-CWD and invalid mention click tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Current and prior user/assistant messages open the file relative to session working_dir"
+          - "Missing, directory, and malformed mentions do not create a preview or external-open success"
+          - "Valid absolute and parent-relative paths retain existing viewer behavior"
+      - id: "T005"
+        title: "Consume syntactic file mentions before generic external link opening"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/navigation.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Valid mentions toggle the existing inline preview"
+          - "Invalid syntactic mentions are handled without reaching open_path_or_url_detached"
+          - "Genuine URLs still use the existing URL opener"
+
+  - number: 3
+    title: "User Story 3 - Clear Inline File Contents"
+    purpose: "Replace dim file body text with the normal active-theme foreground without adding syntax work."
+    story_reference: "US-003"
+    independent_test: "Render an ordinary text/source preview and assert its content span uses the normal foreground semantic rather than dim_color."
+    tasks:
+      - id: "T006"
+        title: "Add semantic foreground tests for ordinary inline file bodies"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/ui_inline_file_preview.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Ordinary file content is not styled with dim_color"
+          - "Markdown preview rendering remains delegated unchanged"
+          - "Empty, Unicode, tabbed, and long lines render without panic"
+      - id: "T007"
+        title: "Use the normal theme foreground for ordinary file content"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/ui_inline_file_preview.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "No fixed white RGB is introduced"
+          - "No Cargo dependency or new syntax-highlighting path is added"
+          - "Header, path metadata, and divider remain visually secondary"
+
+  - number: 4
+    title: "User Story 4 - Interaction Preservation"
+    purpose: "Prove existing transcript interaction contracts remain intact."
+    story_reference: "US-004"
+    independent_test: "Run focused URL, copy selection, scrolling, inline-preview collapse, and mixed URL/@path tests."
+    tasks:
+      - id: "T008"
+        title: "Run and extend focused interaction regression tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T005", "T007"]
+        acceptance_criteria:
+          - "Mixed URL and @path clicks dispatch to their original handlers"
+          - "Drag selection over preview content does not collapse it"
+          - "Scrolling and click-to-collapse behavior remain unchanged"
+
+  - number: 5
+    title: "User Story 5 - Built-Binary Validation and Delivery"
+    purpose: "Validate the new behavior through the executing binary and repository gates."
+    story_reference: "US-005"
+    independent_test: "Build jcode-tui, run isolated built-binary TUI frames in light and dark themes, then run repository guardrails."
+    tasks:
+      - id: "T009"
+        title: "Validate, polish, commit, and prepare merge handoff"
+        status: "InProgress"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Focused exact-name tests pass"
+          - "The TUI target builds successfully"
+          - "Newly built binary frames confirm mention opening and readable ordinary file content in light and dark themes"
+          - "scripts/check_guardrails.sh passes or an unrelated baseline failure is isolated"
+          - "Only explicit owned files are staged and committed"
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-004", "US-005"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-004", "US-005"]
+    - story_id: "US-003"
+      depends_on: []
+      blocks: ["US-004", "US-005"]
+    - story_id: "US-004"
+      depends_on: ["US-001", "US-002", "US-003"]
+      blocks: ["US-005"]
+    - story_id: "US-005"
+      depends_on: ["US-004"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2, 3]
+    - phase: 2
+      blocks: [4]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: []
+
+parallel_execution: []
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Clickable @filepath mentions plus clear ordinary file contents through the existing viewer"
+    validation: "Parser, rendered-click, session-CWD, invalid-path, and semantic foreground tests"
+  incremental_delivery:
+    - milestone: "Click Contract Ready"
+      phases: [1, 2]
+      deliverable: "Valid mentions open and invalid mentions stay local"
+    - milestone: "Viewer Readability Ready"
+      phases: [3]
+      deliverable: "Ordinary clicked file bodies use the normal foreground"
+    - milestone: "Merge Candidate Ready"
+      phases: [4, 5]
+      deliverable: "Regression, built-binary, and guardrail evidence complete"
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-21"
+  artifact_type: "tasks"

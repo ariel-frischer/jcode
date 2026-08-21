@@ -131,6 +131,120 @@ fn test_click_on_relative_file_uses_process_working_directory_without_session_cw
 }
 
 #[test]
+fn test_clicking_file_mentions_in_user_and_prior_messages_uses_session_cwd() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    std::fs::write(repository.path().join("current.txt"), "current mention content")
+        .expect("write current file");
+    std::fs::write(repository.path().join("prior.txt"), "prior mention content")
+        .expect("write prior file");
+    std::fs::write(repository.path().join("system.txt"), "system mention content")
+        .expect("write system file");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![
+        DisplayMessage::user("open @current.txt"),
+        DisplayMessage::assistant("Earlier reference: @prior.txt"),
+        DisplayMessage::system("System reference: @system.txt"),
+    ];
+    app.bump_display_messages_version();
+    app.scroll_offset = 0;
+    app.auto_scroll_paused = false;
+    app.is_processing = false;
+    app.status = ProcessingStatus::Idle;
+
+    let backend = ratatui::backend::TestBackend::new(100, 36);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+
+    let locate = |terminal: &ratatui::Terminal<ratatui::backend::TestBackend>, needle: &str| {
+        let buf = terminal.backend().buffer();
+        let area = *buf.area();
+        for row in 0..area.height {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            if let Some(byte) = line.find(needle) {
+                return Some((line[..byte].chars().count() as u16 + 1, row));
+            }
+        }
+        None
+    };
+    let click = |app: &mut App, column: u16, row: u16| {
+        for kind in [
+            MouseEventKind::Down(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+        ] {
+            app.handle_mouse_event(MouseEvent {
+                kind,
+                column,
+                row,
+                modifiers: KeyModifiers::empty(),
+            });
+        }
+    };
+
+    let (column, row) = locate(&terminal, "@current.txt").expect("current mention visible");
+    click(&mut app, column, row);
+    let current = render_and_snap(&app, &mut terminal);
+    assert!(current.contains("Inline file · current.txt"));
+    assert!(current.contains("current mention content"));
+
+    let (column, row) = locate(&terminal, "@prior.txt").expect("prior mention visible");
+    click(&mut app, column, row);
+    let prior = render_and_snap(&app, &mut terminal);
+    assert!(prior.contains("Inline file · prior.txt"));
+    assert!(prior.contains("prior mention content"));
+
+    let (column, row) = locate(&terminal, "@system.txt").expect("system mention visible");
+    click(&mut app, column, row);
+    let system = render_and_snap(&app, &mut terminal);
+    assert!(system.contains("Inline file · system.txt"));
+    assert!(system.contains("system mention content"));
+    assert_eq!(app.inline_file_previews.len(), 3);
+}
+
+#[test]
+fn test_clicking_invalid_file_mention_is_consumed_locally() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("Missing: @not-here.txt")];
+    app.bump_display_messages_version();
+    app.scroll_offset = 0;
+    app.auto_scroll_paused = false;
+    app.is_processing = false;
+    app.status = ProcessingStatus::Idle;
+
+    let backend = ratatui::backend::TestBackend::new(90, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find("@not-here.txt")?;
+            Some((line[..byte].chars().count() as u16 + 1, row))
+        })
+        .expect("invalid mention visible");
+
+    assert!(app.try_open_link_at(column, row));
+    assert!(app.inline_file_previews.is_empty());
+    assert!(
+        app.status_notice
+            .as_ref()
+            .is_some_and(|(notice, _)| notice == "File is not available: not-here.txt")
+    );
+}
+
+#[test]
 fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
