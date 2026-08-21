@@ -73,26 +73,26 @@ fn default_resolved_hotkeys_match_legacy_three() {
 }
 
 #[test]
-fn linux_hotkeys_install_automatically_and_respect_opt_out() {
+fn linux_hotkeys_are_manual_opt_in_and_automatic_paths_never_install() {
     assert_eq!(
         linux_hotkey_setup_action(None, false, 0),
-        LinuxHotkeySetupAction::Install,
-        "a fresh install should configure compositor hotkeys automatically"
+        LinuxHotkeySetupAction::None,
+        "a fresh install must not configure compositor hotkeys automatically"
     );
     assert_eq!(
         linux_hotkey_setup_action(Some(true), true, 0),
-        LinuxHotkeySetupAction::Refresh,
-        "an older managed block should refresh automatically"
+        LinuxHotkeySetupAction::None,
+        "legacy enabled state must not refresh compositor hotkeys automatically"
     );
     assert_eq!(
         linux_hotkey_setup_action(Some(true), true, LAUNCH_HOTKEY_TRACKING_VERSION),
         LinuxHotkeySetupAction::None,
-        "an up-to-date install should remain idempotent"
+        "an up-to-date legacy install must remain untouched"
     );
     assert_eq!(
         linux_hotkey_setup_action(Some(false), false, 0),
         LinuxHotkeySetupAction::None,
-        "an explicit launch-hotkey opt-out must be honored"
+        "an explicit launch-hotkey opt-out must remain a no-op"
     );
 }
 

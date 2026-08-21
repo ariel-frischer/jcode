@@ -722,6 +722,8 @@ pub fn run_setup_hotkey(
         let mut state = SetupHintsState::load();
         eprintln!("\x1b[1mjcode setup-hotkey\x1b[0m");
         eprintln!();
+        eprintln!("  Linux compositor launch hotkeys are manual opt-in.");
+        eprintln!("  This command is the only path that installs or refreshes them.");
         if let Some(comp) = detect_linux_compositor() {
             let hotkeys = resolve_linux_hotkeys();
             match install_linux_launch_hotkeys(comp) {
@@ -766,7 +768,7 @@ pub fn run_setup_hotkey(
         }
 
         eprintln!(
-            "Automatic global hotkey setup on Linux supports niri, Hyprland (omarchy), sway, i3, bspwm, GNOME, KDE Plasma, Cinnamon, MATE, and XFCE."
+            "Manual global hotkey setup on Linux supports niri, Hyprland (omarchy), sway, i3, bspwm, GNOME, KDE Plasma, Cinnamon, MATE, and XFCE."
         );
         eprintln!("Your session does not appear to be one of these.");
         eprintln!();
@@ -1257,44 +1259,6 @@ pub fn maybe_show_setup_hints() -> Option<StartupHints> {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(comp) = detect_linux_compositor() {
-            let action = linux_hotkey_setup_action(
-                load_launch_hotkeys_config().enabled,
-                linux_hotkeys_installed(comp),
-                state.launch_hotkey_tracking_version,
-            );
-
-            if action != LinuxHotkeySetupAction::None {
-                match install_linux_launch_hotkeys(comp) {
-                    Ok(_) => {
-                        state.hotkey_configured = true;
-                        state.hotkey_dismissed = true;
-                        state.launch_hotkey_tracking_version = LAUNCH_HOTKEY_TRACKING_VERSION;
-                        let _ = state.save();
-                        if action == LinuxHotkeySetupAction::Install {
-                            jcode_logging::info(&format!(
-                                "Automatically installed {} launch hotkeys on first launch",
-                                comp.name()
-                            ));
-                        } else {
-                            jcode_logging::info(&format!(
-                                "Migrated {} launch hotkeys to usage tracking v{}",
-                                comp.name(),
-                                LAUNCH_HOTKEY_TRACKING_VERSION
-                            ));
-                        }
-                    }
-                    Err(err) => jcode_logging::warn(&format!(
-                        "failed to automatically configure {} launch hotkeys: {err}",
-                        comp.name()
-                    )),
-                }
-            }
-        }
-    }
-
     #[cfg(windows)]
     {
         if state.hotkey_configured
@@ -1559,29 +1523,22 @@ fn linux_hotkeys_installed(comp: linux_env::LinuxCompositor) -> bool {
     }
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LinuxHotkeySetupAction {
     None,
-    Install,
-    Refresh,
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(test)]
 fn linux_hotkey_setup_action(
-    enabled: Option<bool>,
-    installed: bool,
-    tracking_version: u32,
+    _enabled: Option<bool>,
+    _installed: bool,
+    _tracking_version: u32,
 ) -> LinuxHotkeySetupAction {
-    if enabled == Some(false) {
-        LinuxHotkeySetupAction::None
-    } else if !installed {
-        LinuxHotkeySetupAction::Install
-    } else if tracking_version < LAUNCH_HOTKEY_TRACKING_VERSION {
-        LinuxHotkeySetupAction::Refresh
-    } else {
-        LinuxHotkeySetupAction::None
-    }
+    // Linux compositor configuration is intentionally manual-only. Keep this
+    // policy gate as a pure function so legacy state cannot re-enable startup
+    // installation or migration by accident.
+    LinuxHotkeySetupAction::None
 }
 
 /// Pick a terminal emulator to launch jcode in on Linux. Honors `$TERMINAL`,
@@ -2219,9 +2176,8 @@ fn linux_launch_hotkeys_notice(state: &SetupHintsState) -> Option<StartupHints> 
 
     let lines = launch_hotkey_notice_lines(&rows, &state.launch_hotkey_usage, state.launch_count)?;
 
-    // Installation and first launch both configure Linux bindings
-    // automatically. If that best-effort setup failed, avoid showing a stale
-    // instruction that asks the user to repeat setup manually.
+    // Only the explicit `jcode setup-hotkey` command configures Linux bindings.
+    // If the user has not opted in, avoid showing a stale "available" notice.
     if !linux_hotkeys_installed(comp) {
         return None;
     }
@@ -2587,12 +2543,14 @@ fn migrate_macos_hotkey_listener(state: &mut SetupHintsState) -> Result<()> {
     Ok(())
 }
 
-/// Reinstall the launch hotkeys after the `[launch_hotkeys]` config changed
+/// Reinstall platform launch hotkeys after the `[launch_hotkeys]` config changed
 /// (e.g. auto-import baked a per-repo mapping).
 ///
 /// Re-resolves config into platform launch bindings so new chords take effect
-/// immediately. An explicit `enabled = false` remains an opt-out. Best-effort:
-/// errors are logged, never propagated, so this is safe on the startup path.
+/// immediately where the platform integration supports a safe automatic refresh.
+/// Linux compositor bindings are manual-only and are intentionally not touched
+/// here. Best-effort: errors are logged, never propagated, so this is safe on
+/// the startup path.
 pub fn reinstall_launch_hotkeys_after_config_change() {
     #[cfg(target_os = "macos")]
     {
@@ -2623,27 +2581,6 @@ pub fn reinstall_launch_hotkeys_after_config_change() {
     #[cfg(windows)]
     {
         windows_setup::reinstall_windows_launch_hotkeys();
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let Some(comp) = detect_linux_compositor() else {
-            return;
-        };
-        if load_launch_hotkeys_config().enabled == Some(false) {
-            return;
-        }
-        match install_linux_launch_hotkeys(comp) {
-            Ok(true) => jcode_logging::info(&format!(
-                "Refreshed {} launch hotkeys after config change",
-                comp.name()
-            )),
-            Ok(false) => {}
-            Err(err) => jcode_logging::warn(&format!(
-                "failed to refresh {} launch hotkeys: {err}",
-                comp.name()
-            )),
-        }
     }
 }
 

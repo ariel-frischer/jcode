@@ -1,0 +1,115 @@
+feature:
+  branch: "012-opt-in-launch-hotkeys"
+  created: "2026-08-21"
+  status: "Approved"
+  input: >-
+    Make Linux compositor launch hotkeys opt-in and disabled by default. Ensure
+    fresh and legacy Jcode startup, onboarding, auto-import/config-bake,
+    config-change, and version-migration paths never mutate Linux compositor
+    configuration or reload a compositor. Preserve existing bindings byte-for-byte.
+    Keep [launch_hotkeys] enabled=false a no-op. Only an explicit manual
+    jcode setup-hotkey command may install or refresh launch hotkeys, retaining
+    backup-before-write and idempotence. Add focused tests for default, legacy
+    enabled, disabled, manual setup, no-op backup behavior, startup/config-change
+    call sites, and user-facing manual opt-in help.
+user_stories:
+  - id: "US-001"
+    title: "Keep unattended Linux launches read-only"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "startup, onboarding, imports, config changes, and upgrades to avoid editing compositor configuration"
+    so_that: "my existing Hyprland or other Linux desktop bindings are never changed without a contemporaneous command"
+    acceptance_scenarios:
+      - given: "A fresh install with no launch_hotkeys setting"
+        when: "Jcode starts or performs its normal config/import work"
+        then: "No Linux compositor config, backup file, compositor reload, or managed hotkey block is written"
+      - given: "An existing config with launch_hotkeys.enabled=true"
+        when: "Jcode starts, changes config, imports sessions, or migrates versions"
+        then: "The compositor remains untouched"
+      - given: "A config with launch_hotkeys.enabled=false"
+        when: "Any unattended path runs"
+        then: "The path remains a no-op"
+  - id: "US-002"
+    title: "Retain explicit manual setup"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "jcode setup-hotkey to be the only Linux compositor mutation path"
+    so_that: "I can deliberately install or refresh launch hotkeys and understand the side effect"
+    acceptance_scenarios:
+      - given: "A supported Linux compositor config containing user bindings"
+        when: "I explicitly run jcode setup-hotkey"
+        then: "Jcode preserves unrelated bindings, writes the managed block with its existing backup-before-write behavior, and reports the manual action"
+      - given: "The managed block already matches"
+        when: "I explicitly run jcode setup-hotkey again"
+        then: "The operation is idempotent and creates no unnecessary backup"
+  - id: "US-003"
+    title: "Understand the opt-in safety boundary"
+    priority: "P1"
+    as_a: "Jcode user"
+    i_want: "setup output and help to say that Linux compositor hotkeys are manual opt-in"
+    so_that: "I know why startup does not install them and how to enable them"
+    acceptance_scenarios:
+      - given: "A Linux session without manually configured hotkeys"
+        when: "Jcode presents setup guidance"
+        then: "The guidance says compositor hotkeys require explicit manual setup"
+requirements:
+  functional:
+    - id: "FR-001"
+      statement: "The default and all unattended startup, onboarding, auto-import/config-bake, config-change, and version-migration paths MUST NOT call a Linux compositor hotkey installer or reload a compositor."
+    - id: "FR-002"
+      statement: "Legacy launch_hotkeys.enabled=true MUST NOT re-enable unattended Linux compositor mutation; enabled=false MUST remain a no-op."
+    - id: "FR-003"
+      statement: "Only an explicit manual jcode setup-hotkey invocation MAY install or refresh Linux compositor launch hotkeys."
+    - id: "FR-004"
+      statement: "Manual setup MUST retain existing managed-block rendering, backup-before-write behavior when content changes, preservation of unrelated bindings, and idempotence."
+    - id: "FR-005"
+      statement: "Focused tests MUST cover default, legacy enabled, disabled, explicit setup, no-op backup behavior, startup/config-change call sites, and manual opt-in messaging."
+  non_functional:
+    - id: "NFR-001"
+      statement: "The change MUST remain within jcode-setup-hints and the existing startup/config-bake call sites without adding dependencies or changing compositor-specific rendering contracts."
+    - id: "NFR-002"
+      statement: "The safety boundary MUST fail closed: an absent or legacy setting cannot silently authorize background compositor writes."
+    - id: "NFR-003"
+      statement: "Validation MUST include focused tests, formatting, relevant guardrails, and a newly built isolated-runtime check where applicable."
+success_criteria:
+  - id: "SC-001"
+    description: "All supported unattended Linux launch paths leave compositor configuration bytes and backup-file counts unchanged."
+    metric: "Focused filesystem and call-site regression tests"
+    target: "100% of default, legacy-enabled, and disabled cases produce zero compositor writes"
+  - id: "SC-002"
+    description: "Explicit manual setup remains usable and safe for supported Linux compositors."
+    metric: "Installer tests and idempotence assertions"
+    target: "Unrelated bindings remain byte-for-byte unchanged and a matching second setup produces no content change or backup"
+  - id: "SC-003"
+    description: "Users can distinguish automatic startup from manual hotkey setup."
+    metric: "User-facing output assertions"
+    target: "Linux guidance explicitly describes compositor hotkeys as manual opt-in"
+edge_cases:
+  - scenario: "The setting is absent on a fresh install"
+    expected_behavior: "Treat it conservatively as disabled for unattended Linux mutation"
+  - scenario: "Legacy enabled=true is persisted"
+    expected_behavior: "Do not migrate it into an automatic compositor write; preserve the user's setting and require the manual command"
+  - scenario: "The managed block already matches"
+    expected_behavior: "Manual setup remains idempotent and creates no backup for a no-op"
+  - scenario: "The compositor config is missing or malformed"
+    expected_behavior: "Manual setup reports an actionable error without modifying unrelated files"
+assumptions:
+  - "The existing explicit jcode setup-hotkey command is the canonical manual owner and remains the only permitted Linux compositor mutation entry point."
+  - "The launch_hotkeys.enabled field remains serialized for compatibility; its legacy true value no longer authorizes unattended Linux writes."
+  - "Config bake may continue to persist Jcode's own launch-hotkey mapping, but it must not trigger a Linux compositor write."
+constraints:
+  - "Do not delete or rewrite user-authored compositor bindings during migration."
+  - "Do not touch the dotfiles repository or unrelated compositor settings."
+  - "Preserve existing backup and managed-block behavior for explicit setup."
+  - "Respect the repository constitution and worktree-first delivery workflow."
+out_of_scope:
+  - "Changing macOS LaunchAgent or Windows listener behavior unless a shared helper change is strictly required and compatibility is proven."
+  - "Removing existing managed Linux bindings automatically."
+  - "Redesigning compositor-specific renderers, backup retention, or launch-hotkey layout."
+  - "Adding a new configuration system or a second manual setup command."
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "local-recovery-after-codex-context7-stall"
+  created: "2026-08-21T08:57:30Z"
+  artifact_type: "spec"
