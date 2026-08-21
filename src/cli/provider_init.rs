@@ -1488,6 +1488,12 @@ async fn init_provider_with_options(
         }
     };
 
+    if show_init_messages && openai_fast_mode_configured() {
+        init_notice(
+            "⚠ OpenAI Fast/Priority mode is ON and uses more credits. Set [provider] openai_service_tier = \"off\" (or run /fast default off) to disable.",
+        );
+    }
+
     let provider: Arc<dyn provider::Provider> = match choice {
         ProviderChoice::Jcode => {
             init_notice("Using Jcode subscription provider");
@@ -1907,6 +1913,34 @@ async fn init_provider_with_options(
     apply_reasoning_effort(provider.as_ref(), reasoning_effort)?;
 
     Ok(provider)
+}
+
+fn openai_fast_mode_configured() -> bool {
+    crate::config::config()
+        .provider
+        .openai_service_tier
+        .as_deref()
+        .is_some_and(service_tier_is_fast)
+}
+
+fn service_tier_is_fast(tier: &str) -> bool {
+    matches!(
+        tier.trim().to_ascii_lowercase().as_str(),
+        "fast" | "priority"
+    )
+}
+
+#[cfg(test)]
+mod openai_fast_mode_tests {
+    #[test]
+    fn only_fast_and_priority_values_enable_the_warning() {
+        for value in ["fast", "FAST", "priority", " Priority "] {
+            assert!(super::service_tier_is_fast(value));
+        }
+        for value in ["off", "standard", "flex", "", "default"] {
+            assert!(!super::service_tier_is_fast(value));
+        }
+    }
 }
 
 pub async fn init_provider_and_registry(
