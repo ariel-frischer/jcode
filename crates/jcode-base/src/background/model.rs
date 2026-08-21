@@ -3,6 +3,7 @@ use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -98,11 +99,31 @@ pub struct ManagedProcessIdentity {
     /// OS process-start token. Missing tokens are intentionally unsafe for persisted cleanup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_instance: Option<String>,
+    /// A verified process-group member retained so the group can still be
+    /// identified if its leader exits before reconciliation. The PID is never
+    /// sufficient without its matching start token and group membership.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_group_member: Option<ManagedProcessMemberIdentity>,
     /// Jcode server instance that created the task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner_instance: Option<String>,
     #[serde(default)]
     pub transfer_policy: ManagedProcessTransferPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ManagedProcessMemberIdentity {
+    pub pid: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_instance: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackgroundTaskCancellation {
+    FullyStopped,
+    AlreadyTerminal,
+    Refused(String),
+    Incomplete(String),
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -286,6 +307,7 @@ pub(super) struct RunningTask {
     pub(super) started_at_rfc3339: String,
     pub(super) delivery_flags: watch::Sender<(bool, bool)>,
     pub(super) underlying_abort: Option<tokio::task::AbortHandle>,
+    pub(super) underlying_finished: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub(super) managed_process: Option<ManagedProcessIdentity>,
     pub(super) handle: JoinHandle<Result<TaskResult>>,
 }

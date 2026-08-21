@@ -943,6 +943,13 @@ impl BashTool {
                 let managed_process = Some(crate::background::ManagedProcessIdentity {
                     pid: child_pid,
                     process_instance: crate::platform::process_start_token(child_pid),
+                    process_group_member: crate::platform::process_group_member_identity(child_pid)
+                        .map(
+                            |(pid, token)| crate::background::ManagedProcessMemberIdentity {
+                                pid,
+                                process_instance: Some(token),
+                            },
+                        ),
                     owner_instance: Some(crate::background::process_instance_token().to_string()),
                     transfer_policy: crate::background::ManagedProcessTransferPolicy::OwnerBound,
                 });
@@ -1068,6 +1075,15 @@ impl BashTool {
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
+                            process_group_member: crate::platform::process_group_member_identity(
+                                pid,
+                            )
+                            .map(|(member_pid, token)| {
+                                crate::background::ManagedProcessMemberIdentity {
+                                    pid: member_pid,
+                                    process_instance: Some(token),
+                                }
+                            }),
                             owner_instance: Some(
                                 crate::background::process_instance_token().to_string(),
                             ),
@@ -1135,6 +1151,15 @@ impl BashTool {
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
+                            process_group_member: crate::platform::process_group_member_identity(
+                                pid,
+                            )
+                            .map(|(member_pid, token)| {
+                                crate::background::ManagedProcessMemberIdentity {
+                                    pid: member_pid,
+                                    process_instance: Some(token),
+                                }
+                            }),
                             owner_instance: Some(
                                 crate::background::process_instance_token().to_string(),
                             ),

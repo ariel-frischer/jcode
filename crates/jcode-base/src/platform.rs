@@ -391,6 +391,86 @@ pub fn verify_process_start_token(pid: u32, expected: Option<&str>) -> ProcessId
     }
 }
 
+/// Return a live member of `pgid` other than the group leader, together with
+/// its process-start token. This is persisted as additive evidence so a group
+/// remains safely addressable when its leader exits first.
+pub fn process_group_member_identity(pgid: u32) -> Option<(u32, String)> {
+    #[cfg(target_os = "linux")]
+    {
+        let entries = std::fs::read_dir("/proc").ok()?;
+        for entry in entries.flatten() {
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            if pid == pgid {
+                continue;
+            }
+            let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+                continue;
+            };
+            let Some((_, fields)) = stat.rsplit_once(") ") else {
+                continue;
+            };
+            let fields = fields.split_whitespace().collect::<Vec<_>>();
+            if fields.get(2).and_then(|value| value.parse::<u32>().ok()) != Some(pgid) {
+                continue;
+            }
+            let Some(token) = process_start_token(pid) else {
+                continue;
+            };
+            if fields.first().is_some_and(|state| *state != "Z") {
+                return Some((pid, token));
+            }
+        }
+        None
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pgid;
+        None
+    }
+}
+
+/// Verify the persisted leader identity, or the additive member evidence when
+/// the leader has stopped. A matching member must still be in the original
+/// process group immediately before a signal is sent.
+pub fn verify_process_group_identity(
+    leader_pid: u32,
+    leader_token: Option<&str>,
+    member: Option<(u32, &str)>,
+) -> ProcessIdentityCheck {
+    match verify_process_start_token(leader_pid, leader_token) {
+        ProcessIdentityCheck::Matching => ProcessIdentityCheck::Matching,
+        ProcessIdentityCheck::Stopped => {
+            let Some((member_pid, member_token)) = member else {
+                return if is_process_group_live(leader_pid) {
+                    ProcessIdentityCheck::Mismatch
+                } else {
+                    ProcessIdentityCheck::Stopped
+                };
+            };
+            if verify_process_start_token(member_pid, Some(member_token))
+                != ProcessIdentityCheck::Matching
+            {
+                return ProcessIdentityCheck::Mismatch;
+            }
+            #[cfg(unix)]
+            {
+                let actual_group = unsafe { libc::getpgid(member_pid as libc::pid_t) };
+                if actual_group != leader_pid as libc::pid_t {
+                    return ProcessIdentityCheck::Mismatch;
+                }
+            }
+            ProcessIdentityCheck::Matching
+        }
+        other => other,
+    }
+}
+
 /// Verify process identity immediately before signaling its isolated process
 /// group. Missing and mismatched identity fail closed.
 pub fn signal_verified_process_group(
@@ -404,6 +484,25 @@ pub fn signal_verified_process_group(
         && signal_detached_process_group(pid, signal).is_err()
         && !matches!(signal, 0)
         && !is_process_running(pid)
+    {
+        return ProcessIdentityCheck::Stopped;
+    }
+    check
+}
+
+/// Identity-verified process-group signal with optional leader-independent
+/// member evidence.
+pub fn signal_verified_process_group_with_member(
+    pid: u32,
+    expected_start_token: Option<&str>,
+    member: Option<(u32, &str)>,
+    signal: i32,
+) -> ProcessIdentityCheck {
+    let check = verify_process_group_identity(pid, expected_start_token, member);
+    if check == ProcessIdentityCheck::Matching
+        && signal != 0
+        && signal_detached_process_group(pid, signal).is_err()
+        && !is_process_group_live(pid)
     {
         return ProcessIdentityCheck::Stopped;
     }

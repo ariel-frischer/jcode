@@ -145,6 +145,38 @@ fn resolve_action(params: &BgInput) -> Result<String> {
     ))
 }
 
+fn cancel_result_output(
+    task_id: &str,
+    grace: Duration,
+    cancellation: background::BackgroundTaskCancellation,
+) -> Result<ToolOutput> {
+    match cancellation {
+        background::BackgroundTaskCancellation::FullyStopped => {
+            Ok(ToolOutput::new(format!("Task {} cancelled.", task_id))
+                .with_title(format!("bg cancel {}", task_id))
+                .with_metadata(json!({
+                    "task_id": task_id,
+                    "cancelled": true,
+                    "graceful_timeout_ms": grace.as_millis(),
+                })))
+        }
+        background::BackgroundTaskCancellation::AlreadyTerminal => Err(anyhow::anyhow!(
+            "Task {} not found or already completed.",
+            task_id
+        )),
+        background::BackgroundTaskCancellation::Refused(detail) => Err(anyhow::anyhow!(
+            "Task {} cancellation refused: {}",
+            task_id,
+            detail
+        )),
+        background::BackgroundTaskCancellation::Incomplete(detail) => Err(anyhow::anyhow!(
+            "Task {} cancellation incomplete: {}",
+            task_id,
+            detail
+        )),
+    }
+}
+
 fn status_label(status: &BackgroundTaskStatus) -> &'static str {
     match status {
         BackgroundTaskStatus::Running => "running",
@@ -641,15 +673,11 @@ impl Tool for BgTool {
                     .await?
                     .remove(0);
                 let grace = Duration::from_millis(params.graceful_timeout_ms.unwrap_or(400));
-                match manager.cancel_with_grace(&task_id, grace).await? {
-                    true => Ok(ToolOutput::new(format!("Task {} cancelled.", task_id))
-                        .with_title(format!("bg cancel {}", task_id))
-                        .with_metadata(json!({"task_id": task_id, "cancelled": true, "graceful_timeout_ms": grace.as_millis()}))),
-                    false => Err(anyhow::anyhow!(
-                        "Task {} not found or already completed.",
-                        task_id
-                    )),
-                }
+                cancel_result_output(
+                    &task_id,
+                    grace,
+                    manager.cancel_with_grace(&task_id, grace).await?,
+                )
             }
 
             "cleanup" => {
@@ -988,5 +1016,29 @@ mod tests {
                 .is_some_and(|description| description.contains("Task ID"))
         );
         Ok(())
+    }
+
+    #[test]
+    fn cancel_output_never_claims_refused_or_incomplete_teardown_succeeded() {
+        let grace = Duration::from_millis(400);
+        let refused = cancel_result_output(
+            "task-refused",
+            grace,
+            background::BackgroundTaskCancellation::Refused("identity mismatch".to_string()),
+        )
+        .expect_err("refused teardown must be an error")
+        .to_string();
+        assert!(refused.contains("cancellation refused"));
+        assert!(!refused.contains("cancelled."));
+
+        let incomplete = cancel_result_output(
+            "task-incomplete",
+            grace,
+            background::BackgroundTaskCancellation::Incomplete("group still live".to_string()),
+        )
+        .expect_err("incomplete teardown must be an error")
+        .to_string();
+        assert!(incomplete.contains("cancellation incomplete"));
+        assert!(!incomplete.contains("cancelled."));
     }
 }

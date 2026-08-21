@@ -196,6 +196,7 @@ async fn shutdown_temporary_server(
     socket_path: &Path,
     debug_socket_path: &Path,
 ) -> ! {
+    crate::background::global().drain_for_shutdown().await;
     crate::tool::terminate_owned_foreground_process_groups();
     let _ = crate::registry::unregister_server(server_name).await;
     crate::transport::remove_socket(socket_path);

@@ -22,8 +22,9 @@ use tokio::time::{Duration, Instant as TokioInstant, MissedTickBehavior};
 mod model;
 
 pub use model::{
-    BackgroundCleanupResult, BackgroundTaskEventKind, BackgroundTaskEventRecord,
-    BackgroundTaskInfo, BackgroundTaskWaitReason, BackgroundTaskWaitResult, ManagedProcessIdentity,
+    BackgroundCleanupResult, BackgroundTaskCancellation, BackgroundTaskEventKind,
+    BackgroundTaskEventRecord, BackgroundTaskInfo, BackgroundTaskWaitReason,
+    BackgroundTaskWaitResult, ManagedProcessIdentity, ManagedProcessMemberIdentity,
     ManagedProcessTransferPolicy, RunningBackgroundProgress, StaleManagedTaskDecision,
     StaleManagedTaskEligibility, TaskResult, TaskStatusFile, format_progress_display,
     format_progress_summary, process_instance_token, render_progress_bar,
@@ -35,6 +36,12 @@ use model::{
 
 struct AbortOnDrop<T> {
     handle: Option<JoinHandle<T>>,
+}
+
+#[derive(Debug)]
+enum ManagedProcessTeardownError {
+    Refused(String),
+    Incomplete(String),
 }
 
 impl<T> AbortOnDrop<T> {
@@ -208,11 +215,21 @@ impl BackgroundTaskManager {
             self.write_status_file(status_path, &status).await;
             return status;
         }
-        match crate::platform::verify_process_start_token(
+        let member = identity
+            .process_group_member
+            .as_ref()
+            .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
+        match crate::platform::verify_process_group_identity(
             identity.pid,
             identity.process_instance.as_deref(),
+            member,
         ) {
             crate::platform::ProcessIdentityCheck::Matching => {}
+            crate::platform::ProcessIdentityCheck::Stopped
+                if crate::platform::is_process_group_live(identity.pid) =>
+            {
+                return status;
+            }
             crate::platform::ProcessIdentityCheck::Stopped => {}
             check => {
                 status.error = Some(format!(
@@ -225,7 +242,10 @@ impl BackgroundTaskManager {
 
         let reaped_exit = crate::platform::try_reap_child_process(pid).ok().flatten();
 
-        if reaped_exit.is_none() && crate::platform::is_process_running(pid) {
+        if reaped_exit.is_none()
+            && (crate::platform::is_process_running(pid)
+                || crate::platform::is_process_group_live(identity.pid))
+        {
             return status;
         }
 
@@ -348,16 +368,17 @@ impl BackgroundTaskManager {
                 self.terminate_managed_process_group(identity, Duration::from_millis(400))
                     .await
             }
-            None => None,
+            None => Ok(()),
         };
 
         let completed_at = Utc::now();
         let duration_secs = Self::status_duration_secs(&status.started_at, completed_at);
         let error = match teardown_error {
-            Some(teardown_error) => format!(
-                "Task orphaned: the owning server process exited before the task finished; {teardown_error}"
+            Ok(()) => "Task orphaned: the owning server process exited (reloaded or crashed) before the task finished".to_string(),
+            Err(ManagedProcessTeardownError::Refused(detail))
+            | Err(ManagedProcessTeardownError::Incomplete(detail)) => format!(
+                "Task orphaned: the owning server process exited before the task finished; {detail}"
             ),
-            None => "Task orphaned: the owning server process exited (reloaded or crashed) before the task finished".to_string(),
         };
         status.status = BackgroundTaskStatus::Failed;
         status.exit_code = None;
@@ -467,6 +488,7 @@ impl BackgroundTaskManager {
             Some(ManagedProcessIdentity {
                 pid,
                 process_instance: crate::platform::process_start_token(pid),
+                process_group_member: None,
                 owner_instance: Some(model::process_instance_token().to_string()),
                 transfer_policy: ManagedProcessTransferPolicy::Transferred,
             }),
@@ -729,6 +751,7 @@ impl BackgroundTaskManager {
             started_at_rfc3339,
             delivery_flags: delivery_flags_tx,
             underlying_abort: None,
+            underlying_finished: None,
             managed_process: None,
             handle,
         };
@@ -850,9 +873,12 @@ impl BackgroundTaskManager {
         let (registered_tx, registered_rx) = tokio::sync::oneshot::channel::<()>();
 
         let underlying_abort = Some(handle.abort_handle());
+        let underlying_finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let underlying_finished_for_wrapper = Arc::clone(&underlying_finished);
         let mut underlying = AbortOnDrop::new(handle);
         let wrapper_handle = tokio::spawn(async move {
             let tool_result = underlying.join().await;
+            underlying_finished_for_wrapper.store(true, std::sync::atomic::Ordering::Release);
             let duration_secs = started_at.elapsed().as_secs_f64();
 
             let (status, exit_code, error, output_text) = match tool_result {
@@ -966,6 +992,7 @@ impl BackgroundTaskManager {
             started_at_rfc3339: initial_status.started_at.clone(),
             delivery_flags: delivery_flags_tx,
             underlying_abort,
+            underlying_finished: Some(underlying_finished),
             managed_process,
             handle: wrapper_handle,
         };
@@ -1004,6 +1031,23 @@ impl BackgroundTaskManager {
         }
 
         // Sort by task_id (which includes timestamp)
+        results.sort_by(|a, b| b.task_id.cmp(&a.task_id));
+        results
+    }
+
+    /// Read status files without reconciliation, signaling, or status writes.
+    async fn list_read_only(&self) -> Vec<TaskStatusFile> {
+        let mut results = Vec::new();
+        if let Ok(mut entries) = fs::read_dir(&self.output_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if path.extension().map(|e| e == "json").unwrap_or(false)
+                    && let Some(status) = self.read_status_file(&path).await
+                {
+                    results.push(status);
+                }
+            }
+        }
         results.sort_by(|a, b| b.task_id.cmp(&a.task_id));
         results
     }
@@ -1469,7 +1513,7 @@ impl BackgroundTaskManager {
     }
 
     /// Cancel a running task
-    pub async fn cancel(&self, task_id: &str) -> Result<bool> {
+    pub async fn cancel(&self, task_id: &str) -> Result<BackgroundTaskCancellation> {
         self.cancel_with_grace(task_id, std::time::Duration::from_millis(400))
             .await
     }
@@ -1480,49 +1524,53 @@ impl BackgroundTaskManager {
         &self,
         task_id: &str,
         _graceful_timeout: std::time::Duration,
-    ) -> Result<bool> {
+    ) -> Result<BackgroundTaskCancellation> {
         let task = {
             let mut tasks = self.tasks.write().await;
             tasks.remove(task_id)
         };
         if let Some(task) = task {
+            if self
+                .read_status_file(&task.status_path)
+                .await
+                .is_some_and(|status| status.status != BackgroundTaskStatus::Running)
+            {
+                return Ok(BackgroundTaskCancellation::AlreadyTerminal);
+            }
             if let Some(abort) = task.underlying_abort.as_ref() {
                 abort.abort();
             }
+            let teardown_result = if task.managed_process.as_ref().is_some_and(|identity| {
+                identity.transfer_policy == ManagedProcessTransferPolicy::OwnerBound
+            }) {
+                if let Some(identity) = task.managed_process.as_ref() {
+                    self.terminate_managed_process_group(identity, _graceful_timeout)
+                        .await
+                } else {
+                    Ok(())
+                }
+            } else {
+                Ok(())
+            };
             let mut wrapper_handle = task.handle;
-            if tokio::time::timeout(_graceful_timeout, &mut wrapper_handle)
+            let wrapper_completed = if tokio::time::timeout(_graceful_timeout, &mut wrapper_handle)
                 .await
                 .is_err()
             {
                 wrapper_handle.abort();
-                let _ = tokio::time::timeout(_graceful_timeout, &mut wrapper_handle).await;
-            }
+                let wrapper_joined = tokio::time::timeout(_graceful_timeout, &mut wrapper_handle)
+                    .await
+                    .is_ok();
+                wrapper_joined
+                    && task
+                        .underlying_finished
+                        .as_ref()
+                        .is_none_or(|finished| finished.load(std::sync::atomic::Ordering::Acquire))
+            } else {
+                true
+            };
 
-            if self
-                .read_status_file(&task.status_path)
-                .await
-                .is_some_and(|status| {
-                    matches!(
-                        status.status,
-                        BackgroundTaskStatus::Completed | BackgroundTaskStatus::Superseded
-                    )
-                })
-            {
-                return Ok(false);
-            }
-
-            let teardown_error = task.managed_process.as_ref().and_then(|identity| {
-                (!crate::platform::wait_for_process_group_exit(
-                    identity.pid,
-                    _graceful_timeout,
-                ))
-                .then(|| {
-                    format!(
-                        "Incomplete teardown: managed process group {} remained live after cancellation",
-                        identity.pid
-                    )
-                })
-            });
+            let teardown_error = teardown_result.err();
 
             // Update status file
             let (notify_flag, wake_flag) = *task.delivery_flags.borrow();
@@ -1533,7 +1581,17 @@ impl BackgroundTaskManager {
                 session_id: task.session_id,
                 status: BackgroundTaskStatus::Failed,
                 exit_code: None,
-                error: teardown_error.or_else(|| Some("Cancelled by user".to_string())),
+                error: Some(if !wrapper_completed {
+                    "Incomplete teardown: cancelled background wrapper did not finish within the bounded deadline".to_string()
+                } else {
+                    match teardown_error.as_ref() {
+                        Some(ManagedProcessTeardownError::Refused(detail)) => {
+                            format!("Refused cancellation: {detail}")
+                        }
+                        Some(ManagedProcessTeardownError::Incomplete(detail)) => detail.clone(),
+                        None => "Cancelled by user".to_string(),
+                    }
+                }),
                 started_at: task.started_at_rfc3339,
                 completed_at: Some(chrono::Utc::now().to_rfc3339()),
                 duration_secs: Some(task.started_at.elapsed().as_secs_f64()),
@@ -1559,23 +1617,39 @@ impl BackgroundTaskManager {
                 let _ = fs::write(&task.status_path, json).await;
             }
 
-            Ok(true)
+            match (wrapper_completed, teardown_error) {
+                (false, _) => Ok(BackgroundTaskCancellation::Incomplete(
+                    "Incomplete teardown: cancelled background wrapper did not finish within the bounded deadline".to_string(),
+                )),
+                (true, Some(ManagedProcessTeardownError::Refused(error))) => {
+                    Ok(BackgroundTaskCancellation::Refused(error))
+                }
+                (true, Some(ManagedProcessTeardownError::Incomplete(error))) => {
+                    Ok(BackgroundTaskCancellation::Incomplete(error))
+                }
+                (true, None) => Ok(BackgroundTaskCancellation::FullyStopped),
+            }
         } else {
             let status_path = self.status_path_for(task_id);
             let Some(mut status) = self.read_status_file(&status_path).await else {
-                return Ok(false);
+                return Ok(BackgroundTaskCancellation::AlreadyTerminal);
             };
             status = self
                 .finalize_detached_status_if_needed(status, &status_path)
                 .await;
-            if status.status != BackgroundTaskStatus::Running
-                || (!status.detached && status.managed_process.is_none())
-            {
-                return Ok(false);
+            if status.status != BackgroundTaskStatus::Running {
+                return Ok(BackgroundTaskCancellation::AlreadyTerminal);
+            }
+            if !status.detached && status.managed_process.is_none() {
+                return Ok(BackgroundTaskCancellation::Refused(
+                    "managed process identity is missing".to_string(),
+                ));
             }
 
             let Some(identity) = status.managed_process.as_ref() else {
-                return Ok(false);
+                return Ok(BackgroundTaskCancellation::Refused(
+                    "managed process PID does not match status".to_string(),
+                ));
             };
             let pid = status.pid.unwrap_or(identity.pid);
             if identity.pid != pid {
@@ -1583,7 +1657,9 @@ impl BackgroundTaskManager {
                     "Refused cancellation: managed process PID does not match status".to_string(),
                 );
                 self.write_status_file(&status_path, &status).await;
-                return Ok(false);
+                return Ok(BackgroundTaskCancellation::Refused(
+                    "managed process owner identity does not match status".to_string(),
+                ));
             }
             if identity.owner_instance.is_none() || identity.owner_instance != status.owner_instance
             {
@@ -1592,14 +1668,21 @@ impl BackgroundTaskManager {
                         .to_string(),
                 );
                 self.write_status_file(&status_path, &status).await;
-                return Ok(false);
+                return Ok(BackgroundTaskCancellation::Refused(
+                    "managed process owner identity does not match status".to_string(),
+                ));
             }
 
             #[cfg(unix)]
             {
-                let check = crate::platform::signal_verified_process_group(
+                let member = identity
+                    .process_group_member
+                    .as_ref()
+                    .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
+                let check = crate::platform::signal_verified_process_group_with_member(
                     identity.pid,
                     identity.process_instance.as_deref(),
+                    member,
                     libc::SIGTERM,
                 );
                 if check != crate::platform::ProcessIdentityCheck::Matching {
@@ -1607,14 +1690,17 @@ impl BackgroundTaskManager {
                         "Refused cancellation: process identity verification failed ({check:?})"
                     ));
                     self.write_status_file(&status_path, &status).await;
-                    return Ok(false);
+                    return Ok(BackgroundTaskCancellation::Refused(format!(
+                        "process identity verification failed ({check:?})"
+                    )));
                 }
                 tokio::time::sleep(_graceful_timeout).await;
                 let mut teardown_error = None;
                 if crate::platform::is_process_group_live(pid) {
-                    let check = crate::platform::signal_verified_process_group(
+                    let check = crate::platform::signal_verified_process_group_with_member(
                         identity.pid,
                         identity.process_instance.as_deref(),
+                        member,
                         libc::SIGKILL,
                     );
                     if check != crate::platform::ProcessIdentityCheck::Matching
@@ -1659,7 +1745,9 @@ impl BackgroundTaskManager {
                         "Refused cancellation: process identity verification failed ({check:?})"
                     ));
                     self.write_status_file(&status_path, &status).await;
-                    return Ok(false);
+                    return Ok(BackgroundTaskCancellation::Refused(format!(
+                        "process identity verification failed ({check:?})"
+                    )));
                 }
             }
 
@@ -1679,7 +1767,15 @@ impl BackgroundTaskManager {
                 terminal_event_record(event_status, event_exit_code, event_error.as_deref()),
             );
             self.write_status_file(&status_path, &status).await;
-            Ok(true)
+            match status.error {
+                Some(error) if error.starts_with("Incomplete") => {
+                    Ok(BackgroundTaskCancellation::Incomplete(error))
+                }
+                Some(error) if error.starts_with("Refused") => {
+                    Ok(BackgroundTaskCancellation::Refused(error))
+                }
+                _ => Ok(BackgroundTaskCancellation::FullyStopped),
+            }
         }
     }
 
@@ -1687,42 +1783,60 @@ impl BackgroundTaskManager {
         &self,
         identity: &ManagedProcessIdentity,
         graceful_timeout: Duration,
-    ) -> Option<String> {
+    ) -> std::result::Result<(), ManagedProcessTeardownError> {
         #[cfg(unix)]
         {
-            let check = crate::platform::signal_verified_process_group(
+            let member = identity
+                .process_group_member
+                .as_ref()
+                .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
+            let check = crate::platform::verify_process_group_identity(
                 identity.pid,
                 identity.process_instance.as_deref(),
-                libc::SIGTERM,
+                member,
             );
             if check == crate::platform::ProcessIdentityCheck::Stopped {
-                return None;
+                return Ok(());
             }
             if check != crate::platform::ProcessIdentityCheck::Matching {
-                return Some(format!(
+                return Err(ManagedProcessTeardownError::Refused(format!(
                     "managed process identity verification refused TERM ({check:?})"
-                ));
+                )));
+            }
+            let check = crate::platform::signal_verified_process_group_with_member(
+                identity.pid,
+                identity.process_instance.as_deref(),
+                member,
+                libc::SIGTERM,
+            );
+            if check != crate::platform::ProcessIdentityCheck::Matching
+                && check != crate::platform::ProcessIdentityCheck::Stopped
+            {
+                return Err(ManagedProcessTeardownError::Refused(format!(
+                    "managed process identity verification refused TERM signal ({check:?})"
+                )));
             }
             tokio::time::sleep(graceful_timeout).await;
             if crate::platform::is_process_group_live(identity.pid) {
-                let check = crate::platform::signal_verified_process_group(
+                let check = crate::platform::signal_verified_process_group_with_member(
                     identity.pid,
                     identity.process_instance.as_deref(),
+                    member,
                     libc::SIGKILL,
                 );
                 if check != crate::platform::ProcessIdentityCheck::Matching
                     && check != crate::platform::ProcessIdentityCheck::Stopped
                 {
-                    return Some(format!(
+                    return Err(ManagedProcessTeardownError::Refused(format!(
                         "managed process identity verification refused KILL ({check:?})"
-                    ));
+                    )));
                 }
             }
             if !crate::platform::wait_for_process_group_exit(identity.pid, graceful_timeout) {
-                return Some(format!(
+                return Err(ManagedProcessTeardownError::Incomplete(format!(
                     "managed process group {} remained live after bounded teardown",
                     identity.pid
-                ));
+                )));
             }
         }
         #[cfg(windows)]
@@ -1735,12 +1849,12 @@ impl BackgroundTaskManager {
             if check != crate::platform::ProcessIdentityCheck::Matching
                 && check != crate::platform::ProcessIdentityCheck::Stopped
             {
-                return Some(format!(
+                return Err(ManagedProcessTeardownError::Refused(format!(
                     "managed process identity verification refused teardown ({check:?})"
-                ));
+                )));
             }
         }
-        None
+        Ok(())
     }
 
     async fn stale_decision_for_status(
@@ -1792,9 +1906,14 @@ impl BackgroundTaskManager {
             );
         }
 
-        match crate::platform::verify_process_start_token(
+        let member = identity
+            .process_group_member
+            .as_ref()
+            .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
+        match crate::platform::verify_process_group_identity(
             identity.pid,
             identity.process_instance.as_deref(),
+            member,
         ) {
             crate::platform::ProcessIdentityCheck::Matching => base(
                 StaleManagedTaskEligibility::VerifiedStale,
@@ -1830,7 +1949,7 @@ impl BackgroundTaskManager {
         &self,
         task_ids: Option<&[String]>,
     ) -> Vec<StaleManagedTaskDecision> {
-        let statuses = self.list().await;
+        let statuses = self.list_read_only().await;
         let mut decisions = Vec::with_capacity(statuses.len());
         for status in statuses
             .iter()
@@ -1855,24 +1974,25 @@ impl BackgroundTaskManager {
         if inspection.eligibility != StaleManagedTaskEligibility::VerifiedStale {
             return Ok(inspection);
         }
-        if !self.cancel_with_grace(task_id, graceful_timeout).await? {
-            let status = self.status(task_id).await;
-            return Ok(StaleManagedTaskDecision {
-                task_id: task_id.to_string(),
-                eligibility: StaleManagedTaskEligibility::IdentityMismatch,
-                dry_run: false,
-                outcome: "refused".to_string(),
-                detail: status.and_then(|status| status.error).unwrap_or_else(|| {
-                    "identity verification failed immediately before signaling".to_string()
-                }),
-            });
-        }
+        let cancellation = self.cancel_with_grace(task_id, graceful_timeout).await?;
+        let (outcome, detail) = match cancellation {
+            BackgroundTaskCancellation::FullyStopped => (
+                "terminated",
+                "verified owned process group was terminated and reaped within the cancellation bound".to_string(),
+            ),
+            BackgroundTaskCancellation::AlreadyTerminal => (
+                "already_terminal",
+                "task reached a terminal state before explicit termination completed".to_string(),
+            ),
+            BackgroundTaskCancellation::Refused(detail) => ("refused", detail),
+            BackgroundTaskCancellation::Incomplete(detail) => ("incomplete", detail),
+        };
         Ok(StaleManagedTaskDecision {
             task_id: task_id.to_string(),
             eligibility: StaleManagedTaskEligibility::VerifiedStale,
             dry_run: false,
-            outcome: "terminated".to_string(),
-            detail: "verified owned process group was terminated and reaped within the cancellation bound".to_string(),
+            outcome: outcome.to_string(),
+            detail,
         })
     }
 
@@ -1899,6 +2019,18 @@ impl BackgroundTaskManager {
             if let Some(abort) = task.underlying_abort.as_ref() {
                 abort.abort();
             }
+            let teardown_error = if task.managed_process.as_ref().is_some_and(|identity| {
+                identity.transfer_policy == ManagedProcessTransferPolicy::OwnerBound
+            }) {
+                if let Some(identity) = task.managed_process.as_ref() {
+                    self.terminate_managed_process_group(identity, Duration::from_millis(400))
+                        .await
+                } else {
+                    Ok(())
+                }
+            } else {
+                Ok(())
+            };
             // Wait (bounded) for the aborted future to actually drop, so
             // kill_on_drop children are killed before the upcoming exec.
             let mut wrapper_handle = task.handle;
@@ -1925,7 +2057,16 @@ impl BackgroundTaskManager {
             {
                 continue;
             }
-            let error = if wrapper_completed {
+            let error = if let Err(teardown_error) = teardown_error {
+                match teardown_error {
+                    ManagedProcessTeardownError::Refused(detail) => {
+                        format!("Refused teardown during server reload: {detail}")
+                    }
+                    ManagedProcessTeardownError::Incomplete(detail) => {
+                        format!("Incomplete teardown during server reload: {detail}")
+                    }
+                }
+            } else if wrapper_completed {
                 "Interrupted by server reload: the owning server process was replaced before the task finished".to_string()
             } else {
                 "Incomplete teardown during server reload: adopted work did not finish within the bounded deadline".to_string()
@@ -1970,6 +2111,13 @@ impl BackgroundTaskManager {
         }
 
         finalized
+    }
+
+    /// Drain non-transferred managed tasks before a process shutdown. This uses
+    /// the same ownership and bounded teardown path as exec-based reload while
+    /// keeping intentionally transferred work out of the in-memory registry.
+    pub async fn drain_for_shutdown(&self) -> usize {
+        self.abort_live_tasks_for_reload().await
     }
 
     /// Clean up old task files (older than specified hours)
