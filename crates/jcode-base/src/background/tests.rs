@@ -425,6 +425,7 @@ fn running_status_fixture(task_id: &str, session_id: &str) -> TaskStatusFile {
         progress: None,
         event_history: Vec::new(),
         stall_wake_seconds: None,
+        managed_process: None,
     }
 }
 
@@ -505,6 +506,353 @@ async fn reconcile_marks_orphan_from_reloaded_process_failed() -> Result<()> {
         "error should explain the reload orphaning, got: {error}"
     );
     assert!(status.completed_at.is_some());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn reconcile_orphan_terminates_owner_bound_process_group() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+
+    let mut command = std::process::Command::new("sh");
+    command
+        .args(["-c", "sleep 60"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let process_instance = crate::platform::process_start_token(pid)
+        .ok_or_else(|| anyhow!("process start identity should be available"))?;
+
+    let mut dead_owner = std::process::Command::new("true").spawn()?;
+    let dead_owner_pid = dead_owner.id();
+    dead_owner.wait()?;
+
+    let mut orphan = running_status_fixture("orphan-group1", "session-orphan-group");
+    orphan.owner_pid = Some(dead_owner_pid);
+    orphan.owner_instance = Some("dead-owner-instance".to_string());
+    orphan.managed_process = Some(ManagedProcessIdentity {
+        pid,
+        process_instance: Some(process_instance),
+        process_group_member: None,
+        owner_instance: orphan.owner_instance.clone(),
+        transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+    });
+    write_status_fixture(&manager, &orphan).await;
+
+    let reconciled = manager.reconcile_orphaned_tasks().await;
+    assert_eq!(reconciled, 1);
+    let status = manager
+        .status(&orphan.task_id)
+        .await
+        .ok_or_else(|| anyhow!("status should exist"))?;
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert!(!crate::platform::is_process_group_live(pid));
+    child.wait()?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn legacy_running_status_inspection_fails_closed() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let status = running_status_fixture("legacy-stale", "legacy-session");
+    write_status_fixture(&manager, &status).await;
+
+    let decisions = manager
+        .inspect_stale_managed_tasks(Some(std::slice::from_ref(&status.task_id)))
+        .await;
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(
+        decisions[0].eligibility,
+        StaleManagedTaskEligibility::MissingIdentity
+    );
+    assert_eq!(decisions[0].outcome, "refused");
+    assert_eq!(
+        manager.status(&status.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Running
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_inspection_does_not_reconcile_or_change_status() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut status = running_status_fixture("inspect-read-only", "inspect-session");
+    status.owner_pid = Some(std::process::id());
+    status.owner_instance = Some("old-process-image".to_string());
+    write_status_fixture(&manager, &status).await;
+
+    let before = tokio::fs::read(manager.status_path_for(&status.task_id)).await?;
+    let decisions = manager
+        .inspect_stale_managed_tasks(Some(&[status.task_id.clone()]))
+        .await;
+    let after = tokio::fs::read(manager.status_path_for(&status.task_id)).await?;
+
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(decisions[0].outcome, "refused");
+    assert_eq!(
+        before, after,
+        "inspection must not reconcile or rewrite status"
+    );
+    let raw_status: TaskStatusFile = serde_json::from_slice(&after)?;
+    assert_eq!(raw_status.status, BackgroundTaskStatus::Running);
+    Ok(())
+}
+
+#[test]
+fn legacy_status_round_trips_without_managed_identity() -> Result<()> {
+    let legacy = serde_json::json!({
+        "task_id": "legacy-round-trip",
+        "tool_name": "bash",
+        "session_id": "session",
+        "status": "running",
+        "exit_code": null,
+        "error": null,
+        "started_at": Utc::now().to_rfc3339(),
+        "completed_at": null,
+        "duration_secs": null,
+        "pid": null,
+        "detached": false,
+        "notify": false,
+        "wake": false,
+        "progress": null,
+        "event_history": []
+    });
+    let status: TaskStatusFile = serde_json::from_value(legacy.clone())?;
+    assert_eq!(status.managed_process, None);
+    assert_eq!(
+        serde_json::from_str::<TaskStatusFile>(&serde_json::to_string(&status)?)?.task_id,
+        "legacy-round-trip"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_identity_mismatch_does_not_signal() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut status = running_status_fixture("mismatch-stale", "mismatch-session");
+    let mut owner = std::process::Command::new("true").spawn()?;
+    let dead_owner_pid = owner.id();
+    owner.wait()?;
+    status.owner_pid = Some(dead_owner_pid);
+    status.owner_instance = Some("dead-owner".to_string());
+    status.managed_process = Some(ManagedProcessIdentity {
+        pid: std::process::id(),
+        process_instance: Some("not-the-current-start-token".to_string()),
+        process_group_member: None,
+        owner_instance: Some("dead-owner".to_string()),
+        transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+    });
+    status.pid = Some(std::process::id());
+    status.detached = true;
+    write_status_fixture(&manager, &status).await;
+
+    let decision = manager
+        .terminate_stale_managed_task(&status.task_id, Duration::from_millis(5))
+        .await?;
+    assert_eq!(
+        decision.eligibility,
+        StaleManagedTaskEligibility::IdentityMismatch
+    );
+    assert_eq!(
+        manager.status(&status.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Running
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn explicit_stale_termination_requires_and_uses_selected_task_id() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut command = std::process::Command::new("sh");
+    command
+        .args(["-c", "sleep 60"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let process_instance = crate::platform::process_start_token(pid).unwrap();
+    let mut dead_owner = std::process::Command::new("true").spawn()?;
+    let dead_owner_pid = dead_owner.id();
+    dead_owner.wait()?;
+
+    let mut status = running_status_fixture("explicit-stale-id", "explicit-session");
+    status.pid = Some(pid);
+    status.owner_pid = Some(dead_owner_pid);
+    status.owner_instance = Some("dead-owner".to_string());
+    status.detached = true;
+    status.managed_process = Some(ManagedProcessIdentity {
+        pid,
+        process_instance: Some(process_instance),
+        process_group_member: crate::platform::process_group_member_identity(pid).map(
+            |(member_pid, token)| ManagedProcessMemberIdentity {
+                pid: member_pid,
+                process_instance: Some(token),
+            },
+        ),
+        owner_instance: status.owner_instance.clone(),
+        transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+    });
+    write_status_fixture(&manager, &status).await;
+
+    let inspection = manager
+        .inspect_stale_managed_tasks(Some(&[status.task_id.clone()]))
+        .await;
+    assert_eq!(
+        inspection[0].eligibility,
+        StaleManagedTaskEligibility::VerifiedStale
+    );
+    let decision = manager
+        .terminate_stale_managed_task(&status.task_id, Duration::from_millis(100))
+        .await?;
+    assert_eq!(decision.outcome, "terminated");
+    assert!(!crate::platform::is_process_group_live(pid));
+    let _ = child.wait();
+    Ok(())
+}
+
+#[tokio::test]
+async fn cancel_reports_fully_stopped_instead_of_boolean_success() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let info = manager
+        .spawn_with_notify(
+            "cancel-contract",
+            None,
+            "cancel-contract-session",
+            false,
+            false,
+            |_output| async move {
+                sleep(Duration::from_secs(60)).await;
+                Ok(TaskResult::completed(Some(0)))
+            },
+        )
+        .await;
+    assert_eq!(
+        manager.cancel(&info.task_id).await?,
+        BackgroundTaskCancellation::FullyStopped
+    );
+    assert_eq!(
+        manager.status(&info.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Failed
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cancel_reports_incomplete_teardown_without_claiming_success() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let worker_started = Arc::clone(&started);
+    let worker_stop = Arc::clone(&stop);
+    let handle = tokio::task::spawn_blocking(move || {
+        worker_started.store(true, std::sync::atomic::Ordering::Release);
+        while !worker_stop.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok::<_, anyhow::Error>(jcode_tool_types::ToolOutput::new("never"))
+    });
+    let info = manager
+        .adopt_with_options_and_identity(
+            "bash",
+            None,
+            "incomplete-cancel-session",
+            false,
+            false,
+            handle,
+            Some(ManagedProcessIdentity {
+                pid: std::process::id(),
+                process_instance: Some("not-the-current-process".to_string()),
+                process_group_member: None,
+                owner_instance: Some(process_instance_token().to_string()),
+                transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+            }),
+        )
+        .await;
+
+    for _ in 0..100 {
+        if started.load(std::sync::atomic::Ordering::Acquire) {
+            break;
+        }
+        sleep(Duration::from_millis(1)).await;
+    }
+    assert!(started.load(std::sync::atomic::Ordering::Acquire));
+
+    let result = manager
+        .cancel_with_grace(&info.task_id, Duration::ZERO)
+        .await?;
+    assert!(matches!(result, BackgroundTaskCancellation::Incomplete(_)));
+    let status = manager.status(&info.task_id).await.unwrap();
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert!(status.error.unwrap_or_default().contains("Incomplete"));
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+#[test]
+fn cancellation_outcome_preserves_typed_teardown_kind() {
+    assert_eq!(
+        cancellation_outcome(
+            true,
+            Some(ManagedProcessTeardownError::Incomplete(
+                "detail without a classification prefix".to_string(),
+            )),
+        ),
+        BackgroundTaskCancellation::Incomplete(
+            "detail without a classification prefix".to_string(),
+        )
+    );
+    assert_eq!(
+        cancellation_outcome(
+            true,
+            Some(ManagedProcessTeardownError::Refused(
+                "another unprefixed detail".to_string(),
+            )),
+        ),
+        BackgroundTaskCancellation::Refused("another unprefixed detail".to_string())
+    );
+}
+
+#[tokio::test]
+async fn detached_cancel_without_managed_identity_reports_missing_identity() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut status = running_status_fixture("missing-managed-identity", "session-missing");
+    status.detached = true;
+    write_status_fixture(&manager, &status).await;
+
+    let result = manager.cancel(&status.task_id).await?;
+    let BackgroundTaskCancellation::Refused(detail) = result else {
+        panic!("missing managed identity must refuse cancellation");
+    };
+    assert!(detail.contains("identity is missing"), "{detail}");
     Ok(())
 }
 
@@ -697,6 +1045,61 @@ async fn abort_live_tasks_for_reload_keeps_naturally_finished_status() -> Result
         status.status,
         BackgroundTaskStatus::Completed,
         "a task that finished before the sweep must keep its real status"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn shutdown_drain_finalizes_owner_bound_tasks() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let info = manager
+        .spawn_with_notify(
+            "shutdown-test",
+            None,
+            "shutdown-session",
+            false,
+            false,
+            |_output| async move {
+                sleep(Duration::from_secs(60)).await;
+                Ok(TaskResult::completed(Some(0)))
+            },
+        )
+        .await;
+    assert_eq!(manager.drain_for_shutdown().await, 1);
+    let status = manager.status(&info.task_id).await.unwrap();
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert!(status.error.unwrap_or_default().contains("shutdown"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn shutdown_drain_overrides_adopted_join_cancellation_status() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let handle = tokio::spawn(async move {
+        sleep(Duration::from_secs(60)).await;
+        Ok::<_, anyhow::Error>(jcode_tool_types::ToolOutput::new("never"))
+    });
+    let info = manager
+        .adopt_with_options_and_identity(
+            "bash",
+            None,
+            "shutdown-adopted-session",
+            false,
+            false,
+            handle,
+            None,
+        )
+        .await;
+
+    assert_eq!(manager.drain_for_shutdown().await, 1);
+    let status = manager.status(&info.task_id).await.unwrap();
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    let error = status.error.unwrap_or_default();
+    assert!(
+        error.contains("Interrupted by server shutdown"),
+        "shutdown must win the adopted-wrapper cancellation race, got: {error}"
     );
     Ok(())
 }

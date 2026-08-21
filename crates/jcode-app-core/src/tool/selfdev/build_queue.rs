@@ -26,6 +26,23 @@ export -f cargo
         let _ = file.flush().await;
     }
 
+    fn cancellation_did_not_complete_output(
+        request_id: &str,
+        task_id: Option<&str>,
+        detail: &str,
+    ) -> ToolOutput {
+        ToolOutput::new(format!(
+            "Self-dev build request `{}` cancellation did not complete: {}",
+            request_id, detail
+        ))
+        .with_metadata(json!({
+            "request_id": request_id,
+            "task_id": task_id,
+            "cancelled": false,
+            "cancelled_task": false,
+        }))
+    }
+
     async fn wait_for_turn(
         request_id: &str,
         worktree_scope: &str,
@@ -1282,11 +1299,39 @@ export -f cargo
             )));
         }
 
-        let cancelled_task = if let Some(task_id) = request.background_task_id.as_deref() {
-            background::global().cancel(task_id).await?
+        let cancellation = if let Some(task_id) = request.background_task_id.as_deref() {
+            Some(background::global().cancel(task_id).await?)
         } else {
-            false
+            None
         };
+        let cancelled_task = matches!(
+            cancellation,
+            Some(background::BackgroundTaskCancellation::FullyStopped)
+        );
+        if let Some(background::BackgroundTaskCancellation::Incomplete(ref detail)) = cancellation {
+            request.error = Some(detail.clone());
+        }
+
+        if let Some(cancellation) = cancellation.as_ref()
+            && !matches!(
+                cancellation,
+                background::BackgroundTaskCancellation::FullyStopped
+                    | background::BackgroundTaskCancellation::AlreadyTerminal
+            )
+        {
+            let detail = match cancellation {
+                background::BackgroundTaskCancellation::Refused(detail)
+                | background::BackgroundTaskCancellation::Incomplete(detail) => detail,
+                _ => unreachable!(),
+            };
+            request.error = Some(detail.clone());
+            request.save()?;
+            return Ok(Self::cancellation_did_not_complete_output(
+                &request.request_id,
+                request.background_task_id.as_deref(),
+                detail,
+            ));
+        }
 
         request.state = BuildRequestState::Cancelled;
         request.completed_at = Some(Utc::now().to_rfc3339());
@@ -1348,5 +1393,19 @@ mod desktop_binary_tests {
                 "{display} was treated as desktop-only"
             );
         }
+    }
+
+    #[test]
+    fn incomplete_build_cancellation_output_does_not_claim_success() {
+        let output = SelfDevTool::cancellation_did_not_complete_output(
+            "build-request",
+            Some("background-task"),
+            "managed process group remained live",
+        );
+        assert!(output.output.contains("cancellation did not complete"));
+        assert!(!output.output.contains("Cancelled self-dev build request"));
+        let metadata = output.metadata.expect("cancellation metadata");
+        assert_eq!(metadata["cancelled"], json!(false));
+        assert_eq!(metadata["cancelled_task"], json!(false));
     }
 }

@@ -961,3 +961,29 @@ async fn startup_ready_signal_is_not_blocked_by_headless_recovery_delay() -> Res
 
     Ok(())
 }
+
+#[tokio::test]
+async fn runtime_shutdown_drains_managed_background_tasks() -> Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let manager =
+        crate::background::BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let info = manager
+        .spawn_with_notify(
+            "shutdown-runtime-test",
+            None,
+            "shutdown-runtime-session",
+            false,
+            false,
+            |_output| async move {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                Ok(crate::background::TaskResult::completed(Some(0)))
+            },
+        )
+        .await;
+    assert_eq!(manager.drain_for_shutdown().await, 1);
+    assert_eq!(
+        manager.status(&info.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Failed
+    );
+    Ok(())
+}

@@ -1298,6 +1298,7 @@ impl Server {
                 if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
                     sigterm.recv().await;
                     crate::logging::info("Server received SIGTERM, shutting down gracefully");
+                    crate::background::global().drain_for_shutdown().await;
                     crate::tool::terminate_owned_foreground_process_groups();
                     let _ = crate::registry::unregister_server(&sigterm_server_name).await;
                     std::process::exit(0);
@@ -1805,6 +1806,7 @@ impl Server {
                                     "Server idle for {} minutes with no clients. Shutting down.",
                                     idle_duration / 60
                                 ));
+                                crate::background::global().drain_for_shutdown().await;
                                 crate::tool::terminate_owned_foreground_process_groups();
                                 let _ = crate::registry::unregister_server(&idle_server_name).await;
                                 std::process::exit(EXIT_IDLE_TIMEOUT);

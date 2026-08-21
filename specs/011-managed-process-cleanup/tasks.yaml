@@ -1,0 +1,288 @@
+tasks:
+    branch: "011-managed-process-cleanup"
+    created: "2026-08-21"
+    spec_path: "specs/011-managed-process-cleanup/spec.yaml"
+    plan_path: "specs/011-managed-process-cleanup/plan.yaml"
+summary:
+    total_tasks: 15
+    total_phases: 7
+    parallel_opportunities: 2
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Establish focused process-tree, persisted-status, and bg-tool fixtures without changing production behavior."
+      tasks:
+        - id: "T001"
+          title: "Prepare deterministic managed process lifecycle fixtures"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/background/tests.rs, crates/jcode-base/src/platform_tests.rs, crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Linux fixtures can start an isolated shell group with a Cargo-like intermediate process and long-lived descendant, observe process identity, and enforce bounded wait or cleanup deadlines."
+            - "Persisted task fixtures can create legacy, matching, missing-identity, mismatched-identity, active-owner, and orphaned running status records in temporary directories."
+            - "All fixtures clean up their own children on assertion failure and never match unrelated processes by command text or executable name."
+    - number: 2
+      title: "Foundational"
+      purpose: "Lock the cancellation ownership and process identity safety contracts before implementation."
+      tasks:
+        - id: "T002"
+          title: "Add adopted underlying-work cancellation regression"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "A test adopts a long-lived underlying work handle, cancels the stable task, and proves the underlying task receives teardown and cannot survive wrapper abortion."
+            - "The test distinguishes successful bounded teardown from wrapper-only status finalization."
+        - id: "T003"
+          title: "Add process start identity and verified signaling regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/platform_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests obtain a stable live process instance token and verify matching process-group liveness and signaling."
+            - "A deliberately mismatched token or PID-reuse-equivalent fixture fails closed and leaves the unrelated process alive."
+            - "Unsupported or missing identity never falls back to PID-only signaling."
+        - id: "T004"
+          title: "Implement additive managed process identity contracts"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/background/model.rs, crates/jcode-base/src/platform.rs"
+          dependencies: ["T002", "T003"]
+          acceptance_criteria:
+            - "TaskStatusFile supports optional process-group PID, opaque process start token, owner instance, and transfer policy with backward-compatible serde defaults."
+            - "Platform helpers verify a live process instance immediately before liveness probes and signals, returning explicit matching, stopped, missing, unsupported, or mismatch outcomes."
+            - "No new dependency or app-core type enters jcode-base."
+        - id: "T005"
+          title: "Implement explicit adopted-work teardown ownership"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/background/model.rs, crates/jcode-base/src/background.rs"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "RunningTask retains a dependency-safe cancellation and bounded-await path to adopted underlying work in addition to the status wrapper."
+            - "cancel_with_grace invokes underlying teardown, waits boundedly, and cannot detach the inner JoinHandle by aborting only the wrapper."
+            - "Normal completion still finalizes output, events, delivery, and terminal status exactly once."
+    - number: 3
+      title: "User Story 1 - Cancel complete managed process trees"
+      purpose: "Make timeout-promoted Bash cancellation terminate and reap the complete owned isolated process group."
+      story_reference: "US-001"
+      independent_test: "Promote a Cargo-like process tree, cancel it, and prove every group member is gone and reaped within the bounded deadline."
+      tasks:
+        - id: "T006"
+          title: "Add timeout promotion, escalation, and descendant reaping regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "A Linux regression starts a shell, Cargo-like parent, and long-lived descendant through the managed Bash path, forces timeout promotion, cancels by task ID, and observes zero live or zombie group members."
+            - "A forced-escalation fixture ignores graceful termination, requires KILL, and records the escalation outcome."
+            - "A normal completion fixture proves no unnecessary signal or false cancellation state."
+        - id: "T007"
+          title: "Publish Bash managed process identity and teardown contract on promotion"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs, crates/jcode-base/src/background.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Timeout-promoted foreground work registers its isolated process-group leader and process start token before it becomes externally cancellable."
+            - "The adopted task receives an explicit teardown hook that retains ProcessGroupKillGuard ownership and waits for child completion or bounded escalation."
+            - "Cancellation status is successful only when the owned workload has stopped and reaping completed; failures remain visible."
+    - number: 4
+      title: "User Story 2 - Reconcile managed work across owner loss"
+      purpose: "Safely terminate non-transferred owned groups on reload or restart while preserving intentional transfer."
+      story_reference: "US-002"
+      independent_test: "Simulate reload or owner loss for matching, transferred, legacy, and mismatched task records and verify only matching non-transferred owned groups are terminated."
+      tasks:
+        - id: "T008"
+          title: "Add reload, shutdown, orphan, and transfer-policy regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "Abrupt shutdown and reload terminate and reap non-transferred promoted process groups."
+            - "Intentionally transferred reload-persistable groups retain the existing documented behavior."
+            - "Legacy or mismatched persisted identity is marked or reported safely without signaling."
+        - id: "T009"
+          title: "Unify reload and orphan reconciliation with verified bounded teardown"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/background.rs, crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "abort_live_tasks_for_reload reaches underlying non-transferred work, applies bounded teardown, and awaits wrapper finalization without detach gaps."
+            - "Restart reconciliation verifies owner and process instance immediately before signaling and fails closed on mismatch or missing identity."
+            - "Transferred groups remain excluded from ordinary owner-bound teardown and preserve existing status behavior."
+    - number: 5
+      title: "User Story 3 - Inspect and explicitly terminate stale managed tasks"
+      purpose: "Give operators a safe dry-run and explicit stable-task cleanup path while preserving nondestructive default cleanup."
+      story_reference: "US-003"
+      independent_test: "Inspect mixed running fixtures, explicitly terminate one verified stale task by stable ID, and prove active, mismatched, legacy, and unrelated processes remain untouched."
+      tasks:
+        - id: "T010"
+          title: "Add stale inspection, explicit termination, and cleanup safety regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/background/tests.rs, crates/jcode-app-core/src/tool/bg.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Dry-run output identifies exact stable task IDs, eligibility reasons, owner state, and identity verification without signaling."
+            - "Explicit termination affects only the selected matching stale task and reports already stopped, mismatch, missing identity, or incomplete reaping truthfully."
+            - "Existing cleanup continues to skip all running tasks and remove only eligible terminal artifacts."
+        - id: "T011"
+          title: "Implement stale managed-task inspection and explicit termination API"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/background/model.rs, crates/jcode-base/src/background.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "The manager returns structured nondestructive inspection decisions for persisted running tasks."
+            - "Explicit termination requires stable task ID and matching owner or orphan policy plus matching process instance."
+            - "Termination uses the same bounded TERM, KILL, liveness, reaping, status, and diagnostic contract as ordinary cancellation."
+        - id: "T012"
+          title: "Expose bg stale inspection and terminate actions"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/bg.rs"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "The tool schema documents nondestructive stale inspection and explicit opt-in termination by stable task identity."
+            - "Dry-run is the default inspection behavior; destructive action is explicit and never inferred from cleanup intent alone."
+            - "Formatted output explains what would be or was terminated and why refusals failed closed."
+    - number: 6
+      title: "User Story 4 - Validate real managed-task lifecycle behavior"
+      purpose: "Exercise the full managed lifecycle through focused tests and a newly built isolated runtime."
+      story_reference: "US-004"
+      independent_test: "Use the newly built jcode binary and private socket to time out a managed process tree, list it, cancel or explicitly clean it, and inspect the server descendants and zombie count."
+      tasks:
+        - id: "T013"
+          title: "Run focused background, platform, Bash, shutdown, and bg tool tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/background/tests.rs, crates/jcode-base/src/platform_tests.rs, crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-app-core/src/tool/bg.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "Exact-name or module-focused tests cover normal completion, cancellation, forced escalation, wrapper abortion, owner reload, shutdown, stale status, PID reuse or mismatch, default cleanup, explicit termination, and unrelated-process preservation."
+            - "Every process fixture has bounded deadlines and leaves no owned live or zombie descendant."
+        - id: "T014"
+          title: "Build and validate the managed lifecycle on an isolated Jcode socket"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "target/selfdev/jcode and isolated runtime artifacts under $JCODE_SCRATCH_DIR"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "The current worktree binary is built with the repository selfdev profile and its resolved path is recorded."
+            - "An isolated socket run promotes a timed managed command, lists it, cancels or explicitly terminates it, and leaves zero live or zombie descendants under the isolated server."
+            - "The validation does not reload or disturb the shared daemon or caller session."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Complete serialized quality gates, documentation consistency, task status, and final scope review."
+      tasks:
+        - id: "T015"
+          title: "Run project polish, guardrails, and final acceptance review"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/011-managed-process-cleanup, crates/jcode-base/src/background.rs, crates/jcode-base/src/background/model.rs, crates/jcode-base/src/platform.rs, crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs, crates/jcode-app-core/src/tool/bg.rs and focused tests"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Autospec artifacts validate, focused tests pass, relevant builds pass, rustfmt is clean, and scripts/check_guardrails.sh completes or any proven unrelated baseline failure is recorded."
+            - "All tasks are marked Completed only after their direct acceptance checks pass."
+            - "Final diff adds no arbitrary process matching, destructive cleanup default, broad process manager, unrelated refactor, new dependency, or upward crate dependency."
+            - "Because cleanup and process ownership are user-work-sensitive, the root performs the required independent inline review, records Medium-or-higher risk rationale, blast radius, rollback, validation evidence, and required review action in the dev-workflow HTML report, and commits only explicit owned files."
+            - "The lifecycle handoff records branch, commit, base, checks, risk, thread, and report; merge-wt receipts subsequently confirm merge to dev, fresh-base validation, non-rewriting push, Bead closure, worktree cleanup, and the required scripts/install_release.sh --fast installation with graceful shared-server reload."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-002"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-003"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "Adopted JoinHandle ownership tests and platform process identity tests touch separate focused lower-layer seams after shared fixtures are ready."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5]
+        description: "Complete safe ownership transfer, identity-verified teardown, reload reconciliation, and operator stale-task controls; built-binary validation and final guardrails remain delivery gates rather than deferred scope."
+        validation: "Run focused jcode-base and jcode-app-core lifecycle tests after each phase, then the isolated socket workflow before polish."
+    incremental_delivery:
+        - milestone: "Ownership Contract Locked"
+          phases: [1, 2]
+          deliverable: "The wrapper-detach and PID-reuse hazards have failing regressions and dependency-safe contracts."
+        - milestone: "Cancellation Safe"
+          phases: [1, 2, 3]
+          deliverable: "Timeout-promoted managed Bash cancellation terminates and reaps complete owned groups."
+        - milestone: "Owner Loss Safe"
+          phases: [1, 2, 3, 4]
+          deliverable: "Reload and restart reconcile matching non-transferred work without harming transferred or unrelated processes."
+        - milestone: "Operator Recovery Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Dry-run stale inspection and explicit stable-task termination are available while normal cleanup remains nondestructive."
+        - milestone: "Lifecycle Outcome Validated"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "Focused tests, isolated built-binary evidence, guardrails, and scope review satisfy all bead acceptance criteria."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-21T07:46:33Z"
+    artifact_type: "tasks"
