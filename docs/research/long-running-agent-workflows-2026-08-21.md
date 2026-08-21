@@ -380,6 +380,33 @@ The independent research also surfaced three useful guardrails against overinter
 
 This strengthens the compaction-first conclusion but does not eliminate the case for handoff. Compaction solves “make the current context smaller.” Handoff solves “stop inheriting this trajectory and start the next phase from a deliberate contract.”
 
+### 5.5 Recent Jcode session-audit evidence
+
+The local audit at [`docs/audits/RECENT_SESSION_INSIGHTS_2026-08-21.md`](../audits/RECENT_SESSION_INSIGHTS_2026-08-21.md) is useful because it observes the real Jcode workflow rather than only external benchmarks. Its 30-file snapshot contained:
+
+- 2,010 messages, 975 top-level tool calls, and 20 recorded tool errors;
+- only 8 sessions longer than three messages, with the two largest accounting for 77.5% of messages and 75.1% of tool calls;
+- 227 batch calls containing 723 child calls;
+- one long workflow with 49 background-task management calls;
+- 23 schedule calls, 6 of which produced errors;
+- no recorded `session_transition` or swarm calls in the historical sample;
+- 28 todo calls, but only one session visibly ended with every todo terminal;
+- duplicate initial-prompt groups consistent with restart or retry behavior without a structured handoff.
+
+The snapshot is explicitly directional and skewed, not a benchmark. The important product evidence is the recurring **lifecycle ambiguity**: implementation can finish while todos, validation evidence, worktree/landing state, or cleanup ownership remain unclear. This supports a model-visible lifecycle gate rather than a rigid workflow engine:
+
+```text
+acceptance criteria -> implement/investigate -> validate -> review risk
+  -> land or explicitly hand off -> reconcile todos, Git, ownership, and final state
+```
+
+It also suggests two cost controls for the research harness:
+
+1. deterministically prefilter empty, setup-only, and abandoned sessions before paying for qualitative summaries;
+2. extract counts, errors, compaction markers, retries, and todo state deterministically before asking a model to interpret selected sessions.
+
+For the long-running benchmark, this means measuring lifecycle closure and evidence completeness, not merely token count or memory-injection frequency. It also supports making the handoff envelope deterministic from todos, files, Git state, and tracking identifiers before asking the model to refine the prose.
+
 ## 6. Proposed policy for Jcode and Locus
 
 ### 6.1 Default decision table
@@ -413,11 +440,12 @@ The agent should be allowed to **propose** a handoff, but it should not be the o
 The optimal interaction is therefore:
 
 1. **Controller automatically compacts** when context pressure requires continuity.
-2. **Agent guidance teaches semantic handoff triggers** and exposes `session_transition` as a model-callable operation.
-3. **The agent proposes handoff** when it reaches a semantic boundary, repeated correction loop, review boundary, or changed operating context.
-4. **The controller validates preconditions**: safe turn boundary, no active compaction, durable todo/evidence state, process manifest present, budget available, and chain depth below the limit.
-5. **The controller performs the transition** and waits for child startup acknowledgment.
-6. **The child runs acceptance-oriented catch-up**, not a vague “continue” prompt.
+2. **Controller constructs a deterministic handoff envelope** from Beads/todos, Git/worktree state, validation receipts, process ownership, and durable tracking.
+3. **Agent guidance teaches semantic handoff triggers** and exposes `session_transition` as a model-callable operation.
+4. **The agent proposes handoff** when it reaches a semantic boundary, repeated correction loop, review boundary, or changed operating context.
+5. **The controller validates preconditions**: safe turn boundary, no active compaction, durable todo/evidence state, process manifest present, budget available, and chain depth below the limit.
+6. **The controller performs the transition** and waits for child startup acknowledgment.
+7. **The child runs acceptance-oriented catch-up**, not a vague “continue” prompt.
 
 This is better than either extreme:
 
@@ -866,6 +894,7 @@ The highest-value next experiment is the controlled replay described above. It s
 - [`docs/proposals/HANDOFF_AGENT_COMPARISON.md`](../proposals/HANDOFF_AGENT_COMPARISON.md)
 - [`docs/proposals/FRESH_SESSION_HANDOFF.md`](../proposals/FRESH_SESSION_HANDOFF.md)
 - [`docs/MEMORY_ARCHITECTURE.md`](../MEMORY_ARCHITECTURE.md)
+- [`docs/audits/RECENT_SESSION_INSIGHTS_2026-08-21.md`](../audits/RECENT_SESSION_INSIGHTS_2026-08-21.md)
 - `crates/jcode-config-types/src/lib.rs` (`CompactionConfig`, `HandoffConfig`)
 - `crates/jcode-app-core/src/agent.rs` (handoff guidance and advisory trigger)
 - `crates/jcode-app-core/src/server/client_actions.rs` (child-session creation and generated handoff)
