@@ -118,6 +118,11 @@ impl App {
             {
                 self.inline_interactive_state = None;
             }
+            if self.pending_model_picker_load.is_some() {
+                self.pending_model_picker_load = None;
+                self.model_picker_load_request_id =
+                    self.model_picker_load_request_id.wrapping_add(1);
+            }
             return;
         };
 
@@ -157,7 +162,14 @@ impl App {
             && picker.preview
         {
             picker.filter = request.filter().to_string();
-            Self::apply_inline_interactive_filter(picker);
+            if self.pending_model_picker_load.is_some() && picker.kind == PickerKind::Model {
+                // The loading shell is not a partial catalog. Keep it visible
+                // while retaining the user's filter for the completed picker.
+                picker.filtered = (0..picker.entries.len()).collect();
+                picker.selected = 0;
+            } else {
+                Self::apply_inline_interactive_filter(picker);
+            }
         }
     }
 

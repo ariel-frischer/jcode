@@ -868,6 +868,11 @@ pub fn remote_model_routes_fallback(
     }
 
     let auth = AuthStatus::check_fast();
+    let standard_openrouter_models = if auth.openrouter != AuthState::NotConfigured {
+        openrouter::standard_catalog_model_ids()
+    } else {
+        None
+    };
     let mut routes = Vec::new();
     for model in remote_available_entries {
         if !is_listable_model_name(model) {
@@ -986,9 +991,11 @@ pub fn remote_model_routes_fallback(
         }
 
         if auth.openrouter != AuthState::NotConfigured {
-            let catalog_lists_model = openrouter_catalog_model
-                .as_deref()
-                .and_then(openrouter::standard_catalog_lists_model);
+            let catalog_lists_model = openrouter_catalog_model.as_deref().and_then(|model| {
+                standard_openrouter_models
+                    .as_ref()
+                    .map(|models| models.contains(model))
+            });
             match (provider_for_model(model), openrouter_cached.as_ref()) {
                 (_, Some((endpoints, _age))) => {
                     for ep in endpoints {
