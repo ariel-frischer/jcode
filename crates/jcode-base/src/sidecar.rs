@@ -192,7 +192,6 @@ impl Sidecar {
                 .agents
                 .memory_reasoning_effort
                 .clone(),
-
         }
     }
 

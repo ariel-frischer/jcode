@@ -1,8 +1,7 @@
 use super::{
     AmbientConfig, Config, DiffDisplayMode, DisplayConfig, HookCommands, LatexRenderingMode,
     McpToolsMode, ProviderConfig, RunSafetyConfig, SessionPickerResumeAction, SwarmSpawnMode,
-    ToolConfig,
-    config_env_fingerprint, populate_context_limits_from_config_ref,
+    ToolConfig, config_env_fingerprint, populate_context_limits_from_config_ref,
 };
 use std::ffi::OsString;
 use std::path::Path;
