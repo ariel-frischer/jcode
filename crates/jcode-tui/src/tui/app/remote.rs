@@ -807,7 +807,16 @@ fn handle_terminal_event_while_disconnected(
         Some(Ok(Event::Paste(text))) => {
             app.note_client_interaction();
             if app.pending_handoff_resume_notice.is_some() {
-                app.set_status_notice("Switching to handoff session… input is temporarily paused");
+                app.handle_paste(text);
+                if !app.input.trim().is_empty() && app.pending_images.is_empty() {
+                    let prepared = input::take_prepared_input(app);
+                    app.queued_messages.push(prepared.expanded);
+                    app.set_status_notice("Pasted input queued until handoff session is ready");
+                } else if !app.input.trim().is_empty() || !app.pending_images.is_empty() {
+                    app.set_status_notice(
+                        "Pasted input ready; press Enter after handoff session is ready",
+                    );
+                }
             } else {
                 app.handle_paste(text);
             }
