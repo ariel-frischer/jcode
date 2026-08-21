@@ -7,6 +7,33 @@ fn desired_nofile_soft_limit_only_raises_when_possible() {
     assert_eq!(desired_nofile_soft_limit(1024, 4096, 8192), Some(4096));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn process_start_identity_requires_matching_token() {
+    let pid = std::process::id();
+    let token = super::process_start_token(pid).expect("current process start token");
+    assert_eq!(
+        super::verify_process_start_token(pid, Some(&token)),
+        super::ProcessIdentityCheck::Matching
+    );
+    assert_eq!(
+        super::verify_process_start_token(pid, Some("pid-reuse-fixture")),
+        super::ProcessIdentityCheck::Mismatch
+    );
+    assert_eq!(
+        super::verify_process_start_token(pid, None),
+        super::ProcessIdentityCheck::Missing
+    );
+}
+
+#[test]
+fn verified_signal_fails_closed_without_identity() {
+    assert_eq!(
+        super::signal_verified_process_group(std::process::id(), None, 0),
+        super::ProcessIdentityCheck::Missing
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn spawn_detached_creates_new_session() {

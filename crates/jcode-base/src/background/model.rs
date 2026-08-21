@@ -84,6 +84,54 @@ pub struct TaskStatusFile {
     /// this long with no new output bytes and no progress events.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stall_wake_seconds: Option<u64>,
+    /// Identity of the Jcode-owned process group, when the task has one.
+    /// This is optional so status files from older builds remain readable and
+    /// destructive reconciliation fails closed when it is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_process: Option<ManagedProcessIdentity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ManagedProcessIdentity {
+    /// Process-group leader. This value is never sufficient to authorize a signal.
+    pub pid: u32,
+    /// OS process-start token. Missing tokens are intentionally unsafe for persisted cleanup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_instance: Option<String>,
+    /// Jcode server instance that created the task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_instance: Option<String>,
+    #[serde(default)]
+    pub transfer_policy: ManagedProcessTransferPolicy,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedProcessTransferPolicy {
+    #[default]
+    OwnerBound,
+    Transferred,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StaleManagedTaskEligibility {
+    ActiveOwner,
+    VerifiedStale,
+    MissingIdentity,
+    IdentityMismatch,
+    UnsupportedIdentity,
+    AlreadyStopped,
+    Terminal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StaleManagedTaskDecision {
+    pub task_id: String,
+    pub eligibility: StaleManagedTaskEligibility,
+    pub dry_run: bool,
+    pub outcome: String,
+    pub detail: String,
 }
 
 fn default_true() -> bool {
@@ -237,6 +285,8 @@ pub(super) struct RunningTask {
     pub(super) started_at: Instant,
     pub(super) started_at_rfc3339: String,
     pub(super) delivery_flags: watch::Sender<(bool, bool)>,
+    pub(super) underlying_abort: Option<tokio::task::AbortHandle>,
+    pub(super) managed_process: Option<ManagedProcessIdentity>,
     pub(super) handle: JoinHandle<Result<TaskResult>>,
 }
 

@@ -41,7 +41,7 @@ impl BgTool {
 
 #[derive(Deserialize)]
 struct BgInput {
-    /// Action to perform: list, status, output, tail, cancel, cleanup, watch, delivery, subscribe, wait
+    /// Action to perform: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, watch, delivery, subscribe, wait
     #[serde(default)]
     action: Option<String>,
     /// Short display label describing why this tool call is being made.
@@ -141,7 +141,7 @@ fn resolve_action(params: &BgInput) -> Result<String> {
     }
 
     Err(anyhow::anyhow!(
-        "Missing required bg action. Use one of: list, status, output, tail, cancel, cleanup, delivery, subscribe, wait. For example: bg action=\"wait\"."
+        "Missing required bg action. Use one of: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, delivery, subscribe, wait. For example: bg action=\"wait\"."
     ))
 }
 
@@ -235,6 +235,7 @@ fn task_metadata(
         "wake": task.wake,
         "pid": task.pid,
         "detached": task.detached,
+        "managed_process": task.managed_process,
         "progress": task.progress,
         "event_history": task.event_history,
         "output_file": manager.output_path_for(&task.task_id).to_string_lossy(),
@@ -281,6 +282,16 @@ fn format_task_details(task: &background::TaskStatusFile) -> String {
     output.push_str(&format!("Wake: {}\n", task.wake));
     if let Some(error) = task.error.as_ref() {
         output.push_str(&format!("Error: {}\n", error));
+    }
+    if let Some(identity) = task.managed_process.as_ref() {
+        output.push_str(&format!(
+            "Managed process: pid={} start_identity_present={} transfer_policy={:?}\n",
+            identity.pid,
+            identity.process_instance.is_some(),
+            identity.transfer_policy
+        ));
+    } else if task.status == BackgroundTaskStatus::Running {
+        output.push_str("Managed process: identity unavailable; destructive cleanup is refused\n");
     }
 
     if !task.event_history.is_empty() {
@@ -478,7 +489,7 @@ impl Tool for BgTool {
                 "intent": super::intent_schema_property(),
                 "action": {
                     "type": "string",
-                    "enum": ["list", "status", "output", "tail", "cancel", "cleanup", "watch", "delivery", "subscribe", "wait"],
+                    "enum": ["list", "status", "output", "tail", "cancel", "cleanup", "inspect_stale", "terminate_stale", "watch", "delivery", "subscribe", "wait"],
                     "description": "Action. Prefer wait over polling; watch is an alias for delivery."
                 },
                 "task_id": { "type": "string", "description": "Task ID." },
@@ -661,6 +672,69 @@ impl Tool for BgTool {
                     "dry_run": dry_run,
                     "max_age_hours": max_age,
                 })))
+            }
+
+            "inspect_stale" => {
+                let selected = params.task_id.as_ref().map(|task_id| vec![task_id.clone()]);
+                let decisions = manager
+                    .inspect_stale_managed_tasks(selected.as_deref())
+                    .await;
+                let output = if decisions.is_empty() {
+                    "No managed tasks matched stale inspection.".to_string()
+                } else {
+                    decisions
+                        .iter()
+                        .map(|decision| {
+                            format!(
+                                "{} · {:?} · {} · {}",
+                                decision.task_id,
+                                decision.eligibility,
+                                decision.outcome,
+                                decision.detail
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                Ok(ToolOutput::new(output)
+                    .with_title("bg inspect_stale")
+                    .with_metadata(json!({
+                        "dry_run": true,
+                        "decisions": decisions,
+                    })))
+            }
+
+            "terminate_stale" => {
+                let task_id = params.task_id.as_deref().ok_or_else(|| {
+                    anyhow::anyhow!("terminate_stale requires an explicit stable task_id")
+                })?;
+                if params.dry_run.unwrap_or(false) {
+                    let decisions = manager
+                        .inspect_stale_managed_tasks(Some(&[task_id.to_string()]))
+                        .await;
+                    return Ok(ToolOutput::new(format!(
+                        "Dry-run termination decision for {}:\n{}",
+                        task_id,
+                        decisions
+                            .first()
+                            .map(|decision| decision.detail.as_str())
+                            .unwrap_or("task not found")
+                    ))
+                    .with_title(format!("bg terminate_stale {}", task_id))
+                    .with_metadata(json!({"dry_run": true, "decisions": decisions})));
+                }
+                let decision = manager
+                    .terminate_stale_managed_task(
+                        task_id,
+                        Duration::from_millis(params.graceful_timeout_ms.unwrap_or(400)),
+                    )
+                    .await?;
+                Ok(ToolOutput::new(format!(
+                    "{} · {} · {}",
+                    decision.task_id, decision.outcome, decision.detail
+                ))
+                .with_title(format!("bg terminate_stale {}", task_id))
+                .with_metadata(json!({"dry_run": false, "decision": decision})))
             }
 
             "watch" | "delivery" | "subscribe" => {
@@ -850,7 +924,7 @@ impl Tool for BgTool {
             }
 
             _ => Err(anyhow::anyhow!(
-                "Unknown action: {}. Valid actions: list, status, output, tail, cancel, cleanup, watch, delivery, subscribe, wait",
+                "Unknown action: {}. Valid actions: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, watch, delivery, subscribe, wait",
                 action
             )),
         }
@@ -896,6 +970,22 @@ mod tests {
         assert!(
             err.to_string().contains("Missing required bg action"),
             "err={err:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn schema_requires_explicit_stale_actions() -> Result<()> {
+        let schema = BgTool::new().parameters_schema();
+        let actions = schema["properties"]["action"]["enum"]
+            .as_array()
+            .ok_or_else(|| anyhow!("action enum should exist"))?;
+        assert!(actions.iter().any(|action| action == "inspect_stale"));
+        assert!(actions.iter().any(|action| action == "terminate_stale"));
+        assert!(
+            schema["properties"]["task_id"]["description"]
+                .as_str()
+                .is_some_and(|description| description.contains("Task ID"))
         );
         Ok(())
     }

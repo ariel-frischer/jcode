@@ -1,0 +1,287 @@
+plan:
+  branch: "011-managed-process-cleanup"
+  created: "2026-08-21"
+  spec_path: "specs/011-managed-process-cleanup/spec.yaml"
+
+summary: |
+  Close the managed Bash ownership gap by making background adoption retain an
+  explicit teardown path to the underlying work rather than only a wrapper task.
+  Running task state will carry a cancellation target that can terminate the
+  complete owned process group, await the adopted workload, and report bounded
+  teardown success or failure. Timeout-promoted foreground Bash work will publish
+  identity-verified process-group metadata before adoption so cancellation,
+  reload, and restart reconciliation all use one ownership contract.
+
+  Extend the backward-compatible persisted background status with optional
+  managed process identity: process-group leader PID, process start token, owner
+  instance, and transfer policy. jcode-base platform helpers will verify the live
+  process instance immediately before TERM, KILL, or liveness decisions and fail
+  closed for missing or mismatched identity. The existing bg interface will gain
+  nondestructive stale-running inspection and explicit opt-in termination by
+  stable task ID, while normal cleanup continues to skip running tasks. Focused
+  Linux regressions and a newly built isolated-server check will prove complete
+  process-tree teardown, reaping, reload behavior, PID-reuse protection, and
+  unrelated-process preservation.
+
+technical_context:
+  language: "Rust 2024"
+  framework: "Tokio async runtime with Serde-persisted background task state and JSON-schema tool interfaces"
+  primary_dependencies:
+    - name: "tokio"
+      version: "1"
+      purpose: "JoinHandle ownership, bounded teardown waits, cancellation orchestration, process spawning, and asynchronous tests."
+    - name: "serde and serde_json"
+      version: "1"
+      purpose: "Backward-compatible persisted running-task metadata and background tool request or response contracts."
+    - name: "libc"
+      version: "0.2"
+      purpose: "Linux process-group TERM, KILL, liveness probes, and wait semantics through existing platform helpers."
+    - name: "tempfile"
+      version: "3"
+      purpose: "Deterministic persisted status and process lifecycle fixtures."
+  storage: "Existing background task status JSON files under the configured background output directory; no new registry or database."
+  testing:
+    framework: "Cargo unit, integration, and Linux process-tree tests"
+    approach: "Write focused failing regressions for adopted cancellation, full-group teardown, escalation, reload transfer behavior, identity mismatch, stale inspection and explicit termination, then run affected crate tests and a newly built binary on an isolated socket."
+  target_platform: "All existing Jcode platforms for compatible status and CLI behavior, with Linux-specific process identity, process-group, and reaping regressions."
+  project_type: "CLI/TUI agent runtime and shared server"
+  performance_goals: "Cancellation and reload teardown remain bounded by explicit grace and escalation deadlines; status listing and dry-run inspection perform bounded local process checks without command-name scans."
+  constraints:
+    - "Keep shell spawning, process-group ownership guards, and child reaping in jcode-app-core Bash ownership code."
+    - "Keep task status, delivery, cancellation orchestration, cleanup policy, and restart reconciliation in jcode-base."
+    - "jcode-base must not depend upward on jcode-app-core; cancellation hooks must use dependency-safe generic contracts."
+    - "Reuse ProcessGroupKillGuard, DetachedChildKillGuard, signal_detached_process_group, process instance tokens, and existing event and status records."
+    - "Persisted fields must be optional or defaulted so legacy task status remains readable and fails closed for destructive actions."
+    - "No signal may be authorized by command text, executable name, PID alone, or age alone."
+    - "Preserve the existing documented reload-persistence behavior for intentionally transferred Bash work."
+    - "Default bg cleanup remains nondestructive for running tasks."
+  scale_scope: "Local Jcode-managed background tasks and their isolated process groups, typically one to tens of concurrent tasks, with persisted recovery after a single owning server instance reload or loss."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan is limited to Bash process ownership, background task lifecycle and status, bg cleanup controls, platform identity verification, and focused tests."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Persisted identity fields are additive and defaulted; normal cleanup and existing transferred-task behavior remain unchanged unless the explicit new termination action is requested."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "The feature adds no configuration setting or precedence path; teardown deadlines remain explicit operation parameters or existing built-in bounds."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "jcode-base owns dependency-light task and process identity contracts while app-core supplies Bash-specific ownership hooks without introducing an upward dependency."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every acceptance criterion maps to a focused background or Bash lifecycle regression plus an isolated built-binary check."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Missing identity, PID reuse, mismatch, and incomplete reaping fail closed and produce visible status or diagnostic outcomes."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Validation proceeds from exact affected tests to serialized builds and repository guardrails before handoff."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The design extends the existing background manager and process guards rather than adding a parallel process registry or generic OS process manager."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Cleanup is nondestructive by default and explicit termination is stable-task and identity gated."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The plan includes a newly built binary and isolated socket lifecycle validation rather than relying on compilation or the shared daemon."
+
+research_findings:
+  decisions:
+    - topic: "Adopted task ownership and cancellation"
+      decision: "Extend RunningTask with a dependency-safe teardown target that owns or can explicitly cancel and await the underlying adopted work, while retaining the wrapper for status finalization."
+      rationale: "Current timeout promotion awaits an inner Bash JoinHandle inside a wrapper, but RunningTask stores only the wrapper; aborting it drops and detaches the inner workload."
+      alternatives_considered:
+        - "Continue aborting only the wrapper and rely on ProcessGroupKillGuard drop"
+        - "Store Bash-specific process guards directly in jcode-base"
+        - "Disable timeout promotion"
+    - topic: "Managed process identity persistence"
+      decision: "Add optional persisted managed process metadata containing group leader PID, process start token, owner instance token, and transfer policy, populated before timeout-promoted or detached work becomes externally manageable."
+      rationale: "PID and age are insufficient across owner restart; the existing Linux /proc start-token verification used by claude_live and the background owner-instance token provide the two required identity checks without a new registry."
+      alternatives_considered:
+        - "Match process executable or command text"
+        - "Trust a PID if the task status is old enough"
+        - "Create a separate process registry outside background status"
+    - topic: "Identity-verified signaling"
+      decision: "Centralize live instance verification and process-group signaling in jcode-base platform or background helpers, rechecking identity immediately before TERM and KILL and treating missing or mismatched identity as a non-destructive refusal."
+      rationale: "Cancellation, restart reconciliation, and explicit stale cleanup need identical PID-reuse protection and diagnostics."
+      alternatives_considered:
+        - "Verify once when reading persisted status and signal later"
+        - "Use kill(pid, 0) alone as identity proof"
+        - "Implement identity verification independently in bg tool code"
+    - topic: "Reload and transfer behavior"
+      decision: "Use the same bounded teardown contract for non-transferred live tasks during reload, while preserving deliberately transferred or reload-persistable Bash work under its current detached ownership contract."
+      rationale: "Reload already aborts and awaits wrappers, but cannot reach inner handles detached earlier; transfer semantics are intentional and must remain compatible."
+      alternatives_considered:
+        - "Terminate every process referenced by running status on reload"
+        - "Preserve every adopted task across reload"
+    - topic: "Operator stale-task workflow"
+      decision: "Add bg stale inspection as a dry-run-capable action and explicit terminate action selected by stable task identity, with eligibility and identity verification reported per task."
+      rationale: "Normal cleanup intentionally skips running tasks, and command-name or age matching would be unsafe."
+      alternatives_considered:
+        - "Make existing cleanup kill old running tasks automatically"
+        - "Add a global kill-cargo command"
+        - "Delete status artifacts without terminating processes"
+    - topic: "Platform compatibility"
+      decision: "Provide full identity-verified process-group behavior on Linux, preserve additive status and CLI compatibility elsewhere, and fail closed where an equivalent start-token check is unavailable."
+      rationale: "The confirmed leak and required regression are Linux process-tree behaviors; conservative refusal is safer than PID-only signaling on unsupported platforms."
+      alternatives_considered:
+        - "Use PID-only termination on every platform"
+        - "Block all status format and CLI improvements on cross-platform process identity parity"
+
+
+data_model:
+  entities:
+    - name: "ManagedProcessIdentity"
+      description: "Backward-compatible persisted identity for an owned process-group leader."
+      fields:
+        - name: "pid"
+          type: "u32"
+          description: "Process-group leader PID used for group signaling after verification."
+          constraints: "Never sufficient alone to authorize signaling."
+        - name: "process_instance"
+          type: "String"
+          description: "OS-derived process start identity token protecting against PID reuse."
+          constraints: "Must match the live process immediately before signaling."
+        - name: "owner_instance"
+          type: "String"
+          description: "Jcode server instance that created and owns the managed task."
+          constraints: "Must match the recorded task ownership policy for reconciliation."
+        - name: "detached"
+          type: "bool"
+          description: "Existing persisted policy indicating whether work was intentionally transferred from ordinary owner-bound lifecycle handling."
+          constraints: "Reuse the existing serde default; legacy or missing process identity never becomes signal authorization."
+      relationships:
+        - target: "TaskStatusFile"
+          type: "many-to-one"
+          description: "Each running managed task may persist one managed process identity."
+    - name: "RunningTask"
+      description: "In-memory background task state retaining status wrapper and explicit underlying teardown ownership."
+      fields:
+        - name: "wrapper_handle"
+          type: "JoinHandle"
+          description: "Finalizes output, delivery, and terminal status."
+          constraints: "Aborting it must not be the only cancellation action for adopted work."
+        - name: "teardown_target"
+          type: "optional cancellation and bounded-await handle"
+          description: "Reaches the underlying adopted workload or owned process lifecycle."
+          constraints: "Cancellation must invoke and await it before reporting successful teardown."
+        - name: "managed_process"
+          type: "Option<ManagedProcessIdentity>"
+          description: "Identity used by explicit cancellation, reload, and status reconciliation."
+          constraints: "Missing identity fails closed for persisted destructive actions."
+      relationships:
+        - target: "ManagedProcessIdentity"
+          type: "one-to-one"
+          description: "A live Bash task may own one verified isolated process group."
+    - name: "StaleManagedTaskDecision"
+      description: "Inspection or termination result for one stable background task."
+      fields:
+        - name: "task_id"
+          type: "String"
+          description: "Stable task identity selected by the operator."
+          constraints: "Required for destructive action."
+        - name: "eligibility"
+          type: "enum"
+          description: "Verified stale, active owner, missing identity, mismatch, terminal, or already stopped."
+          constraints: "Only verified stale or explicitly cancellable owned tasks may be terminated."
+        - name: "dry_run"
+          type: "bool"
+          description: "Whether the operation is inspection-only."
+          constraints: "Defaults to nondestructive behavior."
+        - name: "outcome"
+          type: "String"
+          description: "No-op, terminated, escalated, already stopped, refused, or incomplete teardown."
+          constraints: "Must be visible in tool output and task diagnostics."
+      relationships:
+        - target: "TaskStatusFile"
+          type: "many-to-one"
+          description: "Each decision evaluates one persisted task status and its live process identity."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/011-managed-process-cleanup/spec.yaml"
+      description: "Approved behavior, safety boundaries, and acceptance scenarios for managed process ownership."
+    - path: "specs/011-managed-process-cleanup/plan.yaml"
+      description: "Architecture, persistence, cancellation, cleanup, and validation design."
+    - path: "specs/011-managed-process-cleanup/tasks.yaml"
+      description: "Dependency-ordered implementation and test work."
+  source_code:
+    - path: "crates/jcode-base/src/background/model.rs"
+      description: "Additive persisted process identity, running task teardown state, and stale cleanup result contracts."
+    - path: "crates/jcode-base/src/background.rs"
+      description: "Adoption ownership, cancellation, reload teardown, orphan reconciliation, identity verification, and explicit stale inspection or termination orchestration."
+    - path: "crates/jcode-base/src/platform.rs"
+      description: "Process start-token lookup, identity comparison, and verified process-group signaling helpers."
+    - path: "crates/jcode-app-core/src/tool/bash.rs"
+      description: "Publish timeout-promoted Bash process ownership and adopt the work with an explicit teardown contract."
+    - path: "crates/jcode-app-core/src/tool/bash_process_guard.rs"
+      description: "Reuse and, where needed, expose owned process-group teardown and reaping behavior."
+    - path: "crates/jcode-app-core/src/tool/bg.rs"
+      description: "Add nondestructive stale inspection and explicit opt-in termination actions and schema."
+  tests:
+    - path: "crates/jcode-base/src/background/tests.rs"
+      description: "Adopted underlying cancellation, escalation, persisted compatibility, identity mismatch, orphan reconciliation, cleanup nondestructiveness, and explicit termination tests."
+    - path: "crates/jcode-base/src/platform_tests.rs"
+      description: "Linux process start identity, group liveness, termination, PID-reuse mismatch, and descendant preservation tests."
+    - path: "crates/jcode-app-core/src/tool/bash_tests.rs"
+      description: "Timeout promotion, Cargo-like descendant cancellation, bg action, and no-leak regressions."
+    - path: "crates/jcode-app-core/src/tool/bash_shutdown_tests.rs"
+      description: "Abrupt shutdown and reload behavior distinguishing owned foreground and intentionally transferred processes."
+
+implementation_phases:
+  - phase: 1
+    name: "Lock ownership and identity regressions"
+    goal: "Create focused failing tests for wrapper detachment, complete group teardown, reload transfer behavior, persisted identity, and safe stale inspection."
+    deliverables:
+      - "Adopted-task cancellation regression proving the underlying workload cannot detach when the wrapper is aborted."
+      - "Linux Cargo-like parent and descendant fixture with bounded TERM, KILL, liveness, and reaping assertions."
+      - "Backward-compatible status and PID-reuse mismatch fixtures."
+      - "Dry-run, explicit termination, default cleanup, and unrelated-process preservation tests."
+  - phase: 2
+    name: "Implement managed ownership and identity contract"
+    goal: "Make RunningTask retain underlying teardown ownership and persist identity-safe process-group metadata."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Additive ManagedProcessIdentity fields integrated with the existing detached transfer policy and safe serde defaults."
+      - "Dependency-safe adopted task cancellation and bounded-await handle."
+      - "Timeout-promoted Bash publication of group leader and start identity before external management."
+      - "Identity-verified signaling and conservative unsupported-platform behavior."
+  - phase: 3
+    name: "Unify cancellation, reload, and stale cleanup"
+    goal: "Use one verified bounded teardown path for explicit cancellation, owner reload, restart reconciliation, and explicit operator cleanup."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "TERM then KILL escalation with bounded reaping and truthful task diagnostics."
+      - "Reload and shutdown teardown for non-transferred work while preserving intentional transfer."
+      - "Nondestructive stale-running inspection and explicit terminate-by-task-ID bg actions."
+      - "Existing cleanup remains nondestructive for running tasks."
+  - phase: 4
+    name: "Validate lifecycle outcome and guardrails"
+    goal: "Prove the complete managed process lifecycle through focused tests, affected crates, repository guardrails, and a newly built isolated runtime."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Focused background, platform, Bash, reload, and bg tool tests pass."
+      - "Serialized affected-crate build and repository guardrail evidence."
+      - "Newly built jcode binary on an isolated socket times out, lists, cancels or cleans a managed task with zero remaining live or zombie descendants."
+      - "Final diff review confirms no unrelated process matching, broad refactor, or destructive default behavior."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-21T07:43:01Z"
+  artifact_type: "plan"

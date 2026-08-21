@@ -425,6 +425,7 @@ fn running_status_fixture(task_id: &str, session_id: &str) -> TaskStatusFile {
         progress: None,
         event_history: Vec::new(),
         stall_wake_seconds: None,
+        managed_process: None,
     }
 }
 
@@ -505,6 +506,63 @@ async fn reconcile_marks_orphan_from_reloaded_process_failed() -> Result<()> {
         "error should explain the reload orphaning, got: {error}"
     );
     assert!(status.completed_at.is_some());
+    Ok(())
+}
+
+#[tokio::test]
+async fn legacy_running_status_inspection_fails_closed() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let status = running_status_fixture("legacy-stale", "legacy-session");
+    write_status_fixture(&manager, &status).await;
+
+    let decisions = manager
+        .inspect_stale_managed_tasks(Some(&[status.task_id.clone()]))
+        .await;
+    assert_eq!(decisions.len(), 1);
+    assert_eq!(
+        decisions[0].eligibility,
+        StaleManagedTaskEligibility::MissingIdentity
+    );
+    assert_eq!(decisions[0].outcome, "refused");
+    assert_eq!(
+        manager.status(&status.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Running
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn stale_identity_mismatch_does_not_signal() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut status = running_status_fixture("mismatch-stale", "mismatch-session");
+    let mut owner = std::process::Command::new("true").spawn()?;
+    let dead_owner_pid = owner.id();
+    owner.wait()?;
+    status.owner_pid = Some(dead_owner_pid);
+    status.owner_instance = Some("dead-owner".to_string());
+    status.managed_process = Some(ManagedProcessIdentity {
+        pid: std::process::id(),
+        process_instance: Some("not-the-current-start-token".to_string()),
+        owner_instance: Some("dead-owner".to_string()),
+        transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+    });
+    status.pid = Some(std::process::id());
+    status.detached = true;
+    write_status_fixture(&manager, &status).await;
+
+    let decision = manager
+        .terminate_stale_managed_task(&status.task_id, Duration::from_millis(5))
+        .await?;
+    assert_eq!(
+        decision.eligibility,
+        StaleManagedTaskEligibility::IdentityMismatch
+    );
+    assert_eq!(
+        manager.status(&status.task_id).await.unwrap().status,
+        BackgroundTaskStatus::Running
+    );
     Ok(())
 }
 

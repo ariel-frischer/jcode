@@ -275,6 +275,141 @@ pub fn is_process_running(pid: u32) -> bool {
     }
 }
 
+/// Check whether a process is live rather than merely present as a zombie.
+pub fn is_process_live(pid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+            return false;
+        };
+        stat.rsplit_once(") ")
+            .and_then(|(_, fields)| fields.chars().next())
+            .is_some_and(|state| state != 'Z')
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        is_process_running(pid)
+    }
+}
+
+/// Check whether an isolated process group still contains any live process.
+pub fn is_process_group_live(pgid: u32) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+                continue;
+            };
+            let Some((_, fields)) = stat.rsplit_once(") ") else {
+                continue;
+            };
+            let fields = fields.split_whitespace().collect::<Vec<_>>();
+            if fields.get(2).and_then(|value| value.parse::<u32>().ok()) == Some(pgid)
+                && fields.first().is_some_and(|state| *state != "Z")
+            {
+                return true;
+            }
+        }
+        false
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        is_process_live(pgid)
+    }
+}
+
+/// Wait for every live member of an isolated process group to disappear.
+pub fn wait_for_process_group_exit(pgid: u32, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while is_process_group_live(pgid) {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    true
+}
+
+/// Return the kernel process-start identity for a PID where the platform exposes
+/// one. The token is intentionally opaque to callers and must be compared again
+/// immediately before any persisted-task signal.
+pub fn process_start_token(pid: u32) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let fields = stat
+            .rsplit_once(") ")?
+            .1
+            .split_whitespace()
+            .collect::<Vec<_>>();
+        // /proc/<pid>/stat field 22 is field 20 after the comm field.
+        fields.get(19).map(|token| (*token).to_string())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessIdentityCheck {
+    Matching,
+    Stopped,
+    Missing,
+    Unsupported,
+    Mismatch,
+}
+
+/// Verify a PID's live process instance without treating PID liveness alone as
+/// ownership proof.
+pub fn verify_process_start_token(pid: u32, expected: Option<&str>) -> ProcessIdentityCheck {
+    let Some(expected) = expected.filter(|token| !token.is_empty()) else {
+        return ProcessIdentityCheck::Missing;
+    };
+    let Some(actual) = process_start_token(pid) else {
+        return if is_process_running(pid) {
+            ProcessIdentityCheck::Unsupported
+        } else {
+            ProcessIdentityCheck::Stopped
+        };
+    };
+    if actual == expected {
+        ProcessIdentityCheck::Matching
+    } else {
+        ProcessIdentityCheck::Mismatch
+    }
+}
+
+/// Verify process identity immediately before signaling its isolated process
+/// group. Missing and mismatched identity fail closed.
+pub fn signal_verified_process_group(
+    pid: u32,
+    expected_start_token: Option<&str>,
+    signal: i32,
+) -> ProcessIdentityCheck {
+    let check = verify_process_start_token(pid, expected_start_token);
+    if check == ProcessIdentityCheck::Matching
+        && signal != 0
+        && signal_detached_process_group(pid, signal).is_err()
+        && !matches!(signal, 0)
+        && !is_process_running(pid)
+    {
+        return ProcessIdentityCheck::Stopped;
+    }
+    check
+}
+
 /// Send a signal to an entire detached process group/session led by `pid`.
 ///
 /// On Unix, detached tasks are spawned with `setsid()`, so the leader PID is
