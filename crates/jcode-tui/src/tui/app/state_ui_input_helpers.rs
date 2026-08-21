@@ -8,6 +8,15 @@ fn discover_file_mentions(
     query: &str,
     ignore_patterns: &[String],
 ) -> Vec<(i32, String, bool)> {
+    const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
+        "node_modules/",
+        "target/",
+        ".venv/",
+        "venv/",
+        "dist/",
+        "build/",
+        ".git/",
+    ];
     let mut builder = ignore::WalkBuilder::new(root);
     builder
         .hidden(false)
@@ -16,7 +25,11 @@ fn discover_file_mentions(
         .git_exclude(true);
     let custom_ignore = {
         let mut gitignore = ignore::gitignore::GitignoreBuilder::new(root);
-        for pattern in ignore_patterns {
+        for pattern in BUILTIN_IGNORE_PATTERNS
+            .iter()
+            .copied()
+            .chain(ignore_patterns.iter().map(String::as_str))
+        {
             let _ = gitignore.add_line(None, pattern);
         }
         gitignore.build().ok()
