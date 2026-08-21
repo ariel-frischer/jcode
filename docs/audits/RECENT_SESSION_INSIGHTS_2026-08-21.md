@@ -82,6 +82,12 @@ Related deferred Bead: `jcode-cdp`.
 
 ## Workflow findings
 
+### `dev-workflow` usage in the frozen sample
+
+The exact 30-file set recorded in `~/.jcode/scratch/recent-jcode-insights/pending.json` contains **5 explicit `dev-workflow` skill loads across 4 sessions**, so the skill was used in **13.3% of sampled sessions**. That is 0.17 loads per sampled session, or roughly one load for every six sessions at the call level. One session loaded it twice; the other three loaded it once.
+
+Using the report's eight-session `>3 messages` proxy for substantive activity, 4 of 8 sessions loaded `dev-workflow` (**50%**). The count comes from structured assistant `skill_manage` records with `action=load` or `reload` and `name=dev-workflow`, including calls nested inside `batch`. It excludes prose mentions, documentation reads, copied skill results, merge-wt references, and negative instructions such as “do not invoke dev-workflow.”
+
 ### Add a lifecycle gate before declaring completion
 
 The strongest recurring issue is not task execution. It is ambiguous final state. A session can finish implementation while leaving todos open, validation evidence unstated, a worktree unmerged, or cleanup ownership unclear.
