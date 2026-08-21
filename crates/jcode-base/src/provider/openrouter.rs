@@ -39,6 +39,17 @@ pub fn standard_catalog_lists_model(model_id: &str) -> Option<bool> {
     Some(cache.models.iter().any(|model| model.id == model_id))
 }
 
+/// Load the standard OpenRouter catalog once for callers that need to classify
+/// many models in one pass. Calling [`standard_catalog_lists_model`] per model
+/// clones and scans the full cached catalog each time.
+pub fn standard_catalog_model_ids() -> Option<std::collections::HashSet<String>> {
+    let cache = jcode_provider_openrouter::load_disk_cache_entry_for_namespace("openrouter")?;
+    if cache.models.is_empty() {
+        return None;
+    }
+    Some(cache.models.into_iter().map(|model| model.id).collect())
+}
+
 /// Schedule a background catalog refresh for a direct OpenAI-compatible
 /// profile through the composition-root hook (implemented by the runtime
 /// crate). Kept at its historical path for callers.

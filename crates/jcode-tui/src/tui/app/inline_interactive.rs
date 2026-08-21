@@ -1196,10 +1196,34 @@ impl App {
                 );
                 return;
             }
-            // Names-only remote catalogs must be fully classified before the
-            // picker becomes interactive. A lightweight first paint lets the
-            // user type against incomplete rows, then replaces their filtered
-            // list after favorites and effort variants arrive.
+            // Fully classifying a large names-only remote catalog reads local
+            // provider caches and can take seconds. Keep that work off the key
+            // handling/render thread. The visible loading shell is never a
+            // partial catalog, and the completed authoritative picker replaces
+            // it atomically with the user's current filter preserved.
+            const SYNC_REMOTE_FALLBACK_MAX_MODELS: usize = 64;
+            if self.remote_available_entries.len() > SYNC_REMOTE_FALLBACK_MAX_MODELS {
+                self.open_loading_model_picker(&current_model);
+                let remote_provider_name = self.remote_provider_name.clone();
+                let remote_available_entries = self.remote_available_entries.clone();
+                self.start_model_picker_route_load_with(
+                    cache_signature,
+                    picker_started,
+                    move || {
+                        let mut routes = crate::provider::remote_model_routes_fallback(
+                            remote_provider_name.as_deref(),
+                            &remote_available_entries,
+                        );
+                        Self::extend_remote_routes_for_uncovered_models_static(
+                            remote_provider_name.as_deref(),
+                            &remote_available_entries,
+                            &mut routes,
+                        );
+                        routes
+                    },
+                );
+                return;
+            }
             self.build_remote_model_routes_fallback()
         } else {
             self.simplified_model_routes_for_picker(&current_model)
@@ -1253,6 +1277,38 @@ impl App {
             preview: false,
         });
         self.set_status_notice("Updating model list…");
+    }
+
+    /// Run route classification off the UI thread and deliver the completed
+    /// authoritative catalog through `poll_model_picker_load`.
+    fn start_model_picker_route_load_with(
+        &mut self,
+        signature: ModelPickerCacheSignature,
+        picker_started: std::time::Instant,
+        build_routes: impl FnOnce() -> Vec<crate::provider::ModelRoute> + Send + 'static,
+    ) {
+        self.model_picker_load_request_id = self.model_picker_load_request_id.wrapping_add(1);
+        let request_id = self.model_picker_load_request_id;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let build = move || {
+            let routes_started = std::time::Instant::now();
+            let routes = build_routes();
+            let routes_ms = routes_started.elapsed().as_millis();
+            let _ = tx.send(Ok(ModelPickerRoutesResult { routes, routes_ms }));
+        };
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn_blocking(build);
+        } else {
+            std::thread::spawn(build);
+        }
+
+        self.pending_model_picker_load = Some(PendingModelPickerLoad {
+            request_id,
+            signature,
+            picker_started,
+            receiver: rx,
+        });
     }
 
     pub(super) fn poll_model_picker_load(&mut self) -> bool {
@@ -1313,6 +1369,10 @@ impl App {
 
         match received {
             Ok(result) => {
+                let was_preview = self
+                    .inline_interactive_state
+                    .as_ref()
+                    .is_some_and(|picker| picker.preview);
                 self.open_model_picker_with_routes(
                     pending.signature,
                     pending.picker_started,
@@ -1321,9 +1381,11 @@ impl App {
                     true,
                     true,
                 );
-                if self.inline_interactive_state.is_some() {
-                    self.set_status_notice("Model list updated");
+                if let Some(picker) = self.inline_interactive_state.as_mut() {
+                    picker.preview = was_preview;
                 }
+                self.sync_model_picker_preview_from_input();
+                self.status_notice = None;
                 true
             }
             Err(error) => {
@@ -2037,6 +2099,11 @@ impl App {
                 Ok(true)
             }
             KeyCode::Enter => {
+                if self.pending_model_picker_load.is_some() {
+                    // Do not let Enter select the loading shell as if it were an
+                    // authoritative model row.
+                    return Ok(true);
+                }
                 if let Some(ref mut picker) = self.inline_interactive_state {
                     if picker.filtered.is_empty() {
                         self.inline_interactive_state = None;
@@ -2075,6 +2142,9 @@ impl App {
             }
             KeyCode::Esc => {
                 self.inline_interactive_state = None;
+                self.pending_model_picker_load = None;
+                self.model_picker_load_request_id =
+                    self.model_picker_load_request_id.wrapping_add(1);
                 self.input.clear();
                 self.cursor_pos = 0;
                 Ok(true)
