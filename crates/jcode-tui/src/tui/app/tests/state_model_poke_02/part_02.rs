@@ -271,6 +271,55 @@ fn test_model_picker_cold_preview_immediately_filters_sol_medium() {
 }
 
 #[test]
+fn test_remote_large_catalog_cold_preview_immediately_filters_sol_medium() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.remote_provider_name = Some("OpenAI".to_string());
+    app.remote_provider_model = Some("gpt-5.6-luna".to_string());
+    app.remote_available_entries = (0..65)
+        .map(|idx| format!("catalog-model-{idx}"))
+        .chain(std::iter::once("gpt-5.6-sol".to_string()))
+        .collect();
+    app.remote_model_options.clear();
+
+    for c in "/model sol (med)".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("remote model picker preview should be open");
+    assert_eq!(picker.filter, "sol (med)");
+    assert!(
+        picker
+            .filtered
+            .iter()
+            .any(|&i| picker.entries[i].name == "gpt-5.6-sol (med)"),
+        "large remote catalogs must expose complete Sol effort rows on the first paint"
+    );
+    assert!(
+        app.pending_model_picker_load.is_none(),
+        "the visible remote picker must not be replaced after typing starts"
+    );
+
+    let selected_entry = picker.filtered[picker.selected];
+    assert_eq!(
+        picker.entries[selected_entry].name, "gpt-5.6-sol (med)",
+        "the exact filtered row must be selected instead of xhigh"
+    );
+
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .unwrap();
+    assert_eq!(
+        app.pending_reasoning_effort.as_deref(),
+        Some("medium"),
+        "selecting `sol (med)` must stage medium effort"
+    );
+}
+
+#[test]
 fn test_model_picker_preview_enter_selects_model() {
     let mut app = create_test_app();
     configure_test_remote_models(&mut app);

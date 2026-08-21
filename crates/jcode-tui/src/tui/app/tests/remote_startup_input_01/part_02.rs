@@ -414,8 +414,13 @@ fn test_model_picker_copilot_models_have_copilot_route() {
 
 #[test]
 fn test_model_picker_remote_comtegra_model_uses_comtegra_route_not_copilot() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var("JCODE_HOME").ok();
     let prev_key = std::env::var("COMTEGRA_API_KEY").ok();
+    let temp = tempfile::tempdir().expect("tempdir");
+    crate::env::set_var("JCODE_HOME", temp.path().display().to_string());
     crate::env::set_var("COMTEGRA_API_KEY", "test-key");
+    crate::auth::AuthStatus::invalidate_cache();
 
     let mut app = create_test_app();
     app.is_remote = true;
@@ -423,10 +428,15 @@ fn test_model_picker_remote_comtegra_model_uses_comtegra_route_not_copilot() {
 
     app.open_model_picker();
 
+    match prev_home {
+        Some(value) => crate::env::set_var("JCODE_HOME", value),
+        None => crate::env::remove_var("JCODE_HOME"),
+    }
     match prev_key {
         Some(value) => crate::env::set_var("COMTEGRA_API_KEY", value),
         None => crate::env::remove_var("COMTEGRA_API_KEY"),
     }
+    crate::auth::AuthStatus::invalidate_cache();
 
     let picker = app
         .inline_interactive_state
