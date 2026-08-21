@@ -147,6 +147,40 @@ fn session_handoff_ready_preserves_existing_composer_input() {
 }
 
 #[test]
+fn session_handoff_ready_migrates_legacy_auto_start_draft_into_submission_queue() {
+    ensure_test_jcode_home_if_unset();
+    let destination = "session_handoff_legacy_auto_start_test";
+    crate::client_input::save_startup_submission_for_session(
+        destination,
+        "continue automatically from the handoff".to_string(),
+        Vec::new(),
+    );
+
+    let mut app = create_test_app();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    app.handle_server_event(
+        ServerEvent::SessionHandoffReady {
+            id: 5,
+            source_session_id: app.session.id.clone(),
+            new_session_id: destination.to_string(),
+            new_session_name: "spruce".to_string(),
+            auto_start: true,
+        },
+        &mut remote,
+    );
+
+    assert!(app.input.is_empty());
+    assert!(!app.submit_input_on_startup);
+    assert_eq!(
+        app.queued_messages,
+        ["continue automatically from the handoff"]
+    );
+}
+
+#[test]
 fn session_handoff_ready_restores_editable_draft_without_auto_submit() {
     ensure_test_jcode_home_if_unset();
     let destination = "session_handoff_draft_test";
