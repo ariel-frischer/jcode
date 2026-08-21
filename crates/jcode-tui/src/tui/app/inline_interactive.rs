@@ -1167,22 +1167,16 @@ impl App {
 
         if !self.is_remote && !crate::perf::tui_policy().simplified_model_picker {
             let routes_started = std::time::Instant::now();
-            let routes = self.simplified_model_routes_for_picker(&current_model);
+            let routes = self.provider.model_routes();
             let routes_ms = routes_started.elapsed().as_millis();
             self.open_model_picker_with_routes(
-                cache_signature.clone(),
+                cache_signature,
                 picker_started,
                 routes,
                 routes_ms,
                 preserve_input,
-                false,
+                true,
             );
-            if self.inline_interactive_state.is_some() {
-                self.set_status_notice("Updating model routes…");
-            } else {
-                self.open_loading_model_picker(&current_model);
-            }
-            self.start_model_picker_route_load(cache_signature, picker_started);
             return;
         }
 
@@ -1301,17 +1295,6 @@ impl App {
             preview: false,
         });
         self.set_status_notice("Updating model list…");
-    }
-
-    fn start_model_picker_route_load(
-        &mut self,
-        signature: ModelPickerCacheSignature,
-        picker_started: std::time::Instant,
-    ) {
-        let provider = self.provider.clone();
-        self.start_model_picker_route_load_with(signature, picker_started, move || {
-            provider.model_routes()
-        });
     }
 
     /// Run an arbitrary route builder off the UI thread and deliver the result
