@@ -1,0 +1,202 @@
+plan:
+  branch: "agent/jcode-910-9xb"
+  created: "2026-08-21"
+  spec_path: "specs/011-clickable-file-mentions/spec.yaml"
+
+summary: |
+  Extend the existing transcript click-target parser so an @path token is returned as a local
+  file target without the leading @. The existing chat click dispatch then resolves and toggles
+  the existing inline file preview using the active session working directory and its current
+  filesystem, size, and text-readability rules. Invalid mentions remain handled locally and are
+  never passed to the generic URL opener.
+
+  Keep the viewer change deliberately small: preserve markdown rendering and all current preview
+  lifecycle behavior, add no dependency or new highlighting path, and render ordinary source and
+  text file bodies with the normal theme foreground instead of dim_color(). Focused parser and
+  rendered-click tests cover token boundaries, session-CWD resolution, invalid targets, URL
+  preservation, and semantic foreground styling before built-binary TUI validation.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "Ratatui and Crossterm TUI"
+  primary_dependencies:
+    - name: "regex"
+      version: "existing workspace version"
+      purpose: "Extend the existing transcript link-target parser without a new parser dependency"
+    - name: "unicode-width"
+      version: "existing workspace version"
+      purpose: "Preserve display-column hit testing for wide characters"
+    - name: "ratatui"
+      version: "existing workspace version"
+      purpose: "Render inline preview lines and inspect semantic foreground styles in tests"
+  storage: "Local session state and filesystem only; no persisted schema change"
+  testing:
+    framework: "Rust built-in test harness with Ratatui TestBackend"
+    approach: "Parser unit tests, focused TUI mouse/render tests, then isolated built-binary TUI frames"
+  target_platform: "Jcode TUI on supported terminal platforms"
+  project_type: "cli"
+  performance_goals: "No additional filesystem discovery or per-frame indexing; retain linear token scanning and existing preview caching"
+  constraints:
+    - "No new packages, syntax engines, or Cargo dependency changes"
+    - "Reuse the current link hit-testing, session-CWD resolution, and inline preview lifecycle"
+    - "Preserve URL clicks, copy selection, scrolling, preview collapse, and markdown rendering"
+    - "Preserve existing policy for absolute and parent-relative paths"
+    - "Plain/source file body text must use the active theme's normal foreground"
+  scale_scope: "One transcript line at hit-test time and files up to the existing 512 KiB inline preview limit"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "PRIN-001 Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Three focused TUI files plus existing focused tests; no adjacent refactor or dependency change."
+    - name: "PRIN-002 Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Additive @mention target recognition; existing URLs, plain paths, viewer state, and persistence remain unchanged."
+    - name: "PRIN-004 Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Behavior remains in jcode-tui and reuses jcode-tui-markdown only through its existing rendering boundary."
+    - name: "PRIN-005 Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Exact parser and inline_file_preview tests map directly to click, invalid-path, CWD, URL, and foreground requirements."
+    - name: "PRIN-006 Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Invalid mention targets are consumed as local file attempts and cannot fall through to the external URL opener."
+    - name: "PRIN-007 Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Focused tests and build run first, followed by scripts/check_guardrails.sh before delivery."
+    - name: "PRIN-008 Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "One canonical click parser and one existing inline viewer are reused; no parallel viewer or abstraction is added."
+    - name: "PRIN-009 Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Plan includes built-binary click and visual evidence rather than stopping at compilation."
+    - name: "PRIN-010 Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "No hot-path indexing is introduced and runtime validation uses the newly built binary through an isolated tester/socket."
+
+research_findings:
+  decisions:
+    - topic: "@filepath click recognition"
+      decision: "Recognize @path tokens in ui/url.rs before generic plain-path matching and return the path without @."
+      rationale: "chat_link_target_from_screen already maps a hit to the originating message and try_open_link_at already delegates local paths to the existing preview."
+      alternatives_considered:
+        - "Add a second message renderer hit-region registry"
+        - "Rewrite rendered messages as Markdown links"
+    - topic: "Invalid mention dispatch"
+      decision: "Distinguish syntactically recognized @mentions from unrelated text so invalid file mentions are consumed locally and never externally opened."
+      rationale: "The existing try_toggle_inline_file_preview returns false for missing files, which would otherwise allow generic link handling to inspect the same target."
+      alternatives_considered:
+        - "Open missing targets externally"
+        - "Add a new filesystem policy"
+    - topic: "Viewer content readability"
+      decision: "Replace dim_color() on ordinary file body spans with the default/normal foreground while leaving markdown rendering unchanged."
+      rationale: "The reported defect is low contrast; the existing syntax helper is not a current inline-viewer path and adding one would exceed the clarified scope."
+      alternatives_considered:
+        - "Add or expose a new theme-aware syntax rendering pipeline"
+        - "Use a fixed white RGB value that would fail in light themes"
+    - topic: "Path policy"
+      decision: "Reuse try_toggle_inline_file_preview unchanged for relative, absolute, and parent-relative resolution."
+      rationale: "The Bead explicitly requires the existing viewer/path policy rather than inventing a stricter boundary."
+      alternatives_considered:
+        - "Canonicalize and restrict all paths to session CWD"
+        - "Resolve relative mentions against process CWD"
+
+data_model:
+  entities:
+    - name: "FileMentionHit"
+      description: "A syntactically valid @path token under the clicked display column."
+      fields:
+        - name: "display_range"
+          type: "display-column range"
+          description: "Exact clickable columns including the visible @ prefix"
+          constraints: "Must respect Unicode display width and token boundaries"
+        - name: "target"
+          type: "String"
+          description: "Path passed to the existing inline viewer without the @ prefix"
+          constraints: "Non-empty and not a URL/email token"
+      relationships:
+        - target: "RenderedSessionMessage"
+          type: "many-to-one"
+          description: "The prepared chat frame maps the clicked line to its originating message index"
+    - name: "InlineFilePreview"
+      description: "Existing transient viewer state keyed by the originating message hash."
+      fields:
+        - name: "display_path"
+          type: "String"
+          description: "Original local path shown in the viewer header"
+          constraints: "Existing behavior"
+        - name: "content"
+          type: "String"
+          description: "Readable text loaded under the existing size limit"
+          constraints: "Existing 512 KiB and UTF-8 rules"
+        - name: "markdown"
+          type: "bool"
+          description: "Preserves existing markdown rendering path"
+          constraints: "Existing extension detection"
+      relationships:
+        - target: "FileMentionHit"
+          type: "one-to-one"
+          description: "A successful mention activation toggles the existing preview"
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/011-clickable-file-mentions/spec.yaml"
+      description: "Behavioral contract and clarified non-goals"
+    - path: "specs/011-clickable-file-mentions/plan.yaml"
+      description: "Implementation and validation design"
+    - path: "specs/011-clickable-file-mentions/tasks.yaml"
+      description: "Executable task sequence and acceptance mapping"
+  source_code:
+    - path: "crates/jcode-tui/src/tui/ui/url.rs"
+      description: "Transcript URL, Markdown-link, plain-path, and new @path token hit testing"
+    - path: "crates/jcode-tui/src/tui/app/navigation.rs"
+      description: "Click dispatch guard ensuring invalid @mentions cannot fall through to external opening"
+    - path: "crates/jcode-tui/src/tui/ui_inline_file_preview.rs"
+      description: "Inline viewer body foreground styling"
+  tests:
+    - path: "crates/jcode-tui/src/tui/ui/url.rs"
+      description: "Token-boundary and Unicode display-column unit tests"
+    - path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+      description: "Rendered click, session-CWD, invalid target, URL preservation, and foreground tests"
+
+implementation_phases:
+  - phase: 1
+    name: "Characterize mention tokens and viewer foreground"
+    goal: "Add failing focused tests for parser boundaries, rendered clicks, invalid targets, and semantic content style."
+    deliverables:
+      - "@path parser tests including Unicode prefixes, punctuation, email exclusion, nested and absolute paths"
+      - "Rendered user and prior message click tests using session CWD"
+      - "Invalid mention no-external-fallthrough test"
+      - "Plain file body foreground style assertion"
+  - phase: 2
+    name: "Implement coordinated click and readability behavior"
+    goal: "Reuse the existing click and preview contracts with the smallest source edits."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "@path hit target extraction returning a local path"
+      - "Mention-aware click dispatch that consumes invalid local mentions safely"
+      - "Normal foreground for ordinary inline file contents"
+  - phase: 3
+    name: "Regression and runtime validation"
+    goal: "Prove existing interactions and the newly built TUI behavior."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Focused Rust tests and jcode-tui build"
+      - "URL, selection, scrolling, preview lifecycle, empty/Unicode/long-line fallback coverage"
+      - "Built-binary light/dark frames through an isolated runtime"
+      - "Repository guardrails and explicit-file commit"
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-21"
+  artifact_type: "plan"

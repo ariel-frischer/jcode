@@ -243,9 +243,15 @@ impl App {
     pub(super) fn try_open_link_at(&mut self, column: u16, row: u16) -> bool {
         if let Some((target, message_index)) =
             super::super::ui::chat_link_target_from_screen(column, row)
-            && self.try_toggle_inline_file_preview(&target, message_index)
         {
-            return true;
+            let preview_target = target.strip_prefix('@').unwrap_or(&target);
+            if self.try_toggle_inline_file_preview(preview_target, message_index) {
+                return true;
+            }
+            if target.starts_with('@') {
+                self.set_status_notice(format!("File is not available: {preview_target}"));
+                return true;
+            }
         }
         let Some(target) = super::super::ui::link_target_from_screen(column, row) else {
             return false;
