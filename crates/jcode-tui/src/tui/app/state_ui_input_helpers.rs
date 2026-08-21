@@ -3,6 +3,95 @@ use crate::tui::core;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+fn discover_file_mentions(
+    root: &Path,
+    query: &str,
+    ignore_patterns: &[String],
+) -> Vec<(i32, String, bool)> {
+    const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
+        "node_modules/",
+        "target/",
+        "vendor/",
+        ".venv/",
+        "venv/",
+        "__pycache__/",
+        ".pytest_cache/",
+        ".mypy_cache/",
+        ".ruff_cache/",
+        ".tox/",
+        ".nox/",
+        "dist/",
+        "build/",
+        "out/",
+        "coverage/",
+        ".cache/",
+        ".next/",
+        ".nuxt/",
+        ".svelte-kit/",
+        ".turbo/",
+        ".gradle/",
+        ".terraform/",
+        ".git/",
+    ];
+    let mut builder = ignore::WalkBuilder::new(root);
+    builder
+        .hidden(false)
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false);
+    let ignored_patterns: Vec<&str> = BUILTIN_IGNORE_PATTERNS
+        .iter()
+        .copied()
+        .chain(ignore_patterns.iter().map(String::as_str))
+        .collect();
+    let mut candidates = Vec::new();
+    for entry in builder.build().filter_map(Result::ok) {
+        let path = entry.path();
+        if path == root {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let text = relative
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/");
+        if ignored_patterns.iter().any(|pattern| {
+            let pattern = pattern.trim().trim_start_matches("./");
+            let pattern = pattern.trim_end_matches('/');
+            text.split('/').any(|component| component == pattern)
+                || text == pattern
+                || text.starts_with(&format!("{pattern}/"))
+        }) {
+            continue;
+        }
+        let score = if query.is_empty() {
+            Some(0)
+        } else {
+            jcode_fuzzy::fuzzy_score(query, &text)
+        };
+        if let Some(score) = score {
+            candidates.push((score, text, entry.file_type().is_some_and(|t| t.is_dir())));
+        }
+        if candidates.len() >= 5000 {
+            break;
+        }
+    }
+    candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    candidates
+}
+
+fn effective_file_mention_ignores(app: &App) -> Vec<String> {
+    let config = crate::config::config();
+    let mut ignores = config.file_mentions.ignore.clone();
+    if let Some(profile_name) = app.session.profile_name.as_deref()
+        && let Some(profile) = config.profiles.get(profile_name)
+    {
+        ignores.extend(profile.file_mentions_ignore.iter().cloned());
+    }
+    ignores
+}
+
 #[derive(Clone, Copy)]
 struct RegisteredCommand {
     name: &'static str,
@@ -1186,6 +1275,31 @@ impl App {
         self.rank_suggestions(&prefix, self.command_candidates())
     }
 
+    fn file_mention_suggestions(&self, input: &str) -> Vec<(String, &'static str)> {
+        let cursor = self.cursor_pos.min(input.len());
+        let before_cursor = &input[..cursor];
+        let Some(at) = before_cursor.rfind('@') else { return Vec::new() };
+        if before_cursor[at + 1..].contains(char::is_whitespace) {
+            return Vec::new();
+        }
+        let query = &before_cursor[at + 1..];
+        let root = self.session.working_dir.as_deref().map(Path::new)
+            .unwrap_or_else(|| Path::new("."));
+        let candidates = discover_file_mentions(
+            root,
+            query,
+            &effective_file_mention_ignores(self),
+        );
+        candidates.into_iter().take(100).map(|(_, path, dir)| {
+            let mut replacement = input[..at].to_string();
+            replacement.push('@');
+            replacement.push_str(&path);
+            if dir { replacement.push('/'); }
+            replacement.push_str(&input[cursor..]);
+            (replacement, if dir { "Directory" } else { "File" })
+        }).collect()
+    }
+
     /// Get command suggestions based on current input
     pub fn command_suggestions(&self) -> Vec<(String, &'static str)> {
         // Read up to eight times per frame; recomputing each time re-ranks
@@ -1272,6 +1386,12 @@ impl App {
             };
             if suppress {
                 return Vec::new();
+            }
+        }
+        if !self.input.trim_start().starts_with('/') && self.input.contains('@') {
+            let mentions = self.file_mention_suggestions(&self.input);
+            if !mentions.is_empty() {
+                return mentions;
             }
         }
         self.get_suggestions_for(&self.input)
@@ -1959,6 +2079,28 @@ fn compact_suggestion_text(text: &str, max_chars: usize) -> String {
 mod external_cli_suggestion_tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn file_mentions_skip_vendor_directories_and_honor_custom_patterns() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("src")).expect("src");
+        std::fs::create_dir_all(temp.path().join("node_modules/pkg")).expect("node_modules");
+        std::fs::create_dir_all(temp.path().join("generated")).expect("generated");
+        std::fs::write(temp.path().join("src/main.rs"), "fn main() {}").expect("source");
+        std::fs::write(temp.path().join("node_modules/pkg/index.js"), "").expect("vendor");
+        std::fs::write(temp.path().join("generated/api.rs"), "").expect("generated file");
+
+        let defaults = vec!["node_modules/".into()];
+        let paths = discover_file_mentions(temp.path(), "", &defaults);
+        let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
+        assert!(names.contains(&"src"), "discovered names: {names:?}");
+        assert!(names.contains(&"src/main.rs"));
+        assert!(!names.iter().any(|path| path.starts_with("node_modules/")));
+
+        let custom = vec!["node_modules/".into(), "generated/".into()];
+        let paths = discover_file_mentions(temp.path(), "", &custom);
+        assert!(!paths.iter().any(|(_, path, _)| path.starts_with("generated/")));
+    }
 
     /// Faithful, real-home measurement of the per-frame onboarding cost.
     /// Ignored by default (depends on local ~/.codex and ~/.claude contents).

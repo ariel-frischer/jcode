@@ -807,6 +807,20 @@ skill policy unless an explicit child override is supplied. Session metadata sto
 selected name and a credential-free resolved snapshot. Restore uses that snapshot and
 warns when the named profile is missing or changed; it never silently falls back.
 
+The TUI `@` file picker skips common generated and dependency directories by default. Add
+custom global patterns under `[file_mentions]`, or add profile-specific patterns under
+`[profiles.<name>]`:
+
+```toml
+[file_mentions]
+ignore = ["private/", "*.generated.*"]
+
+[profiles.review]
+file_mentions_ignore = ["fixtures/", "snapshots/2024/"]
+```
+
+Profile patterns are additive to the global list and apply when that profile is active.
+
 The generated config template documents the field list and precedence (explicit
 invocation > environment > selected profile > unprofiled persisted config > built-in
 default). Unknown profiles and invalid values fail before a provider request with the
