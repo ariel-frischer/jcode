@@ -254,7 +254,11 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
         return needs_redraw;
     }
 
-    if !app.is_processing && !app.queued_messages.is_empty() {
+    // History clears destination display state when it attaches a fresh handoff
+    // session. Keep queued startup messages intact until then so the generated
+    // handoff briefing remains the first visible destination message instead of
+    // flashing briefly and disappearing before the assistant response.
+    if remote.has_loaded_history() && !app.is_processing && !app.queued_messages.is_empty() {
         let queued_messages = std::mem::take(&mut app.queued_messages);
         let hidden_reminders = std::mem::take(&mut app.hidden_queued_system_messages);
         let (messages, reminder, display_system_messages) =
@@ -302,7 +306,10 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
         needs_redraw = true;
     }
 
-    if !app.is_processing && !app.hidden_queued_system_messages.is_empty() {
+    if remote.has_loaded_history()
+        && !app.is_processing
+        && !app.hidden_queued_system_messages.is_empty()
+    {
         let reminders = std::mem::take(&mut app.hidden_queued_system_messages);
         let combined = reminders.join("\n\n");
         crate::logging::info(&format!(
