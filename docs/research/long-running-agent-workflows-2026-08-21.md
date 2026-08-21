@@ -926,3 +926,85 @@ The highest-value next experiment is the controlled replay described above. It s
 - The CAT, SWE-MeM, CoMem, and icat numbers are not apples-to-apples with Jcode. They use different models, training, prompts, environments, and acceptance setups.
 - Web search was partially blocked by search-provider anti-bot responses. The research therefore used direct official pages, GitHub raw files, arXiv records, and repository-local evidence.
 - No paid live-model benchmark was run. The proposed benchmark deliberately separates local replay validation from later external-cost validation.
+
+## 12. Minimal recommendation set
+
+These are recommendations only. No global instructions, skills, or Jcode source were changed as a result of this section.
+
+### 12.1 Global agent instructions
+
+Recommend adding one concise long-running queue contract to `~/AGENTS.md`:
+
+- The controller-provided Bead manifest is authoritative.
+- Keep `active`, `next`, `acceptance`, and `blocker` todos current.
+- Do not create Beads for ordinary subtasks. Create or propose one only for a separate bug, unresolvable blocker, or explicit scope expansion.
+- Do not claim completion without acceptance evidence and a durable checkpoint.
+- If an eligible `next` Bead exists, do not stop after the current Bead succeeds.
+- Compact within a coherent milestone. At a meaningful boundary, write a checkpoint and use the `session_transition` tool rather than merely mentioning a handoff.
+- Retry safely: reconcile ambiguous effects first, reuse a session only for healthy validation-only work, and use a fresh session after crashes or transport failures.
+
+Keep this contract policy-level. Put implementation details in `dev-workflow` and Locus documentation rather than making the global instructions large.
+
+### 12.2 `/dev-workflow` skill updates
+
+Recommend a short “long-running execution” section, not a new workflow mode:
+
+1. Define the controller/worker boundary: Locus owns queue, leases, worktrees, receipts, retries, and integration. Jcode owns the bounded agent session.
+2. Require a frozen run manifest or queue projection with the active Bead, next eligible Bead, acceptance gates, retry ordinal, and process ownership.
+3. Add a terminal-state matrix for success, blocked, cancelled, timeout, crash, transport failure, protocol failure, ambiguous effect, and no-progress termination.
+4. Require one direct acceptance check per requirement and a machine-readable completion receipt before advancing the queue.
+5. Add bounded liveness and retry guidance. Process existence alone is not progress.
+6. State explicitly that model-created Beads are proposals, not automatic queue mutations.
+7. Preserve the simple one-worker workflow as the default. Use parallel waves only for dependency-independent Beads with isolated worktrees and serialized integration.
+
+Do not make the skill prescribe Ralph, Temporal, or a particular provider. The contract should remain usable with Jcode, Locus, or another worker adapter.
+
+### 12.3 New skills
+
+No new skill is needed initially. Existing `/beads`, `/dev-workflow`, `/merge-wt`, `/systematic-debugging`, and `/locus` cover the required responsibilities.
+
+Only create a narrow `/long-horizon-agent-run` or `/agent-run-recovery` skill later if this contract is repeatedly used across multiple repositories. Until then, a reference section in `dev-workflow` avoids duplication and skill sprawl.
+
+### 12.4 Jcode harness feature candidates
+
+No Jcode source change is required before a local orchestration pilot. For a reliable production-like controller, the highest-value additions would be:
+
+- Structured lifecycle events for todo-group closure, compaction start/end, handoff request, child-session startup/acknowledgment, terminal reason, and heartbeat.
+- A machine-readable session envelope carrying active Bead, next Bead, acceptance gates, checkpoint ID, process manifest, and retry ordinal.
+- Explicit terminal results for “session ended without acceptance,” “handoff child not acknowledged,” “no progress,” and “ambiguous effect.”
+- A supervisor-readable status query that does not depend on parsing model prose or the current transcript.
+- Handoff and retry receipts that link parent session, child session, Bead, worktree, and validation evidence.
+
+Do **not** prioritize forced handoff at a token threshold, infinite Ralph loops, or model-generated queue advancement. The current advisory poke is sufficient for prompting the agent. The missing reliability layer is deterministic, externally observable lifecycle state.
+
+### 12.5 Recommended order
+
+1. Adopt the instruction and `dev-workflow` recommendations as documentation policy.
+2. Run a local Locus pilot using the existing Jcode handoff and compaction behavior.
+3. Add structured Jcode lifecycle events only where the pilot shows the supervisor cannot distinguish progress, completion, or recovery.
+4. Add new skills only after the same protocol is needed in more than one repository.
+
+### 12.6 Recommended handoff-poke wording
+
+The current wording is too vague because it says “consider handing off” without naming the action. Prefer concise, conditional instructions:
+
+**Soft threshold, after a todo group closes:**
+
+> A todo group just closed and context usage is elevated. If the next work is a materially different milestone, write the required checkpoint and call the `session_transition` tool now. If it is the same milestone, continue or compact instead. Do not hand off while an important long-running process is still active unless its ownership and recovery state are durable.
+
+**Hard threshold:**
+
+> Context usage is high. Finish the current acceptance item, checkpoint the result, then call `session_transition` before starting another milestone. Do not begin the next milestone in this session.
+
+When calling `session_transition`, provide a non-empty goal and structured prompt, keep `copy_todos=true` by default, and include the active Bead, completed outcome, validation evidence, risks, process ownership, and exact next action. The poke should teach the action and its decision rule, not attempt to force the transition.
+
+### 12.7 Adoption phase recommendation
+
+The Locus-supervised architecture is the preferred **future** target once Locus is stable. For the near term, Jcode-only long-horizon execution is the better and more consistent path:
+
+- Use Jcode compaction within a milestone and `session_transition` between milestones.
+- Let Beads and copied todos provide the durable queue projection.
+- Keep the existing Jcode session and handoff behavior as the operational path rather than adding an unstable Locus dependency.
+- Treat Locus integration as a later reliability upgrade, after its runner, recovery, and cleanup behavior are proven with fault-injection tests.
+
+This changes sequencing, not the target architecture: stabilize the Jcode-only loop first, then place Locus outside it as the authoritative supervisor.
