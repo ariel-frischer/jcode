@@ -35,6 +35,8 @@ const MODEL_PICKER_USAGE_FILE: &str = "model_picker_usage.json";
 const MODEL_PICKER_USAGE_VERSION: u8 = 1;
 const MODEL_PICKER_FAVORITES_FILE: &str = "model_picker_favorites.json";
 const MODEL_PICKER_FAVORITES_VERSION: u8 = 1;
+const REMOTE_MODEL_PICKER_STAGE_MODELS: usize = 24;
+const REMOTE_MODEL_PICKER_ASYNC_THRESHOLD: usize = 64;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RemoteModelCatalogCache {
@@ -290,6 +292,394 @@ fn model_picker_entry_sort(a: &PickerEntry, b: &PickerEntry) -> std::cmp::Orderi
         )
     };
     rank(a).cmp(&rank(b))
+}
+
+fn model_picker_entry_identity(entry: &PickerEntry) -> (String, String, String, Option<String>) {
+    let route = entry.active_option();
+    (
+        entry.name.clone(),
+        route
+            .map(|route| route.provider.clone())
+            .unwrap_or_default(),
+        route
+            .map(|route| route.api_method.clone())
+            .unwrap_or_default(),
+        entry.effort.clone(),
+    )
+}
+
+fn append_unique_model(
+    models: &mut Vec<String>,
+    seen: &mut HashSet<String>,
+    model: impl Into<String>,
+) {
+    let model = model.into();
+    if !model.trim().is_empty() && model != "unknown" && seen.insert(model.clone()) {
+        models.push(model);
+    }
+}
+
+fn stored_model_name(key: &str) -> Option<&str> {
+    key.split('\u{1f}').next().filter(|model| !model.is_empty())
+}
+
+fn staged_remote_model_names(
+    current_model: &str,
+    default_model: Option<&str>,
+    remote_available_entries: &[String],
+) -> Vec<String> {
+    let favorites = load_model_picker_favorites_store();
+    let usage = load_model_picker_usage_store();
+    let mut models = Vec::new();
+    let mut seen = HashSet::new();
+    let available = remote_available_entries
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+
+    append_unique_model(&mut models, &mut seen, current_model);
+    if let Some(default_model) = default_model {
+        append_unique_model(&mut models, &mut seen, default_model);
+    }
+
+    let mut favorite_models = favorites
+        .favorites
+        .iter()
+        .filter_map(|key| stored_model_name(key).map(str::to_string))
+        .collect::<Vec<_>>();
+    favorite_models.sort();
+    for model in favorite_models {
+        if available.contains(model.as_str()) {
+            append_unique_model(&mut models, &mut seen, model);
+        }
+    }
+
+    let mut used_models = usage.selections.iter().collect::<Vec<_>>();
+    used_models.sort_by_key(|(key, entry)| {
+        (
+            std::cmp::Reverse(entry.count),
+            std::cmp::Reverse(entry.last_selected_unix_secs),
+            *key,
+        )
+    });
+    for (key, _) in used_models {
+        if let Some(model) = stored_model_name(key)
+            && available.contains(model)
+        {
+            append_unique_model(&mut models, &mut seen, model);
+        }
+    }
+
+    for model in RECOMMENDED_MODELS {
+        if available.contains(model) {
+            append_unique_model(&mut models, &mut seen, *model);
+        }
+    }
+
+    for model in remote_available_entries {
+        if models.len() >= REMOTE_MODEL_PICKER_STAGE_MODELS {
+            break;
+        }
+        append_unique_model(&mut models, &mut seen, model.clone());
+    }
+    models
+}
+
+#[derive(Clone)]
+pub(super) struct ModelPickerEntryBuildContext {
+    is_remote: bool,
+    current_model: String,
+    current_provider: String,
+    current_api_method: Option<String>,
+    current_effort: Option<String>,
+    default_model: Option<String>,
+    default_provider: Option<String>,
+    default_anthropic_effort: Option<String>,
+    default_openai_effort: Option<String>,
+    provider_allowlist: Option<Vec<String>>,
+    recent_auth_provider: Option<String>,
+}
+
+pub(super) struct PreparedModelPickerEntries {
+    routes: Vec<crate::provider::ModelRoute>,
+    entries: Vec<PickerEntry>,
+    cached_entries: Option<Vec<PickerEntry>>,
+    current_model: String,
+    current_provider: String,
+    recent_auth_provider: Option<String>,
+    model_count: usize,
+    grouping_ms: u128,
+    timestamp_ms: u128,
+    entries_ms: u128,
+}
+
+fn prepare_model_picker_entries(
+    routes: Vec<crate::provider::ModelRoute>,
+    context: &ModelPickerEntryBuildContext,
+) -> PreparedModelPickerEntries {
+    use std::collections::BTreeMap;
+
+    let is_config_default = |name: &str, route: &PickerOption, effort: Option<&str>| -> bool {
+        if !model_picker_route_is_default(
+            name,
+            route,
+            context.default_model.as_deref(),
+            context.default_provider.as_deref(),
+        ) {
+            return false;
+        }
+        let selection = crate::provider::MultiProvider::default_model_selection_from_route(
+            name,
+            &route.api_method,
+            &route.provider,
+        );
+        model_picker_effort_matches_default(
+            selection.provider_key.as_deref(),
+            effort,
+            context.default_anthropic_effort.as_deref(),
+            context.default_openai_effort.as_deref(),
+        )
+    };
+
+    let routes = if routes.is_empty() && context.is_remote && context.current_model != "unknown" {
+        vec![crate::provider::ModelRoute {
+            model: context.current_model.clone(),
+            provider: context.current_provider.clone(),
+            api_method: "current".to_string(),
+            available: true,
+            detail: "catalog still loading".to_string(),
+            cheapness: None,
+        }]
+    } else {
+        routes
+    };
+    let routes = crate::provider::dedupe_model_routes(routes);
+    let routes = filter_routes_by_provider_allowlist(
+        routes,
+        context.provider_allowlist.as_deref(),
+        &context.current_model,
+        &context.current_provider,
+        context.current_api_method.as_deref(),
+    );
+
+    let grouping_started = std::time::Instant::now();
+    let mut model_order: Vec<String> = Vec::new();
+    let mut model_options: BTreeMap<String, Vec<PickerOption>> = BTreeMap::new();
+    for route in &routes {
+        if !model_options.contains_key(&route.model) {
+            model_order.push(route.model.clone());
+        }
+        model_options
+            .entry(route.model.clone())
+            .or_default()
+            .push(PickerOption {
+                provider: route.provider.clone(),
+                api_method: route.api_method.clone(),
+                available: route.available,
+                detail: route.detail.clone(),
+                estimated_reference_cost_micros: route.estimated_reference_cost_micros(),
+            });
+    }
+    let grouping_ms = grouping_started.elapsed().as_millis();
+
+    fn route_sort_key(route: &PickerOption) -> (u8, u8, u64, String) {
+        let available = if route.available { 0 } else { 1 };
+        let method = match crate::provider::ModelRouteApiMethod::parse(&route.api_method) {
+            crate::provider::ModelRouteApiMethod::ClaudeOAuth
+            | crate::provider::ModelRouteApiMethod::OpenAIOAuth
+            | crate::provider::ModelRouteApiMethod::OpenAIApiKey => 0,
+            crate::provider::ModelRouteApiMethod::AnthropicApiKey
+            | crate::provider::ModelRouteApiMethod::OpenAiCompatible { .. } => 1,
+            crate::provider::ModelRouteApiMethod::Cursor => 2,
+            crate::provider::ModelRouteApiMethod::Copilot => 3,
+            crate::provider::ModelRouteApiMethod::OpenRouter => 4,
+            _ => 5,
+        };
+        let cheapness = route.estimated_reference_cost_micros.unwrap_or(u64::MAX);
+        (available, method, cheapness, route.provider.clone())
+    }
+
+    let timestamp_started = std::time::Instant::now();
+    let timestamps = crate::provider::openrouter::load_model_timestamp_index();
+    let timestamp_ms = timestamp_started.elapsed().as_millis();
+    let created_timestamp = |model: &str| {
+        crate::provider::openrouter::model_created_timestamp_from_index(model, &timestamps)
+    };
+    let latest_recommended_ts = RECOMMENDED_MODELS
+        .iter()
+        .filter_map(|model| created_timestamp(model))
+        .max();
+    let old_threshold_secs = latest_recommended_ts
+        .map(|timestamp| timestamp.saturating_sub(30 * 86400))
+        .unwrap_or(0);
+
+    fn format_created(timestamp: u64) -> String {
+        use chrono::{TimeZone, Utc};
+        Utc.timestamp_opt(timestamp as i64, 0)
+            .single()
+            .map(|date| date.format("%b %Y").to_string())
+            .unwrap_or_default()
+    }
+
+    let entries_started = std::time::Instant::now();
+    let usage_store = load_model_picker_usage_store();
+    let favorites_store = load_model_picker_favorites_store();
+    let mut entries = Vec::new();
+    for name in &model_order {
+        let mut entry_routes = model_options.remove(name).unwrap_or_default();
+        entry_routes.sort_by_key(route_sort_key);
+        let recently_authenticated =
+            context
+                .recent_auth_provider
+                .as_deref()
+                .is_some_and(|provider| {
+                    entry_routes.iter().any(|route| {
+                        jcode_provider_core::model_route_provider_labels_related(
+                            &route.provider,
+                            provider,
+                        )
+                    })
+                });
+        if recently_authenticated {
+            for route in &mut entry_routes {
+                if context
+                    .recent_auth_provider
+                    .as_deref()
+                    .is_some_and(|provider| {
+                        jcode_provider_core::model_route_provider_labels_related(
+                            &route.provider,
+                            provider,
+                        )
+                    })
+                    && !route.detail.contains("recently added")
+                {
+                    route.detail = if route.detail.trim().is_empty() {
+                        "recently added".to_string()
+                    } else {
+                        format!("recently added · {}", route.detail)
+                    };
+                }
+            }
+        }
+
+        let mut effort_routes = Vec::new();
+        let mut plain_routes = Vec::new();
+        let mut model_efforts = Vec::new();
+        for route in entry_routes {
+            let efforts = if route_supports_reasoning_effort(&route.api_method) {
+                inferred_reasoning_efforts(Some(&route.api_method), Some(name))
+            } else {
+                Vec::new()
+            };
+            if efforts.is_empty() {
+                plain_routes.push(route);
+            } else {
+                for effort in &efforts {
+                    if !model_efforts.contains(effort) {
+                        model_efforts.push(*effort);
+                    }
+                }
+                effort_routes.push((route, efforts));
+            }
+        }
+
+        for effort in &model_efforts {
+            if crate::prompt::is_swarm_mode_effort(effort) {
+                continue;
+            }
+            let effort_label = match *effort {
+                "xhigh" => "xhigh",
+                "max" => "max",
+                "high" => "high",
+                "medium" => "med",
+                "low" => "low",
+                "none" => "none",
+                other => other,
+            };
+            let display_name = format!("{} ({})", name, effort_label);
+            let effort_matches_current = *name == context.current_model
+                && context.current_effort.as_deref() == Some(*effort);
+            let created = created_timestamp(name);
+            for (route, route_efforts) in &effort_routes {
+                if !route_efforts.contains(effort) {
+                    continue;
+                }
+                entries.push(PickerEntry {
+                    name: display_name.clone(),
+                    options: vec![route.clone()],
+                    action: PickerAction::Model,
+                    selected_option: 0,
+                    is_current: effort_matches_current
+                        && model_picker_route_is_current(
+                            name,
+                            route,
+                            &context.current_model,
+                            &context.current_provider,
+                        ),
+                    recommended: *effort == "high"
+                        && model_picker_route_is_recommended(name, route),
+                    recommendation_rank: model_picker_recommendation_rank(name),
+                    usage_score: model_picker_usage_score(&usage_store, name, route, Some(effort)),
+                    old: old_threshold_secs > 0
+                        && created
+                            .map(|time| time < old_threshold_secs)
+                            .unwrap_or(false),
+                    created_date: created.map(format_created),
+                    effort: Some(effort.to_string()),
+                    is_default: is_config_default(name, route, Some(effort)),
+                    is_favorite: model_picker_is_favorite(
+                        &favorites_store,
+                        name,
+                        route,
+                        Some(effort),
+                    ),
+                });
+            }
+        }
+
+        let created = created_timestamp(name);
+        let is_old = old_threshold_secs > 0
+            && created
+                .map(|time| time < old_threshold_secs)
+                .unwrap_or(false);
+        for route in plain_routes {
+            entries.push(PickerEntry {
+                name: name.clone(),
+                options: vec![route.clone()],
+                action: PickerAction::Model,
+                selected_option: 0,
+                is_current: model_picker_route_is_current(
+                    name,
+                    &route,
+                    &context.current_model,
+                    &context.current_provider,
+                ),
+                recommended: model_picker_route_is_recommended(name, &route),
+                recommendation_rank: model_picker_recommendation_rank(name),
+                usage_score: model_picker_usage_score(&usage_store, name, &route, None),
+                old: is_old,
+                created_date: created.map(format_created),
+                effort: None,
+                is_default: is_config_default(name, &route, None),
+                is_favorite: model_picker_is_favorite(&favorites_store, name, &route, None),
+            });
+        }
+    }
+    entries.sort_by(model_picker_entry_sort);
+    let entries_ms = entries_started.elapsed().as_millis();
+
+    PreparedModelPickerEntries {
+        routes,
+        entries,
+        cached_entries: None,
+        current_model: context.current_model.clone(),
+        current_provider: context.current_provider.clone(),
+        recent_auth_provider: context.recent_auth_provider.clone(),
+        model_count: model_order.len(),
+        grouping_ms,
+        timestamp_ms,
+        entries_ms,
+    }
 }
 
 /// Return the filtered position of the favorite after the current model in a
@@ -872,7 +1262,26 @@ impl App {
             return;
         }
 
-        let mut snapshot = self.remote_model_catalog_snapshot();
+        Self::persist_remote_model_catalog_snapshot(self.remote_model_catalog_snapshot());
+    }
+
+    fn persist_remote_model_catalog_cache_async(&self) {
+        if !self.is_remote || self.remote_model_options.is_empty() {
+            return;
+        }
+
+        let snapshot = self.remote_model_catalog_snapshot();
+        let persist = move || Self::persist_remote_model_catalog_snapshot(snapshot);
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn_blocking(persist);
+        } else {
+            std::thread::spawn(persist);
+        }
+    }
+
+    fn persist_remote_model_catalog_snapshot(
+        mut snapshot: jcode_provider_core::ModelCatalogSnapshot,
+    ) {
         // Never persist placeholder routes; see
         // inline_interactive_placeholder_routes.rs.
         snapshot
@@ -1060,6 +1469,42 @@ impl App {
         )
     }
 
+    fn model_picker_entry_build_context(&self) -> ModelPickerEntryBuildContext {
+        let config = crate::config::config();
+        ModelPickerEntryBuildContext {
+            is_remote: self.is_remote,
+            current_model: if self.is_remote {
+                self.remote_provider_model
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string())
+            } else {
+                self.provider.model().to_string()
+            },
+            current_provider: if self.is_remote {
+                self.remote_provider_name
+                    .clone()
+                    .unwrap_or_else(|| "remote".to_string())
+            } else {
+                self.provider.display_name()
+            },
+            current_api_method: self.current_route_api_method(),
+            current_effort: if self.is_remote {
+                self.remote_reasoning_effort.clone()
+            } else {
+                self.provider.reasoning_effort()
+            },
+            default_model: config.provider.default_model.clone(),
+            default_provider: config.provider.default_provider.clone(),
+            default_anthropic_effort: config.provider.anthropic_reasoning_effort.clone(),
+            default_openai_effort: config.provider.openai_reasoning_effort.clone(),
+            provider_allowlist: config.provider.model_picker_providers.clone(),
+            recent_auth_provider: self
+                .recent_authenticated_provider
+                .as_ref()
+                .map(|(provider, _)| provider.clone()),
+        }
+    }
+
     pub(super) fn open_model_picker(&mut self) {
         self.open_model_picker_inner(false);
     }
@@ -1198,9 +1643,54 @@ impl App {
                 );
                 return;
             }
-            // Endpoint caches are loaded in one directory pass, so even large
-            // names-only catalogs can be fully classified before first paint
-            // without the former hundreds of serial missing-file lookups.
+            if self.remote_available_entries.len() > REMOTE_MODEL_PICKER_ASYNC_THRESHOLD {
+                let staged_models = staged_remote_model_names(
+                    &current_model,
+                    config_default_model.as_deref(),
+                    &self.remote_available_entries,
+                );
+                let mut staged_routes = crate::provider::remote_model_routes_fallback(
+                    self.remote_provider_name.as_deref(),
+                    &staged_models,
+                );
+                Self::extend_remote_routes_for_uncovered_models_static(
+                    self.remote_provider_name.as_deref(),
+                    &staged_models,
+                    &mut staged_routes,
+                );
+                let routes_ms = routes_started.elapsed().as_millis();
+                self.open_model_picker_with_routes(
+                    cache_signature.clone(),
+                    picker_started,
+                    staged_routes,
+                    routes_ms,
+                    preserve_input,
+                    false,
+                );
+
+                let remote_provider_name = self.remote_provider_name.clone();
+                let remote_available_entries = self.remote_available_entries.clone();
+                let entry_context = self.model_picker_entry_build_context();
+                self.start_model_picker_route_load_with(
+                    cache_signature,
+                    picker_started,
+                    entry_context,
+                    move || {
+                        let mut routes = crate::provider::remote_model_routes_fallback(
+                            remote_provider_name.as_deref(),
+                            &remote_available_entries,
+                        );
+                        Self::extend_remote_routes_for_uncovered_models_static(
+                            remote_provider_name.as_deref(),
+                            &remote_available_entries,
+                            &mut routes,
+                        );
+                        routes
+                    },
+                );
+                self.set_status_notice("Loading remaining models…");
+                return;
+            }
             self.build_remote_model_routes_fallback()
         } else {
             self.simplified_model_routes_for_picker(&current_model)
@@ -1258,6 +1748,106 @@ impl App {
             preview: false,
         });
         self.set_status_notice("Updating model list…");
+    }
+
+    fn start_model_picker_route_load_with(
+        &mut self,
+        signature: ModelPickerCacheSignature,
+        picker_started: std::time::Instant,
+        entry_context: ModelPickerEntryBuildContext,
+        build_routes: impl FnOnce() -> Vec<crate::provider::ModelRoute> + Send + 'static,
+    ) {
+        self.model_picker_load_request_id = self.model_picker_load_request_id.wrapping_add(1);
+        let request_id = self.model_picker_load_request_id;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let build = move || {
+            let routes_started = std::time::Instant::now();
+            let routes = build_routes();
+            let routes_ms = routes_started.elapsed().as_millis();
+            let mut prepared = prepare_model_picker_entries(routes, &entry_context);
+            prepared.cached_entries = Some(prepared.entries.clone());
+            let _ = tx.send(Ok(ModelPickerRoutesResult {
+                routes_ms,
+                prepared,
+            }));
+        };
+
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn_blocking(build);
+        } else {
+            std::thread::spawn(build);
+        }
+
+        self.pending_model_picker_load = Some(PendingModelPickerLoad {
+            request_id,
+            signature,
+            picker_started,
+            receiver: rx,
+        });
+    }
+
+    fn complete_staged_model_picker_with_prepared(
+        &mut self,
+        signature: ModelPickerCacheSignature,
+        picker_started: std::time::Instant,
+        mut prepared: PreparedModelPickerEntries,
+        routes_ms: u128,
+    ) -> Vec<crate::provider::ModelRoute> {
+        let (staged_entries, selected_identity) = self
+            .inline_interactive_state
+            .as_mut()
+            .map(|picker| {
+                let selected_identity = picker
+                    .filtered
+                    .get(picker.selected)
+                    .and_then(|index| picker.entries.get(*index))
+                    .map(model_picker_entry_identity);
+                (std::mem::take(&mut picker.entries), selected_identity)
+            })
+            .unwrap_or_default();
+
+        let full_entries = std::mem::take(&mut prepared.entries);
+        let mut full_entry_order = Vec::with_capacity(full_entries.len());
+        let mut full_entries_by_identity = HashMap::with_capacity(full_entries.len());
+        for entry in full_entries {
+            let identity = model_picker_entry_identity(&entry);
+            full_entry_order.push(identity.clone());
+            full_entries_by_identity.insert(identity, entry);
+        }
+        let mut entries = Vec::with_capacity(full_entries_by_identity.len() + staged_entries.len());
+        for staged_entry in staged_entries {
+            let identity = model_picker_entry_identity(&staged_entry);
+            if let Some(entry) = full_entries_by_identity.remove(&identity) {
+                entries.push(entry);
+            } else {
+                entries.push(staged_entry);
+            }
+        }
+        for identity in full_entry_order {
+            if let Some(entry) = full_entries_by_identity.remove(&identity) {
+                entries.push(entry);
+            }
+        }
+        prepared.entries = entries;
+
+        let routes = self.open_model_picker_with_prepared(
+            signature,
+            picker_started,
+            prepared,
+            routes_ms,
+            true,
+            true,
+        );
+
+        if let Some(picker) = self.inline_interactive_state.as_mut()
+            && let Some(selected_identity) = selected_identity
+            && let Some(selected) = picker.filtered.iter().position(|index| {
+                model_picker_entry_identity(&picker.entries[*index]) == selected_identity
+            })
+        {
+            picker.selected = selected;
+        }
+        routes
     }
 
     pub(super) fn poll_model_picker_load(&mut self) -> bool {
@@ -1322,18 +1912,19 @@ impl App {
                     .inline_interactive_state
                     .as_ref()
                     .is_some_and(|picker| picker.preview);
-                self.open_model_picker_with_routes(
+                let routes = self.complete_staged_model_picker_with_prepared(
                     pending.signature,
                     pending.picker_started,
-                    result.routes,
+                    result.prepared,
                     result.routes_ms,
-                    true,
-                    true,
                 );
+                if self.is_remote {
+                    self.remote_model_options = routes;
+                    self.persist_remote_model_catalog_cache_async();
+                }
                 if let Some(picker) = self.inline_interactive_state.as_mut() {
                     picker.preview = was_preview;
                 }
-                self.sync_model_picker_preview_from_input();
                 self.status_notice = None;
                 true
             }
@@ -1353,80 +1944,39 @@ impl App {
         preserve_input: bool,
         cache_entries: bool,
     ) -> Vec<crate::provider::ModelRoute> {
-        use std::collections::BTreeMap;
+        let context = self.model_picker_entry_build_context();
+        let prepared = prepare_model_picker_entries(routes, &context);
+        self.open_model_picker_with_prepared(
+            cache_signature,
+            picker_started,
+            prepared,
+            routes_ms,
+            preserve_input,
+            cache_entries,
+        )
+    }
 
-        let current_model = if self.is_remote {
-            self.remote_provider_model
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string())
-        } else {
-            self.provider.model().to_string()
-        };
-        let current_provider = if self.is_remote {
-            self.remote_provider_name
-                .clone()
-                .unwrap_or_else(|| "remote".to_string())
-        } else {
-            self.provider.display_name()
-        };
-        let current_api_method = self.current_route_api_method();
-        let config = crate::config::config();
-        let config_default_model = config.provider.default_model.clone();
-        let config_default_provider = config.provider.default_provider.clone();
-        let config_anthropic_effort = config.provider.anthropic_reasoning_effort.clone();
-        let config_openai_effort = config.provider.openai_reasoning_effort.clone();
-        let current_effort = if self.is_remote {
-            self.remote_reasoning_effort.clone()
-        } else {
-            self.provider.reasoning_effort()
-        };
-
-        let is_config_default = |name: &str, route: &PickerOption, effort: Option<&str>| -> bool {
-            if !model_picker_route_is_default(
-                name,
-                route,
-                config_default_model.as_deref(),
-                config_default_provider.as_deref(),
-            ) {
-                return false;
-            }
-            let selection = crate::provider::MultiProvider::default_model_selection_from_route(
-                name,
-                &route.api_method,
-                &route.provider,
-            );
-            model_picker_effort_matches_default(
-                selection.provider_key.as_deref(),
-                effort,
-                config_anthropic_effort.as_deref(),
-                config_openai_effort.as_deref(),
-            )
-        };
-
-        let routes = if routes.is_empty() && self.is_remote && current_model != "unknown" {
-            vec![crate::provider::ModelRoute {
-                model: current_model.clone(),
-                provider: self
-                    .remote_provider_name
-                    .clone()
-                    .unwrap_or_else(|| "current".to_string()),
-                api_method: "current".to_string(),
-                available: true,
-                detail: "catalog still loading".to_string(),
-                cheapness: None,
-            }]
-        } else {
-            routes
-        };
-        let routes = crate::provider::dedupe_model_routes(routes);
-        let routes = filter_routes_by_provider_allowlist(
+    fn open_model_picker_with_prepared(
+        &mut self,
+        cache_signature: ModelPickerCacheSignature,
+        picker_started: std::time::Instant,
+        prepared: PreparedModelPickerEntries,
+        routes_ms: u128,
+        preserve_input: bool,
+        cache_entries: bool,
+    ) -> Vec<crate::provider::ModelRoute> {
+        let PreparedModelPickerEntries {
             routes,
-            config.provider.model_picker_providers.as_deref(),
-            &current_model,
-            &current_provider,
-            current_api_method.as_deref(),
-        );
-
+            entries,
+            cached_entries,
+            current_model,
+            current_provider,
+            recent_auth_provider,
+            model_count,
+            grouping_ms,
+            timestamp_ms,
+            entries_ms,
+        } = prepared;
         if routes.is_empty() {
             self.inline_interactive_state = None;
             self.push_display_message(DisplayMessage::system(
@@ -1436,231 +1986,6 @@ impl App {
             return routes;
         }
 
-        let grouping_started = std::time::Instant::now();
-        let mut model_order: Vec<String> = Vec::new();
-        let mut model_options: BTreeMap<String, Vec<PickerOption>> = BTreeMap::new();
-        for r in &routes {
-            if !model_options.contains_key(&r.model) {
-                model_order.push(r.model.clone());
-            }
-            model_options
-                .entry(r.model.clone())
-                .or_default()
-                .push(PickerOption {
-                    provider: r.provider.clone(),
-                    api_method: r.api_method.clone(),
-                    available: r.available,
-                    detail: r.detail.clone(),
-                    estimated_reference_cost_micros: r.estimated_reference_cost_micros(),
-                });
-        }
-        let grouping_ms = grouping_started.elapsed().as_millis();
-
-        fn route_sort_key(r: &PickerOption) -> (u8, u8, u64, String) {
-            let avail = if r.available { 0 } else { 1 };
-            let method = match crate::provider::ModelRouteApiMethod::parse(&r.api_method) {
-                crate::provider::ModelRouteApiMethod::ClaudeOAuth
-                | crate::provider::ModelRouteApiMethod::OpenAIOAuth
-                | crate::provider::ModelRouteApiMethod::OpenAIApiKey => 0,
-                crate::provider::ModelRouteApiMethod::AnthropicApiKey
-                | crate::provider::ModelRouteApiMethod::OpenAiCompatible { .. } => 1,
-                crate::provider::ModelRouteApiMethod::Cursor => 2,
-                crate::provider::ModelRouteApiMethod::Copilot => 3,
-                crate::provider::ModelRouteApiMethod::OpenRouter => 4,
-                _ => 5,
-            };
-            let cheapness = r.estimated_reference_cost_micros.unwrap_or(u64::MAX);
-            (avail, method, cheapness, r.provider.clone())
-        }
-
-        fn route_matches_recent_auth(route_provider: &str, login_provider: &str) -> bool {
-            jcode_provider_core::model_route_provider_labels_related(route_provider, login_provider)
-        }
-
-        let timestamp_started = std::time::Instant::now();
-        let openrouter_created_timestamps =
-            crate::provider::openrouter::load_model_timestamp_index();
-        let timestamp_ms = timestamp_started.elapsed().as_millis();
-        let openrouter_created_timestamp = |model: &str| {
-            crate::provider::openrouter::model_created_timestamp_from_index(
-                model,
-                &openrouter_created_timestamps,
-            )
-        };
-
-        let latest_recommended_ts: Option<u64> = RECOMMENDED_MODELS
-            .iter()
-            .filter_map(|m| openrouter_created_timestamp(m))
-            .max();
-        let old_threshold_secs = latest_recommended_ts
-            .map(|ts| ts.saturating_sub(30 * 86400))
-            .unwrap_or(0);
-
-        fn format_created(ts: u64) -> String {
-            use chrono::{TimeZone, Utc};
-            if let Some(dt) = Utc.timestamp_opt(ts as i64, 0).single() {
-                dt.format("%b %Y").to_string()
-            } else {
-                String::new()
-            }
-        }
-
-        let recent_auth_provider = self
-            .recent_authenticated_provider
-            .as_ref()
-            .map(|(provider, _)| provider.as_str());
-
-        let entries_started = std::time::Instant::now();
-        let usage_store = load_model_picker_usage_store();
-        let favorites_store = load_model_picker_favorites_store();
-        let mut entries: Vec<PickerEntry> = Vec::new();
-        for name in &model_order {
-            let mut entry_routes = model_options.remove(name).unwrap_or_default();
-            entry_routes.sort_by_key(route_sort_key);
-            let recently_authenticated = recent_auth_provider
-                .map(|provider| {
-                    entry_routes
-                        .iter()
-                        .any(|route| route_matches_recent_auth(&route.provider, provider))
-                })
-                .unwrap_or(false);
-            if recently_authenticated {
-                for route in &mut entry_routes {
-                    if recent_auth_provider
-                        .map(|provider| route_matches_recent_auth(&route.provider, provider))
-                        .unwrap_or(false)
-                        && !route.detail.contains("recently added")
-                    {
-                        route.detail = if route.detail.trim().is_empty() {
-                            "recently added".to_string()
-                        } else {
-                            format!("recently added · {}", route.detail)
-                        };
-                    }
-                }
-            }
-
-            // Expand each route only across the effort ladder its runtime can
-            // actually apply. The same model can be reachable through native
-            // OpenAI (where `max` is real) and OpenRouter (where `max` aliases
-            // `xhigh`), so model-id-only inference over-advertises values.
-            let mut effort_routes = Vec::new();
-            let mut plain_routes = Vec::new();
-            let mut model_efforts = Vec::new();
-            for route in entry_routes {
-                let efforts = if route_supports_reasoning_effort(&route.api_method) {
-                    inferred_reasoning_efforts(Some(&route.api_method), Some(name))
-                } else {
-                    Vec::new()
-                };
-                if efforts.is_empty() {
-                    plain_routes.push(route);
-                } else {
-                    for effort in &efforts {
-                        if !model_efforts.contains(effort) {
-                            model_efforts.push(*effort);
-                        }
-                    }
-                    effort_routes.push((route, efforts));
-                }
-            }
-
-            if !effort_routes.is_empty() {
-                for effort in &model_efforts {
-                    // Swarm modes (swarm / swarm-deep) are orchestration rungs on
-                    // the effort ladder, not per-model reasoning variants. They
-                    // must not generate `model (swarm)` picker rows.
-                    if crate::prompt::is_swarm_mode_effort(effort) {
-                        continue;
-                    }
-                    let effort_label = match *effort {
-                        "xhigh" => "xhigh",
-                        "max" => "max",
-                        "high" => "high",
-                        "medium" => "med",
-                        "low" => "low",
-                        "none" => "none",
-                        other => other,
-                    };
-                    let display_name = format!("{} ({})", name, effort_label);
-                    let effort_matches_current =
-                        *name == current_model && current_effort.as_deref() == Some(*effort);
-                    let or_created = openrouter_created_timestamp(name);
-                    for (route, route_efforts) in &effort_routes {
-                        if !route_efforts.contains(effort) {
-                            continue;
-                        }
-                        let is_this_current = effort_matches_current
-                            && model_picker_route_is_current(
-                                name,
-                                route,
-                                &current_model,
-                                &current_provider,
-                            );
-                        entries.push(PickerEntry {
-                            name: display_name.clone(),
-                            options: vec![route.clone()],
-                            action: PickerAction::Model,
-                            selected_option: 0,
-                            is_current: is_this_current,
-                            recommended: *effort == "high"
-                                && model_picker_route_is_recommended(name, route),
-                            recommendation_rank: model_picker_recommendation_rank(name),
-                            usage_score: model_picker_usage_score(
-                                &usage_store,
-                                name,
-                                route,
-                                Some(effort),
-                            ),
-                            old: old_threshold_secs > 0
-                                && or_created.map(|t| t < old_threshold_secs).unwrap_or(false),
-                            created_date: or_created.map(format_created),
-                            effort: Some(effort.to_string()),
-                            is_default: is_config_default(name, route, Some(effort)),
-                            is_favorite: model_picker_is_favorite(
-                                &favorites_store,
-                                name,
-                                route,
-                                Some(effort),
-                            ),
-                        });
-                    }
-                }
-            }
-            {
-                let or_created = openrouter_created_timestamp(name);
-                let is_old = old_threshold_secs > 0
-                    && or_created.map(|t| t < old_threshold_secs).unwrap_or(false);
-                for route in plain_routes {
-                    let is_recommended = model_picker_route_is_recommended(name, &route);
-                    let is_current = model_picker_route_is_current(
-                        name,
-                        &route,
-                        &current_model,
-                        &current_provider,
-                    );
-                    let is_default = is_config_default(name, &route, None);
-                    entries.push(PickerEntry {
-                        name: name.clone(),
-                        options: vec![route.clone()],
-                        action: PickerAction::Model,
-                        selected_option: 0,
-                        is_current,
-                        recommended: is_recommended,
-                        recommendation_rank: model_picker_recommendation_rank(name),
-                        usage_score: model_picker_usage_score(&usage_store, name, &route, None),
-                        old: is_old,
-                        created_date: or_created.map(format_created),
-                        effort: None,
-                        is_default,
-                        is_favorite: model_picker_is_favorite(&favorites_store, name, &route, None),
-                    });
-                }
-            }
-        }
-
-        entries.sort_by(model_picker_entry_sort);
-        let entries_ms = entries_started.elapsed().as_millis();
         let total_ms = picker_started.elapsed().as_millis();
 
         if total_ms >= 250 || std::env::var("JCODE_LOG_MODEL_PICKER_TIMING").is_ok() {
@@ -1669,7 +1994,7 @@ impl App {
                 self.is_remote,
                 crate::perf::tui_policy().simplified_model_picker,
                 routes.len(),
-                model_order.len(),
+                model_count,
                 entries.len(),
                 routes_ms,
                 grouping_ms,
@@ -1718,14 +2043,17 @@ impl App {
                             .to_string(),
                     ),
                     ("routes_in", routes.len().to_string()),
-                    ("models", model_order.len().to_string()),
+                    ("models", model_count.to_string()),
                     ("entries", entries.len().to_string()),
                     ("entries_available", available_entries.to_string()),
                     ("current_model", current_model.clone()),
                     ("current_provider", current_provider.clone()),
                     (
                         "recent_auth_provider",
-                        recent_auth_provider.unwrap_or("none").to_string(),
+                        recent_auth_provider
+                            .as_deref()
+                            .unwrap_or("none")
+                            .to_string(),
                     ),
                     ("by_provider", per_provider),
                     ("total_ms", total_ms.to_string()),
@@ -1752,13 +2080,12 @@ impl App {
         };
 
         self.inline_view_state = None;
-        if cache_entries && Self::should_cache_model_picker_entries(model_order.len(), routes.len())
-        {
+        if cache_entries && Self::should_cache_model_picker_entries(model_count, routes.len()) {
             self.model_picker_cache = Some(ModelPickerCache {
                 signature: cache_signature,
-                entries: entries.clone(),
+                entries: cached_entries.unwrap_or_else(|| entries.clone()),
                 route_count: routes.len(),
-                model_count: model_order.len(),
+                model_count,
             });
         } else {
             self.model_picker_cache = None;
@@ -2048,11 +2375,6 @@ impl App {
                 Ok(true)
             }
             KeyCode::Enter => {
-                if self.pending_model_picker_load.is_some() {
-                    // Do not let Enter select the loading shell as if it were an
-                    // authoritative model row.
-                    return Ok(true);
-                }
                 if let Some(ref mut picker) = self.inline_interactive_state {
                     if picker.filtered.is_empty() {
                         self.inline_interactive_state = None;
@@ -3322,6 +3644,12 @@ impl App {
                             ));
                             self.set_status_notice("Model unavailable");
                             return Ok(());
+                        }
+
+                        if self.pending_model_picker_load.is_some() {
+                            self.pending_model_picker_load = None;
+                            self.model_picker_load_request_id =
+                                self.model_picker_load_request_id.wrapping_add(1);
                         }
 
                         let bare_name = model_entry_base_name(&entry);
