@@ -849,7 +849,7 @@ fn test_duplicate_available_models_updated_event_is_a_no_op() {
 }
 
 #[test]
-fn test_remote_final_catalog_replaces_post_login_loading_state_in_place() {
+fn test_remote_post_login_refresh_keeps_full_catalog_visible_until_final_snapshot() {
     let mut app = create_test_app();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
@@ -871,10 +871,15 @@ fn test_remote_final_catalog_replaces_post_login_loading_state_in_place() {
 
     let picker = app.inline_interactive_state.as_ref().unwrap();
     assert!(
-        picker.entries[0].options[0]
-            .detail
-            .contains("updating model list")
+        picker
+            .entries
+            .iter()
+            .any(|entry| entry.name.starts_with("gpt-5.4")),
+        "the existing complete remote catalog must remain usable during refresh"
     );
+    assert!(!picker.entries.iter().any(|entry| entry.options.iter().any(|option| {
+        option.detail.contains("updating model list")
+    })));
 
     app.handle_server_event(
         crate::protocol::ServerEvent::AvailableModelsUpdated {
@@ -898,9 +903,13 @@ fn test_remote_final_catalog_replaces_post_login_loading_state_in_place() {
         "an intermediate catalog snapshot must not release queued prompts"
     );
     assert!(
-        app.inline_interactive_state.as_ref().unwrap().entries[0].options[0]
-            .detail
-            .contains("updating model list")
+        app.inline_interactive_state
+            .as_ref()
+            .unwrap()
+            .entries
+            .iter()
+            .any(|entry| entry.name.starts_with("gpt-5.4")),
+        "an intermediate snapshot must not replace the usable picker"
     );
 
     app.handle_server_event(
@@ -921,7 +930,7 @@ fn test_remote_final_catalog_replaces_post_login_loading_state_in_place() {
     let picker = app
         .inline_interactive_state
         .as_ref()
-        .expect("server catalog should replace loading picker");
+        .expect("final server catalog should refresh the picker");
     assert!(
         picker
             .entries

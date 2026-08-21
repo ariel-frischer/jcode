@@ -595,6 +595,68 @@ pub fn load_endpoints_disk_cache_public(model: &str) -> Option<(Vec<EndpointInfo
     Some((cache.endpoints, age))
 }
 
+/// Load endpoint caches for a model catalog in one directory pass.
+///
+/// The model picker can classify hundreds of models at once. Calling
+/// [`load_endpoints_disk_cache_public`] for every model performs one metadata
+/// lookup for every absent cache file, which dominates cold picker latency.
+pub fn load_endpoints_disk_caches_public(
+    models: &[String],
+) -> HashMap<String, (Vec<EndpointInfo>, u64)> {
+    let desired: HashMap<PathBuf, &String> = models
+        .iter()
+        .map(|model| (endpoints_cache_path(model), model))
+        .collect();
+    let Some(cache_dir) = desired.keys().next().and_then(|path| path.parent()) else {
+        return HashMap::new();
+    };
+    let Ok(entries) = std::fs::read_dir(cache_dir) else {
+        return HashMap::new();
+    };
+    let now = current_unix_secs().unwrap_or(0);
+    let mut loaded = HashMap::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(model) = desired.get(&path) else {
+            continue;
+        };
+        let modified_at = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        let cache = if let Ok(memo) = ENDPOINTS_DISK_CACHE_MEMO.lock()
+            && let Some(entry) = memo.get(&path)
+            && entry.modified_at == modified_at
+        {
+            entry.cache.clone()
+        } else {
+            let cache = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|content| serde_json::from_str::<EndpointsDiskCache>(&content).ok());
+            if let Ok(mut memo) = ENDPOINTS_DISK_CACHE_MEMO.lock() {
+                memo.insert(
+                    path,
+                    EndpointsDiskCacheMemoEntry {
+                        modified_at,
+                        cache: cache.clone(),
+                    },
+                );
+            }
+            cache
+        };
+        let Some(cache) = cache.filter(|cache| !cache.endpoints.is_empty()) else {
+            continue;
+        };
+        loaded.insert(
+            (*model).clone(),
+            (cache.endpoints, now.saturating_sub(cache.cached_at)),
+        );
+    }
+
+    loaded
+}
+
 pub fn load_endpoints_disk_cache(model: &str) -> Option<Vec<EndpointInfo>> {
     let path = endpoints_cache_path(model);
     let modified_at = disk_cache_modified_at(&path);
@@ -928,5 +990,48 @@ mod tests {
             normalize_model_created_timestamp(Some(1_735_689_600)),
             Some(1_735_689_600)
         );
+    }
+
+    #[test]
+    fn endpoint_cache_batch_loads_existing_models_and_skips_missing_models() {
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().expect("lock endpoint cache test env");
+        let original_home = std::env::var_os("JCODE_HOME");
+        let original_namespace = std::env::var_os("JCODE_OPENROUTER_CACHE_NAMESPACE");
+        let test_home = std::env::temp_dir().join(format!(
+            "jcode-openrouter-endpoint-batch-{}-{}",
+            std::process::id(),
+            current_unix_secs().unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&test_home).expect("create endpoint cache test home");
+        // SAFETY: this crate's environment-mutating test is serialized by ENV_LOCK.
+        unsafe {
+            std::env::set_var("JCODE_HOME", &test_home);
+            std::env::set_var("JCODE_OPENROUTER_CACHE_NAMESPACE", "openrouter");
+        }
+
+        let cached_model = "openai/gpt-test";
+        save_endpoints_disk_cache(
+            cached_model,
+            &[make_endpoint("OpenAI", 100.0, 99.0, false, 1.0)],
+        );
+        let models = vec![cached_model.to_string(), "missing/model".to_string()];
+        let loaded = load_endpoints_disk_caches_public(&models);
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[cached_model].0[0].provider_name, "OpenAI");
+        assert!(!loaded.contains_key("missing/model"));
+
+        let _ = std::fs::remove_dir_all(&test_home);
+        unsafe {
+            match original_home {
+                Some(value) => std::env::set_var("JCODE_HOME", value),
+                None => std::env::remove_var("JCODE_HOME"),
+            }
+            match original_namespace {
+                Some(value) => std::env::set_var("JCODE_OPENROUTER_CACHE_NAMESPACE", value),
+                None => std::env::remove_var("JCODE_OPENROUTER_CACHE_NAMESPACE"),
+            }
+        }
     }
 }

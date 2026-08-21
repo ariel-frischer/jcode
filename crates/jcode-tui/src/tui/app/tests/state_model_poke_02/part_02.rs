@@ -287,27 +287,20 @@ fn test_remote_large_catalog_cold_preview_immediately_filters_sol_medium() {
             .unwrap();
     }
 
-    let loading_picker = app
-        .inline_interactive_state
-        .as_ref()
-        .expect("remote model picker loading shell should open immediately");
-    assert!(loading_picker.preview);
-    assert_eq!(app.input(), "/model sol (med)");
-    assert!(
-        app.pending_model_picker_load.is_some(),
-        "large remote catalog classification must not block input handling"
-    );
-
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while app.pending_model_picker_load.is_some() && std::time::Instant::now() < deadline {
-        app.poll_model_picker_load();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-
     let picker = app
         .inline_interactive_state
         .as_ref()
-        .expect("completed remote model picker preview should be open");
+        .expect("complete remote model picker should open immediately");
+    assert!(picker.preview);
+    assert_eq!(app.input(), "/model sol (med)");
+    assert!(
+        app.pending_model_picker_load.is_none(),
+        "large remote catalog must not expose a one-row loading phase"
+    );
+    assert!(
+        !app.remote_model_options.is_empty(),
+        "the fully classified names-only fallback must be retained for warm reloads"
+    );
     assert_eq!(picker.filter, "sol (med)");
     assert!(
         picker
