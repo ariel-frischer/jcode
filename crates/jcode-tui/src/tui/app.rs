@@ -659,6 +659,12 @@ struct CommandCandidatesCache {
     candidates: Vec<(String, &'static str)>,
 }
 
+#[derive(Clone, Debug)]
+struct TabCompletionState {
+    suggestion_index: usize,
+    suggestions: Vec<String>,
+}
+
 /// Memoized result of [`App::command_suggestions`] for one exact input buffer.
 ///
 /// The suggestion list is read up to eight times per rendered frame (input
@@ -1538,9 +1544,9 @@ pub struct App {
     // After an interrupt, wait one redraw before auto-dispatching queued followups so
     // the queued preview can render in the interrupted state first.
     pending_queued_dispatch: bool,
-    // Tab completion state: (base_input, suggestion_index)
-    // base_input is the original input before cycling, suggestion_index is current position
-    tab_completion_state: Option<(String, usize)>,
+    // Tab completion state retains the original input and suggestion snapshot so
+    // repeated Tab can cycle file mentions even as the active query changes.
+    tab_completion_state: Option<TabCompletionState>,
     // Selected row in the visible command suggestion list.
     command_suggestion_selected: usize,
     // Time when app started (for startup animations)

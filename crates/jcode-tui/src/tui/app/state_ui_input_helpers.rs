@@ -11,16 +11,16 @@ const FILE_MENTION_POLL_BATCHES: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FileMentionRequest {
-    root: PathBuf,
-    query: String,
-    ignore_patterns: Vec<String>,
+    pub(super) root: PathBuf,
+    pub(super) query: String,
+    pub(super) ignore_patterns: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FileMentionCandidate {
-    score: i32,
-    path: String,
-    is_dir: bool,
+    pub(super) score: i32,
+    pub(super) path: String,
+    pub(super) is_dir: bool,
 }
 
 #[derive(Debug)]
@@ -81,6 +81,62 @@ fn start_file_mention_discovery(
     (receiver, cancel)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Entry processing keeps the bounded discovery state explicit"
+)]
+fn process_file_mention_entry(
+    root: &Path,
+    query: &str,
+    ignored_patterns: &[&str],
+    entry: ignore::DirEntry,
+    cancel: &AtomicBool,
+    sender: &mpsc::Sender<FileMentionBatch>,
+    generation: u64,
+    batch: &mut Vec<FileMentionCandidate>,
+    match_count: &mut usize,
+) -> bool {
+    if !cancel.load(Ordering::Relaxed) {
+        return false;
+    }
+    let path = entry.path();
+    if path == root {
+        return true;
+    }
+    let Ok(relative) = path.strip_prefix(root) else {
+        return true;
+    };
+    let text = relative
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
+    if ignored_patterns.iter().any(|pattern| {
+        let pattern = pattern.trim().trim_start_matches("./");
+        let pattern = pattern.trim_end_matches('/');
+        text.split('/').any(|component| component == pattern)
+            || text == pattern
+            || text.starts_with(&format!("{pattern}/"))
+    }) {
+        return true;
+    }
+    let score = if query.is_empty() {
+        Some(0)
+    } else {
+        jcode_fuzzy::fuzzy_score(query, &text)
+    };
+    if let Some(score) = score {
+        batch.push(FileMentionCandidate {
+            score,
+            path: text,
+            is_dir: entry.file_type().is_some_and(|t| t.is_dir()),
+        });
+        *match_count += 1;
+    }
+    if batch.len() >= FILE_MENTION_BATCH_SIZE {
+        return send_file_mention_batch(sender, generation, batch, false);
+    }
+    true
+}
+
 /// Test-only entry point for deterministic batch and responsiveness checks.
 pub(super) fn start_file_mention_discovery_for_test(
     root: PathBuf,
@@ -124,12 +180,6 @@ fn discover_file_mentions_batched(
         ".terraform/",
         ".git/",
     ];
-    let mut builder = ignore::WalkBuilder::new(root);
-    builder
-        .hidden(false)
-        .git_ignore(false)
-        .git_global(false)
-        .git_exclude(false);
     let ignored_patterns: Vec<&str> = BUILTIN_IGNORE_PATTERNS
         .iter()
         .copied()
@@ -137,50 +187,71 @@ fn discover_file_mentions_batched(
         .collect();
     let mut batch = Vec::with_capacity(FILE_MENTION_BATCH_SIZE);
     let mut match_count = 0;
-    for entry in builder.build().filter_map(Result::ok) {
-        if !cancel.load(Ordering::Relaxed) {
-            return;
-        }
-        let path = entry.path();
-        if path == root {
-            continue;
-        }
-        let Ok(relative) = path.strip_prefix(root) else {
-            continue;
-        };
-        let text = relative
-            .to_string_lossy()
-            .replace(std::path::MAIN_SEPARATOR, "/");
-        if ignored_patterns.iter().any(|pattern| {
-            let pattern = pattern.trim().trim_start_matches("./");
-            let pattern = pattern.trim_end_matches('/');
-            text.split('/').any(|component| component == pattern)
-                || text == pattern
-                || text.starts_with(&format!("{pattern}/"))
-        }) {
-            continue;
-        }
-        let score = if query.is_empty() {
-            Some(0)
-        } else {
-            jcode_fuzzy::fuzzy_score(query, &text)
-        };
-        if let Some(score) = score {
-            batch.push(FileMentionCandidate {
-                score,
-                path: text,
-                is_dir: entry.file_type().is_some_and(|t| t.is_dir()),
-            });
-            match_count += 1;
-        }
-        if batch.len() >= FILE_MENTION_BATCH_SIZE
-            && !send_file_mention_batch(sender, generation, &mut batch, false)
-        {
-            return;
+    let mut stopped = false;
+
+    // Emit direct children first. A depth-first walk can otherwise fill the
+    // first bounded batches with a large nested directory and hide files that
+    // are immediately in the user's working directory.
+    let mut direct_builder = ignore::WalkBuilder::new(root);
+    direct_builder
+        .hidden(false)
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false)
+        .max_depth(Some(1));
+    for entry in direct_builder.build().filter_map(Result::ok) {
+        if !process_file_mention_entry(
+            root,
+            query,
+            &ignored_patterns,
+            entry,
+            cancel,
+            sender,
+            generation,
+            &mut batch,
+            &mut match_count,
+        ) {
+            stopped = true;
+            break;
         }
         if match_count >= FILE_MENTION_MAX_MATCHES {
             break;
         }
+    }
+
+    if !stopped && match_count < FILE_MENTION_MAX_MATCHES {
+        let mut recursive_builder = ignore::WalkBuilder::new(root);
+        recursive_builder
+            .hidden(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false);
+        for entry in recursive_builder.build().filter_map(Result::ok) {
+            if entry.depth() <= 1 {
+                continue;
+            }
+            if !process_file_mention_entry(
+                root,
+                query,
+                &ignored_patterns,
+                entry,
+                cancel,
+                sender,
+                generation,
+                &mut batch,
+                &mut match_count,
+            ) {
+                stopped = true;
+                break;
+            }
+            if match_count >= FILE_MENTION_MAX_MATCHES {
+                break;
+            }
+        }
+    }
+
+    if stopped {
+        return;
     }
     if !batch.is_empty() || match_count == 0 {
         let _ = send_file_mention_batch(sender, generation, &mut batch, true);
@@ -1465,12 +1536,13 @@ impl App {
             return Vec::new();
         }
         let query = &before_cursor[at + 1..];
-        let root = self
-            .session
-            .working_dir
-            .as_deref()
-            .map(Path::new)
-            .unwrap_or_else(|| Path::new("."));
+        let launch_cwd;
+        let root = if let Some(working_dir) = self.session.working_dir.as_deref() {
+            Path::new(working_dir)
+        } else {
+            launch_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            &launch_cwd
+        };
         let request = FileMentionRequest {
             root: root.to_path_buf(),
             query: query.to_owned(),
@@ -1868,22 +1940,22 @@ impl App {
     /// Autocomplete current input - cycles through suggestions on repeated Tab
     pub fn autocomplete(&mut self) -> bool {
         // Get suggestions for current input
-        let current_suggestions = self.get_suggestions_for(&self.input);
+        let current_suggestions = self.command_suggestions();
 
         // Check if we're continuing a tab cycle from a previous base
-        if let Some((ref base, idx)) = self.tab_completion_state.clone() {
-            let base_suggestions = self.get_suggestions_for(base);
-
+        if let Some(state) = self.tab_completion_state.clone() {
             // If current input is in base suggestions AND there are multiple options, continue cycling
-            if base_suggestions.len() > 1
-                && base_suggestions.iter().any(|(cmd, _)| cmd == &self.input)
+            if state.suggestions.len() > 1 && state.suggestions.iter().any(|cmd| cmd == &self.input)
             {
-                let next_index = (idx + 1) % base_suggestions.len();
-                let (cmd, _) = &base_suggestions[next_index];
+                let next_index = (state.suggestion_index + 1) % state.suggestions.len();
+                let cmd = &state.suggestions[next_index];
                 self.remember_input_undo_state();
                 self.input = cmd.clone();
                 self.cursor_pos = self.input.len();
-                self.tab_completion_state = Some((base.clone(), next_index));
+                self.tab_completion_state = Some(TabCompletionState {
+                    suggestion_index: next_index,
+                    ..state
+                });
                 return true;
             }
             // Otherwise, fall through to start a new cycle with current input
@@ -1913,7 +1985,6 @@ impl App {
             .command_suggestion_selected
             .min(current_suggestions.len().saturating_sub(1));
         let (cmd, _) = &current_suggestions[selected];
-        let base = self.input.clone();
         self.remember_input_undo_state();
         self.input = cmd.clone();
         // If unique match, add trailing space for arg-accepting commands
@@ -1921,7 +1992,13 @@ impl App {
             self.input.push(' ');
         }
         self.cursor_pos = self.input.len();
-        self.tab_completion_state = Some((base, selected));
+        self.tab_completion_state = Some(TabCompletionState {
+            suggestion_index: selected,
+            suggestions: current_suggestions
+                .into_iter()
+                .map(|(suggestion, _)| suggestion)
+                .collect(),
+        });
         self.command_suggestion_selected = 0;
         true
     }
