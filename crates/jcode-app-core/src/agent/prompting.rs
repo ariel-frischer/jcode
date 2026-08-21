@@ -79,10 +79,12 @@ impl Agent {
         memory_prompt: Option<&str>,
     ) -> crate::prompt::SplitSystemPrompt {
         if let Some(ref override_prompt) = self.system_prompt_override {
-            return crate::prompt::SplitSystemPrompt {
+            let mut split = crate::prompt::SplitSystemPrompt {
                 static_part: override_prompt.clone(),
                 dynamic_part: String::new(),
             };
+            self.append_current_turn_system_reminder(&mut split);
+            return split;
         }
 
         let skills = self.current_skills_snapshot();

@@ -39,6 +39,11 @@ struct DelayedProvider {
     first_event_delay: Duration,
 }
 
+#[derive(Clone, Default)]
+struct CapturingSystemProvider {
+    requests: Arc<std::sync::Mutex<Vec<String>>>,
+}
+
 struct NativeAutoCompactionProvider;
 
 struct NativeCompactionStreamProvider;
@@ -152,6 +157,92 @@ impl Provider for DelayedProvider {
             open_delay: self.open_delay,
             first_event_delay: self.first_event_delay,
         })
+    }
+}
+
+#[async_trait]
+impl Provider for CapturingSystemProvider {
+    async fn complete(
+        &self,
+        messages: &[Message],
+        _tools: &[ToolDefinition],
+        system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> Result<EventStream> {
+        let mut request = system.to_string();
+        for message in messages {
+            for block in &message.content {
+                if let ContentBlock::Text { text, .. } = block {
+                    request.push('\n');
+                    request.push_str(text);
+                }
+            }
+        }
+        self.requests.lock().unwrap().push(request);
+        let (tx, rx) = tokio_mpsc::channel::<Result<StreamEvent>>(2);
+        tx.send(Ok(StreamEvent::TextDelta("acknowledged".to_string())))
+            .await
+            .unwrap();
+        tx.send(Ok(StreamEvent::MessageEnd {
+            stop_reason: Some("end_turn".to_string()),
+        }))
+        .await
+        .unwrap();
+        Ok(Box::pin(ReceiverStream::new(rx)))
+    }
+
+    fn name(&self) -> &str {
+        "capturing-system"
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(self.clone())
+    }
+}
+
+#[tokio::test]
+async fn handoff_reminder_reaches_provider_with_system_prompt_override() {
+    let _guard = crate::storage::lock_test_env();
+    let provider = CapturingSystemProvider::default();
+    let requests = Arc::clone(&provider.requests);
+    let provider: Arc<dyn Provider> = Arc::new(provider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+    agent.set_system_prompt("custom destination system prompt");
+
+    let handoff = concat!(
+        "Goal: HANDOFF_GOAL_42N\n",
+        "Progress: HANDOFF_PROGRESS_42N\n",
+        "Next steps: HANDOFF_NEXT_42N\n",
+        "Durable tracker: HANDOFF_BEAD_42N\n",
+        "Relevant files: HANDOFF_RELEVANT_FILE_42N.rs"
+    );
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    agent
+        .run_once_streaming_mpsc("", Vec::new(), Some(handoff.to_string()), tx)
+        .await
+        .unwrap();
+
+    let requests = requests.lock().unwrap();
+    assert_eq!(
+        requests.len(),
+        1,
+        "first destination turn must call the provider once"
+    );
+    let request = &requests[0];
+    assert!(request.contains("custom destination system prompt"));
+    for marker in [
+        "HANDOFF_GOAL_42N",
+        "HANDOFF_PROGRESS_42N",
+        "HANDOFF_NEXT_42N",
+        "HANDOFF_BEAD_42N",
+        "HANDOFF_RELEVANT_FILE_42N.rs",
+    ] {
+        assert_eq!(
+            request.matches(marker).count(),
+            1,
+            "provider-visible handoff marker must be delivered exactly once: {marker}"
+        );
     }
 }
 

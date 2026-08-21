@@ -1,0 +1,36 @@
+tasks:
+  branch: "agent/jcode-42n"
+  created: "2026-08-21"
+  spec_path: "specs/011-handoff-provider-context/spec.yaml"
+  plan_path: "specs/011-handoff-provider-context/plan.yaml"
+  phases:
+    - number: 1
+      title: "Regression and root cause"
+      tasks:
+        - id: "T001"
+          status: "Completed"
+          title: "Add provider-boundary regression for an override plus structured handoff reminder"
+        - id: "T002"
+          status: "Completed"
+          title: "Run the focused test red and confirm the missing reminder failure"
+    - number: 2
+      title: "Canonical fix"
+      tasks:
+        - id: "T003"
+          status: "Completed"
+          title: "Append current-turn reminders after either override or normal prompt construction"
+        - id: "T004"
+          status: "Completed"
+          title: "Run focused app-core and TUI handoff tests"
+    - number: 3
+      title: "Delivery evidence"
+      tasks:
+        - id: "T005"
+          status: "Completed"
+          title: "Run formatting, relevant checks, guardrails, and selfdev build"
+        - id: "T006"
+          status: "Completed"
+          title: "Run isolated-socket built-binary handoff marker validation"
+        - id: "T007"
+          status: "Completed"
+          title: "Commit, report, and hand off to merge-wt"

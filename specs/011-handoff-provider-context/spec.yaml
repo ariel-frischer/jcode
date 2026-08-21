@@ -1,0 +1,65 @@
+feature:
+  branch: "agent/jcode-42n"
+  created: "2026-08-21"
+  status: "Approved"
+  input: >-
+    Fix Bead jcode-42n so a fresh-session handoff shown in the destination TUI
+    is delivered exactly once to the destination agent's first provider request,
+    including sessions that use an explicit system prompt override.
+user_stories:
+  - id: "US-001"
+    title: "Receive the visible handoff in model context"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "the destination agent to receive the same handoff shown by the TUI"
+    so_that: "fresh-session continuation does not require retransmission or history search"
+    acceptance_scenarios:
+      - given: "A destination session with a custom system prompt override"
+        when: "Its queued handoff starts the first provider turn"
+        then: "The provider system prompt contains the override and the complete handoff reminder exactly once"
+      - given: "A destination session without an override"
+        when: "Its queued handoff starts the first provider turn"
+        then: "Existing prompt assembly and handoff delivery remain unchanged"
+  - id: "US-002"
+    title: "Preserve handoff lifecycle compatibility"
+    priority: "P1"
+    as_a: "Jcode operator"
+    i_want: "auto-start, editable drafts, reconnect, and reload behavior to remain compatible"
+    so_that: "the fix does not introduce duplicate or lost startup turns"
+    acceptance_scenarios:
+      - given: "The handoff prompt is queued, restored, or resumed"
+        when: "the destination starts processing"
+        then: "the existing TUI and server exactly-once dispatch path remains authoritative"
+requirements:
+  functional:
+    - id: "FR-001"
+      statement: "Current-turn system reminders MUST be appended to an explicit system prompt override before provider dispatch."
+    - id: "FR-002"
+      statement: "The reminder body MUST preserve Goal, Progress, Next steps, Durable tracker, and Relevant files markers."
+    - id: "FR-003"
+      statement: "The reminder MUST appear exactly once in the provider-visible system prompt."
+    - id: "FR-004"
+      statement: "Prompt overrides without a reminder and ordinary prompt assembly MUST remain byte-for-byte compatible."
+  non_functional:
+    - id: "NFR-001"
+      statement: "The fix MUST remain in app-core prompt assembly and add no protocol, persistence, or dependency changes."
+    - id: "NFR-002"
+      statement: "Focused app-core tests, relevant crate checks, guardrails, and isolated-socket runtime validation MUST be recorded."
+scope:
+  owns:
+    - "crates/jcode-app-core/src/agent/prompting.rs"
+    - "crates/jcode-app-core/src/agent_tests.rs"
+  reuses:
+    - "current_turn_system_reminder"
+    - "SplitSystemPrompt dynamic_part"
+    - "existing SessionHandoffReady and startup queue lifecycle"
+  non_goals:
+    - "Changing handoff prose or TUI presentation"
+    - "Adding a second persisted startup mechanism"
+    - "Changing protocol fields, profiles, lineage, or chain limits"
+root_cause: >-
+  Agent::build_system_prompt_split returns early when system_prompt_override is
+  present. That bypasses append_current_turn_system_reminder, so the TUI can
+  render the queued handoff while Provider::complete receives only the override.
+  This creates the observed presentation/model-context divergence.
+

@@ -1,0 +1,44 @@
+plan:
+  branch: "agent/jcode-42n"
+  created: "2026-08-21"
+  spec_path: "specs/011-handoff-provider-context/spec.yaml"
+summary: >-
+  Keep the existing server-created startup queue and TUI dispatch lifecycle.
+  Repair the canonical provider prompt assembly seam by constructing the override
+  split first, then applying the same current-turn reminder append used by normal
+  prompts. Prove the real Provider::complete system argument contains every unique
+  handoff marker once.
+architecture:
+  owner: "jcode-app-core Agent prompt assembly"
+  invariant: "Every current-turn reminder reaches the provider regardless of base prompt source."
+  compatibility: "An override with no reminder remains unchanged; normal prompt assembly is untouched."
+  rejected_alternatives:
+    - "Replay the prompt from TUI history, because presentation is not runtime authority."
+    - "Persist a second handoff field on Session, because the existing dispatch reaches app-core correctly."
+    - "Convert the handoff into a user message, because it is system-owned startup context."
+implementation:
+  - "Add a request-capturing Provider regression with a custom override and unique structured markers."
+  - "Run it red and confirm the provider sees the override but not the handoff."
+  - "Remove the override early return and append the reminder to the override split."
+  - "Run focused tests, format, app-core checks, guardrails, build, and isolated runtime acceptance."
+constitution_check:
+  PRIN-001: "PASS: two surgical Rust files plus required spec artifacts."
+  PRIN-002: "PASS: no wire or persisted format changes."
+  PRIN-004: "PASS: server/app-core remains provider-context authority."
+  PRIN-005: "PASS: provider boundary is asserted directly."
+  PRIN-006: "PASS: no new external input or sensitive logging."
+  PRIN-007: "PASS WITH BASELINE FAILURES: focused checks and changed-surface clippy pass; full guardrails were run and unrelated failures are recorded in evidence.md."
+  PRIN-008: "PASS: one canonical prompt assembly path, no duplicate mechanism."
+  PRIN-009: "PASS: validates the actual destination-agent outcome."
+  PRIN-010: "PASS: the newly built binary completed a local fake-provider transition and the destination acknowledged a unique marker."
+acceptance_matrix:
+  - requirement: "FR-001, FR-002, FR-003"
+    check: "cargo test -p jcode-app-core --lib agent::tests::handoff_reminder_reaches_provider_with_system_prompt_override -- --exact"
+  - requirement: "FR-004"
+    check: "focused jcode-app-core agent tests and package checks"
+  - requirement: "Lifecycle compatibility"
+    check: "existing app-core server handoff tests and jcode-tui remote handoff tests"
+  - requirement: "Repository integration"
+    check: "scripts/check_guardrails.sh"
+  - requirement: "Executing-runtime truth"
+    check: "isolated-socket newly built jcode transition with unique marker acknowledgement"
