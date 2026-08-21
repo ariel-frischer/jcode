@@ -193,9 +193,19 @@ impl BackgroundTaskManager {
         };
 
         let Some(identity) = status.managed_process.as_ref() else {
+            status.error = Some(
+                "Managed process identity is missing; detached reconciliation failed closed"
+                    .to_string(),
+            );
+            self.write_status_file(status_path, &status).await;
             return status;
         };
         if identity.pid != pid {
+            status.error = Some(
+                "Managed process PID does not match detached status; reconciliation failed closed"
+                    .to_string(),
+            );
+            self.write_status_file(status_path, &status).await;
             return status;
         }
         match crate::platform::verify_process_start_token(
@@ -203,11 +213,12 @@ impl BackgroundTaskManager {
             identity.process_instance.as_deref(),
         ) {
             crate::platform::ProcessIdentityCheck::Matching => {}
-            crate::platform::ProcessIdentityCheck::Stopped => return status,
+            crate::platform::ProcessIdentityCheck::Stopped => {}
             check => {
                 status.error = Some(format!(
                     "Managed process identity verification failed during reconciliation ({check:?})"
                 ));
+                self.write_status_file(status_path, &status).await;
                 return status;
             }
         }
@@ -305,7 +316,7 @@ impl BackgroundTaskManager {
         if owner_pid == std::process::id() {
             return true;
         }
-        !crate::platform::is_process_running(owner_pid)
+        !crate::platform::is_process_live(owner_pid)
     }
 
     /// Finalize an orphaned non-detached `Running` status file as `Failed`.
@@ -327,11 +338,27 @@ impl BackgroundTaskManager {
             return status;
         }
 
+        if status.managed_process.as_ref().is_some_and(|identity| {
+            identity.transfer_policy == ManagedProcessTransferPolicy::Transferred
+        }) {
+            return status;
+        }
+        let teardown_error = match status.managed_process.as_ref() {
+            Some(identity) => {
+                self.terminate_managed_process_group(identity, Duration::from_millis(400))
+                    .await
+            }
+            None => None,
+        };
+
         let completed_at = Utc::now();
         let duration_secs = Self::status_duration_secs(&status.started_at, completed_at);
-        let error =
-            "Task orphaned: the owning server process exited (reloaded or crashed) before the task finished"
-                .to_string();
+        let error = match teardown_error {
+            Some(teardown_error) => format!(
+                "Task orphaned: the owning server process exited before the task finished; {teardown_error}"
+            ),
+            None => "Task orphaned: the owning server process exited (reloaded or crashed) before the task finished".to_string(),
+        };
         status.status = BackgroundTaskStatus::Failed;
         status.exit_code = None;
         status.error = Some(error.clone());
@@ -1656,6 +1683,66 @@ impl BackgroundTaskManager {
         }
     }
 
+    async fn terminate_managed_process_group(
+        &self,
+        identity: &ManagedProcessIdentity,
+        graceful_timeout: Duration,
+    ) -> Option<String> {
+        #[cfg(unix)]
+        {
+            let check = crate::platform::signal_verified_process_group(
+                identity.pid,
+                identity.process_instance.as_deref(),
+                libc::SIGTERM,
+            );
+            if check == crate::platform::ProcessIdentityCheck::Stopped {
+                return None;
+            }
+            if check != crate::platform::ProcessIdentityCheck::Matching {
+                return Some(format!(
+                    "managed process identity verification refused TERM ({check:?})"
+                ));
+            }
+            tokio::time::sleep(graceful_timeout).await;
+            if crate::platform::is_process_group_live(identity.pid) {
+                let check = crate::platform::signal_verified_process_group(
+                    identity.pid,
+                    identity.process_instance.as_deref(),
+                    libc::SIGKILL,
+                );
+                if check != crate::platform::ProcessIdentityCheck::Matching
+                    && check != crate::platform::ProcessIdentityCheck::Stopped
+                {
+                    return Some(format!(
+                        "managed process identity verification refused KILL ({check:?})"
+                    ));
+                }
+            }
+            if !crate::platform::wait_for_process_group_exit(identity.pid, graceful_timeout) {
+                return Some(format!(
+                    "managed process group {} remained live after bounded teardown",
+                    identity.pid
+                ));
+            }
+        }
+        #[cfg(windows)]
+        {
+            let check = crate::platform::signal_verified_process_group(
+                identity.pid,
+                identity.process_instance.as_deref(),
+                libc::SIGKILL,
+            );
+            if check != crate::platform::ProcessIdentityCheck::Matching
+                && check != crate::platform::ProcessIdentityCheck::Stopped
+            {
+                return Some(format!(
+                    "managed process identity verification refused teardown ({check:?})"
+                ));
+            }
+        }
+        None
+    }
+
     async fn stale_decision_for_status(
         &self,
         status: &TaskStatusFile,
@@ -1694,10 +1781,7 @@ impl BackgroundTaskManager {
             Some(pid) if pid == std::process::id() => {
                 status.owner_instance.as_deref() == Some(model::process_instance_token())
             }
-            Some(pid) => {
-                crate::platform::verify_process_start_token(pid, status.owner_instance.as_deref())
-                    == crate::platform::ProcessIdentityCheck::Matching
-            }
+            Some(pid) => crate::platform::is_process_live(pid),
             None => false,
         };
         if owner_active || self.is_live_task(&status.task_id) {

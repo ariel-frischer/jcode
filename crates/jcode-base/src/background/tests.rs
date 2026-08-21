@@ -509,6 +509,58 @@ async fn reconcile_marks_orphan_from_reloaded_process_failed() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn reconcile_orphan_terminates_owner_bound_process_group() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+
+    let mut command = std::process::Command::new("sh");
+    command
+        .args(["-c", "sleep 60"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let process_instance = crate::platform::process_start_token(pid)
+        .ok_or_else(|| anyhow!("process start identity should be available"))?;
+
+    let mut dead_owner = std::process::Command::new("true").spawn()?;
+    let dead_owner_pid = dead_owner.id();
+    dead_owner.wait()?;
+
+    let mut orphan = running_status_fixture("orphan-group1", "session-orphan-group");
+    orphan.owner_pid = Some(dead_owner_pid);
+    orphan.owner_instance = Some("dead-owner-instance".to_string());
+    orphan.managed_process = Some(ManagedProcessIdentity {
+        pid,
+        process_instance: Some(process_instance),
+        owner_instance: orphan.owner_instance.clone(),
+        transfer_policy: ManagedProcessTransferPolicy::OwnerBound,
+    });
+    write_status_fixture(&manager, &orphan).await;
+
+    let reconciled = manager.reconcile_orphaned_tasks().await;
+    assert_eq!(reconciled, 1);
+    let status = manager
+        .status(&orphan.task_id)
+        .await
+        .ok_or_else(|| anyhow!("status should exist"))?;
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert!(!crate::platform::is_process_group_live(pid));
+    child.wait()?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn legacy_running_status_inspection_fails_closed() -> Result<()> {
     let tmp = tempdir()?;
