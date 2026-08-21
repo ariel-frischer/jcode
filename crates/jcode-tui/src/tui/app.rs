@@ -344,8 +344,8 @@ struct ModelPickerCache {
 }
 
 struct ModelPickerRoutesResult {
-    routes: Vec<crate::provider::ModelRoute>,
     routes_ms: u128,
+    prepared: inline_interactive::PreparedModelPickerEntries,
 }
 
 #[derive(Debug, Clone)]

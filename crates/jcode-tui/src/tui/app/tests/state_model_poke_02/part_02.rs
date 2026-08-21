@@ -271,35 +271,83 @@ fn test_model_picker_cold_preview_immediately_filters_sol_medium() {
 }
 
 #[test]
-fn test_remote_large_catalog_cold_preview_immediately_filters_sol_medium() {
+fn test_remote_large_catalog_cold_preview_stages_useful_rows_then_appends_full_catalog() {
     let mut app = create_test_app();
     app.is_remote = true;
     app.remote_provider_name = Some("OpenAI".to_string());
     app.remote_provider_model = Some("gpt-5.6-luna".to_string());
-    app.remote_available_entries = (0..65)
+    app.remote_available_entries = (0..1_000)
         .map(|idx| format!("catalog-model-{idx}"))
         .chain(std::iter::once("gpt-5.6-sol".to_string()))
         .collect();
     app.remote_model_options.clear();
 
+    let favorite_model = "catalog-model-999";
+    let favorite_route = crate::provider::remote_model_routes_fallback(
+        Some("OpenAI"),
+        &[favorite_model.to_string()],
+    )
+    .into_iter()
+    .find(|route| route.model == favorite_model)
+    .expect("favorite fixture route");
+    let favorite_key = format!(
+        "{}\u{1f}{}\u{1f}{}\u{1f}",
+        favorite_model, favorite_route.provider, favorite_route.api_method
+    );
+    let sol_route = crate::provider::remote_model_routes_fallback(
+        Some("OpenAI"),
+        &["gpt-5.6-sol".to_string()],
+    )
+    .into_iter()
+    .find(|route| route.model == "gpt-5.6-sol" && route.api_method == "openai-oauth")
+    .expect("Sol favorite fixture route");
+    let sol_favorite_key = format!(
+        "gpt-5.6-sol\u{1f}{}\u{1f}{}\u{1f}medium",
+        sol_route.provider, sol_route.api_method
+    );
+    let favorites_path = crate::storage::app_config_dir()
+        .unwrap()
+        .join("model_picker_favorites.json");
+    std::fs::create_dir_all(favorites_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        favorites_path,
+        serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "favorites": [favorite_key, sol_favorite_key],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let useful_started = Instant::now();
     for c in "/model sol (med)".chars() {
         app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
             .unwrap();
     }
+    let useful_elapsed = useful_started.elapsed();
 
     let picker = app
         .inline_interactive_state
         .as_ref()
-        .expect("complete remote model picker should open immediately");
+        .expect("useful remote model picker stage should open immediately");
     assert!(picker.preview);
     assert_eq!(app.input(), "/model sol (med)");
     assert!(
-        app.pending_model_picker_load.is_none(),
-        "large remote catalog must not expose a one-row loading phase"
+        app.pending_model_picker_load.is_some(),
+        "the full large catalog must be classified off the TUI thread"
     );
     assert!(
-        !app.remote_model_options.is_empty(),
-        "the fully classified names-only fallback must be retained for warm reloads"
+        app.remote_model_options.is_empty(),
+        "the partial first stage must not masquerade as the complete remote catalog"
+    );
+    assert!(
+        picker.entries.len() >= 36,
+        "the first populated stage should contain at least three pages of useful rows, got {}",
+        picker.entries.len()
+    );
+    assert!(
+        useful_elapsed < Duration::from_millis(100),
+        "time to useful rows should stay well below one second, got {useful_elapsed:?}"
     );
     assert_eq!(picker.filter, "sol (med)");
     assert!(
@@ -307,15 +355,81 @@ fn test_remote_large_catalog_cold_preview_immediately_filters_sol_medium() {
             .filtered
             .iter()
             .any(|&i| picker.entries[i].name == "gpt-5.6-sol (med)"),
-        "large remote catalogs must expose complete Sol effort rows on the first paint"
+        "the useful first stage must include persisted favorite Sol effort rows"
     );
-    assert!(app.pending_model_picker_load.is_none());
+
+    let staged_prefix = picker
+        .entries
+        .iter()
+        .map(|entry| {
+            let route = entry.active_option().expect("model route");
+            (
+                entry.name.clone(),
+                route.provider.clone(),
+                route.api_method.clone(),
+                entry.effort.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
 
     let selected_entry = picker.filtered[picker.selected];
     assert_eq!(
         picker.entries[selected_entry].name, "gpt-5.6-sol (med)",
         "the exact filtered row must be selected instead of xhigh"
     );
+
+    let completion_deadline = Instant::now() + Duration::from_secs(5);
+    let completion_elapsed = loop {
+        let completion_started = Instant::now();
+        if app.poll_model_picker_load() {
+            break completion_started.elapsed();
+        }
+        assert!(
+            Instant::now() < completion_deadline,
+            "full catalog should complete asynchronously within five seconds"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert!(
+        completion_elapsed < Duration::from_millis(100),
+        "appending the prepared full catalog must not block the TUI, got {completion_elapsed:?}"
+    );
+    assert!(app.pending_model_picker_load.is_none());
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("full remote model picker should replace the staged load in place");
+    assert_eq!(picker.filter, "sol (med)");
+    assert!(picker.entries.len() > staged_prefix.len());
+    assert_eq!(
+        picker
+            .entries
+            .iter()
+            .take(staged_prefix.len())
+            .map(|entry| {
+                let route = entry.active_option().expect("model route");
+                (
+                    entry.name.clone(),
+                    route.provider.clone(),
+                    route.api_method.clone(),
+                    entry.effort.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        staged_prefix,
+        "full catalog completion must append without moving the visible staged rows"
+    );
+    assert!(
+        !app.remote_model_options.is_empty(),
+        "the complete catalog must be retained for warm reloads"
+    );
+    let selected_entry = picker.filtered[picker.selected];
+    let selected_route = picker.entries[selected_entry]
+        .active_option()
+        .expect("selected full model route");
+    assert_eq!(picker.entries[selected_entry].name, "gpt-5.6-sol (med)");
+    assert_eq!(selected_route.provider, sol_route.provider);
+    assert_eq!(selected_route.api_method, sol_route.api_method);
 
     app.handle_key(KeyCode::Enter, KeyModifiers::empty())
         .unwrap();
@@ -324,6 +438,36 @@ fn test_remote_large_catalog_cold_preview_immediately_filters_sol_medium() {
         Some("medium"),
         "selecting `sol (med)` must stage medium effort"
     );
+}
+
+#[test]
+fn test_remote_staged_model_selection_cancels_full_load_without_reopening_picker() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.remote_provider_name = Some("OpenAI".to_string());
+    app.remote_provider_model = Some("gpt-5.6-luna".to_string());
+    app.remote_available_entries = (0..1_000)
+        .map(|idx| format!("catalog-model-{idx}"))
+        .chain(std::iter::once("gpt-5.6-luna".to_string()))
+        .collect();
+    app.remote_model_options.clear();
+
+    for c in "/model gpt-5.6-luna (high)".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+    assert!(app.pending_model_picker_load.is_some());
+
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .unwrap();
+
+    assert!(app.inline_interactive_state.is_none());
+    assert!(
+        app.pending_model_picker_load.is_none(),
+        "choosing a staged row must cancel the obsolete full-load completion"
+    );
+    assert!(!app.poll_model_picker_load());
+    assert!(app.inline_interactive_state.is_none());
 }
 
 #[test]
