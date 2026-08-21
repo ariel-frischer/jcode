@@ -14,6 +14,8 @@ pub use keybindings::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileMentionsConfig {
+    /// Whether typing `@` enables filesystem-backed file suggestions.
+    pub enabled: bool,
     /// Additional gitignore-style path patterns excluded from `@` completion.
     pub ignore: Vec<String>,
 }
@@ -21,6 +23,7 @@ pub struct FileMentionsConfig {
 impl Default for FileMentionsConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             ignore: vec![
                 "node_modules/".into(),
                 "target/".into(),

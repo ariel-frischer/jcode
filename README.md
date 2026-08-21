@@ -691,11 +691,14 @@ jcode dictate
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
-The TUI `@` file picker skips common generated and dependency directories by default. Add
-custom gitignore-style patterns in `~/.jcode/config.toml`:
+The TUI `@` file picker is enabled by default and discovers suggestions in bounded
+background batches so typing remains responsive. Set `enabled = false` to keep ordinary
+`@` input without filesystem-backed suggestions. It skips common generated and dependency
+directories by default. Add custom gitignore-style patterns in `~/.jcode/config.toml`:
 
 ```toml
 [file_mentions]
+enabled = true
 ignore = ["private/", "*.generated.*"]
 ```
 
