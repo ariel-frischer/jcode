@@ -81,8 +81,32 @@ impl App {
         )
     }
 
+    /// Model pinned by the active startup/session profile, if any. Used as a
+    /// header hint while the server has not yet reported the session's model so
+    /// `--profile <name>` launches show the profile's model instead of the
+    /// global config default during the bootstrap window.
+    fn startup_profile_model_hint(&self) -> Option<String> {
+        Self::sanitize_remote_model_hint(
+            self.profile_state
+                .current_startup
+                .as_ref()
+                .and_then(|startup| startup.model.clone()),
+        )
+    }
+
+    /// Provider pinned by the active startup/session profile, if any.
+    fn startup_profile_provider_hint(&self) -> Option<String> {
+        self.profile_state
+            .current_startup
+            .as_ref()
+            .and_then(|startup| startup.provider.clone())
+            .map(|provider| provider.trim().to_string())
+            .filter(|provider| !provider.is_empty())
+    }
+
     pub(super) fn effective_remote_provider_model(&self) -> Option<String> {
         Self::sanitize_remote_model_hint(self.remote_provider_model.clone())
+            .or_else(|| self.startup_profile_model_hint())
             .or_else(|| Self::sanitize_remote_model_hint(self.session.model.clone()))
             .or_else(|| self.configured_remote_model_hint())
     }
@@ -180,6 +204,7 @@ impl App {
         let configured_provider_hint = self.configured_remote_provider_hint();
         self.remote_provider_name
             .clone()
+            .or_else(|| self.startup_profile_provider_hint())
             .or_else(|| {
                 self.effective_remote_provider_model().and_then(|model| {
                     crate::provider::provider_for_model_with_hint(&model, None)

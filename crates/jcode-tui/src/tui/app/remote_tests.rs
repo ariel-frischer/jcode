@@ -1553,3 +1553,47 @@ fn remote_submit_input_never_strands_a_local_pending_turn() {
         "the prompt should be queued for the remote tick loop"
     );
 }
+
+#[test]
+fn startup_profile_model_and_provider_show_in_header_before_server_reports() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.profile_state.current_startup = Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("free-ox".to_owned()),
+        provider: Some("openrouter".to_owned()),
+        model: Some("stealth/ox-alpha".to_owned()),
+        ..Default::default()
+    });
+
+    use crate::tui::TuiState;
+    assert_eq!(
+        <crate::tui::app::App as TuiState>::provider_model(&app),
+        "stealth/ox-alpha",
+        "header must show the profile's model, not the config default, before the server reports"
+    );
+    assert_eq!(
+        <crate::tui::app::App as TuiState>::provider_name(&app),
+        "openrouter",
+        "header must show the profile's provider before the server reports"
+    );
+}
+
+#[test]
+fn server_reported_model_still_wins_over_startup_profile_hint() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.profile_state.current_startup = Some(crate::protocol::SessionProfileStartup {
+        profile_name: Some("free-ox".to_owned()),
+        provider: Some("openrouter".to_owned()),
+        model: Some("stealth/ox-alpha".to_owned()),
+        ..Default::default()
+    });
+    app.remote_provider_model = Some("gpt-5.6-luna".to_owned());
+
+    use crate::tui::TuiState;
+    assert_eq!(
+        <crate::tui::app::App as TuiState>::provider_model(&app),
+        "gpt-5.6-luna",
+        "server-reported model remains authoritative once known"
+    );
+}
