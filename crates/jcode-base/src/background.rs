@@ -2053,6 +2053,23 @@ impl BackgroundTaskManager {
         let mut finalized = 0;
 
         for task in tasks {
+            let prior_status = self.read_status_file(&task.status_path).await;
+            // A task that was already terminal before this drain started won the
+            // race naturally. Preserve its real outcome, but still consume the
+            // wrapper handle so no completed task is detached from this sweep.
+            if prior_status
+                .as_ref()
+                .is_some_and(|status| status.status != BackgroundTaskStatus::Running)
+            {
+                let mut wrapper_handle = task.handle;
+                if tokio::time::timeout(Duration::from_secs(2), &mut wrapper_handle)
+                    .await
+                    .is_err()
+                {
+                    wrapper_handle.abort();
+                }
+                continue;
+            }
             if let Some(abort) = task.underlying_abort.as_ref() {
                 abort.abort();
             }
@@ -2085,15 +2102,6 @@ impl BackgroundTaskManager {
                 };
 
             let (notify_flag, wake_flag) = *task.delivery_flags.borrow();
-            let prior_status = self.read_status_file(&task.status_path).await;
-            // If the task won the race and finished naturally, keep its real
-            // terminal status instead of stamping it as interrupted.
-            if prior_status
-                .as_ref()
-                .is_some_and(|status| status.status != BackgroundTaskStatus::Running)
-            {
-                continue;
-            }
             let error = if let Err(teardown_error) = teardown_error {
                 match teardown_error {
                     ManagedProcessTeardownError::Refused(detail) => {

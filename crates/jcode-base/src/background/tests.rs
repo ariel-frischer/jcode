@@ -1073,6 +1073,37 @@ async fn shutdown_drain_finalizes_owner_bound_tasks() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn shutdown_drain_overrides_adopted_join_cancellation_status() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let handle = tokio::spawn(async move {
+        sleep(Duration::from_secs(60)).await;
+        Ok::<_, anyhow::Error>(jcode_tool_types::ToolOutput::new("never"))
+    });
+    let info = manager
+        .adopt_with_options_and_identity(
+            "bash",
+            None,
+            "shutdown-adopted-session",
+            false,
+            false,
+            handle,
+            None,
+        )
+        .await;
+
+    assert_eq!(manager.drain_for_shutdown().await, 1);
+    let status = manager.status(&info.task_id).await.unwrap();
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    let error = status.error.unwrap_or_default();
+    assert!(
+        error.contains("Interrupted by server shutdown"),
+        "shutdown must win the adopted-wrapper cancellation race, got: {error}"
+    );
+    Ok(())
+}
+
 #[tokio::test(start_paused = true)]
 async fn stall_watchdog_fires_and_wait_returns_stalled() -> Result<()> {
     let tmp = tempdir()?;
