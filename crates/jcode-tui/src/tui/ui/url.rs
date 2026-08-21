@@ -98,7 +98,10 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
             || raw_text[..mention_start]
                 .chars()
                 .next_back()
-                .is_some_and(char::is_whitespace);
+                .is_some_and(|character| {
+                    character.is_whitespace()
+                        || matches!(character, '\'' | '"' | '`' | '(' | '[' | '{')
+                });
         if !starts_token {
             continue;
         }
@@ -283,5 +286,23 @@ mod tests {
             Some("user@example.com".to_string()),
             "existing plain-path classification remains unchanged"
         );
+    }
+
+    #[test]
+    fn file_mentions_follow_inline_opening_delimiters() {
+        for text in [
+            "`@src/main.rs`",
+            "(@src/main.rs)",
+            "[@src/main.rs]",
+            "{@src/main.rs}",
+            "\"@src/main.rs\"",
+            "'@src/main.rs'",
+        ] {
+            assert_eq!(
+                link_target_for_display_column(text, 1),
+                Some("@src/main.rs".to_string()),
+                "mention should be clickable in {text:?}"
+            );
+        }
     }
 }
