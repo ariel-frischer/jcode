@@ -798,10 +798,60 @@ fn create_handoff_child_session_with_compaction(
 }
 
 const MAX_GENERATED_HANDOFF_PROMPT_CHARS: usize = 32 * 1024;
+const MAX_RECENT_HANDOFF_MESSAGES_CHARS: usize = 8 * 1024;
+const MAX_RECENT_HANDOFF_MESSAGES: usize = 4;
 const HANDOFF_SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
 
+fn recent_handoff_messages(session: &Session) -> String {
+    let mut messages = Vec::new();
+    let mut remaining = MAX_RECENT_HANDOFF_MESSAGES_CHARS;
+
+    for message in session.messages.iter().rev() {
+        let text = message
+            .content
+            .iter()
+            .filter_map(|block| match block {
+                crate::message::ContentBlock::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let text = text.trim();
+        if text.is_empty() || text.starts_with("<system-reminder>") {
+            continue;
+        }
+
+        let role = match message.role {
+            crate::message::Role::User => "User",
+            crate::message::Role::Assistant => "Assistant",
+        };
+        let entry = format!("{role}:\n{text}");
+        if entry.len() > remaining {
+            if messages.is_empty() {
+                messages.push(crate::util::truncate_str(&entry, remaining).to_string());
+            }
+            break;
+        }
+        remaining -= entry.len();
+        messages.push(entry);
+        if messages.len() == MAX_RECENT_HANDOFF_MESSAGES {
+            break;
+        }
+    }
+
+    messages.reverse();
+    if messages.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\nRecent source-session messages (verbatim):\n{}",
+            messages.join("\n\n")
+        )
+    }
+}
+
 fn generated_handoff_prompt(
-    session_id: &str,
+    session: &Session,
     compaction: Option<&crate::session::StoredCompactionState>,
 ) -> String {
     let mut prompt = String::from("Continue from this fresh-session handoff.\n\n");
@@ -815,7 +865,7 @@ fn generated_handoff_prompt(
             .to_string()
     };
 
-    let todos = crate::todo::load_todos(session_id).unwrap_or_default();
+    let todos = crate::todo::load_todos(&session.id).unwrap_or_default();
     let mut open_todos = todos
         .iter()
         .filter(|todo| !todo.status.eq_ignore_ascii_case("completed"))
@@ -828,15 +878,20 @@ fn generated_handoff_prompt(
         );
     }
     let next_steps_section = format!("\n\nNext steps:\n{}", open_todos.join("\n"));
+    let recent_messages_section = recent_handoff_messages(session);
 
     let next_steps_section = crate::util::truncate_str(
         &next_steps_section,
-        MAX_GENERATED_HANDOFF_PROMPT_CHARS.saturating_sub(prompt.len()),
+        MAX_GENERATED_HANDOFF_PROMPT_CHARS
+            .saturating_sub(prompt.len())
+            .saturating_sub(recent_messages_section.len()),
     );
     let summary_budget = MAX_GENERATED_HANDOFF_PROMPT_CHARS
         .saturating_sub(prompt.len())
+        .saturating_sub(recent_messages_section.len())
         .saturating_sub(next_steps_section.len());
     prompt.push_str(crate::util::truncate_str(&summary_section, summary_budget));
+    prompt.push_str(&recent_messages_section);
     prompt.push_str(next_steps_section);
     prompt
 }
@@ -926,7 +981,7 @@ pub(super) async fn handle_handoff(
                 return;
             }
         };
-        let prompt = generated_handoff_prompt(&client_session_id, compaction.as_ref());
+        let prompt = generated_handoff_prompt(&parent, compaction.as_ref());
         (Some(prompt), compaction, policy.copy_todos)
     };
     let auto_start = auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
