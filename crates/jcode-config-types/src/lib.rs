@@ -27,10 +27,26 @@ impl Default for FileMentionsConfig {
             ignore: vec![
                 "node_modules/".into(),
                 "target/".into(),
+                "vendor/".into(),
                 ".venv/".into(),
                 "venv/".into(),
+                "__pycache__/".into(),
+                ".pytest_cache/".into(),
+                ".mypy_cache/".into(),
+                ".ruff_cache/".into(),
+                ".tox/".into(),
+                ".nox/".into(),
                 "dist/".into(),
                 "build/".into(),
+                "out/".into(),
+                "coverage/".into(),
+                ".cache/".into(),
+                ".next/".into(),
+                ".nuxt/".into(),
+                ".svelte-kit/".into(),
+                ".turbo/".into(),
+                ".gradle/".into(),
+                ".terraform/".into(),
                 ".git/".into(),
             ],
         }
@@ -435,6 +451,9 @@ impl Default for CompactionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct SessionProfileConfig {
+    /// Additional directories or glob patterns excluded from TUI `@` completion.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub file_mentions_ignore: Vec<String>,
     /// Provider identifier or route selected for the session.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
