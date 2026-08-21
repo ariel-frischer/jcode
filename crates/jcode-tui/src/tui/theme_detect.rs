@@ -232,6 +232,13 @@ impl std::fmt::Display for BackgroundQueryError {
 fn query_terminal_background(
     timeout: std::time::Duration,
 ) -> Result<terminal_colorsaurus::Color, BackgroundQueryError> {
+    // Some terminal multiplexers deliver a valid response well after the
+    // nominal probe timeout. Keep consuming input for a bounded grace period
+    // so a late OSC 11 reply cannot become the first crossterm input event.
+    // Unsupported terminals pay this cost only once because the caller caches
+    // the timeout verdict.
+    const LATE_REPLY_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
     use std::io::Write;
     use std::os::fd::AsRawFd;
 
@@ -248,7 +255,7 @@ fn query_terminal_background(
         stdout.flush().map_err(BackgroundQueryError::Io)?;
 
         let fd = std::io::stdin().as_raw_fd();
-        let deadline = std::time::Instant::now() + timeout;
+        let deadline = std::time::Instant::now() + timeout + LATE_REPLY_GRACE;
         let mut response = Vec::with_capacity(64);
         let mut byte = [0u8; 1];
 
@@ -324,13 +331,9 @@ fn parse_background_reply(bytes: &[u8]) -> Option<(u16, u16, u16)> {
         .position(|window| window == PREFIX)?
         + PREFIX.len();
     let payload = &bytes[start..];
-    let end = payload
-        .iter()
-        .enumerate()
-        .position(|(index, byte)| {
-            *byte == b'\x07'
-                || (*byte == 0x1b && payload.get(index + 1) == Some(&b'\\'))
-        })?;
+    let end = payload.iter().enumerate().position(|(index, byte)| {
+        *byte == b'\x07' || (*byte == 0x1b && payload.get(index + 1) == Some(&b'\\'))
+    })?;
     let channels = payload[..end]
         .split(|byte| *byte == b'/')
         .map(|channel| {
@@ -503,7 +506,10 @@ mod tests {
     #[test]
     fn parses_complete_osc11_background_replies_without_consuming_unrelated_bytes() {
         let response = b"\x1b]11;rgb:1111/2222/3333\x1b\\trailing";
-        assert_eq!(parse_background_reply(response), Some((0x1111, 0x2222, 0x3333)));
+        assert_eq!(
+            parse_background_reply(response),
+            Some((0x1111, 0x2222, 0x3333))
+        );
         assert_eq!(
             parse_background_reply(b"\x1b[?62;c\x1b]11;rgb:1111/2222/3333\x07"),
             Some((0x1111, 0x2222, 0x3333))
