@@ -11,10 +11,26 @@ fn discover_file_mentions(
     const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
         "node_modules/",
         "target/",
+        "vendor/",
         ".venv/",
         "venv/",
+        "__pycache__/",
+        ".pytest_cache/",
+        ".mypy_cache/",
+        ".ruff_cache/",
+        ".tox/",
+        ".nox/",
         "dist/",
         "build/",
+        "out/",
+        "coverage/",
+        ".cache/",
+        ".next/",
+        ".nuxt/",
+        ".svelte-kit/",
+        ".turbo/",
+        ".gradle/",
+        ".terraform/",
         ".git/",
     ];
     let mut builder = ignore::WalkBuilder::new(root);
@@ -63,6 +79,17 @@ fn discover_file_mentions(
     }
     candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     candidates
+}
+
+fn effective_file_mention_ignores(app: &App) -> Vec<String> {
+    let config = crate::config::config();
+    let mut ignores = config.file_mentions.ignore.clone();
+    if let Some(profile_name) = app.session.profile_name.as_deref()
+        && let Some(profile) = config.profiles.get(profile_name)
+    {
+        ignores.extend(profile.file_mentions_ignore.iter().cloned());
+    }
+    ignores
 }
 
 #[derive(Clone, Copy)]
@@ -1241,7 +1268,7 @@ impl App {
         let candidates = discover_file_mentions(
             root,
             query,
-            &crate::config::config().file_mentions.ignore,
+            &effective_file_mention_ignores(self),
         );
         candidates.into_iter().take(100).map(|(_, path, dir)| {
             let mut replacement = input[..at].to_string();
