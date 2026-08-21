@@ -551,3 +551,102 @@ binary build at a time and separate cold/warm measurements for startup, one
 tool call, and a short local session. Do not treat this quick result as a
 reason to add an optimization until that workload-level comparison identifies
 a user-visible gap.
+
+## 2026-08-21 broader README and client-startup comparison
+
+Bead: `jcode-fi8`
+
+### Scope correction
+
+The preceding `jcode-7u8` campaign measured only cheap CLI process startup and
+Clap help rendering. It did not evaluate the README's broader performance
+section. The README makes separate claims about resident memory and per-session
+scaling, time to first frame, time to first input, and boot-up behavior. The
+architecture design also defines NFR-002 targets for TUI first-frame p95 below
+25 ms, first-input readiness p95 below 75 ms, local prompt acknowledgement p95
+below 100 ms, and daemon-event-to-client-display p95 below 50 ms.
+
+This follow-up extends the comparison to the client/server startup path, but it
+does not retroactively turn the result into a complete validation of every
+README or design goal.
+
+### Targets and controls
+
+The same exact scratch binaries from `jcode-7u8` were reused, avoiding another
+Cargo build:
+
+| Target | Source ref | Binary SHA-256 |
+|---|---|---|
+| Custom dev | `e43c6f0bc165f4caf87be234c8e5ccb26c35c8b4` | `d855cffcf4d3799582f299e2fd294e01fe83a8ab2a479493aceca12968a63905` |
+| Official upstream | `a63dbc4546895ecb4d1be1a285d98e6e13fb1b74` | `69ff9aeb3deecf21273e9675636f1808e45b3fecc69bf1f2ee039fc679a4a147` |
+
+- Host: AMD Ryzen AI 7 PRO 350, 27 GiB RAM, Linux x86_64.
+- Harness: `scripts/bench_startup.py` imported without modification; five
+  serialized runs per binary for binary help/version timing, isolated server
+  readiness, and cold client startup profiles.
+- Each run used isolated `JCODE_HOME`, `JCODE_RUNTIME_DIR`, and
+  `JCODE_SOCKET` directories with telemetry disabled. No model, network,
+  shared daemon, or user configuration was involved.
+- Private startup daemons were terminated by the harness and their temporary
+  roots were removed. The raw artifact is
+  `/home/ari/.jcode/scratch/jcode-fi8-startup-raw.json`.
+
+### Client/server startup results
+
+Values are p50 from five runs. “Custom delta” is
+`(custom - upstream) / upstream`; negative values favor the custom binary.
+
+| Metric | Custom p50 | Upstream p50 | Custom delta | Observation |
+|---|---:|---:|---:|---|
+| Binary `--help` load | 55.301 ms | 44.376 ms | +24.6% | Custom slower in this harness; noisy process-load path |
+| Binary `--version` | 49.817 ms | 45.985 ms | +8.3% | Custom slower; small absolute difference |
+| Isolated server socket ready | 137.469 ms | 150.031 ms | -8.4% | Custom faster at p50 |
+| Cold client startup total | 1,162.0 ms | 1,164.5 ms | -0.2% | Effectively tied |
+| Cold `server_ready` phase | 168.9 ms | 184.5 ms | -8.5% | Custom faster at p50 |
+| Cold `app_new_for_remote` phase | 3.7 ms | 3.3 ms | +12.1% | Small absolute difference |
+| Remote bootstrap history | 507.0 ms | 530.0 ms | -4.3% | Directionally custom-faster, noisy |
+
+The five-run inclusive p95 estimates for cold total were 1,166.6 ms custom and
+1,168.7 ms upstream. The observed p95 estimates for isolated server readiness
+were 195.4 ms custom and 168.1 ms upstream, illustrating enough scheduling
+noise that these samples should not be treated as a statistical p95 guarantee.
+
+**Finding:** the cold client startup total is effectively equal between these
+exact custom and upstream binaries in this harness. The custom binary shows a
+modest median advantage in private server readiness, but it is not consistently
+faster across the low-level binary-load cases and the sample is too small to
+claim a meaningful end-user startup improvement or regression.
+
+### README and design-goal coverage matrix
+
+| Goal or claim | Current evidence | Status in this comparison |
+|---|---|---|
+| README time to first frame: 14.0 ms historical baseline | README reports ten interactive PTY launches | Not revalidated pairwise; the visible-ready harness requires Python `pyte`, which is unavailable in this environment |
+| README time to first input: 48.7 ms historical baseline | README reports ten interactive PTY launches | Not revalidated pairwise for the same dependency reason |
+| NFR-002 TUI first-frame and first-input p95 targets | Design target only | Not measured here; cold startup profile is not a first-render/input-ready metric |
+| NFR-002 prompt acknowledgement and event-to-client display | Design target only | Not measured; requires a local session/event harness |
+| README one-session and ten-session PSS | Historical cross-tool table | Not remeasured custom versus upstream |
+| README extra PSS per added session | Historical scaling table | Not remeasured; requires controlled multi-client memory sampling |
+| Existing tool CPU/memory profile | `jcode-znm` report includes public daemon/tool-path evidence | Current custom behavior is profiled, but not pairwise against upstream in this Bead |
+| Compile-performance plan | `docs/plans/COMPILE_PERFORMANCE_PLAN.md` records warm check/build baselines and targets | Not part of this runtime comparison; compile benchmarks need separate serialized build waves |
+| TUI render, reconnect, event fanout, throughput, and memory retention | Architecture/design goals and historical investigations | Unmeasured here |
+
+The README also contains a claim that a Mermaid rendering library is 1800x
+faster than a browser/TypeScript path. That is a separate renderer benchmark,
+not a client-startup or custom-versus-upstream Jcode comparison.
+
+### Limitations and next measurement lanes
+
+This result compares the exact `jcode-7u8` refs rather than the newer moving
+`dev` tip, because reusing the existing binaries was the deliberate way to
+avoid another resource-heavy build. The five-run p95 estimates are directional
+only. The user-visible first-frame/input lane is blocked by the missing `pyte`
+Python dependency, and no dependency installation or replacement parser was
+introduced for this quick pass.
+
+The remaining meaningful lanes are: (1) install or vendor the visible-ready
+benchmark dependency and run ten PTY samples against both binaries, (2) run a
+private local prompt/event acknowledgement and reconnect matrix, (3) compare
+one- and ten-session PSS plus incremental PSS, and (4) run the documented
+cold/warm compile checkpoints one build at a time. These should remain separate
+acceptance lanes rather than being inferred from the cold startup total.
