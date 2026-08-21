@@ -459,3 +459,83 @@ The main proven core opportunities were large text-file streaming and bounded li
 their cost is attributable to useful external work such as repository traversal.
 The next performance investigation should target configured hook process startup
 only if its user-visible integration cost is considered unacceptable.
+
+## 2026-08-21 custom dev versus official upstream
+
+Bead: `jcode-7u8`
+
+### Question and comparison targets
+
+This quick campaign checks whether the current custom development binary has
+regressed on cheap, no-network CLI startup paths relative to the official
+upstream source. It is intentionally a startup smoke benchmark, not a claim
+about model latency, agent-turn throughput, tool execution, or long-lived
+daemon performance.
+
+| Target | Source ref | Binary | SHA-256 |
+|---|---|---|---|
+| Custom dev | `dev` HEAD `e43c6f0bc165` | `~/.jcode/builds/versions/e43c6f0bc/jcode` | `3059d3b037548a70bb6d812b54a0ae0fec9c70f5bb3c444c1a571d50637269ee` |
+| Official upstream | `upstream/master` `a63dbc4546895ecb4d1be1a285d98e6e13fb1b74` | scratch selfdev build | `69ff9aeb3deecf21273e9675636f1808e45b3fecc69bf1f2ee039fc679a4a147` |
+
+The two histories share the `v0.79.1` release ancestor. At measurement time,
+the custom side was 506 commits ahead of that common ancestor and upstream was
+13 commits ahead. The upstream binary was built once, serially, from an exact
+`git archive` of `upstream/master`; no Cargo builds ran in parallel. The custom
+binary was already installed, so it was not rebuilt.
+
+### Method
+
+- Host: AMD Ryzen AI 7 PRO 350, 27 GiB RAM, Linux x86_64.
+- Four side-effect-free commands: `--version`, `--help`, `server --help`, and
+  `run --help`.
+- One warm-up per binary and case, followed by 15 measured subprocess samples.
+- Fixed seed `20260821`; binary/case order was randomized and interleaved per
+  round.
+- Wall time came from `perf_counter_ns`; child CPU came from the delta of
+  `RUSAGE_CHILDREN` around each subprocess.
+- Each process used an empty temporary `HOME` and XDG config/data/cache/runtime
+  directories. No model, network, shared daemon, or user configuration was
+  involved. All commands returned exit code 0 and emitted no stderr.
+
+### Results
+
+Values are p50 per process. “Custom faster” is `(upstream - custom) / upstream`.
+
+| Case | Custom wall | Upstream wall | Custom faster | Custom child CPU | Upstream child CPU | CPU lower |
+|---|---:|---:|---:|---:|---:|---:|
+| `--version` | 8.838 ms | 13.340 ms | 33.7% | 9.578 ms | 15.032 ms | 36.3% |
+| `--help` | 9.294 ms | 15.774 ms | 41.1% | 9.924 ms | 17.419 ms | 43.0% |
+| `server --help` | 9.183 ms | 14.652 ms | 37.3% | 9.713 ms | 16.277 ms | 40.3% |
+| `run --help` | 9.156 ms | 16.457 ms | 44.4% | 10.393 ms | 17.965 ms | 42.1% |
+
+The help output byte counts and SHA-256 digests matched for every paired case,
+so the timings compare equivalent CLI work rather than one binary rendering a
+smaller response. The custom executable was also smaller: 152,827,696 bytes
+versus 281,406,112 bytes for upstream; ELF `text` was 114,602,227 versus
+189,272,715 bytes.
+
+### Finding and limitations
+
+**Finding:** these representative CLI startup checks show no performance
+regression in the custom dev build. The custom binary was consistently faster,
+with 33.7-44.4% lower wall time and 36.3-43.0% lower measured child CPU than
+the official upstream-master build on this host.
+
+This is evidence for process startup and Clap help rendering only. It does not
+establish that the custom fork is faster for agent turns, provider streaming,
+tool execution, TUI rendering, memory retention, or daemon reuse. The upstream
+scratch binary unexpectedly printed the local custom banner
+`v0.79.507-dev (e43c6f0bc)` despite being built from the upstream source tree;
+the banner is therefore not trusted for identity in this campaign. The source
+ref, source-tree diff, executable hashes, and paired output hashes were used
+instead. A private custom-daemon start smoke returned `{"status":"running"}`
+in about 201 ms, but ordinary stop required force and was not promoted to a
+timed comparison. The private process was verified absent afterward, and the
+shared daemon was not touched.
+
+For a stronger follow-up, compare the common `v0.79.1` ancestor against the
+custom build using the existing private-daemon acceptance harness, with one
+binary build at a time and separate cold/warm measurements for startup, one
+tool call, and a short local session. Do not treat this quick result as a
+reason to add an optimization until that workload-level comparison identifies
+a user-visible gap.
