@@ -131,6 +131,53 @@ fn test_click_on_relative_file_uses_process_working_directory_without_session_cw
 }
 
 #[test]
+fn test_click_on_home_relative_file_path_toggles_inline_preview() {
+    let _render_lock = scroll_render_test_lock();
+    let home = dirs::home_dir().expect("home directory");
+    let home_file_dir = tempfile::tempdir_in(&home).expect("home-relative tempdir");
+    let home_relative_dir = home_file_dir
+        .path()
+        .strip_prefix(&home)
+        .expect("tempdir must be under home");
+    let target = format!("~/{}", home_relative_dir.join("home-relative.txt").display());
+    std::fs::write(home_file_dir.path().join("home-relative.txt"), "home-relative content")
+        .expect("write home-relative file");
+
+    let mut app = create_test_app();
+    app.display_messages = vec![DisplayMessage::assistant(format!("Open `{target}`"))];
+    app.bump_display_messages_version();
+    app.scroll_offset = 0;
+    app.auto_scroll_paused = false;
+    app.is_processing = false;
+    app.status = ProcessingStatus::Idle;
+
+    let backend = ratatui::backend::TestBackend::new(100, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find(&target)?;
+            Some((line[..byte].chars().count() as u16 + 1, row))
+        })
+        .expect("home-relative path must be visible");
+
+    assert!(app.try_open_link_at(column, row));
+    let preview = app
+        .inline_file_previews
+        .values()
+        .next()
+        .expect("home-relative file preview");
+    assert_eq!(preview.display_path, target);
+    assert_eq!(preview.content, "home-relative content");
+}
+
+#[test]
 fn test_clicking_file_mentions_in_user_and_prior_messages_uses_session_cwd() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");

@@ -52,9 +52,15 @@ impl App {
         if path_target.contains("://") || path_target.starts_with("mailto:") {
             return false;
         }
-        let candidate = std::path::Path::new(path_target);
+        let candidate = if let Some(home_relative) = path_target.strip_prefix("~/") {
+            dirs::home_dir()
+                .map(|home| home.join(home_relative))
+                .unwrap_or_else(|| std::path::PathBuf::from(path_target))
+        } else {
+            std::path::PathBuf::from(path_target)
+        };
         let path = if candidate.is_absolute() {
-            candidate.to_path_buf()
+            candidate
         } else {
             let Some(working_dir) = self
                 .session
