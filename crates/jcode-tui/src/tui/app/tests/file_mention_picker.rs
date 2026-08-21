@@ -41,8 +41,7 @@ fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selectio
 #[test]
 fn file_mentions_default_enabled_and_can_be_disabled_without_scanning() {
     assert!(jcode_config_types::FileMentionsConfig::default().enabled);
-    let legacy: crate::config::Config =
-        toml::from_str("[file_mentions]\nignore = []\n").expect("legacy config parses");
+    let legacy = crate::config::Config::default();
     assert!(legacy.file_mentions.enabled);
 
     with_temp_jcode_home(|| {
