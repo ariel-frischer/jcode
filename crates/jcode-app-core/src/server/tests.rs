@@ -2,7 +2,8 @@
 
 use super::{
     FileAccess, Server, SessionInterruptQueues, SwarmMember, dispatch_background_task_completion,
-    file_activity_scope_label, persist_swarm_state_snapshot, remove_session_entry,
+    file_activity_scope_label, headless_member_should_restore, persist_swarm_state_snapshot,
+    remove_session_entry,
 };
 use crate::agent::Agent;
 use crate::bus::{
@@ -75,6 +76,16 @@ fn file_activity_scope_label_classifies_overlap() {
 
     let current = file_touch_with_summary(None);
     assert_eq!(file_activity_scope_label(&previous, &current), "same file");
+}
+
+#[test]
+fn startup_recovery_selects_ready_headless_workers_only() {
+    assert!(headless_member_should_restore("ready", true));
+    assert!(headless_member_should_restore("crashed", true));
+    assert!(!headless_member_should_restore("completed", true));
+    assert!(!headless_member_should_restore("failed", true));
+    assert!(!headless_member_should_restore("stopped", true));
+    assert!(!headless_member_should_restore("ready", false));
 }
 
 #[tokio::test]
@@ -773,6 +784,47 @@ async fn startup_recovery_resumes_interrupted_headless_sessions_after_reload() -
         ReloadContext::peek_for_session(&initiator.id)?.is_none(),
         "initiator reload context should be consumed by headless recovery"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(
+    clippy::await_holding_lock,
+    reason = "test intentionally serializes process-wide JCODE_HOME/env state across async recovery assertions"
+)]
+async fn startup_recovery_reconstructs_idle_headless_worker() -> Result<()> {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp = tempfile::TempDir::new()?;
+    let _env = configure_test_env(&temp);
+
+    let mut idle = crate::session::Session::create(None, Some("idle-worker".to_string()));
+    idle.save()?;
+
+    let swarm_id = "swarm-idle-worker-recovery";
+    persist_swarm_state_snapshot(
+        swarm_id,
+        None,
+        None,
+        &[persisted_headless_member(
+            &idle.id,
+            swarm_id,
+            "ready",
+            "waiting for another assignment",
+        )],
+    );
+
+    let server = Server::new(Arc::new(StreamingMockProvider::default()));
+    server.recover_headless_sessions_on_startup().await;
+
+    assert!(
+        server.sessions.read().await.contains_key(&idle.id),
+        "startup recovery should reconstruct the idle worker Agent"
+    );
+    let members = server.swarm_state.members.read().await;
+    let recovered = members.get(&idle.id).expect("restored swarm member");
+    assert_eq!(recovered.status, "ready");
+    assert!(recovered.is_headless);
 
     Ok(())
 }

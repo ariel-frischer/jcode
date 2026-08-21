@@ -350,22 +350,18 @@ fn recover_member_status(
         );
     }
 
-    // No client or headless process survives a server restart. A connected TUI
-    // will explicitly mark its member ready again during subscribe; until that
-    // happens, restoring a persisted `ready` member as live creates a ghost
-    // that can never enter terminal-member GC. This previously resurrected
-    // hundreds of detached historical clients as ready on every reload.
+    // A connected TUI will explicitly mark its member ready again during
+    // subscribe. Until that happens, restoring a persisted detached client as
+    // live creates a ghost that can never enter terminal-member GC. Headless
+    // workers are different: startup recovery can reconstruct their Agent from
+    // the durable session, so keep them ready and reusable across reloads.
     if status == SwarmLifecycleStatus::Ready {
+        if is_headless {
+            return (status, detail);
+        }
         return (
             SwarmLifecycleStatus::Stopped,
-            append_recovery_detail(
-                detail,
-                if is_headless {
-                    "idle worker not restored after server restart"
-                } else {
-                    "client not attached after server restart"
-                },
-            ),
+            append_recovery_detail(detail, "client not attached after server restart"),
         );
     }
 
