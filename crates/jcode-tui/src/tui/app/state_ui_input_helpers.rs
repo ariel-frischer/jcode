@@ -1,13 +1,104 @@
 use super::*;
 use crate::tui::core;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
+
+const FILE_MENTION_BATCH_SIZE: usize = 32;
+const FILE_MENTION_MAX_MATCHES: usize = 5000;
+const FILE_MENTION_POLL_BATCHES: usize = 8;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct FileMentionRequest {
+    root: PathBuf,
+    query: String,
+    ignore_patterns: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct FileMentionCandidate {
+    score: i32,
+    path: String,
+    is_dir: bool,
+}
+
+#[derive(Debug)]
+pub(super) struct FileMentionBatch {
+    pub generation: u64,
+    pub candidates: Vec<FileMentionCandidate>,
+    pub done: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct FileMentionDiscovery {
+    pub request: FileMentionRequest,
+    pub generation: u64,
+    pub receiver: mpsc::Receiver<FileMentionBatch>,
+    pub cancel: Arc<AtomicBool>,
+    pub candidates: Vec<FileMentionCandidate>,
+}
 
 fn discover_file_mentions(
     root: &Path,
     query: &str,
     ignore_patterns: &[String],
 ) -> Vec<(i32, String, bool)> {
+    let (sender, receiver) = mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(true));
+    discover_file_mentions_batched(root, query, ignore_patterns, 0, &cancel, &sender);
+    drop(sender);
+    receiver
+        .into_iter()
+        .flat_map(|batch| {
+            batch
+                .candidates
+                .into_iter()
+                .map(|candidate| (candidate.score, candidate.path, candidate.is_dir))
+        })
+        .collect()
+}
+
+fn start_file_mention_discovery(
+    root: PathBuf,
+    query: String,
+    ignore_patterns: Vec<String>,
+    generation: u64,
+) -> (mpsc::Receiver<FileMentionBatch>, Arc<AtomicBool>) {
+    let (sender, receiver) = mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(true));
+    let worker_cancel = Arc::clone(&cancel);
+    std::thread::spawn(move || {
+        discover_file_mentions_batched(
+            &root,
+            &query,
+            &ignore_patterns,
+            generation,
+            &worker_cancel,
+            &sender,
+        );
+    });
+    (receiver, cancel)
+}
+
+/// Test-only entry point for deterministic batch and responsiveness checks.
+pub(super) fn start_file_mention_discovery_for_test(
+    root: PathBuf,
+    query: String,
+    ignore_patterns: Vec<String>,
+    generation: u64,
+) -> (mpsc::Receiver<FileMentionBatch>, Arc<AtomicBool>) {
+    start_file_mention_discovery(root, query, ignore_patterns, generation)
+}
+
+fn discover_file_mentions_batched(
+    root: &Path,
+    query: &str,
+    ignore_patterns: &[String],
+    generation: u64,
+    cancel: &Arc<AtomicBool>,
+    sender: &mpsc::Sender<FileMentionBatch>,
+) {
     const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
         "node_modules/",
         "target/",
@@ -44,8 +135,12 @@ fn discover_file_mentions(
         .copied()
         .chain(ignore_patterns.iter().map(String::as_str))
         .collect();
-    let mut candidates = Vec::new();
+    let mut batch = Vec::with_capacity(FILE_MENTION_BATCH_SIZE);
+    let mut match_count = 0;
     for entry in builder.build().filter_map(Result::ok) {
+        if !cancel.load(Ordering::Relaxed) {
+            return;
+        }
         let path = entry.path();
         if path == root {
             continue;
@@ -71,14 +166,117 @@ fn discover_file_mentions(
             jcode_fuzzy::fuzzy_score(query, &text)
         };
         if let Some(score) = score {
-            candidates.push((score, text, entry.file_type().is_some_and(|t| t.is_dir())));
+            batch.push(FileMentionCandidate {
+                score,
+                path: text,
+                is_dir: entry.file_type().is_some_and(|t| t.is_dir()),
+            });
+            match_count += 1;
         }
-        if candidates.len() >= 5000 {
+        if batch.len() >= FILE_MENTION_BATCH_SIZE
+            && !send_file_mention_batch(sender, generation, &mut batch, false)
+        {
+            return;
+        }
+        if match_count >= FILE_MENTION_MAX_MATCHES {
             break;
         }
     }
-    candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
-    candidates
+    if !batch.is_empty() || match_count == 0 {
+        let _ = send_file_mention_batch(sender, generation, &mut batch, true);
+    } else {
+        let _ = sender.send(FileMentionBatch {
+            generation,
+            candidates: Vec::new(),
+            done: true,
+        });
+    }
+}
+
+fn send_file_mention_batch(
+    sender: &mpsc::Sender<FileMentionBatch>,
+    generation: u64,
+    candidates: &mut Vec<FileMentionCandidate>,
+    done: bool,
+) -> bool {
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    let candidates = std::mem::take(candidates);
+    sender
+        .send(FileMentionBatch {
+            generation,
+            candidates,
+            done,
+        })
+        .is_ok()
+}
+
+impl App {
+    pub(super) fn poll_file_mention_discovery(&mut self) -> bool {
+        let mut changed = false;
+        let mut pending = self.file_mention_discovery.borrow_mut();
+        let Some(discovery) = pending.as_mut() else {
+            return false;
+        };
+        for _ in 0..FILE_MENTION_POLL_BATCHES {
+            let batch = match discovery.receiver.try_recv() {
+                Ok(batch) => batch,
+                Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => break,
+            };
+            if batch.generation != discovery.generation {
+                continue;
+            }
+            discovery.candidates.extend(batch.candidates);
+            changed = true;
+            if batch.done {
+                break;
+            }
+        }
+        if changed {
+            *self.command_suggestions_cache.borrow_mut() = None;
+        }
+        changed
+    }
+
+    fn clear_file_mention_discovery(&self) {
+        if let Some(discovery) = self.file_mention_discovery.borrow_mut().take() {
+            discovery.cancel.store(false, Ordering::Relaxed);
+        }
+    }
+
+    fn ensure_file_mention_discovery(&self, request: FileMentionRequest) {
+        if self
+            .file_mention_discovery
+            .borrow()
+            .as_ref()
+            .is_some_and(|discovery| discovery.request == request)
+        {
+            return;
+        }
+
+        let generation = self.file_mention_generation.get().wrapping_add(1);
+        self.file_mention_generation.set(generation);
+        if let Some(discovery) = self.file_mention_discovery.borrow_mut().take() {
+            discovery.cancel.store(false, Ordering::Relaxed);
+        }
+        let (receiver, cancel) = start_file_mention_discovery(
+            request.root.clone(),
+            request.query.clone(),
+            request.ignore_patterns.clone(),
+            generation,
+        );
+        *self.file_mention_discovery.borrow_mut() = Some(FileMentionDiscovery {
+            request,
+            generation,
+            receiver,
+            cancel,
+            candidates: Vec::new(),
+        });
+    }
 }
 
 fn effective_file_mention_ignores(app: &App) -> Vec<String> {
@@ -1279,9 +1477,11 @@ impl App {
         let cursor = self.cursor_pos.min(input.len());
         let before_cursor = &input[..cursor];
         let Some(at) = before_cursor.rfind('@') else {
+            self.clear_file_mention_discovery();
             return Vec::new();
         };
         if before_cursor[at + 1..].contains(char::is_whitespace) {
+            self.clear_file_mention_discovery();
             return Vec::new();
         }
         let query = &before_cursor[at + 1..];
@@ -1291,14 +1491,29 @@ impl App {
             .as_deref()
             .map(Path::new)
             .unwrap_or_else(|| Path::new("."));
-        let candidates = discover_file_mentions(root, query, &effective_file_mention_ignores(self));
-        candidates
-            .into_iter()
+        let request = FileMentionRequest {
+            root: root.to_path_buf(),
+            query: query.to_owned(),
+            ignore_patterns: effective_file_mention_ignores(self),
+        };
+        self.ensure_file_mention_discovery(request.clone());
+        let pending = self.file_mention_discovery.borrow();
+        let Some(discovery) = pending
+            .as_ref()
+            .filter(|discovery| discovery.request == request)
+        else {
+            return Vec::new();
+        };
+        discovery
+            .candidates
+            .iter()
             .take(100)
-            .map(|(_, path, dir)| {
+            .map(|candidate| {
+                let path = &candidate.path;
+                let dir = candidate.is_dir;
                 let mut replacement = input[..at].to_string();
                 replacement.push('@');
-                replacement.push_str(&path);
+                replacement.push_str(path);
                 if dir {
                     replacement.push('/');
                 }
@@ -1397,10 +1612,16 @@ impl App {
             }
         }
         if !self.input.trim_start().starts_with('/') && self.input.contains('@') {
+            if !crate::config::config().file_mentions.enabled {
+                self.clear_file_mention_discovery();
+                return Vec::new();
+            }
             let mentions = self.file_mention_suggestions(&self.input);
             if !mentions.is_empty() {
                 return mentions;
             }
+        } else {
+            self.clear_file_mention_discovery();
         }
         self.get_suggestions_for(&self.input)
     }
