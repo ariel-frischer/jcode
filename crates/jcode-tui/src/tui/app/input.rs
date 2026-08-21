@@ -382,7 +382,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        ClipboardPasteContent, ClipboardPasteKind, dropped_image_files,
+        ClipboardPasteContent, ClipboardPasteKind, dropped_image_files, expand_file_mentions,
         is_clipboard_paste_shortcut, parse_dropped_paths, preferred_wayland_text_type,
         read_clipboard_for_paste_with, shifted_printable_fallback, text_input_for_key,
     };
@@ -587,6 +587,50 @@ mod tests {
         assert_eq!(
             text_input_for_key(KeyCode::Char('@'), KeyModifiers::CONTROL),
             None
+        );
+    }
+
+    #[test]
+    fn file_mentions_expand_relative_paths_against_working_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("docs")).unwrap();
+        std::fs::write(dir.path().join("docs/boundaries.md"), "# boundaries\n").unwrap();
+
+        let expanded = expand_file_mentions(
+            "Please inspect @docs/boundaries.md",
+            Some(dir.path().to_str().unwrap()),
+            true,
+        );
+
+        assert_eq!(
+            expanded,
+            "Please inspect <file path=\"docs/boundaries.md\">\n# boundaries\n\n</file>"
+        );
+    }
+
+    #[test]
+    fn file_mentions_preserve_unresolved_and_embedded_at_signs() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = "email me@example.com about @missing.md";
+
+        assert_eq!(
+            expand_file_mentions(input, Some(dir.path().to_str().unwrap()), true),
+            input
+        );
+    }
+
+    #[test]
+    fn disabled_file_mentions_leave_existing_paths_literal() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.md"), "private context").unwrap();
+
+        assert_eq!(
+            expand_file_mentions(
+                "Inspect @notes.md",
+                Some(dir.path().to_str().unwrap()),
+                false,
+            ),
+            "Inspect @notes.md"
         );
     }
 }
@@ -1413,8 +1457,89 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
     result
 }
 
+/// Expand repository-local `@path` references before sending a prompt.
+///
+/// The picker only changes the text in the composer. The provider must receive
+/// the referenced contents too, matching Claude Code's accepted file-reference
+/// behavior. Unresolved references are intentionally preserved:
+/// `@someone` and prose containing `@` are not file errors.
+pub(super) fn expand_file_mentions(
+    input: &str,
+    working_dir: Option<&str>,
+    enabled: bool,
+) -> String {
+    let Some(working_dir) = working_dir.filter(|_| enabled) else {
+        return input.to_owned();
+    };
+    let mut output = String::with_capacity(input.len());
+    let mut cursor = 0;
+    while cursor < input.len() {
+        let Some(relative_at) = input[cursor..].find('@') else {
+            output.push_str(&input[cursor..]);
+            break;
+        };
+        let at = cursor + relative_at;
+        output.push_str(&input[cursor..at]);
+
+        // An @ embedded in an identifier or email address is not a file
+        // reference. A file mention starts at the beginning or after whitespace.
+        let valid_start = at == 0
+            || input[..at]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
+        let end = input[at + 1..]
+            .find(char::is_whitespace)
+            .map_or(input.len(), |offset| at + 1 + offset);
+        let mention = &input[at + 1..end];
+        if !valid_start || mention.is_empty() {
+            output.push('@');
+            cursor = at + 1;
+            continue;
+        }
+
+        let path = PathBuf::from(mention);
+        let resolved = if path.is_absolute() {
+            path
+        } else {
+            PathBuf::from(working_dir).join(path)
+        };
+        let replacement = resolved
+            .metadata()
+            .ok()
+            .filter(|metadata| {
+                metadata.is_file() && metadata.len() <= MAX_SUBMITTED_TEXT_BYTES as u64
+            })
+            .and_then(|_| std::fs::read_to_string(&resolved).ok())
+            .map(|contents| {
+                let escaped_path = mention
+                    .replace('&', "&amp;")
+                    .replace('"', "&quot;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                format!("<file path=\"{escaped_path}\">\n{contents}\n</file>")
+            })
+            .filter(|replacement| {
+                output.len() + replacement.len() + input.len().saturating_sub(end)
+                    <= MAX_SUBMITTED_TEXT_BYTES
+            });
+        if let Some(replacement) = replacement {
+            output.push_str(&replacement);
+        } else {
+            output.push_str(&input[at..end]);
+        }
+        cursor = end;
+    }
+    output
+}
+
 pub(super) fn queue_message(app: &mut App) {
-    let prepared = take_prepared_input(app);
+    let mut prepared = take_prepared_input(app);
+    prepared.expanded = expand_file_mentions(
+        &prepared.expanded,
+        app.session.working_dir.as_deref(),
+        crate::config::config().file_mentions.enabled,
+    );
     app.queued_messages.push(prepared.expanded);
 }
 
@@ -1888,7 +2013,12 @@ fn route_prompt_to_new_session_local(app: &mut App) -> bool {
     let prepared = take_prepared_input(app);
     let restored_raw = prepared.raw_input.clone();
     let restored_images = prepared.images.clone();
-    match commands::launch_prompt_in_new_session_local(app, prepared.expanded, prepared.images) {
+    let expanded = expand_file_mentions(
+        &prepared.expanded,
+        app.session.working_dir.as_deref(),
+        crate::config::config().file_mentions.enabled,
+    );
+    match commands::launch_prompt_in_new_session_local(app, expanded, prepared.images) {
         Ok(_) => true,
         Err(error) => {
             app.input = restored_raw;
@@ -1921,7 +2051,12 @@ pub(super) fn handle_alternate_enter(app: &mut App) {
         SendAction::Submit => app.submit_input(),
         SendAction::Queue => queue_message(app),
         SendAction::Interleave => {
-            let prepared = take_prepared_input(app);
+            let mut prepared = take_prepared_input(app);
+            prepared.expanded = expand_file_mentions(
+                &prepared.expanded,
+                app.session.working_dir.as_deref(),
+                crate::config::config().file_mentions.enabled,
+            );
             stage_local_interleave(app, prepared.expanded, prepared.images);
         }
     }
@@ -2699,7 +2834,12 @@ pub(super) fn handle_enter(app: &mut App) -> bool {
             SendAction::Submit => app.submit_input(),
             SendAction::Queue => queue_message(app),
             SendAction::Interleave => {
-                let prepared = take_prepared_input(app);
+                let mut prepared = take_prepared_input(app);
+                prepared.expanded = expand_file_mentions(
+                    &prepared.expanded,
+                    app.session.working_dir.as_deref(),
+                    crate::config::config().file_mentions.enabled,
+                );
                 stage_local_interleave(app, prepared.expanded, prepared.images);
             }
         }
@@ -3839,6 +3979,22 @@ impl App {
         // Leaving the preview should happen as soon as the user acts on it.
         self.onboarding_preview_mode = false;
 
+        // Keep the transcript readable while sending the referenced file contents
+        // to the provider and persisted model history.
+        let display_input = input.clone();
+        input = expand_file_mentions(
+            &input,
+            self.session.working_dir.as_deref(),
+            crate::config::config().file_mentions.enabled,
+        );
+        if let Some(notice) = input_exceeds_submit_limit(&input) {
+            self.input = display_input;
+            self.cursor_pos = self.input.len();
+            self.set_status_notice(notice.clone());
+            self.push_display_message(DisplayMessage::system(notice));
+            return;
+        }
+
         // Add the expanded user message to the transcript. The composer remains compact
         // while editing, but sent turns should show the actual pasted content.
         // Remember the typed prompt so we can restore it to the input box if this
@@ -3853,7 +4009,7 @@ impl App {
 
         self.push_display_message(DisplayMessage {
             role: "user".to_string(),
-            content: input.clone(),
+            content: display_input,
             tool_calls: vec![],
             duration_secs: None,
             title: None,
