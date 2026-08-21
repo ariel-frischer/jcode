@@ -340,6 +340,12 @@ profile = "full"
 # disabled = ["browser", "gmail", "swarm"]
 # Disable all built-in tools unless enabled is set.
 disable_base_tools = false
+# MCP tool exposure: "eager" sends every server tool definition, "deferred"
+# sends only fixed mcp_search/mcp_call tools, and "auto" switches to deferred
+# when the filtered MCP definitions exceed the token threshold below.
+# Env overrides: JCODE_MCP_TOOLS, JCODE_MCP_TOOLS_TOKEN_THRESHOLD.
+mcp_tools = "auto"
+mcp_tools_token_threshold = 8000
 
 # Named session profiles (optional). Select one for a new interactive session:
 #   jcode --profile review
@@ -788,7 +794,8 @@ mod tests {
     #[test]
     fn default_config_template_parses() {
         let template = Config::default_config_file_contents();
-        toml::from_str::<Config>(&template).expect("the shipped config template must parse");
+        let config =
+            toml::from_str::<Config>(&template).expect("the shipped config template must parse");
         let run_safety = template
             .find("[run_safety]")
             .expect("the template documents run-safety settings");
@@ -799,6 +806,8 @@ mod tests {
             run_safety > jade_relay,
             "run-safety must be a top-level section after the complete safety section"
         );
+        assert_eq!(config.tools.mcp_tools, McpToolsMode::Auto);
+        assert_eq!(config.tools.mcp_tools_token_threshold, 8_000);
     }
 
     /// Colors are only discoverable if the template mentions them, since most
