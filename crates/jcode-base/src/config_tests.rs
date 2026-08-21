@@ -23,10 +23,10 @@ fn test_openai_reasoning_effort_defaults_to_low() {
 }
 
 #[test]
-fn test_openai_fast_mode_defaults_to_priority() {
+fn test_openai_fast_mode_defaults_to_standard() {
     assert_eq!(
         ProviderConfig::default().openai_service_tier.as_deref(),
-        Some("priority")
+        Some("off")
     );
 }
 

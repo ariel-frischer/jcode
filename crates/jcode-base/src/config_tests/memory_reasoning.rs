@@ -126,8 +126,8 @@ fn test_generated_default_config_uses_low_openai_reasoning_effort() {
         "generated default config should use low OpenAI reasoning effort"
     );
     assert!(
-        content.contains("openai_service_tier = \"priority\""),
-        "generated default config should enable OpenAI fast mode"
+        content.contains("openai_service_tier = \"off\""),
+        "generated default config should use Standard OpenAI mode"
     );
     assert!(
         content.contains("[tools]") && content.contains("profile = \"full\""),
