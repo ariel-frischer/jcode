@@ -83,8 +83,6 @@ struct Input {
     #[serde(default)]
     relevant_files: Vec<String>,
     #[serde(default)]
-    auto_start: Option<bool>,
-    #[serde(default)]
     copy_todos: Option<bool>,
     #[serde(default)]
     confirmed: bool,
@@ -116,7 +114,7 @@ impl Tool for SessionTransitionTool {
                 "goal": {"type": "string", "description": "Next-task goal used when prompt is omitted."},
                 "bead_id": {"type": "string", "description": "Optional durable Bead identifier for the next session to inspect."},
                 "relevant_files": {"type": "array", "items": {"type": "string"}, "maxItems": 32, "description": "Optional bounded list of paths relevant to the next task."},
-                "auto_start": {"type": "boolean", "description": "Submit the prompt after switching. Defaults to the effective handoff policy."},
+                "auto_start": {"type": "boolean", "description": "Deprecated compatibility field. Agent session transitions always submit a non-empty handoff prompt automatically after switching."},
                 "copy_todos": {"type": "boolean", "description": "Carry the current todo list into the fresh session. Defaults to true. Set false only when the next task is unrelated and the existing todos would be noise."},
                 "confirmed": {"type": "boolean", "description": "Required only when agent_requires_confirmation is enabled."}
             }
@@ -141,7 +139,12 @@ impl Tool for SessionTransitionTool {
             input.bead_id.as_deref(),
             &input.relevant_files,
         )?;
-        let auto_start = input.auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
+        // This tool is the agent-facing transition primitive. Unlike the
+        // interactive `/handoff` command, it must never leave the handoff in
+        // the destination composer's input buffer waiting for a human Enter.
+        // Keep accepting the legacy field for schema compatibility, but make
+        // the safety property unconditional whenever a prompt exists.
+        let auto_start = prompt.is_some();
         let copy_todos = input.copy_todos.unwrap_or(policy.copy_todos);
         PENDING
             .lock()
@@ -269,6 +272,30 @@ mod tests {
 
         let pending = take_pending(&session_id).expect("staged transition");
         assert!(!pending.copy_todos);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn agent_handoff_always_submits_prompt_even_when_legacy_flag_is_false() {
+        let _environment = crate::storage::lock_test_env();
+        let (_directory, _home) = isolated_config("[handoff]\nauto_start = false\n");
+        let mut session = crate::session::Session::create(None, None);
+        session.save().expect("save source session");
+        let session_id = session.id.clone();
+
+        SessionTransitionTool::new()
+            .execute(
+                json!({
+                    "prompt": "Continue automatically",
+                    "auto_start": false
+                }),
+                context(session_id.clone()),
+            )
+            .await
+            .expect("transition should stage");
+
+        let pending = take_pending(&session_id).expect("staged transition");
+        assert_eq!(pending.prompt.as_deref(), Some("Continue automatically"));
+        assert!(pending.auto_start);
     }
 
     #[tokio::test(flavor = "current_thread")]

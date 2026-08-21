@@ -2867,8 +2867,22 @@ pub(in crate::tui::app) fn handle_server_event(
             {
                 let restores_queued_context = !restored.queued_messages.is_empty()
                     || !restored.hidden_queued_system_messages.is_empty();
+                let restores_prompt_in_composer = !restored.input.trim().is_empty();
                 app.apply_restored_reload_input(restored);
-                if restores_queued_context {
+                if auto_start && restores_prompt_in_composer && !restores_queued_context {
+                    // Agent transitions are always submitted handoffs. A stale
+                    // or legacy startup file may still encode the prompt as an
+                    // editable draft, so normalize it into the same queued
+                    // path used by current handoffs instead of waiting for a
+                    // human to press Enter in the destination TUI.
+                    let handoff_prompt = std::mem::take(&mut app.input);
+                    if !handoff_prompt.trim().is_empty() {
+                        app.queued_messages.insert(0, handoff_prompt);
+                    }
+                    app.input = existing_input;
+                    app.cursor_pos = existing_cursor.min(app.input.len());
+                    app.submit_input_on_startup = false;
+                } else if restores_queued_context {
                     app.input = existing_input;
                     app.cursor_pos = existing_cursor.min(app.input.len());
                     app.submit_input_on_startup = false;
