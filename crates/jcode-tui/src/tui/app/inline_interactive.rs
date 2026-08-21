@@ -1126,11 +1126,13 @@ impl App {
             self.provider.model().to_string()
         };
 
-        // Never present the old catalog as authoritative immediately after a
-        // login/import. Local mode clears this when the provider's synchronous
-        // auth activation finishes; remote mode clears it when the server sends
-        // the final catalog activity after all provider work completes.
-        if self.auth_catalog_refresh_pending {
+        // Local mode cannot synthesize newly authenticated routes until its
+        // provider refresh finishes. A remote client already has the server's
+        // names/routes snapshot, so keep that complete catalog usable while the
+        // final auth-driven refresh runs instead of collapsing to one row.
+        let remote_catalog_available = self.is_remote
+            && (!self.remote_available_entries.is_empty() || !self.remote_model_options.is_empty());
+        if self.auth_catalog_refresh_pending && !remote_catalog_available {
             self.open_loading_model_picker(&current_model);
             return;
         }
@@ -1196,41 +1198,16 @@ impl App {
                 );
                 return;
             }
-            // Fully classifying a large names-only remote catalog reads local
-            // provider caches and can take seconds. Keep that work off the key
-            // handling/render thread. The visible loading shell is never a
-            // partial catalog, and the completed authoritative picker replaces
-            // it atomically with the user's current filter preserved.
-            const SYNC_REMOTE_FALLBACK_MAX_MODELS: usize = 64;
-            if self.remote_available_entries.len() > SYNC_REMOTE_FALLBACK_MAX_MODELS {
-                self.open_loading_model_picker(&current_model);
-                let remote_provider_name = self.remote_provider_name.clone();
-                let remote_available_entries = self.remote_available_entries.clone();
-                self.start_model_picker_route_load_with(
-                    cache_signature,
-                    picker_started,
-                    move || {
-                        let mut routes = crate::provider::remote_model_routes_fallback(
-                            remote_provider_name.as_deref(),
-                            &remote_available_entries,
-                        );
-                        Self::extend_remote_routes_for_uncovered_models_static(
-                            remote_provider_name.as_deref(),
-                            &remote_available_entries,
-                            &mut routes,
-                        );
-                        routes
-                    },
-                );
-                return;
-            }
+            // Endpoint caches are loaded in one directory pass, so even large
+            // names-only catalogs can be fully classified before first paint
+            // without the former hundreds of serial missing-file lookups.
             self.build_remote_model_routes_fallback()
         } else {
             self.simplified_model_routes_for_picker(&current_model)
         };
         let routes_ms = routes_started.elapsed().as_millis();
 
-        let _ = self.open_model_picker_with_routes(
+        let picker_routes = self.open_model_picker_with_routes(
             cache_signature,
             picker_started,
             routes,
@@ -1238,6 +1215,10 @@ impl App {
             preserve_input,
             true,
         );
+        if self.is_remote {
+            self.remote_model_options = picker_routes;
+            self.persist_remote_model_catalog_cache();
+        }
     }
 
     fn open_loading_model_picker(&mut self, current_model: &str) {
@@ -1277,38 +1258,6 @@ impl App {
             preview: false,
         });
         self.set_status_notice("Updating model list…");
-    }
-
-    /// Run route classification off the UI thread and deliver the completed
-    /// authoritative catalog through `poll_model_picker_load`.
-    fn start_model_picker_route_load_with(
-        &mut self,
-        signature: ModelPickerCacheSignature,
-        picker_started: std::time::Instant,
-        build_routes: impl FnOnce() -> Vec<crate::provider::ModelRoute> + Send + 'static,
-    ) {
-        self.model_picker_load_request_id = self.model_picker_load_request_id.wrapping_add(1);
-        let request_id = self.model_picker_load_request_id;
-        let (tx, rx) = std::sync::mpsc::channel();
-        let build = move || {
-            let routes_started = std::time::Instant::now();
-            let routes = build_routes();
-            let routes_ms = routes_started.elapsed().as_millis();
-            let _ = tx.send(Ok(ModelPickerRoutesResult { routes, routes_ms }));
-        };
-
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            handle.spawn_blocking(build);
-        } else {
-            std::thread::spawn(build);
-        }
-
-        self.pending_model_picker_load = Some(PendingModelPickerLoad {
-            request_id,
-            signature,
-            picker_started,
-            receiver: rx,
-        });
     }
 
     pub(super) fn poll_model_picker_load(&mut self) -> bool {

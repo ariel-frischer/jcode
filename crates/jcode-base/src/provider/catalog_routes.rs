@@ -873,16 +873,28 @@ pub fn remote_model_routes_fallback(
     } else {
         None
     };
+    let openrouter_catalog_models: Vec<Option<String>> = remote_available_entries
+        .iter()
+        .map(|model| openrouter_catalog_model_id(model))
+        .collect();
+    let endpoint_model_ids: Vec<String> = openrouter_catalog_models
+        .iter()
+        .flatten()
+        .cloned()
+        .collect();
+    let endpoint_caches = openrouter::load_endpoints_disk_caches_public(&endpoint_model_ids);
     let mut routes = Vec::new();
-    for model in remote_available_entries {
+    for (model, openrouter_catalog_model) in remote_available_entries
+        .iter()
+        .zip(openrouter_catalog_models)
+    {
         if !is_listable_model_name(model) {
             continue;
         }
 
-        let openrouter_catalog_model = openrouter_catalog_model_id(model);
         let openrouter_cached = openrouter_catalog_model
             .as_deref()
-            .and_then(openrouter::load_endpoints_disk_cache_public);
+            .and_then(|model| endpoint_caches.get(model));
 
         if super::bedrock::BedrockProvider::is_bedrock_model_id(model) {
             let available = auth.bedrock != AuthState::NotConfigured
@@ -921,14 +933,14 @@ pub fn remote_model_routes_fallback(
                 auto_detail,
             ));
             if let Some((endpoints, age)) = cached {
-                let age_str = if age < 3600 {
+                let age_str = if *age < 3600 {
                     format!("{}m ago", age / 60)
-                } else if age < 86400 {
+                } else if *age < 86400 {
                     format!("{}h ago", age / 3600)
                 } else {
                     format!("{}d ago", age / 86400)
                 };
-                for ep in &endpoints {
+                for ep in endpoints {
                     routes.push(build_openrouter_endpoint_route(
                         model,
                         ep,
@@ -996,7 +1008,7 @@ pub fn remote_model_routes_fallback(
                     .as_ref()
                     .map(|models| models.contains(model))
             });
-            match (provider_for_model(model), openrouter_cached.as_ref()) {
+            match (provider_for_model(model), openrouter_cached) {
                 (_, Some((endpoints, _age))) => {
                     for ep in endpoints {
                         routes.push(build_openrouter_endpoint_route(model, ep, true, None));
