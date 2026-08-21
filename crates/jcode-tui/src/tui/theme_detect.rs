@@ -232,6 +232,13 @@ impl std::fmt::Display for BackgroundQueryError {
 fn query_terminal_background(
     timeout: std::time::Duration,
 ) -> Result<terminal_colorsaurus::Color, BackgroundQueryError> {
+    // Some terminal multiplexers deliver a valid response well after the
+    // nominal probe timeout. Keep consuming input for a bounded grace period
+    // so a late OSC 11 reply cannot become the first crossterm input event.
+    // Unsupported terminals pay this cost only once because the caller caches
+    // the timeout verdict.
+    const LATE_REPLY_GRACE: std::time::Duration = std::time::Duration::from_secs(1);
+
     use std::io::Write;
     use std::os::fd::AsRawFd;
 
@@ -248,7 +255,7 @@ fn query_terminal_background(
         stdout.flush().map_err(BackgroundQueryError::Io)?;
 
         let fd = std::io::stdin().as_raw_fd();
-        let deadline = std::time::Instant::now() + timeout;
+        let deadline = std::time::Instant::now() + timeout + LATE_REPLY_GRACE;
         let mut response = Vec::with_capacity(64);
         let mut byte = [0u8; 1];
 
