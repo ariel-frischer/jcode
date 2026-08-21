@@ -88,6 +88,17 @@ pub(in crate::tui::app) async fn submit_prepared_remote_input(
     remote: &mut RemoteConnection,
     prepared: input::PreparedInput,
 ) -> Result<()> {
+    // A handoff resume is an ordered barrier: the automatic handoff prompt is
+    // already at the head of queued_messages and must reach the destination
+    // before any input typed while the destination is being opened. Preserve
+    // that input as a normal follow-up instead of dropping it or letting the
+    // pre-History path overtake the handoff.
+    if remote.resume_in_flight() || app.pending_handoff_resume_notice.is_some() {
+        app.queued_messages.push(prepared.expanded);
+        app.set_status_notice("Input queued until handoff session is ready");
+        return Ok(());
+    }
+
     if app.remote_model_switch_in_flight || app.auth_catalog_refresh_pending {
         app.pending_prompt_after_model_switch = Some(prepared);
         app.set_status_notice(if app.auth_catalog_refresh_pending {

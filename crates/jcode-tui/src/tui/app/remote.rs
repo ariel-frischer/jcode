@@ -419,9 +419,7 @@ async fn apply_terminal_event(
             input_attribution.scroll_delta = key_scroll_delta(&key);
             app.note_client_interaction();
             app.update_copy_badge_key_event(key);
-            if app.pending_handoff_resume_notice.is_some() {
-                app.set_status_notice("Switching to handoff session… input is temporarily paused");
-            } else if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+            if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
                 handle_remote_key_event(app, key, remote).await?;
                 if let Some(selection) = app.pending_route_selection.take() {
                     app.pending_model_switch = None;
@@ -525,7 +523,20 @@ async fn apply_terminal_event(
         Some(Ok(Event::Paste(text))) => {
             input_attribution.event = Some(format!("paste:{}", text.len()));
             app.note_client_interaction();
-            app.handle_paste(text);
+            if app.pending_handoff_resume_notice.is_some() || remote.resume_in_flight() {
+                app.handle_paste(text);
+                if !app.input.trim().is_empty() && app.pending_images.is_empty() {
+                    let prepared = input::take_prepared_input(app);
+                    app.queued_messages.push(prepared.expanded);
+                    app.set_status_notice("Pasted input queued until handoff session is ready");
+                } else if !app.input.trim().is_empty() || !app.pending_images.is_empty() {
+                    app.set_status_notice(
+                        "Pasted input ready; press Enter after handoff session is ready",
+                    );
+                }
+            } else {
+                app.handle_paste(text);
+            }
             needs_redraw = true;
         }
         Some(Ok(Event::Mouse(mouse))) => {
