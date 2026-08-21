@@ -877,15 +877,16 @@ The strongest design is not “Ralph instead of handoff” or “handoff instead
 1. **Use the transcript** while the current turn and milestone are coherent.
 2. **Use compaction** to preserve continuity within that milestone.
 3. **Use structured handoff** to cross a semantic boundary or escape context poisoning.
-4. **Use Beads and repository artifacts** as durable task truth.
-5. **Use Locus receipts and run manifests** as durable effect and process truth.
-6. **Use Ralph-like iteration** as a bounded retry policy with acceptance checks, strategy switching, and stop conditions.
+4. **Use Beads** as the durable source of truth for work state, dependencies, acceptance, blockers, and continuation.
+5. **Use Bead comments, commits, worktree state, and validation artifacts** as the verifiable evidence for implementation progress and effects.
+6. **Treat Locus as a future optional supervisor** once its runner and recovery behavior are stable, not as the current source of truth.
+7. **Use Ralph-like iteration** as a bounded retry policy with acceptance checks, strategy switching, and stop conditions.
 
-The likely Jcode/Locus default is therefore:
+The likely near-term Jcode default is therefore:
 
-> **Compact first within a coherent milestone. Hand off at semantic boundaries, repeated compaction, repeated correction, or operational context changes. Let Beads describe the work, let Locus own effects, and never let an infinite loop or completion phrase be the authority for correctness.**
+> **Compact first within a coherent milestone. Hand off at semantic boundaries, repeated compaction, repeated correction, or operational context changes. Let Beads own work state, verify progress through comments, commits, worktree state, and validation evidence, and never let an infinite loop or completion phrase be the authority for correctness. Locus remains a future optional supervisor.**
 
-The highest-value next experiment is the controlled replay described above. It should compare equivalent checkpoint content across compaction-only, handoff-only, and hybrid arms, then add process interruption and cleanup faults. That experiment will answer the question more reliably than another round of prompt tuning or another overnight Ralph run.
+The near-term priorities are explicit handoff guidance, lifecycle observability, and an opt-in Beads-first long-horizon mode in `dev-workflow`. The controlled replay remains a deferred future experiment rather than current execution work.
 
 ## Sources and local evidence
 
