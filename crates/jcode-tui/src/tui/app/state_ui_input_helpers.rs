@@ -20,20 +20,14 @@ fn discover_file_mentions(
     let mut builder = ignore::WalkBuilder::new(root);
     builder
         .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true);
-    let custom_ignore = {
-        let mut gitignore = ignore::gitignore::GitignoreBuilder::new(root);
-        for pattern in BUILTIN_IGNORE_PATTERNS
-            .iter()
-            .copied()
-            .chain(ignore_patterns.iter().map(String::as_str))
-        {
-            let _ = gitignore.add_line(None, pattern);
-        }
-        gitignore.build().ok()
-    };
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false);
+    let ignored_patterns: Vec<&str> = BUILTIN_IGNORE_PATTERNS
+        .iter()
+        .copied()
+        .chain(ignore_patterns.iter().map(String::as_str))
+        .collect();
     let mut candidates = Vec::new();
     for entry in builder.build().filter_map(Result::ok) {
         let path = entry.path();
@@ -46,14 +40,21 @@ fn discover_file_mentions(
         let text = relative
             .to_string_lossy()
             .replace(std::path::MAIN_SEPARATOR, "/");
-        if custom_ignore.as_ref().is_some_and(|ignore| {
-            ignore
-                .matched_path_or_any_parents(path, entry.file_type().is_some_and(|t| t.is_dir()))
-                .is_ignore()
+        if ignored_patterns.iter().any(|pattern| {
+            let pattern = pattern.trim().trim_start_matches("./");
+            let pattern = pattern.trim_end_matches('/');
+            text.split('/').any(|component| component == pattern)
+                || text == pattern
+                || text.starts_with(&format!("{pattern}/"))
         }) {
             continue;
         }
-        if let Some(score) = jcode_fuzzy::fuzzy_score(query, &text) {
+        let score = if query.is_empty() {
+            Some(0)
+        } else {
+            jcode_fuzzy::fuzzy_score(query, &text)
+        };
+        if let Some(score) = score {
             candidates.push((score, text, entry.file_type().is_some_and(|t| t.is_dir())));
         }
         if candidates.len() >= 5000 {
@@ -1340,12 +1341,6 @@ impl App {
                 return Vec::new();
             }
         }
-        if self.input.contains('@') && !self.input.trim_start().starts_with('/') {
-            let mentions = self.file_mention_suggestions(&self.input);
-            if !mentions.is_empty() {
-                return mentions;
-            }
-        }
         if !self.input.trim_start().starts_with('/') && self.input.contains('@') {
             let mentions = self.file_mention_suggestions(&self.input);
             if !mentions.is_empty() {
@@ -2050,7 +2045,7 @@ mod external_cli_suggestion_tests {
         let defaults = vec!["node_modules/".into()];
         let paths = discover_file_mentions(temp.path(), "", &defaults);
         let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
-        assert!(names.contains(&"src"));
+        assert!(names.contains(&"src"), "discovered names: {names:?}");
         assert!(names.contains(&"src/main.rs"));
         assert!(!names.iter().any(|path| path.starts_with("node_modules/")));
 
