@@ -182,28 +182,22 @@ fn detect_terminal_theme() -> Option<ThemeMode> {
         );
         return None;
     }
-    let mut options = terminal_colorsaurus::QueryOptions::default();
     // Keep startup snappy; supporting terminals answer in a few ms, and
-    // colorsaurus detects non-supporting terminals before the timeout anyway.
-    // This bound lands on the launch critical path whenever a terminal claims
-    // OSC support but never replies (multiplexers, remote shells), so keep it
-    // far below the perceptible-stall threshold.
-    options.timeout = std::time::Duration::from_millis(120);
-    // Ask for only OSC 11. `theme_mode` queries both OSC 10 (foreground) and
-    // OSC 11 (background); on some terminals the two replies can be split far
-    // enough apart that the query consumes one and crossterm later decodes the
-    // other as ordinary keys. That produces composer garbage such as
-    // `10;rgb:cdcd/d6d6/f4f4\\11;rgb:0000/0000/0000\\` at startup. Background
-    // lightness is all our renderer needs, and a single request has no second
-    // reply that can escape into the event reader.
-    match terminal_colorsaurus::background_color(options) {
+    // terminals that do not answer are cached after the first bounded probe.
+    let timeout = std::time::Duration::from_millis(120);
+    // Do not use terminal-colorsaurus's background_color helper here. Its
+    // capability probe sends a DA1 query after OSC 11 and assumes the replies
+    // arrive in that order. A multiplexer can answer DA1 first, leaving the
+    // OSC 11 response queued for crossterm to decode as composer input. Send
+    // only the query we need and consume the matching response ourselves.
+    match query_terminal_background(timeout) {
         Ok(background) if background.perceived_lightness() > 0.5 => {
             crate::logging::info("Detected light terminal background; adapting theme");
             Some(ThemeMode::Light)
         }
         Ok(_) => Some(ThemeMode::Dark),
         Err(e) => {
-            if matches!(e, terminal_colorsaurus::Error::Timeout(_)) {
+            if matches!(e, BackgroundQueryError::Timeout) {
                 cache_silent_terminal_at(
                     silent_terminal_cache_path().as_deref(),
                     &terminal_identity(),
@@ -215,6 +209,142 @@ fn detect_terminal_theme() -> Option<ThemeMode> {
             None
         }
     }
+}
+
+#[derive(Debug)]
+enum BackgroundQueryError {
+    Timeout,
+    Io(std::io::Error),
+    Parse,
+}
+
+impl std::fmt::Display for BackgroundQueryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout => write!(f, "timed out"),
+            Self::Io(error) => write!(f, "I/O error: {error}"),
+            Self::Parse => write!(f, "invalid OSC 11 response"),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn query_terminal_background(
+    timeout: std::time::Duration,
+) -> Result<terminal_colorsaurus::Color, BackgroundQueryError> {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+
+    let was_raw = crossterm::terminal::is_raw_mode_enabled().unwrap_or(false);
+    if !was_raw {
+        crossterm::terminal::enable_raw_mode().map_err(BackgroundQueryError::Io)?;
+    }
+
+    let result = (|| {
+        let mut stdout = std::io::stdout().lock();
+        stdout
+            .write_all(b"\x1b]11;?\x07")
+            .map_err(BackgroundQueryError::Io)?;
+        stdout.flush().map_err(BackgroundQueryError::Io)?;
+
+        let fd = std::io::stdin().as_raw_fd();
+        let deadline = std::time::Instant::now() + timeout;
+        let mut response = Vec::with_capacity(64);
+        let mut byte = [0u8; 1];
+
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(BackgroundQueryError::Timeout);
+            }
+            let timeout_ms = remaining.as_millis().clamp(1, i32::MAX as u128) as i32;
+            let mut poll_fd = libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ready = unsafe { libc::poll(&mut poll_fd, 1, timeout_ms) };
+            if ready < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(BackgroundQueryError::Io(error));
+            }
+            if ready == 0 {
+                return Err(BackgroundQueryError::Timeout);
+            }
+
+            let count = unsafe { libc::read(fd, byte.as_mut_ptr().cast(), byte.len()) };
+            if count < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(BackgroundQueryError::Io(error));
+            }
+            if count == 0 {
+                return Err(BackgroundQueryError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "terminal input closed",
+                )));
+            }
+            response.push(byte[0]);
+            if let Some((red, green, blue)) = parse_background_reply(&response) {
+                return Ok(terminal_colorsaurus::Color::rgb(red, green, blue));
+            }
+            if response.len() > 4096 {
+                return Err(BackgroundQueryError::Parse);
+            }
+        }
+    })();
+
+    if !was_raw {
+        let _ = crossterm::terminal::disable_raw_mode();
+    }
+    result
+}
+
+#[cfg(not(unix))]
+fn query_terminal_background(
+    timeout: std::time::Duration,
+) -> Result<terminal_colorsaurus::Color, BackgroundQueryError> {
+    let mut options = terminal_colorsaurus::QueryOptions::default();
+    options.timeout = timeout;
+    terminal_colorsaurus::background_color(options).map_err(|error| match error {
+        terminal_colorsaurus::Error::Timeout(_) => BackgroundQueryError::Timeout,
+        other => BackgroundQueryError::Io(std::io::Error::other(other.to_string())),
+    })
+}
+
+fn parse_background_reply(bytes: &[u8]) -> Option<(u16, u16, u16)> {
+    const PREFIX: &[u8] = b"\x1b]11;rgb:";
+    let start = bytes
+        .windows(PREFIX.len())
+        .position(|window| window == PREFIX)?
+        + PREFIX.len();
+    let payload = &bytes[start..];
+    let end = payload
+        .iter()
+        .enumerate()
+        .position(|(index, byte)| {
+            *byte == b'\x07'
+                || (*byte == 0x1b && payload.get(index + 1) == Some(&b'\\'))
+        })?;
+    let channels = payload[..end]
+        .split(|byte| *byte == b'/')
+        .map(|channel| {
+            let text = std::str::from_utf8(channel).ok()?;
+            let digits = text.len();
+            if !(1..=4).contains(&digits) {
+                return None;
+            }
+            let value = u32::from_str_radix(text, 16).ok()?;
+            let max = u32::pow(16, digits as u32) - 1;
+            Some((u32::from(u16::MAX) * value / max) as u16)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (channels.len() == 3).then(|| (channels[0], channels[1], channels[2]))
 }
 
 /// Identity of the terminal we are talking to, for caching purposes. Keep it
@@ -314,8 +444,8 @@ fn terminal_background_query_supported(
 #[cfg(test)]
 mod tests {
     use super::{
-        SILENT_TERMINAL_CACHE_MAX, cache_silent_terminal_at, silent_terminal_is_cached_at,
-        terminal_background_query_supported,
+        SILENT_TERMINAL_CACHE_MAX, cache_silent_terminal_at, parse_background_reply,
+        silent_terminal_is_cached_at, terminal_background_query_supported,
     };
 
     #[test]
@@ -368,6 +498,26 @@ mod tests {
         assert!(lines.len() <= SILENT_TERMINAL_CACHE_MAX, "{}", lines.len());
         let newest = format!("term-{}||", SILENT_TERMINAL_CACHE_MAX * 2 - 1);
         assert!(silent_terminal_is_cached_at(Some(&path), &newest));
+    }
+
+    #[test]
+    fn parses_complete_osc11_background_replies_without_consuming_unrelated_bytes() {
+        let response = b"\x1b]11;rgb:1111/2222/3333\x1b\\trailing";
+        assert_eq!(parse_background_reply(response), Some((0x1111, 0x2222, 0x3333)));
+        assert_eq!(
+            parse_background_reply(b"\x1b[?62;c\x1b]11;rgb:1111/2222/3333\x07"),
+            Some((0x1111, 0x2222, 0x3333))
+        );
+        assert_eq!(
+            parse_background_reply(b"\x1b]11;rgb:f/e/d\x07"),
+            Some((0xffff, 0xeeee, 0xdddd))
+        );
+        assert_eq!(
+            parse_background_reply(b"\x1b]11;rgb:f/ed1/cb23\x07"),
+            Some((0xffff, 0xed1d, 0xcb23))
+        );
+        assert_eq!(parse_background_reply(b"\x1b]11;rgb:1111/2222"), None);
+        assert_eq!(parse_background_reply(b"\x1b[?62;c"), None);
     }
 
     #[test]
