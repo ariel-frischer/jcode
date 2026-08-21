@@ -459,3 +459,95 @@ The main proven core opportunities were large text-file streaming and bounded li
 their cost is attributable to useful external work such as repository traversal.
 The next performance investigation should target configured hook process startup
 only if its user-visible integration cost is considered unacceptable.
+
+## 2026-08-21 custom dev versus official upstream
+
+Bead: `jcode-7u8`
+
+### Question and comparison targets
+
+This quick campaign checks whether the current custom development binary has
+regressed on cheap, no-network CLI startup paths relative to the official
+upstream source. It is intentionally a startup smoke benchmark, not a claim
+about model latency, agent-turn throughput, tool execution, or long-lived
+daemon performance.
+
+| Target | Exact source ref | Binary | SHA-256 | Size |
+|---|---|---|---|---:|
+| Custom dev | `dev` HEAD `e43c6f0bc165f4caf87be234c8e5ccb26c35c8b4` | scratch selfdev build | `d855cffcf4d3799582f299e2fd294e01fe83a8ab2a479493aceca12968a63905` | 281,406,112 bytes |
+| Official upstream | `upstream/master` `a63dbc4546895ecb4d1be1a285d98e6e13fb1b74` | scratch selfdev build | `69ff9aeb3deecf21273e9675636f1808e45b3fecc69bf1f2ee039fc679a4a147` | 281,406,112 bytes |
+
+The custom ref is local-only and unpublished. The upstream executable was
+built from an exact `git archive` of `upstream/master`; both scratch binaries
+and their source archives are local measurement artifacts, not distributed
+release artifacts. The two histories share the `v0.79.1` release ancestor. At
+measurement time, the custom side was 506 commits ahead of that ancestor and
+upstream was 13 commits ahead.
+
+### Method and comparability controls
+
+- Host: AMD Ryzen AI 7 PRO 350, 27 GiB RAM, Linux x86_64.
+- Both binaries used Rust/Cargo `1.95.0`, target `x86_64-unknown-linux-gnu`,
+  `cargo build --profile selfdev --bin jcode`, no feature flags, and the same
+  `scripts/dev_cargo.sh` clang + lld wrapper.
+- The `selfdev` profile inherits release settings but sets `opt-level=0`; the
+  compared settings were `debug=0`, `codegen-units=256`,
+  `incremental=true`, and no LTO. Both outputs are unstripped ELF PIE files.
+- Builds were serialized. Incremental sccache was skipped because it cannot
+  cache incremental units. The custom archive build supplied
+  `JCODE_BUILD_GIT_HASH=e43c6f0bc165`; the upstream build did not, so its banner
+  is not trusted as source identity.
+- Four side-effect-free commands: `--version`, `--help`, `server --help`, and
+  `run --help`.
+- One warm-up per binary and case, followed by 15 measured subprocess samples.
+  Fixed seed `20260821`; binary/case order was randomized and interleaved per
+  round.
+- Wall time came from `perf_counter_ns`; child CPU came from the delta of
+  `RUSAGE_CHILDREN` around each subprocess.
+- Each process used empty temporary `HOME` and XDG config/data/cache/state
+  directories. No model, network, shared daemon, or user configuration was
+  involved. All 120 measured commands returned exit code 0 and emitted no
+  stderr.
+
+### Results
+
+Values are p50 per process. “Custom faster” is `(upstream - custom) /
+upstream`; a negative value means the custom binary was slower.
+
+| Case | Custom wall | Upstream wall | Custom faster | Custom child CPU | Upstream child CPU | CPU lower |
+|---|---:|---:|---:|---:|---:|---:|
+| `--version` | 9.090 ms | 8.434 ms | -7.8% | 9.991 ms | 9.411 ms | -6.2% |
+| `--help` | 9.475 ms | 10.359 ms | 8.5% | 10.705 ms | 11.445 ms | 6.5% |
+| `server --help` | 9.394 ms | 10.107 ms | 7.1% | 10.388 ms | 11.341 ms | 8.4% |
+| `run --help` | 9.359 ms | 9.754 ms | 4.0% | 10.542 ms | 11.061 ms | 4.7% |
+
+The three help cases had identical output byte counts and SHA-256 digests:
+`--help` 7,379 bytes, `server --help` 4,423 bytes, and `run --help` 4,717
+bytes. The `--version` output differed only because the custom binary printed
+`jcode v0.79.507-dev (e43c6f0bc165)` while the upstream scratch binary printed
+the stale local banner `jcode v0.79.507-dev (e43c6f0bc)`.
+
+### Finding and limitations
+
+**Finding:** this equal-profile smoke test does not show a broad startup
+regression. The custom binary was 4.0-8.5% faster on the three equivalent help
+paths, with 4.7-8.4% lower child CPU. The one metadata-only `--version` path
+was 7.8% slower wall time and 6.2% higher child CPU, which is a small isolated
+exception rather than evidence of a general regression.
+
+This is evidence for process startup and Clap help rendering only. It does not
+establish that the custom fork is faster or slower for agent turns, provider
+streaming, tool execution, TUI rendering, memory retention, or daemon reuse.
+The initial release-vs-selfdev comparison was rejected because its optimization
+profiles were not comparable and is not used for this conclusion. A private
+custom-daemon start smoke returned `{"status":"running"}` in about 201 ms,
+but ordinary stop required force and was not promoted to a timed comparison.
+The private process was verified absent afterward, and the shared daemon was
+not touched.
+
+For a stronger follow-up, compare the common `v0.79.1` ancestor against the
+custom build using the existing private-daemon acceptance harness, with one
+binary build at a time and separate cold/warm measurements for startup, one
+tool call, and a short local session. Do not treat this quick result as a
+reason to add an optimization until that workload-level comparison identifies
+a user-visible gap.
