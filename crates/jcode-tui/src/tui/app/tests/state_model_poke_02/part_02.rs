@@ -276,6 +276,7 @@ fn test_remote_large_catalog_cold_preview_stages_useful_rows_then_appends_full_c
     app.is_remote = true;
     app.remote_provider_name = Some("OpenAI".to_string());
     app.remote_provider_model = Some("gpt-5.6-luna".to_string());
+    let configured_default_model = crate::config::config().provider.default_model.clone();
     app.remote_available_entries = (0..1_000)
         .map(|idx| format!("catalog-model-{idx}"))
         .chain(std::iter::once("gpt-5.6-sol".to_string()))
@@ -344,6 +345,38 @@ fn test_remote_large_catalog_cold_preview_stages_useful_rows_then_appends_full_c
         picker.entries.len() >= 36,
         "the first populated stage should contain at least three pages of useful rows, got {}",
         picker.entries.len()
+    );
+    assert!(
+        picker.entries.iter().any(|entry| {
+            entry.name == "gpt-5.6-luna" || entry.name.starts_with("gpt-5.6-luna (")
+        }),
+        "the first populated stage must include the current model"
+    );
+    if let Some(default_model) = configured_default_model {
+        assert!(
+            picker.entries.iter().any(|entry| {
+                entry.name == default_model
+                    || entry
+                        .name
+                        .strip_prefix(&default_model)
+                        .is_some_and(|suffix| suffix.starts_with(" ("))
+            }),
+            "the first populated stage must include the configured default model {default_model}"
+        );
+    }
+    assert!(
+        picker
+            .entries
+            .iter()
+            .any(|entry| entry.is_favorite && entry.name == favorite_model),
+        "the first populated stage must include every persisted favorite"
+    );
+    assert!(
+        picker
+            .entries
+            .iter()
+            .any(|entry| entry.is_favorite && entry.name == "gpt-5.6-sol (med)"),
+        "the first populated stage must include the persisted Sol effort favorite"
     );
     assert!(
         useful_elapsed < Duration::from_millis(100),
