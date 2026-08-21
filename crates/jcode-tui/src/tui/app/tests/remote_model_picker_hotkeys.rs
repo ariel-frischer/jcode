@@ -60,8 +60,18 @@ fn test_remote_command_palette_model_aliases_open_full_picker() {
                 ))
                 .expect("palette query should be accepted remotely");
             }
+            let view = app.command_palette_view().expect("palette should remain open");
+            assert_eq!(view.query, query);
+            assert!(
+                view.entries
+                    .first()
+                    .is_some_and(|entry| matches!(entry.command.as_str(), "/model" | "/models")),
+                "model query should select a model command first; entries={:?}",
+                view.entries
+            );
             rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
                 .expect("model command should dispatch remotely");
+            wait_for_model_picker_load(&mut app);
 
             let picker = app
                 .inline_interactive_state

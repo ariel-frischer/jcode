@@ -429,6 +429,14 @@ async fn handle_remote_key_internal(
         return Ok(());
     }
 
+    // Ctrl+P is the command-palette chord. Keep it ahead of configurable
+    // toggles because the legacy auto-poke default also uses Ctrl+P; auto-poke
+    // remains available from the palette or through a remapped binding.
+    if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('p') {
+        app.open_command_palette();
+        return Ok(());
+    }
+
     if input::is_next_prompt_new_session_hotkey(code, modifiers) {
         app.toggle_next_prompt_new_session_routing();
         return Ok(());

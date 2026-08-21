@@ -2432,6 +2432,14 @@ pub(super) fn handle_pre_control_shortcuts(
         return true;
     }
 
+    // Ctrl+P is the command-palette chord. Keep it ahead of configurable
+    // toggles because the legacy auto-poke default also uses Ctrl+P; auto-poke
+    // remains available from the palette or through a remapped binding.
+    if modifiers == KeyModifiers::CONTROL && code == KeyCode::Char('p') {
+        app.open_command_palette();
+        return true;
+    }
+
     let macos_option_shortcut =
         crate::tui::keybind::shortcut_char_for_macos_option_key(code, modifiers);
     if app.toggle_keys.auto_poke.matches(code, modifiers) {
