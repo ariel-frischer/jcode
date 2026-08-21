@@ -1278,26 +1278,34 @@ impl App {
     fn file_mention_suggestions(&self, input: &str) -> Vec<(String, &'static str)> {
         let cursor = self.cursor_pos.min(input.len());
         let before_cursor = &input[..cursor];
-        let Some(at) = before_cursor.rfind('@') else { return Vec::new() };
+        let Some(at) = before_cursor.rfind('@') else {
+            return Vec::new();
+        };
         if before_cursor[at + 1..].contains(char::is_whitespace) {
             return Vec::new();
         }
         let query = &before_cursor[at + 1..];
-        let root = self.session.working_dir.as_deref().map(Path::new)
+        let root = self
+            .session
+            .working_dir
+            .as_deref()
+            .map(Path::new)
             .unwrap_or_else(|| Path::new("."));
-        let candidates = discover_file_mentions(
-            root,
-            query,
-            &effective_file_mention_ignores(self),
-        );
-        candidates.into_iter().take(100).map(|(_, path, dir)| {
-            let mut replacement = input[..at].to_string();
-            replacement.push('@');
-            replacement.push_str(&path);
-            if dir { replacement.push('/'); }
-            replacement.push_str(&input[cursor..]);
-            (replacement, if dir { "Directory" } else { "File" })
-        }).collect()
+        let candidates = discover_file_mentions(root, query, &effective_file_mention_ignores(self));
+        candidates
+            .into_iter()
+            .take(100)
+            .map(|(_, path, dir)| {
+                let mut replacement = input[..at].to_string();
+                replacement.push('@');
+                replacement.push_str(&path);
+                if dir {
+                    replacement.push('/');
+                }
+                replacement.push_str(&input[cursor..]);
+                (replacement, if dir { "Directory" } else { "File" })
+            })
+            .collect()
     }
 
     /// Get command suggestions based on current input
@@ -2099,7 +2107,11 @@ mod external_cli_suggestion_tests {
 
         let custom = vec!["node_modules/".into(), "generated/".into()];
         let paths = discover_file_mentions(temp.path(), "", &custom);
-        assert!(!paths.iter().any(|(_, path, _)| path.starts_with("generated/")));
+        assert!(
+            !paths
+                .iter()
+                .any(|(_, path, _)| path.starts_with("generated/"))
+        );
     }
 
     /// Faithful, real-home measurement of the per-frame onboarding cost.
