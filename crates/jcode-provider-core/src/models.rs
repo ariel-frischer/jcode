@@ -239,6 +239,14 @@ pub fn context_limit_for_model_with_provider_and_cache(
         return Some(copilot_context_limit_for_model(model));
     }
 
+    // OpenAI OAuth's Codex catalog currently reports the legacy generic GPT-5
+    // 272K value for Sol. Its published, verified total context is 1.05M, so
+    // keep the native OpenAI route authoritative over that stale cache entry.
+    // Other providers still reach the dynamic cache below.
+    if matches!(provider, Some("openai")) && model.starts_with("gpt-5.6-sol") {
+        return Some(1_050_000);
+    }
+
     // Claude models: classify long-context behavior centrally. For generations
     // verified against the live API this is authoritative, because the live
     // catalog's `max_input_tokens` over-advertises 1M for models that are
@@ -288,6 +296,12 @@ pub fn context_limit_for_model_with_provider_and_cache(
     // catalog so model capability lookups do not fall through to the older
     // 272K GPT-5 default when the OpenRouter runtime cache is unavailable.
     if model.starts_with("gpt-5.6-luna") {
+        return Some(1_050_000);
+    }
+
+    // GPT-5.6 Sol exposes the same 1.05M-token total context window through
+    // OpenAI OAuth. Keep this before the legacy 272K GPT-5 Codex fallback.
+    if model.starts_with("gpt-5.6-sol") {
         return Some(1_050_000);
     }
 
@@ -818,6 +832,37 @@ mod tests {
             context_limit_for_model_with_provider_and_cache("gpt-5.4", None, |_| None),
             Some(1_000_000)
         );
+    }
+
+    #[test]
+    fn gpt_5_6_sol_uses_its_published_context_window() {
+        assert_eq!(context_limit_for_model("gpt-5.6-sol"), Some(1_050_000));
+        assert_eq!(
+            context_limit_for_model_with_provider("openai/gpt-5.6-sol", Some("openrouter")),
+            Some(1_050_000)
+        );
+
+        // OpenAI OAuth currently advertises the obsolete generic GPT-5 Codex
+        // value. Sol's verified limit must override that provider cache entry.
+        assert_eq!(
+            context_limit_for_model_with_provider_and_cache("gpt-5.6-sol", Some("openai"), |_| {
+                Some(272_000)
+            }),
+            Some(1_050_000)
+        );
+
+        // OpenRouter or custom gateway metadata remains authoritative.
+        assert_eq!(
+            context_limit_for_model_with_provider_and_cache(
+                "openai/gpt-5.6-sol",
+                Some("openrouter"),
+                |_| Some(1_048_576)
+            ),
+            Some(1_048_576)
+        );
+
+        // Older GPT-5 Codex families retain their backend-advertised fallback.
+        assert_eq!(context_limit_for_model("gpt-5.5"), Some(272_000));
     }
 
     #[test]

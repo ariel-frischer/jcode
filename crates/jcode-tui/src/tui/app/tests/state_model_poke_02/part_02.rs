@@ -236,6 +236,41 @@ fn test_model_picker_preview_stays_open_and_updates_filter() {
 }
 
 #[test]
+fn test_model_picker_cold_preview_immediately_filters_sol_medium() {
+    ensure_test_jcode_home_if_unset();
+    clear_persisted_test_ui_state();
+    crate::tui::ui::clear_test_render_state_for_tests();
+
+    let provider: Arc<dyn Provider> = Arc::new(MixedModelRoutesProvider {
+        model: StdArc::new(StdMutex::new("gpt-5.5".to_string())),
+    });
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let registry = rt.block_on(crate::tool::Registry::new(provider.clone()));
+    let mut app = App::new_for_test_harness(provider, registry);
+    app.queue_mode = false;
+    app.diff_mode = crate::config::DiffDisplayMode::Inline;
+
+    for c in "/model sol (med)".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("model picker preview should be open");
+    assert_eq!(picker.filter, "sol (med)");
+    assert!(
+        picker
+            .filtered
+            .iter()
+            .any(|&i| picker.entries[i].name == "gpt-5.6-sol (med)"),
+        "the complete Sol effort rows must exist before the first filtered paint"
+    );
+    assert!(app.pending_model_picker_load.is_none());
+}
+
+#[test]
 fn test_model_picker_preview_enter_selects_model() {
     let mut app = create_test_app();
     configure_test_remote_models(&mut app);

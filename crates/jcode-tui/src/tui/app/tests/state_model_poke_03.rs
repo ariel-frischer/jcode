@@ -173,6 +173,14 @@ impl MixedModelRoutesProvider {
                 cheapness: None,
             },
             crate::provider::ModelRoute {
+                model: "gpt-5.6-sol".to_string(),
+                provider: "OpenAI".to_string(),
+                api_method: "openai-oauth".to_string(),
+                available: true,
+                detail: String::new(),
+                cheapness: None,
+            },
+            crate::provider::ModelRoute {
                 model: "claude-opus-4-6".to_string(),
                 provider: "Anthropic".to_string(),
                 api_method: "claude-oauth".to_string(),
@@ -1116,7 +1124,7 @@ fn test_tui_openai_compatible_local_refresh_failure_is_pending_not_final_failure
 }
 
 #[test]
-fn test_model_picker_opens_simplified_state_before_async_routes_complete() {
+fn test_model_picker_cold_open_has_complete_routes_without_async_replacement() {
     ensure_test_jcode_home_if_unset();
     clear_persisted_test_ui_state();
     crate::tui::ui::clear_test_render_state_for_tests();
@@ -1125,7 +1133,7 @@ fn test_model_picker_opens_simplified_state_before_async_routes_complete() {
     let provider: Arc<dyn Provider> = Arc::new(CountingModelRoutesProvider {
         calls: StdArc::clone(&calls),
         route_count: 2,
-        delay: Duration::from_millis(75),
+        delay: Duration::ZERO,
     });
     let rt = tokio::runtime::Runtime::new().unwrap();
     let registry = rt.block_on(crate::tool::Registry::new(provider.clone()));
@@ -1138,23 +1146,15 @@ fn test_model_picker_opens_simplified_state_before_async_routes_complete() {
     let picker = app
         .inline_interactive_state
         .as_ref()
-        .expect("loading picker should open immediately");
-    assert_eq!(picker.entries.len(), 1);
+        .expect("complete picker should open immediately");
+    assert_eq!(picker.entries.len(), 2);
     assert_eq!(picker.entries[0].name, "counting-a");
-    assert_eq!(picker.entries[0].options[0].detail, "simplified catalog");
-    assert!(app.pending_model_picker_load.is_some());
-    assert_eq!(
-        app.status_notice(),
-        Some("Updating model routes…".to_string())
+    assert_eq!(picker.entries[1].name, "counting-b");
+    assert!(
+        app.pending_model_picker_load.is_none(),
+        "a cold local picker must not replace the visible list after the user starts filtering"
     );
-
-    wait_for_model_picker_load(&mut app);
-    let picker = app
-        .inline_interactive_state
-        .as_ref()
-        .expect("hydrated picker should still be open");
-    assert!(picker.entries.len() >= 2);
-    assert_eq!(app.status_notice(), Some("Model list updated".to_string()));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]
