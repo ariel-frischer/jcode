@@ -3,6 +3,54 @@ use crate::tui::core;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+fn discover_file_mentions(
+    root: &Path,
+    query: &str,
+    ignore_patterns: &[String],
+) -> Vec<(i32, String, bool)> {
+    let mut builder = ignore::WalkBuilder::new(root);
+    builder
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true);
+    let custom_ignore = {
+        let mut gitignore = ignore::gitignore::GitignoreBuilder::new(root);
+        for pattern in ignore_patterns {
+            let _ = gitignore.add_line(None, pattern);
+        }
+        gitignore.build().ok()
+    };
+    let mut candidates = Vec::new();
+    for entry in builder.build().filter_map(Result::ok) {
+        let path = entry.path();
+        if path == root {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(root) else {
+            continue;
+        };
+        let text = relative
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/");
+        if custom_ignore.as_ref().is_some_and(|ignore| {
+            ignore
+                .matched_path_or_any_parents(path, entry.file_type().is_some_and(|t| t.is_dir()))
+                .is_ignore()
+        }) {
+            continue;
+        }
+        if let Some(score) = jcode_fuzzy::fuzzy_score(query, &text) {
+            candidates.push((score, text, entry.file_type().is_some_and(|t| t.is_dir())));
+        }
+        if candidates.len() >= 5000 {
+            break;
+        }
+    }
+    candidates.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    candidates
+}
+
 #[derive(Clone, Copy)]
 struct RegisteredCommand {
     name: &'static str,
@@ -1166,6 +1214,31 @@ impl App {
         self.rank_suggestions(&prefix, self.command_candidates())
     }
 
+    fn file_mention_suggestions(&self, input: &str) -> Vec<(String, &'static str)> {
+        let cursor = self.cursor_pos.min(input.len());
+        let before_cursor = &input[..cursor];
+        let Some(at) = before_cursor.rfind('@') else { return Vec::new() };
+        if before_cursor[at + 1..].contains(char::is_whitespace) {
+            return Vec::new();
+        }
+        let query = &before_cursor[at + 1..];
+        let root = self.session.working_dir.as_deref().map(Path::new)
+            .unwrap_or_else(|| Path::new("."));
+        let candidates = discover_file_mentions(
+            root,
+            query,
+            &crate::config::config().file_mentions.ignore,
+        );
+        candidates.into_iter().take(100).map(|(_, path, dir)| {
+            let mut replacement = input[..at].to_string();
+            replacement.push('@');
+            replacement.push_str(&path);
+            if dir { replacement.push('/'); }
+            replacement.push_str(&input[cursor..]);
+            (replacement, if dir { "Directory" } else { "File" })
+        }).collect()
+    }
+
     /// Get command suggestions based on current input
     pub fn command_suggestions(&self) -> Vec<(String, &'static str)> {
         // Read up to eight times per frame; recomputing each time re-ranks
@@ -1252,6 +1325,18 @@ impl App {
             };
             if suppress {
                 return Vec::new();
+            }
+        }
+        if self.input.contains('@') && !self.input.trim_start().starts_with('/') {
+            let mentions = self.file_mention_suggestions(&self.input);
+            if !mentions.is_empty() {
+                return mentions;
+            }
+        }
+        if !self.input.trim_start().starts_with('/') && self.input.contains('@') {
+            let mentions = self.file_mention_suggestions(&self.input);
+            if !mentions.is_empty() {
+                return mentions;
             }
         }
         self.get_suggestions_for(&self.input)
@@ -1938,6 +2023,28 @@ fn compact_suggestion_text(text: &str, max_chars: usize) -> String {
 mod external_cli_suggestion_tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn file_mentions_skip_vendor_directories_and_honor_custom_patterns() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("src")).expect("src");
+        std::fs::create_dir_all(temp.path().join("node_modules/pkg")).expect("node_modules");
+        std::fs::create_dir_all(temp.path().join("generated")).expect("generated");
+        std::fs::write(temp.path().join("src/main.rs"), "fn main() {}").expect("source");
+        std::fs::write(temp.path().join("node_modules/pkg/index.js"), "").expect("vendor");
+        std::fs::write(temp.path().join("generated/api.rs"), "").expect("generated file");
+
+        let defaults = vec!["node_modules/".into()];
+        let paths = discover_file_mentions(temp.path(), "", &defaults);
+        let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
+        assert!(names.contains(&"src"));
+        assert!(names.contains(&"src/main.rs"));
+        assert!(!names.iter().any(|path| path.starts_with("node_modules/")));
+
+        let custom = vec!["node_modules/".into(), "generated/".into()];
+        let paths = discover_file_mentions(temp.path(), "", &custom);
+        assert!(!paths.iter().any(|(_, path, _)| path.starts_with("generated/")));
+    }
 
     /// Faithful, real-home measurement of the per-frame onboarding cost.
     /// Ignored by default (depends on local ~/.codex and ~/.claude contents).
