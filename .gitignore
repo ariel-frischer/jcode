@@ -23,6 +23,7 @@ ios_simulator_screenshot.png
 /telemetry-worker/backups/
 target-ttest/
 target-ttest*/
+/target-handoff/
 /.worktrees/
 
 # Offscreen frames written by `jcode-desktop2 --capture`. These are review
@@ -46,4 +47,3 @@ Thumbs.db
 
 # Generated browser automation logs and page snapshots.
 /.playwright-mcp/
-
