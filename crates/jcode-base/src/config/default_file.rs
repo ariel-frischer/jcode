@@ -106,6 +106,13 @@ swarm_panel_focus = "alt+n"
 # By default Enter resumes in this terminal; Ctrl+Enter performs the alternate action.
 session_picker_enter = "current-terminal"
 
+[file_mentions]
+# Filesystem-backed `@` suggestions are enabled by default. Set false to keep
+# ordinary `@` input without starting workspace discovery.
+enabled = true
+# Additional path components excluded from suggestions.
+# ignore = ["private/", "*.generated.*"]
+
 [dictation]
 # External speech-to-text command.
 # The command should record/transcribe speech and print the final transcript to stdout.
