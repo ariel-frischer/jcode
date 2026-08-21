@@ -165,23 +165,34 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
                 }
             }
         }
+    }
 
-        if let Some(target_session) = app.workspace_client.take_pending_resume_session() {
-            match remote.resume_session(&target_session).await {
-                Ok(()) => {
-                    let label = crate::id::extract_session_name(&target_session)
-                        .map(|name| name.to_string())
-                        .unwrap_or(target_session);
-                    app.set_status_notice(format!("Workspace → {}", label));
-                    return true;
+    // A handoff is announced by the source session before its current turn
+    // has necessarily emitted the terminal event. Do not wait for
+    // `is_processing` to clear here: the source can remain marked busy while
+    // the destination resume is already ready, and input sent during that
+    // gap is then rejected by the source as "Already processing".
+    let handoff_resume_pending = app.pending_handoff_resume_notice.is_some();
+    if (handoff_resume_pending || !app.is_processing)
+        && let Some(target_session) = app.workspace_client.take_pending_resume_session()
+    {
+        match remote.resume_session(&target_session).await {
+            Ok(()) => {
+                let label = crate::id::extract_session_name(&target_session)
+                    .map(|name| name.to_string())
+                    .unwrap_or(target_session);
+                app.set_status_notice(format!("Workspace → {}", label));
+                return true;
+            }
+            Err(err) => {
+                if handoff_resume_pending {
+                    app.pending_handoff_resume_notice = None;
                 }
-                Err(err) => {
-                    app.push_display_message(DisplayMessage::error(format!(
-                        "Failed to switch workspace session: {}",
-                        err
-                    )));
-                    needs_redraw = true;
-                }
+                app.push_display_message(DisplayMessage::error(format!(
+                    "Failed to switch workspace session: {}",
+                    err
+                )));
+                needs_redraw = true;
             }
         }
     }
@@ -408,7 +419,9 @@ async fn apply_terminal_event(
             input_attribution.scroll_delta = key_scroll_delta(&key);
             app.note_client_interaction();
             app.update_copy_badge_key_event(key);
-            if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+            if app.pending_handoff_resume_notice.is_some() {
+                app.set_status_notice("Switching to handoff session… input is temporarily paused");
+            } else if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
                 handle_remote_key_event(app, key, remote).await?;
                 if let Some(selection) = app.pending_route_selection.take() {
                     app.pending_model_switch = None;
@@ -782,7 +795,11 @@ fn handle_terminal_event_while_disconnected(
         }
         Some(Ok(Event::Paste(text))) => {
             app.note_client_interaction();
-            app.handle_paste(text);
+            if app.pending_handoff_resume_notice.is_some() {
+                app.set_status_notice("Switching to handoff session… input is temporarily paused");
+            } else {
+                app.handle_paste(text);
+            }
             needs_redraw = true;
         }
         Some(Ok(Event::Mouse(mouse))) => {
