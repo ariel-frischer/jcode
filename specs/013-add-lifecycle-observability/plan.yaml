@@ -62,7 +62,7 @@ technical_context:
     - "The master switch controls both outputs; persistence and structured local logging remain independently selectable beneath it."
     - "Environment overrides use the existing config resolver and take precedence over persisted config, which takes precedence over built-in defaults; no per-session observability override is added."
     - "Default effective values are enabled=true, persist_session_events=true, and emit_structured_logs=false so the primary per-session query works out of the box without duplicating normal logs."
-    - "Events may contain only approved enums, counts, sizes, timestamps, policy values, session identifiers, and opaque process-manifest identifiers."
+    - "Events may contain only approved enums, counts, sizes, timestamps, policy values, session identifiers, and opaque process-manifest identifiers; raw prompts, command text, command output, environment values, secret values, and unnecessary todo content are forbidden across persistence, structured logs, and queries."
     - "Recorder, append, rotation, retention, logging, parse, and query failures must not alter lifecycle decisions or prevent session continuation."
     - "Local lifecycle observability must not call, configure, or mutate jcode-telemetry-core or remote telemetry consent."
     - "No global SQLite database, aggregate event source of truth, benchmark campaign, Locus integration, PRD, workflow engine, or general content capture is introduced."
