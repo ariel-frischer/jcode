@@ -114,6 +114,49 @@ fn session_handoff_ready_restores_destination_startup_context_before_resume() {
 }
 
 #[test]
+fn input_submitted_during_handoff_is_queued_after_automatic_resume_prompt() {
+    ensure_test_jcode_home_if_unset();
+    let destination = "session_handoff_input_order_test";
+    crate::client_input::save_startup_queued_message_for_session(
+        destination,
+        "automatic handoff prompt".to_string(),
+    );
+
+    let mut app = create_test_app();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    app.handle_server_event(
+        ServerEvent::SessionHandoffReady {
+            id: 11,
+            source_session_id: app.session.id.clone(),
+            new_session_id: destination.to_string(),
+            new_session_name: "input-order".to_string(),
+            auto_start: true,
+        },
+        &mut remote,
+    );
+    app.input = "typed during handoff".to_string();
+    app.cursor_pos = app.input.len();
+
+    rt.block_on(crate::tui::app::remote::handle_remote_key(
+        &mut app,
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+        &mut remote,
+    ))
+    .expect("handoff-time submission should be accepted");
+
+    assert_eq!(
+        app.queued_messages,
+        ["automatic handoff prompt", "typed during handoff"]
+    );
+    assert!(app.input.is_empty());
+    assert!(remote.resume_in_flight());
+}
+
+#[test]
 fn session_handoff_ready_preserves_existing_composer_input() {
     ensure_test_jcode_home_if_unset();
     let destination = "session_handoff_existing_input_test";

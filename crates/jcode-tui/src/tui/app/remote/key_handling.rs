@@ -981,6 +981,11 @@ async fn handle_remote_key_internal(
             }
             if !app.input.is_empty() {
                 let prepared = input::take_prepared_input(app);
+                if remote.resume_in_flight() || app.pending_handoff_resume_notice.is_some() {
+                    app.queued_messages.push(prepared.expanded);
+                    app.set_status_notice("Input queued until handoff session is ready");
+                    return Ok(());
+                }
                 let trimmed = prepared.expanded.trim();
 
                 if let Some(topic) = trimmed
