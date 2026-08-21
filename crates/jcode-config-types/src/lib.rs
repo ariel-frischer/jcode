@@ -13,6 +13,30 @@ pub use keybindings::{
     keybinding_default, keybinding_defaults_report, validate_keybinding_defaults,
 };
 
+/// File mention completion behavior for the TUI composer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileMentionsConfig {
+    /// Additional gitignore-style path patterns excluded from `@` completion.
+    pub ignore: Vec<String>,
+}
+
+impl Default for FileMentionsConfig {
+    fn default() -> Self {
+        Self {
+            ignore: vec![
+                "node_modules/".into(),
+                "target/".into(),
+                ".venv/".into(),
+                "venv/".into(),
+                "dist/".into(),
+                "build/".into(),
+                ".git/".into(),
+            ],
+        }
+    }
+}
+
 /// Compaction mode
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]

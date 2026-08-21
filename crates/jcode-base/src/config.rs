@@ -8,6 +8,7 @@ pub use jcode_config_types::{
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
     DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, HandoffConfig,
     HandoffProfileConfig, HookCommands, HooksConfig, KeybindingsConfig, LatexRenderingMode,
+    FileMentionsConfig,
     LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode, NamedProviderAuth,
     NamedProviderConfig, NamedProviderModelConfig, NamedProviderType, NativeScrollbarConfig,
     NotificationsConfig, OverscrollStatusMode, PowerConfig, ProviderConfig, ReasoningDisplayMode,
@@ -473,6 +474,8 @@ pub fn on_config_reloaded(listener: fn()) {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
+    /// TUI `@` file mention completion configuration.
+    pub file_mentions: FileMentionsConfig,
     /// Keybinding configuration
     pub keybindings: KeybindingsConfig,
 
