@@ -377,7 +377,7 @@ async fn no_argument_handoff_persists_summary_for_destination_startup() {
     parent.add_message(
         Role::User,
         vec![ContentBlock::Text {
-            text: "Finish the handoff summary regression and report the next steps".to_string(),
+            text: "Preserve the exact handoff codeword salamander123".to_string(),
             cache_control: None,
         }],
     );
@@ -441,6 +441,10 @@ async fn no_argument_handoff_persists_summary_for_destination_startup() {
         .as_str()
         .expect("queued handoff prompt should be text");
     assert!(queued_prompt.contains("Generated handoff summary"));
+    assert!(
+        queued_prompt.contains("salamander123"),
+        "no-argument handoff must not rely exclusively on a lossy model summary"
+    );
     assert!(queued_prompt.contains("Next steps:"));
     assert!(queued_prompt.contains("Review the generated handoff next steps"));
 
