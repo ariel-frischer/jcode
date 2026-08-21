@@ -6,14 +6,15 @@
 pub use jcode_config_types::{
     AgentsConfig, AmbientConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig, CompactionConfig,
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
-    DiffDisplayMode, DisplayConfig, FeatureConfig, FileMentionsConfig, GatewayConfig,
-    HandoffConfig, HandoffProfileConfig, HookCommands, HooksConfig, KeybindingsConfig,
-    LatexRenderingMode, LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode,
-    NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig, NamedProviderType,
-    NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode, PowerConfig, ProviderConfig,
-    ReasoningDisplayMode, RunSafetyConfig, SafetyConfig, SessionPickerResumeAction,
-    SessionProfileConfig, SkillsMode, SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode,
-    SwarmStripLayout, TerminalConfig, UpdateChannel, WebSearchConfig, WebSearchEngine,
+    DiffDisplayMode, DisplayConfig, FeatureConfig, GatewayConfig, HandoffConfig,
+    HandoffProfileConfig, HookCommands, HooksConfig, KeybindingsConfig, LatexRenderingMode,
+    FileMentionsConfig,
+    LaunchHotkeyEntry, LaunchHotkeysConfig, MarkdownSpacingMode, NamedProviderAuth,
+    NamedProviderConfig, NamedProviderModelConfig, NamedProviderType, NativeScrollbarConfig,
+    NotificationsConfig, OverscrollStatusMode, PowerConfig, ProviderConfig, ReasoningDisplayMode,
+    RunSafetyConfig, SafetyConfig, SessionPickerResumeAction, SessionProfileConfig, SkillsMode,
+    SponsorsConfig, SwarmRolePolicy, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
+    UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
