@@ -324,13 +324,9 @@ fn parse_background_reply(bytes: &[u8]) -> Option<(u16, u16, u16)> {
         .position(|window| window == PREFIX)?
         + PREFIX.len();
     let payload = &bytes[start..];
-    let end = payload
-        .iter()
-        .enumerate()
-        .position(|(index, byte)| {
-            *byte == b'\x07'
-                || (*byte == 0x1b && payload.get(index + 1) == Some(&b'\\'))
-        })?;
+    let end = payload.iter().enumerate().position(|(index, byte)| {
+        *byte == b'\x07' || (*byte == 0x1b && payload.get(index + 1) == Some(&b'\\'))
+    })?;
     let channels = payload[..end]
         .split(|byte| *byte == b'/')
         .map(|channel| {
@@ -503,7 +499,10 @@ mod tests {
     #[test]
     fn parses_complete_osc11_background_replies_without_consuming_unrelated_bytes() {
         let response = b"\x1b]11;rgb:1111/2222/3333\x1b\\trailing";
-        assert_eq!(parse_background_reply(response), Some((0x1111, 0x2222, 0x3333)));
+        assert_eq!(
+            parse_background_reply(response),
+            Some((0x1111, 0x2222, 0x3333))
+        );
         assert_eq!(
             parse_background_reply(b"\x1b[?62;c\x1b]11;rgb:1111/2222/3333\x07"),
             Some((0x1111, 0x2222, 0x3333))
