@@ -1,13 +1,19 @@
 use anyhow::Result;
 use std::io::{self, IsTerminal, Write};
 use std::panic;
+use std::sync::{Arc, Mutex};
 
 use crate::{id, session, telemetry, tui};
 
-pub struct TuiRuntimeState {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TuiTerminalModes {
     mouse_capture: bool,
     keyboard_enhanced: bool,
     focus_change: bool,
+}
+
+pub struct TuiRuntimeState {
+    modes: Mutex<TuiTerminalModes>,
 }
 
 const INHERITED_MODES_ENV: &str = "JCODE_TUI_INHERITED_MODES";
@@ -115,7 +121,7 @@ fn has_terminal_exec_handoff(
 /// disarms the guard. If neither is called (error/panic path), `Drop` performs
 /// a best-effort full restore.
 pub struct TuiRuntimeGuard {
-    state: TuiRuntimeState,
+    state: Arc<TuiRuntimeState>,
     armed: bool,
 }
 
@@ -127,7 +133,7 @@ thread_local! {
 }
 
 impl TuiRuntimeGuard {
-    fn new(state: TuiRuntimeState) -> Self {
+    fn new(state: Arc<TuiRuntimeState>) -> Self {
         Self { state, armed: true }
     }
 
@@ -453,23 +459,32 @@ pub fn init_tui_runtime() -> Result<(ratatui::DefaultTerminal, TuiRuntimeGuard)>
 
     Ok((
         terminal,
-        TuiRuntimeGuard::new(TuiRuntimeState {
-            mouse_capture: modes.mouse_capture,
-            keyboard_enhanced: modes.keyboard_enhanced,
-            focus_change: modes.focus_change,
-        }),
+        TuiRuntimeGuard::new(Arc::new(TuiRuntimeState {
+            modes: Mutex::new(TuiTerminalModes {
+                mouse_capture: modes.mouse_capture,
+                keyboard_enhanced: modes.keyboard_enhanced,
+                focus_change: modes.focus_change,
+            }),
+        })),
     ))
 }
 
 fn cleanup_tui_runtime(state: &TuiRuntimeState, restore_terminal: bool) {
+    // Signal teardown can race normal teardown after raw mode is restored. Hold
+    // the mode lock through the complete sequence so a signal cannot exit the
+    // process halfway through normal cleanup or pop Kitty's mode stack twice.
+    let mut modes = state
+        .modes
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     crate::logging::info(&format!(
         "EVENT event=TUI_TERMINAL_MODES phase=cleanup pid={} restore_terminal={} raw_mode={} mouse_capture={} keyboard_enhanced={} focus_change={}",
         std::process::id(),
         restore_terminal,
         crossterm::terminal::is_raw_mode_enabled().unwrap_or(false),
-        state.mouse_capture,
-        state.keyboard_enhanced,
-        state.focus_change,
+        modes.mouse_capture,
+        modes.keyboard_enhanced,
+        modes.focus_change,
     ));
     crate::tui::mermaid::clear_image_state();
     let image_cleanup = crate::tui::mermaid::take_terminal_image_cleanup_payload();
@@ -482,19 +497,22 @@ fn cleanup_tui_runtime(state: &TuiRuntimeState, restore_terminal: bool) {
 
     if restore_terminal {
         let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste);
-        if state.focus_change {
+        if modes.focus_change {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableFocusChange);
+            modes.focus_change = false;
         }
-        if state.mouse_capture {
+        if modes.mouse_capture {
             if let Err(error) = sync_windows_vt_mouse_capture(false) {
                 crate::logging::warn(&format!(
                     "failed to disable Windows VT mouse capture: {error}"
                 ));
             }
             let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableMouseCapture);
+            modes.mouse_capture = false;
         }
-        if state.keyboard_enhanced {
+        if modes.keyboard_enhanced {
             tui::disable_keyboard_enhancement();
+            modes.keyboard_enhanced = false;
         }
         jcode_tui_style::restore_terminal_quietly();
     }
@@ -517,10 +535,14 @@ fn run_result_will_exec(run_result: &crate::tui::RunResult, extra_exec: bool) ->
 }
 
 fn export_tui_exec_handoff(state: &TuiRuntimeState) {
+    let modes = state
+        .modes
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let modes = InheritedTerminalModes {
-        mouse_capture: state.mouse_capture,
-        keyboard_enhanced: state.keyboard_enhanced,
-        focus_change: state.focus_change,
+        mouse_capture: modes.mouse_capture,
+        keyboard_enhanced: modes.keyboard_enhanced,
+        focus_change: modes.focus_change,
     };
     crate::env::set_var(INHERITED_MODES_ENV, modes.encode());
     let theme = crate::tui::theme_detect::current_theme_label();
@@ -602,15 +624,15 @@ fn signal_crash_reason(sig: i32) -> String {
 }
 
 #[cfg(unix)]
-fn handle_termination_signal(sig: i32) -> ! {
+fn cleanup_tui_runtime_for_signal(state: &TuiRuntimeState) {
+    cleanup_tui_runtime(state, true);
+}
+
+#[cfg(unix)]
+fn handle_termination_signal(sig: i32, state: &TuiRuntimeState) -> ! {
     mark_current_session_crashed(signal_crash_reason(sig));
 
-    let _ = crossterm::terminal::disable_raw_mode();
-    let _ = crossterm::execute!(
-        std::io::stderr(),
-        crossterm::terminal::LeaveAlternateScreen,
-        crossterm::cursor::Show
-    );
+    cleanup_tui_runtime_for_signal(state);
 
     if let Some(session_id) = get_current_session() {
         print_session_resume_hint(&session_id);
@@ -620,10 +642,10 @@ fn handle_termination_signal(sig: i32) -> ! {
 }
 
 #[cfg(unix)]
-pub fn spawn_session_signal_watchers() {
+pub fn spawn_session_signal_watchers(runtime: &TuiRuntimeGuard) {
     use tokio::signal::unix::{SignalKind, signal};
 
-    fn spawn_one(sig: i32, kind: SignalKind) {
+    fn spawn_one(sig: i32, kind: SignalKind, state: Arc<TuiRuntimeState>) {
         tokio::spawn(async move {
             let mut stream = match signal(kind) {
                 Ok(s) => s,
@@ -638,19 +660,35 @@ pub fn spawn_session_signal_watchers() {
             };
             if stream.recv().await.is_some() {
                 crate::logging::info(&format!("Received {} in TUI process", signal_name(sig)));
-                handle_termination_signal(sig);
+                handle_termination_signal(sig, &state);
             }
         });
     }
 
-    spawn_one(libc::SIGHUP, SignalKind::hangup());
-    spawn_one(libc::SIGTERM, SignalKind::terminate());
-    spawn_one(libc::SIGINT, SignalKind::interrupt());
-    spawn_one(libc::SIGQUIT, SignalKind::quit());
+    spawn_one(
+        libc::SIGHUP,
+        SignalKind::hangup(),
+        Arc::clone(&runtime.state),
+    );
+    spawn_one(
+        libc::SIGTERM,
+        SignalKind::terminate(),
+        Arc::clone(&runtime.state),
+    );
+    spawn_one(
+        libc::SIGINT,
+        SignalKind::interrupt(),
+        Arc::clone(&runtime.state),
+    );
+    spawn_one(
+        libc::SIGQUIT,
+        SignalKind::quit(),
+        Arc::clone(&runtime.state),
+    );
 }
 
 #[cfg(not(unix))]
-pub fn spawn_session_signal_watchers() {}
+pub fn spawn_session_signal_watchers(_runtime: &TuiRuntimeGuard) {}
 
 #[cfg(test)]
 mod tests {
@@ -662,11 +700,13 @@ mod tests {
     fn test_guard() -> TuiRuntimeGuard {
         // All terminal-mode flags disabled so teardown only performs the minimal
         // (and TTY-safe) restore path during tests.
-        TuiRuntimeGuard::new(TuiRuntimeState {
-            mouse_capture: false,
-            keyboard_enhanced: false,
-            focus_change: false,
-        })
+        TuiRuntimeGuard::new(Arc::new(TuiRuntimeState {
+            modes: Mutex::new(TuiTerminalModes {
+                mouse_capture: false,
+                keyboard_enhanced: false,
+                focus_change: false,
+            }),
+        }))
     }
 
     #[test]
@@ -771,6 +811,29 @@ mod tests {
         assert_eq!(
             restores, 0,
             "finish() should disarm the guard so drop does not double-restore"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn signal_cleanup_restores_and_disarms_all_terminal_modes() {
+        let state = TuiRuntimeState {
+            modes: Mutex::new(TuiTerminalModes {
+                mouse_capture: true,
+                keyboard_enhanced: true,
+                focus_change: true,
+            }),
+        };
+
+        cleanup_tui_runtime_for_signal(&state);
+
+        assert_eq!(
+            *state.modes.lock().unwrap(),
+            TuiTerminalModes {
+                mouse_capture: false,
+                keyboard_enhanced: false,
+                focus_change: false,
+            }
         );
     }
 
