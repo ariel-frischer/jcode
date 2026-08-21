@@ -12,6 +12,7 @@ use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 
 #[path = "sidecar/reasoning.rs"]
 pub(crate) mod reasoning;
@@ -144,6 +145,11 @@ pub struct Sidecar {
     model: String,
     max_tokens: u32,
     backend: SidecarBackend,
+    /// Provider snapshot selected with the model. Keeping the fork here avoids
+    /// re-resolving a mutable global provider between sidecar construction and
+    /// dispatch, which can lose an OpenAI-compatible profile and fall back to
+    /// the OpenRouter default model.
+    provider: Option<Arc<dyn crate::provider::Provider>>,
     /// Optional explicit reasoning effort override (OpenAI Responses API).
     /// When `Some`, this effort is always sent; when `None`, the default
     /// per-model behavior applies. Used by the memory benchmark to pin
@@ -160,10 +166,10 @@ impl Sidecar {
     }
 
     fn with_configured_model(configured_model: Option<String>) -> Self {
-        let (backend, model) = if let Some(model) = configured_model {
+        let (backend, model, provider) = if let Some(model) = configured_model {
             match crate::provider::provider_for_model(&model) {
-                Some("openai") => (SidecarBackend::OpenAI, model),
-                Some("claude") => (SidecarBackend::Claude, model),
+                Some("openai") => (SidecarBackend::OpenAI, model, None),
+                Some("claude") => (SidecarBackend::Claude, model, None),
                 _ => {
                     crate::logging::warn(&format!(
                         "Ignoring unsupported memory sidecar model override '{}'; expected an OpenAI or Claude model",
@@ -181,10 +187,12 @@ impl Sidecar {
             model,
             max_tokens: DEFAULT_MAX_TOKENS,
             backend,
+            provider,
             reasoning_override: crate::config::config()
                 .agents
                 .memory_reasoning_effort
                 .clone(),
+
         }
     }
 
@@ -199,20 +207,36 @@ impl Sidecar {
     ///
     /// Only when no provider is registered at all do we fall back to Claude,
     /// which then fails on use with a clear credentials error.
-    fn auto_select_backend() -> (SidecarBackend, String) {
+    fn auto_select_backend() -> (
+        SidecarBackend,
+        String,
+        Option<Arc<dyn crate::provider::Provider>>,
+    ) {
         if auth::codex::load_credentials().is_ok() {
-            (SidecarBackend::OpenAI, SIDECAR_OPENAI_MODEL.to_string())
+            (
+                SidecarBackend::OpenAI,
+                SIDECAR_OPENAI_MODEL.to_string(),
+                None,
+            )
         } else if auth::claude::load_credentials().is_ok() {
-            (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
+            (
+                SidecarBackend::Claude,
+                SIDECAR_CLAUDE_MODEL.to_string(),
+                None,
+            )
         } else if let Some(provider) = crate::provider::active_provider_fork() {
             // Dispatch through whatever provider the user is running on. The
             // model string is informational here; the provider already has the
             // user's selected model and routes accordingly.
-            (SidecarBackend::Provider, provider.model())
+            (SidecarBackend::Provider, provider.model(), Some(provider))
         } else {
             // No credentials and no live provider: default to Claude so the
             // eventual error message is actionable.
-            (SidecarBackend::Claude, SIDECAR_CLAUDE_MODEL.to_string())
+            (
+                SidecarBackend::Claude,
+                SIDECAR_CLAUDE_MODEL.to_string(),
+                None,
+            )
         }
     }
 
@@ -247,6 +271,7 @@ impl Sidecar {
             model: model.into(),
             max_tokens: DEFAULT_MAX_TOKENS,
             backend: SidecarBackend::Claude,
+            provider: None,
             reasoning_override: None,
         }
     }
@@ -260,6 +285,7 @@ impl Sidecar {
             model: model.into(),
             max_tokens: DEFAULT_MAX_TOKENS,
             backend: SidecarBackend::OpenAI,
+            provider: None,
             reasoning_override: reasoning_effort,
         }
     }
@@ -297,7 +323,7 @@ impl Sidecar {
     /// collects the streamed `TextDelta`s into a single string. The provider was
     /// forked at construction time, so it carries the user's selected model.
     async fn complete_via_provider(&self, system: &str, user_message: &str) -> Result<String> {
-        let provider = crate::provider::active_provider_fork().context(
+        let provider = self.provider.as_ref().context(
             "No active provider registered for sidecar; memory features require a logged-in provider",
         )?;
         provider
@@ -423,6 +449,7 @@ impl Sidecar {
                             model: SIDECAR_CLAUDE_MODEL.to_string(),
                             max_tokens: self.max_tokens,
                             backend: SidecarBackend::Claude,
+                            provider: None,
                             reasoning_override: None,
                         };
                         claude.complete_claude(system, user_message).await
