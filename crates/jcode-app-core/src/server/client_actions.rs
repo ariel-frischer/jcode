@@ -778,7 +778,14 @@ fn create_handoff_child_session_with_compaction(
     child.save()?;
     if let Some(prompt) = prompt {
         if auto_start {
-            crate::client_input::save_startup_queued_message_for_session(&child.id, prompt);
+            // The generated handoff prompt is provider-visible context, but it
+            // is not user-authored input. Preserve that distinction through the
+            // startup queue so the destination renders it as a system message
+            // while still sending the unwrapped body to the provider.
+            crate::client_input::save_startup_queued_message_for_session(
+                &child.id,
+                format!("[SYSTEM: {prompt}]"),
+            );
         } else {
             crate::client_input::save_startup_draft_for_session(&child.id, prompt);
         }
