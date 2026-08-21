@@ -940,14 +940,28 @@ impl BashTool {
                 // as a background-task card, and the agent is told where to find it.
                 let display_name =
                     summarize_background_command(params.intent.as_deref(), &params.command);
+                let managed_process = Some(crate::background::ManagedProcessIdentity {
+                    pid: child_pid,
+                    process_instance: crate::platform::process_start_token(child_pid),
+                    process_group_member: crate::platform::process_group_member_identity(child_pid)
+                        .map(
+                            |(pid, token)| crate::background::ManagedProcessMemberIdentity {
+                                pid,
+                                process_instance: Some(token),
+                            },
+                        ),
+                    owner_instance: Some(crate::background::process_instance_token().to_string()),
+                    transfer_policy: crate::background::ManagedProcessTransferPolicy::OwnerBound,
+                });
                 let info = crate::background::global()
-                    .adopt_with_options(
+                    .adopt_with_options_and_identity(
                         "bash",
                         Some(display_name.clone()),
                         &ctx.session_id,
                         params.notify,
                         params.wake,
                         work_handle,
+                        managed_process,
                     )
                     .await;
                 #[cfg(unix)]
@@ -1049,7 +1063,7 @@ impl BashTool {
             if started.elapsed() >= timeout_duration {
                 let elapsed = started.elapsed();
                 manager
-                    .register_detached_task(
+                    .register_detached_task_with_identity(
                         &info,
                         "bash",
                         Some(display_name.clone()),
@@ -1058,6 +1072,24 @@ impl BashTool {
                         &started_at,
                         params.notify,
                         params.wake,
+                        Some(crate::background::ManagedProcessIdentity {
+                            pid,
+                            process_instance: crate::platform::process_start_token(pid),
+                            process_group_member: crate::platform::process_group_member_identity(
+                                pid,
+                            )
+                            .map(|(member_pid, token)| {
+                                crate::background::ManagedProcessMemberIdentity {
+                                    pid: member_pid,
+                                    process_instance: Some(token),
+                                }
+                            }),
+                            owner_instance: Some(
+                                crate::background::process_instance_token().to_string(),
+                            ),
+                            transfer_policy:
+                                crate::background::ManagedProcessTransferPolicy::Transferred,
+                        }),
                     )
                     .await;
                 child_guard.disarm();
@@ -1107,7 +1139,7 @@ impl BashTool {
                 .unwrap_or(false)
             {
                 manager
-                    .register_detached_task(
+                    .register_detached_task_with_identity(
                         &info,
                         "bash",
                         Some(display_name.clone()),
@@ -1116,6 +1148,24 @@ impl BashTool {
                         &started_at,
                         params.notify,
                         params.wake,
+                        Some(crate::background::ManagedProcessIdentity {
+                            pid,
+                            process_instance: crate::platform::process_start_token(pid),
+                            process_group_member: crate::platform::process_group_member_identity(
+                                pid,
+                            )
+                            .map(|(member_pid, token)| {
+                                crate::background::ManagedProcessMemberIdentity {
+                                    pid: member_pid,
+                                    process_instance: Some(token),
+                                }
+                            }),
+                            owner_instance: Some(
+                                crate::background::process_instance_token().to_string(),
+                            ),
+                            transfer_policy:
+                                crate::background::ManagedProcessTransferPolicy::Transferred,
+                        }),
                     )
                     .await;
                 child_guard.disarm();
@@ -1207,18 +1257,23 @@ impl BashTool {
 
 	                    while !stdout_done || !stderr_done {
 	                        tokio::select! {
-	                            _ = async {
+                            _ = async {
 	                                match timeout_sleep.as_mut().as_pin_mut() {
 	                                    Some(sleep) => sleep.await,
 	                                    None => std::future::pending().await,
 	                                }
 	                            }, if timeout_duration.is_some() => {
 	                                timed_out = true;
-	                                #[cfg(unix)]
-	                                {
-	                                    if let Some(pid) = child.id() {
-	                                        let _ = crate::platform::signal_detached_process_group(pid, libc::SIGKILL);
-	                                    } else {
+                                #[cfg(unix)]
+                                {
+                                    if let Some(pid) = child.id() {
+                                        let token = crate::platform::process_start_token(pid);
+                                        let _ = crate::platform::signal_verified_process_group(
+                                            pid,
+                                            token.as_deref(),
+                                            libc::SIGKILL,
+                                        );
+                                    } else {
 	                                        let _ = child.start_kill();
 	                                    }
 	                                }

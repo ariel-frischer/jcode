@@ -7,6 +7,135 @@ fn desired_nofile_soft_limit_only_raises_when_possible() {
     assert_eq!(desired_nofile_soft_limit(1024, 4096, 8192), Some(4096));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn process_start_identity_requires_matching_token() {
+    let pid = std::process::id();
+    let token = super::process_start_token(pid).expect("current process start token");
+    assert_eq!(
+        super::verify_process_start_token(pid, Some(&token)),
+        super::ProcessIdentityCheck::Matching
+    );
+    assert_eq!(
+        super::verify_process_start_token(pid, Some("pid-reuse-fixture")),
+        super::ProcessIdentityCheck::Mismatch
+    );
+    assert_eq!(
+        super::verify_process_start_token(pid, None),
+        super::ProcessIdentityCheck::Missing
+    );
+}
+
+#[test]
+fn verified_signal_fails_closed_without_identity() {
+    assert_eq!(
+        super::signal_verified_process_group(std::process::id(), None, 0),
+        super::ProcessIdentityCheck::Missing
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn verified_signal_reports_signal_syscall_failure() {
+    use std::process::Stdio;
+
+    let mut command = std::process::Command::new("sleep");
+    command
+        .arg("60")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = super::spawn_detached(&mut command).expect("spawn isolated signal fixture");
+    let pid = child.id();
+    let token = super::process_start_token(pid).expect("fixture process start token");
+
+    assert_eq!(
+        super::signal_verified_process_group(pid, Some(&token), i32::MAX),
+        super::ProcessIdentityCheck::SignalFailed
+    );
+    assert!(
+        super::is_process_running(pid),
+        "an invalid signal must not terminate the fixture"
+    );
+
+    super::signal_detached_process_group(pid, libc::SIGKILL).expect("clean up signal fixture");
+    let _ = child.wait();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn leader_exit_keeps_verified_descendant_group_addressable() {
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let mut command = std::process::Command::new("sh");
+    command
+        .arg("-c")
+        .arg("sleep 60 & child=$!; echo $child; exit 0")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut leader = command.spawn().expect("spawn isolated group fixture");
+    let leader_pid = leader.id();
+    let leader_token = super::process_start_token(leader_pid).expect("leader token");
+    let mut unrelated = std::process::Command::new("sleep")
+        .arg("60")
+        .spawn()
+        .expect("spawn unrelated process fixture");
+    let unrelated_pid = unrelated.id();
+    let member_pid = std::io::BufRead::lines(std::io::BufReader::new(
+        leader.stdout.take().expect("leader stdout"),
+    ))
+    .next()
+    .expect("member pid line")
+    .expect("read member pid")
+    .parse::<u32>()
+    .expect("numeric member pid");
+    let member_token = super::process_start_token(member_pid).expect("member token");
+    let _ = leader.wait();
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while super::is_process_running(leader_pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        super::verify_process_group_identity(
+            leader_pid,
+            Some(&leader_token),
+            Some((member_pid, &member_token)),
+        ),
+        super::ProcessIdentityCheck::Matching,
+        "a verified descendant should retain safe group identity after leader exit"
+    );
+    assert_eq!(
+        super::signal_verified_process_group_with_member(
+            leader_pid,
+            Some(&leader_token),
+            Some((member_pid, &member_token)),
+            libc::SIGKILL,
+        ),
+        super::ProcessIdentityCheck::Matching
+    );
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while super::is_process_group_live(leader_pid) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!super::is_process_group_live(leader_pid));
+    assert!(
+        super::is_process_live(unrelated_pid),
+        "unrelated process must survive"
+    );
+    let _ = unsafe { libc::kill(unrelated_pid as libc::pid_t, libc::SIGKILL) };
+    let _ = unrelated.wait();
+}
+
 #[cfg(unix)]
 #[test]
 fn spawn_detached_creates_new_session() {
