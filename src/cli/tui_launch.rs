@@ -101,7 +101,7 @@ pub async fn run_tui_client(
     if let Some(ref session_id) = resume_session {
         set_current_session(session_id);
     }
-    spawn_session_signal_watchers();
+    spawn_session_signal_watchers(&tui_runtime);
 
     if let Some(ref session_id) = resume_session {
         let session_name = id::extract_session_name(session_id)
