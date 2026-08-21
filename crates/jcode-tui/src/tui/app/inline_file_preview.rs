@@ -1,6 +1,36 @@
 use super::*;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
+pub(super) fn resolve_local_file_target(
+    target: &str,
+    working_dir: Option<&std::path::Path>,
+) -> Option<std::path::PathBuf> {
+    let path_target = target.split(['#', '?']).next().unwrap_or(target);
+    if path_target.contains("://") || path_target.starts_with("mailto:") {
+        return None;
+    }
+
+    if path_target == "~" {
+        return dirs::home_dir();
+    }
+    if let Some(rest) = path_target
+        .strip_prefix("~/")
+        .or_else(|| path_target.strip_prefix("~\\"))
+    {
+        return dirs::home_dir().map(|home| home.join(rest));
+    }
+
+    let candidate = std::path::Path::new(path_target);
+    if candidate.is_absolute() {
+        return Some(candidate.to_path_buf());
+    }
+
+    working_dir
+        .map(std::path::Path::to_path_buf)
+        .or_else(|| std::env::current_dir().ok())
+        .map(|directory| directory.join(candidate))
+}
+
 impl App {
     pub(super) fn try_collapse_inline_file_preview_at(&mut self, mouse: MouseEvent) -> bool {
         if !matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
@@ -52,20 +82,14 @@ impl App {
         if path_target.contains("://") || path_target.starts_with("mailto:") {
             return false;
         }
-        let candidate = std::path::Path::new(path_target);
-        let path = if candidate.is_absolute() {
-            candidate.to_path_buf()
-        } else {
-            let Some(working_dir) = self
-                .session
+        let Some(path) = resolve_local_file_target(
+            path_target,
+            self.session
                 .working_dir
                 .as_deref()
-                .map(std::path::PathBuf::from)
-                .or_else(|| std::env::current_dir().ok())
-            else {
-                return false;
-            };
-            working_dir.join(candidate)
+                .map(std::path::Path::new),
+        ) else {
+            return false;
         };
         if !path.is_file() {
             return false;
@@ -130,5 +154,23 @@ impl App {
         self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
         self.set_status_notice(format!("Expanded file: {path_target}"));
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_local_file_target;
+
+    #[test]
+    fn resolve_local_file_target_expands_home_and_session_relative_paths() {
+        let home = dirs::home_dir().expect("test home directory");
+        let expanded = resolve_local_file_target("~/.jcode/report.html", None)
+            .expect("tilde path should resolve");
+        assert_eq!(expanded, home.join(".jcode/report.html"));
+
+        let repository = tempfile::tempdir().expect("repository tempdir");
+        let relative = resolve_local_file_target("docs/report.html", Some(repository.path()))
+            .expect("relative path should resolve against session directory");
+        assert_eq!(relative, repository.path().join("docs/report.html"));
     }
 }

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 mod display;
-pub use display::DisplayConfig;
+pub use display::{DisplayConfig, HtmlFileOpenMode};
 pub mod keybindings;
 mod run_safety;
 pub use run_safety::RunSafetyConfig;
