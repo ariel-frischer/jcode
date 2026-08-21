@@ -398,7 +398,7 @@ pub(crate) enum Command {
     },
 
     /// Manually set up the platform global hotkey to launch jcode. On Linux,
-    /// compositor changes are opt-in and this command is the only installer.
+    /// compositor changes are manual opt-in and this command is the only installer.
     SetupHotkey {
         /// Internal: run as the macOS hotkey listener process.
         #[arg(long, hide = true)]
