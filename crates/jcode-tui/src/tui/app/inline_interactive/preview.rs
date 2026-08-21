@@ -162,14 +162,7 @@ impl App {
             && picker.preview
         {
             picker.filter = request.filter().to_string();
-            if self.pending_model_picker_load.is_some() && picker.kind == PickerKind::Model {
-                // The loading shell is not a partial catalog. Keep it visible
-                // while retaining the user's filter for the completed picker.
-                picker.filtered = (0..picker.entries.len()).collect();
-                picker.selected = 0;
-            } else {
-                Self::apply_inline_interactive_filter(picker);
-            }
+            Self::apply_inline_interactive_filter(picker);
         }
     }
 
