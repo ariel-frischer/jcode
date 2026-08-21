@@ -47,3 +47,6 @@ Thumbs.db
 
 # Generated browser automation logs and page snapshots.
 /.playwright-mcp/
+
+# Local-only developer investigation notes.
+/docs/dev-internal/
