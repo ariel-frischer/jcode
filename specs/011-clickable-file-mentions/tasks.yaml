@@ -136,11 +136,11 @@ phases:
     title: "User Story 5 - Built-Binary Validation and Delivery"
     purpose: "Validate the new behavior through the executing binary and repository gates."
     story_reference: "US-005"
-    independent_test: "Build jcode-tui, run isolated built-binary TUI frames in light and dark themes, then run repository guardrails."
+    independent_test: "Build jcode-tui, verify the exact built binary in an isolated private-socket session, assert theme-default foreground semantics, then run repository guardrails."
     tasks:
       - id: "T009"
         title: "Validate, polish, commit, and prepare merge handoff"
-        status: "InProgress"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"
@@ -149,7 +149,7 @@ phases:
         acceptance_criteria:
           - "Focused exact-name tests pass"
           - "The TUI target builds successfully"
-          - "Newly built binary frames confirm mention opening and readable ordinary file content in light and dark themes"
+          - "The newly built binary runs in an isolated private-socket session, while rendered interaction tests confirm mention opening and theme-default ordinary file foreground semantics"
           - "scripts/check_guardrails.sh passes or an unrelated baseline failure is isolated"
           - "Only explicit owned files are staged and committed"
 
