@@ -816,6 +816,46 @@ async fn cancel_reports_incomplete_teardown_without_claiming_success() -> Result
     Ok(())
 }
 
+#[test]
+fn cancellation_outcome_preserves_typed_teardown_kind() {
+    assert_eq!(
+        cancellation_outcome(
+            true,
+            Some(ManagedProcessTeardownError::Incomplete(
+                "detail without a classification prefix".to_string(),
+            )),
+        ),
+        BackgroundTaskCancellation::Incomplete(
+            "detail without a classification prefix".to_string(),
+        )
+    );
+    assert_eq!(
+        cancellation_outcome(
+            true,
+            Some(ManagedProcessTeardownError::Refused(
+                "another unprefixed detail".to_string(),
+            )),
+        ),
+        BackgroundTaskCancellation::Refused("another unprefixed detail".to_string())
+    );
+}
+
+#[tokio::test]
+async fn detached_cancel_without_managed_identity_reports_missing_identity() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let mut status = running_status_fixture("missing-managed-identity", "session-missing");
+    status.detached = true;
+    write_status_fixture(&manager, &status).await;
+
+    let result = manager.cancel(&status.task_id).await?;
+    let BackgroundTaskCancellation::Refused(detail) = result else {
+        panic!("missing managed identity must refuse cancellation");
+    };
+    assert!(detail.contains("identity is missing"), "{detail}");
+    Ok(())
+}
+
 #[tokio::test]
 async fn reconcile_marks_orphan_from_dead_process_failed() -> Result<()> {
     let tmp = tempdir()?;
@@ -1029,7 +1069,7 @@ async fn shutdown_drain_finalizes_owner_bound_tasks() -> Result<()> {
     assert_eq!(manager.drain_for_shutdown().await, 1);
     let status = manager.status(&info.task_id).await.unwrap();
     assert_eq!(status.status, BackgroundTaskStatus::Failed);
-    assert!(status.error.unwrap_or_default().contains("reload"));
+    assert!(status.error.unwrap_or_default().contains("shutdown"));
     Ok(())
 }
 

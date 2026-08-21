@@ -369,7 +369,13 @@ pub enum ProcessIdentityCheck {
     Missing,
     Unsupported,
     Mismatch,
+    SignalFailed,
 }
+
+/// Windows tree termination ignores Unix signal numbers, but zero remains
+/// reserved for identity-only verification across platforms.
+#[cfg(windows)]
+pub(crate) const PROCESS_GROUP_TERMINATE_REQUEST: i32 = 1;
 
 /// Verify a PID's live process instance without treating PID liveness alone as
 /// ownership proof.
@@ -479,15 +485,17 @@ pub fn signal_verified_process_group(
     signal: i32,
 ) -> ProcessIdentityCheck {
     let check = verify_process_start_token(pid, expected_start_token);
-    if check == ProcessIdentityCheck::Matching
-        && signal != 0
-        && signal_detached_process_group(pid, signal).is_err()
-        && !matches!(signal, 0)
-        && !is_process_running(pid)
-    {
-        return ProcessIdentityCheck::Stopped;
+    if check != ProcessIdentityCheck::Matching {
+        return check;
     }
-    check
+    if signal == 0 {
+        return ProcessIdentityCheck::Matching;
+    }
+    match signal_detached_process_group(pid, signal) {
+        Ok(()) => ProcessIdentityCheck::Matching,
+        Err(_) if !is_process_running(pid) => ProcessIdentityCheck::Stopped,
+        Err(_) => ProcessIdentityCheck::SignalFailed,
+    }
 }
 
 /// Identity-verified process-group signal with optional leader-independent
@@ -499,14 +507,17 @@ pub fn signal_verified_process_group_with_member(
     signal: i32,
 ) -> ProcessIdentityCheck {
     let check = verify_process_group_identity(pid, expected_start_token, member);
-    if check == ProcessIdentityCheck::Matching
-        && signal != 0
-        && signal_detached_process_group(pid, signal).is_err()
-        && !is_process_group_live(pid)
-    {
-        return ProcessIdentityCheck::Stopped;
+    if check != ProcessIdentityCheck::Matching {
+        return check;
     }
-    check
+    if signal == 0 {
+        return ProcessIdentityCheck::Matching;
+    }
+    match signal_detached_process_group(pid, signal) {
+        Ok(()) => ProcessIdentityCheck::Matching,
+        Err(_) if !is_process_group_live(pid) => ProcessIdentityCheck::Stopped,
+        Err(_) => ProcessIdentityCheck::SignalFailed,
+    }
 }
 
 /// Send a signal to an entire detached process group/session led by `pid`.

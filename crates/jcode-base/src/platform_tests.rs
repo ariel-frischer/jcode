@@ -36,6 +36,33 @@ fn verified_signal_fails_closed_without_identity() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn verified_signal_reports_signal_syscall_failure() {
+    use std::process::Stdio;
+
+    let mut command = std::process::Command::new("sleep");
+    command
+        .arg("60")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = super::spawn_detached(&mut command).expect("spawn isolated signal fixture");
+    let pid = child.id();
+    let token = super::process_start_token(pid).expect("fixture process start token");
+
+    assert_eq!(
+        super::signal_verified_process_group(pid, Some(&token), i32::MAX),
+        super::ProcessIdentityCheck::SignalFailed
+    );
+    assert!(
+        super::is_process_running(pid),
+        "an invalid signal must not terminate the fixture"
+    );
+
+    super::signal_detached_process_group(pid, libc::SIGKILL).expect("clean up signal fixture");
+    let _ = child.wait();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn leader_exit_keeps_verified_descendant_group_addressable() {
     use std::process::Stdio;
     use std::time::{Duration, Instant};
