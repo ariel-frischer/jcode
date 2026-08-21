@@ -89,8 +89,10 @@ swarm_panel_focus = "alt+n"
 # Spawn a fresh jcode session in a new terminal window, reusing the current
 # session's working directory. Companion to the system-wide launch hotkeys.
 # `jcode setup-hotkey` installs these three global launch hotkeys on macOS,
-# Linux niri/Hyprland/sway/i3, and Windows. The Cmd modifier maps to Super on
-# Linux and Alt on Windows. Windows also adds the physical Copilot key:
+# Linux niri/Hyprland/sway/i3, and Windows. On Linux, compositor changes are
+# manual opt-in; startup/config changes never write or reload them. The Cmd
+# modifier maps to Super on Linux and Alt on Windows. Windows also adds the
+# physical Copilot key:
 #   Cmd+;        new jcode in your home directory
 #   Cmd+'        new jcode in your last project directory
 #   Cmd+Shift+'  new jcode self-dev session (last jcode repo)

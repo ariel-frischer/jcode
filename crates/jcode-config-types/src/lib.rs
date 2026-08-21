@@ -1801,7 +1801,7 @@ pub struct LaunchHotkeyEntry {
     pub self_dev: bool,
 }
 
-/// Configuration for the global "launch a new jcode" hotkeys (macOS).
+/// Configuration for the global "launch a new jcode" hotkeys.
 ///
 /// When `entries` is empty, jcode uses its built-in defaults (`Cmd+;` -> home,
 /// `Cmd+'` -> last project, `Cmd+Shift+'` -> self-dev). Auto-import can bake a
@@ -1811,9 +1811,9 @@ pub struct LaunchHotkeyEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct LaunchHotkeysConfig {
-    /// Whether the global launch hotkeys are installed at all. `None` means
-    /// "not decided yet" (fall back to the legacy auto-install gating); `Some`
-    /// is an explicit user/import choice.
+    /// Whether the global launch hotkeys are enabled. `None` preserves the
+    /// legacy unset state; Linux compositor installation remains manual-only
+    /// regardless of this value.
     pub enabled: Option<bool>,
     /// Explicit chord -> directory mapping. Empty = use built-in defaults.
     pub entries: Vec<LaunchHotkeyEntry>,

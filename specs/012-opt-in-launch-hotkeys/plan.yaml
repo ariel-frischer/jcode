@@ -1,0 +1,119 @@
+plan:
+  branch: "012-opt-in-launch-hotkeys"
+  created: "2026-08-21"
+  spec_path: "specs/012-opt-in-launch-hotkeys/spec.yaml"
+summary: >-
+  Make Linux compositor launch-hotkey mutation an explicit manual action while
+  preserving the existing installer, managed-block renderer, backup behavior,
+  and unrelated platform behavior. Treat absent and legacy enabled settings
+  conservatively on every unattended path, and prove the boundary with focused
+  gating, call-site, installer, and user-facing output tests.
+technical_context:
+  language: "Rust"
+  framework: "Cargo workspace with jcode-setup-hints, jcode-base, and root CLI composition"
+  primary_dependencies:
+    - "jcode-setup-hints Linux compositor adapters and managed-block renderers"
+    - "jcode-base Config::bake_launch_hotkeys_once"
+    - "src/cli/dispatch.rs startup setup-hint and config-bake call site"
+  storage: "User config under ~/.jcode plus compositor-owned config stores; no schema migration"
+  testing:
+    unit: "Pure LinuxHotkeySetupAction gating tests and setup-hint output assertions"
+    integration: "Focused jcode-setup-hints and jcode-base tests plus call-site regression checks"
+    runtime: "Newly built isolated-socket or command-level smoke where the Linux path is observable"
+  target_platform: "Linux, with macOS and Windows behavior preserved unless shared code requires compatibility checks"
+  project_type: "Rust coding-agent CLI and shared server"
+  performance_goals: "Remove Linux compositor writes from unattended startup without adding work to the first-frame path"
+  constraints:
+    - "No new dependencies"
+    - "No automatic compositor reloads, backups, or managed-block writes"
+    - "Explicit setup-hotkey remains the sole Linux compositor mutation owner"
+    - "User-authored compositor content must remain untouched"
+  scale_scope: "One compositor setup boundary and its existing startup/config-change callers"
+implementation_phases:
+  - phase: 1
+    name: "Regression contract"
+    goal: "Freeze the fail-closed Linux gating contract and prove the current behavior fails it"
+    deliverables:
+      - "Tests for absent, legacy enabled, disabled, installed, and tracking-version cases"
+      - "Call-site assertions that startup and config-change paths do not invoke the Linux installer"
+      - "A user-facing output assertion for manual opt-in language"
+    dependencies: []
+  - phase: 2
+    name: "Manual-only Linux mutation"
+    goal: "Gate unattended Linux paths while leaving explicit setup-hotkey installation unchanged"
+    deliverables:
+      - "Linux automatic gate defaults to no-op for absent and legacy enabled settings"
+      - "Linux config-change reinstall path is read-only"
+      - "Explicit setup-hotkey continues to render, backup before changed writes, reload when required, and remain idempotent"
+      - "Comments and config documentation describe the new safety boundary"
+    dependencies:
+      - 1
+  - phase: 3
+    name: "Focused delivery validation"
+    goal: "Validate the changed surface and record runtime and guardrail evidence"
+    deliverables:
+      - "Focused package tests and formatting"
+      - "Relevant dependency and guardrail checks"
+      - "Selfdev build and isolated runtime or deterministic command-level smoke"
+      - "Bead comment with exact evidence and remaining platform gaps"
+    dependencies:
+      - 2
+constitution_check:
+  PRIN-001: "PASS: scope is limited to the Linux gating helper, existing call sites, tests, and related help text."
+  PRIN-002: "PASS: LaunchHotkeysConfig serde fields and explicit setup command remain compatible."
+  PRIN-003: "PASS: absent, false, and legacy true semantics are documented and tested at the existing resolver boundary."
+  PRIN-004: "PASS: jcode-setup-hints owns compositor mutation and jcode-base/root only stop invoking it automatically."
+  PRIN-005: "PASS: every acceptance case maps to focused gating, call-site, installer, or output assertions."
+  PRIN-006: "PASS: fail-closed behavior avoids unintended filesystem and compositor side effects."
+  PRIN-007: "PENDING: focused checks, guardrails, and selfdev build must pass or record unrelated baseline failures."
+  PRIN-008: "PASS: reuses the existing setup-hotkey owner and does not add a parallel mechanism."
+  PRIN-009: "PASS: protects existing user bindings and gives users an explicit control boundary."
+  PRIN-010: "PASS: removes work from unattended startup and validates the executing build where runtime behavior is claimed."
+research_findings:
+  current_owner: "crates/jcode-setup-hints/src/lib.rs owns Linux compositor detection, rendering, backup, reload, manual setup, and automatic reinstall."
+  current_automatic_paths:
+    - "maybe_show_setup_hints invokes linux_hotkey_setup_action and install_linux_launch_hotkeys"
+    - "reinstall_launch_hotkeys_after_config_change invokes the Linux installer after config changes"
+    - "src/cli/dispatch.rs starts a detached launch-hotkey bake thread and triggers reinstall when Config baking writes"
+  preserved_path: "run_setup_hotkey invokes install_linux_launch_hotkeys directly and must remain the only Linux write path."
+  runner_recovery: "The first external Autospec planning lane stalled after launching npm exec @upstash/context7-mcp@latest; artifacts were recovered locally and validated before implementation."
+data_model:
+  config: "LaunchHotkeysConfig remains enabled: Option<bool>, entries, imported with unchanged serde representation."
+  runtime_state: "SetupHintsState tracking fields remain unchanged except that unattended Linux paths no longer mutate them as a side effect of installation."
+  compositor_files: "Existing compositor-specific managed blocks and backup files are not migrated or rewritten automatically."
+api_contracts:
+  cli: "jcode setup-hotkey remains the explicit manual Linux installer and retains its existing output and error contract with manual opt-in wording."
+  config: "No new field or environment variable; legacy enabled=true cannot authorize background Linux writes."
+project_structure:
+  owned_files:
+    - "crates/jcode-setup-hints/src/lib.rs"
+    - "crates/jcode-setup-hints/src/setup_hints_tests.rs"
+    - "crates/jcode-base/src/config/config_file.rs"
+    - "src/cli/dispatch.rs"
+    - "crates/jcode-base/src/config/default_file.rs"
+  validation_files:
+    - "crates/jcode-setup-hints/src/launch_hotkeys.rs"
+    - "crates/jcode-setup-hints/src/linux_env.rs"
+risks:
+  - id: "RISK-001"
+    risk: "A shared helper change could accidentally alter macOS or Windows automatic setup."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Gate only Linux automatic call sites and run existing cross-platform setup-hint tests."
+  - id: "RISK-002"
+    risk: "The config-bake thread could still trigger a Linux reinstall indirectly."
+    likelihood: "high"
+    impact: "high"
+    mitigation: "Cover Config bake return handling and the Linux branch of reinstall_launch_hotkeys_after_config_change directly."
+  - id: "RISK-003"
+    risk: "Manual setup could lose backup or idempotence while automatic code is removed."
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Keep installer functions unchanged where possible and retain focused managed-block and no-op tests."
+open_questions: []
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "local-recovery-after-codex-context7-stall"
+  created: "2026-08-21T08:57:30Z"
+  artifact_type: "plan"

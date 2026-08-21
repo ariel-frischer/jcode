@@ -1,0 +1,116 @@
+tasks:
+  branch: "012-opt-in-launch-hotkeys"
+  created: "2026-08-21"
+  spec_path: "specs/012-opt-in-launch-hotkeys/spec.yaml"
+  plan_path: "specs/012-opt-in-launch-hotkeys/plan.yaml"
+summary:
+  total_tasks: 9
+  total_phases: 3
+  parallel_opportunities: 0
+  estimated_complexity: "medium"
+phases:
+  - number: 1
+    title: "Regression contract"
+    purpose: "Add red tests for the fail-closed Linux automatic boundary before changing production code."
+    story_reference: "US-001"
+    independent_test: "The focused jcode-setup-hints test target fails because absent and legacy enabled state currently request installation."
+    tasks:
+      - id: "T001"
+        type: "test"
+        title: "Update Linux automatic gate tests for default and legacy safety"
+        status: "Pending"
+        description: "Change the pure LinuxHotkeySetupAction expectations so absent and legacy enabled settings cannot authorize unattended installation or refresh while disabled remains a no-op."
+        acceptance: "The exact gate test fails against current behavior for the expected reason."
+      - id: "T002"
+        type: "test"
+        title: "Add call-site and manual-output regression coverage"
+        status: "Pending"
+        description: "Add focused assertions for config-change/startup paths and user-facing Linux setup guidance, without invoking a real compositor."
+        acceptance: "Tests identify the automatic call sites and require manual opt-in wording."
+      - id: "T003"
+        type: "test"
+        title: "Add explicit setup idempotence and no-backup coverage"
+        status: "Pending"
+        description: "Preserve or extend pure managed-block and installer-adjacent tests proving unchanged content does not create a backup and unrelated lines survive."
+        acceptance: "The regression suite covers explicit manual behavior separately from automatic gating."
+  - number: 2
+    title: "Manual-only Linux mutation"
+    purpose: "Implement the smallest production change that removes Linux automatic compositor writes while preserving explicit setup."
+    story_reference: "US-002"
+    independent_test: "Focused jcode-setup-hints tests pass and no automatic Linux branch reaches install_linux_launch_hotkeys."
+    tasks:
+      - id: "T004"
+        type: "implementation"
+        title: "Make Linux automatic setup fail closed"
+        status: "Pending"
+        description: "Update the Linux automatic gating helper and maybe_show_setup_hints path so absent and legacy enabled states produce no automatic install or refresh."
+        acceptance: "Default and legacy enabled startup cases return no automatic action."
+      - id: "T005"
+        type: "implementation"
+        title: "Remove Linux config-change reinstall side effects"
+        status: "Pending"
+        description: "Make reinstall_launch_hotkeys_after_config_change read-only for Linux while leaving macOS and Windows branches unchanged."
+        acceptance: "Config bake and config-change paths cannot write or reload a Linux compositor."
+      - id: "T006"
+        type: "documentation"
+        title: "Clarify manual setup-hotkey messaging and compatibility comments"
+        status: "Pending"
+        description: "Update Linux setup output, config documentation, and comments to say compositor setup is manual opt-in without changing serialized fields."
+        acceptance: "The public output tells users to run jcode setup-hotkey explicitly."
+  - number: 3
+    title: "Focused delivery validation"
+    purpose: "Run attributable validation, build the changed code, and record evidence."
+    story_reference: "US-001, US-002, US-003"
+    independent_test: "All focused tests, artifact validators, formatting, and relevant guardrails pass or have isolated baseline evidence."
+    tasks:
+      - id: "T007"
+        type: "test"
+        title: "Run focused tests and formatting"
+        status: "Pending"
+        description: "Run exact jcode-setup-hints and jcode-base tests, cargo fmt check, and changed-surface checks."
+        acceptance: "Commands and outcomes are recorded without broad unrelated filters."
+      - id: "T008"
+        type: "test"
+        title: "Run guardrails, selfdev build, and isolated runtime check"
+        status: "Pending"
+        description: "Run scripts/check_guardrails.sh, build the TUI selfdev binary, and perform an isolated or deterministic command-level check that proves no automatic compositor mutation."
+        acceptance: "The executing binary identity and any platform limitations are recorded."
+      - id: "T009"
+        type: "implementation"
+        title: "Review diff, commit, and hand off for merge"
+        status: "Pending"
+        description: "Inspect explicit diffs, stage only owned files, create one focused commit, and record the Bead handoff for merge-wt."
+        acceptance: "Worktree is clean except for intentional committed changes and Bead evidence names the exact validation."
+dependencies:
+  T002:
+    - T001
+  T003:
+    - T001
+  T004:
+    - T001
+    - T002
+  T005:
+    - T002
+  T006:
+    - T004
+  T007:
+    - T003
+    - T004
+    - T005
+    - T006
+  T008:
+    - T007
+  T009:
+    - T008
+parallel_execution: []
+implementation_strategy:
+  mvp_scope: "T001-T006: fail-closed Linux automatic paths, preserved explicit setup, and clear manual opt-in messaging."
+  validation_scope: "T007-T009: focused tests, guardrails/build/runtime evidence, diff review, and merge handoff."
+  rollback: "Revert the focused commit; no compositor files are migrated or deleted by this change."
+  ownership: "jcode-setup-hints owns Linux compositor mutation; startup/config-bake callers may only invoke read-only logic after this change."
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "local-recovery-after-codex-context7-stall"
+  created: "2026-08-21T08:57:30Z"
+  artifact_type: "tasks"

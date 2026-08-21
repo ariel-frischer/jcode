@@ -332,9 +332,10 @@ impl Config {
     ///   commit a degenerate "everything is home" layout on a fresh machine; the
     ///   built-in 3 hotkeys keep working until there is real history.
     ///
-    /// Returns `true` when it wrote a baked mapping (so the caller can trigger a
-    /// hotkey reinstall), `false` otherwise. Best-effort: errors are logged and
-    /// swallowed.
+    /// Returns `true` when it wrote a baked mapping (so supported platform
+    /// integrations can refresh their bindings), `false` otherwise. Linux
+    /// compositor bindings are refreshed only by explicit `setup-hotkey`.
+    /// Best-effort: errors are logged and swallowed.
     #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     pub fn bake_launch_hotkeys_once() -> bool {
         use jcode_import_core::repo_ranking;
