@@ -1864,6 +1864,9 @@ pub(in crate::tui::app) fn handle_server_event(
                             session_id, history_message_count, fingerprint
                         ));
                         drop(messages);
+                        if let Some(notice) = app.pending_handoff_resume_notice.take() {
+                            app.push_display_message(DisplayMessage::system(notice));
+                        }
                     } else {
                         let restored_messages = messages
                             .into_iter()
