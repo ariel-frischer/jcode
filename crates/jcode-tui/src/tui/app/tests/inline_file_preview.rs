@@ -80,6 +80,99 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
 }
 
 #[test]
+fn test_clicking_html_file_uses_resolved_external_opener_by_default() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let html = repository.path().join("report.html");
+    std::fs::write(&html, "<html><body>report</body></html>").expect("write html report");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("Open report.html")];
+    app.bump_display_messages_version();
+
+    let backend = ratatui::backend::TestBackend::new(90, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find("report.html")?;
+            Some((line[..byte].chars().count() as u16 + 2, row))
+        })
+        .expect("HTML path must be visible");
+
+    let opened = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+    let opened_for_closure = opened.clone();
+    let handled = app.try_open_link_at_with(column, row, |target| {
+        *opened_for_closure.lock().unwrap() = Some(target.to_string());
+        Ok::<(), &'static str>(())
+    });
+
+    assert!(handled);
+    assert_eq!(
+        *opened.lock().unwrap(),
+        Some(html.to_string_lossy().into_owned()),
+        "HTML file opening must resolve against the session working directory"
+    );
+    assert!(app.inline_file_previews.is_empty());
+    assert_eq!(
+        app.status_notice(),
+        Some(format!("Opened file: {}", html.display()))
+    );
+}
+
+#[test]
+fn test_clicking_html_file_can_be_configured_to_use_inline_preview() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let html = repository.path().join("report.html");
+    std::fs::write(&html, "<html><body>report</body></html>").expect("write html report");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("Open report.html")];
+    app.bump_display_messages_version();
+
+    let backend = ratatui::backend::TestBackend::new(90, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find("report.html")?;
+            Some((line[..byte].chars().count() as u16 + 2, row))
+        })
+        .expect("HTML path must be visible");
+
+    let opened = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let opened_for_closure = opened.clone();
+    let handled = app.try_open_link_at_with_mode(
+        column,
+        row,
+        crate::config::HtmlFileOpenMode::Inline,
+        |_| {
+            *opened_for_closure.lock().unwrap() = true;
+            Ok::<(), &'static str>(())
+        },
+    );
+
+    assert!(handled);
+    assert!(!*opened.lock().unwrap());
+    assert_eq!(app.inline_file_previews.len(), 1);
+}
+
+#[test]
 fn test_relative_file_preview_falls_back_to_process_working_directory() {
     let _render_lock = scroll_render_test_lock();
     let mut app = create_test_app();

@@ -241,10 +241,71 @@ impl App {
     }
 
     pub(super) fn try_open_link_at(&mut self, column: u16, row: u16) -> bool {
-        if let Some((target, message_index)) =
+        let (target, message_index) = if let Some((target, message_index)) =
             super::super::ui::chat_link_target_from_screen(column, row)
         {
-            let preview_target = target.strip_prefix('@').unwrap_or(&target);
+            (target, Some(message_index))
+        } else if let Some(target) = super::super::ui::link_target_from_screen(column, row) {
+            (target, None)
+        } else {
+            return false;
+        };
+
+        self.try_open_link_target_with(
+            &target,
+            message_index,
+            crate::config::config().display.html_file_open,
+            |target: &str| super::helpers::open_path_or_url_detached(target),
+        )
+    }
+
+    fn try_open_link_target_with<F, E>(
+        &mut self,
+        target: &str,
+        message_index: Option<usize>,
+        html_file_open: crate::config::HtmlFileOpenMode,
+        mut open_target: F,
+    ) -> bool
+    where
+        F: FnMut(&str) -> Result<(), E>,
+        E: std::fmt::Display,
+    {
+        let preview_target = target.strip_prefix('@').unwrap_or(target);
+        let working_dir = self
+            .session
+            .working_dir
+            .as_deref()
+            .map(std::path::Path::new);
+        let html_path = (html_file_open == crate::config::HtmlFileOpenMode::External)
+            .then(|| {
+                super::inline_file_preview::resolve_local_file_target(preview_target, working_dir)
+            })
+            .flatten()
+            .filter(|path| {
+                path.is_file()
+                    && path.extension().is_some_and(|extension| {
+                        matches!(
+                            extension.to_string_lossy().to_ascii_lowercase().as_str(),
+                            "html" | "htm"
+                        )
+                    })
+            });
+
+        if let Some(path) = html_path {
+            let display_path = path.to_string_lossy().into_owned();
+            return match open_target(&display_path) {
+                Ok(()) => {
+                    self.set_status_notice(format!("Opened file: {}", path.display()));
+                    true
+                }
+                Err(error) => {
+                    self.set_status_notice(format!("Failed to open file: {error}"));
+                    true
+                }
+            };
+        }
+
+        if let Some(message_index) = message_index {
             if self.try_toggle_inline_file_preview(preview_target, message_index) {
                 return true;
             }
@@ -253,17 +314,14 @@ impl App {
                 return true;
             }
         }
-        let Some(target) = super::super::ui::link_target_from_screen(column, row) else {
-            return false;
-        };
 
-        if self.try_open_repository_markdown_link(&target) {
+        if self.try_open_repository_markdown_link(target) {
             return true;
         }
 
-        match super::helpers::open_path_or_url_detached(&target) {
+        match open_target(target) {
             Ok(()) => self.set_status_notice(format!("Opened link: {}", target)),
-            Err(e) => self.set_status_notice(format!("Failed to open link: {}", e)),
+            Err(error) => self.set_status_notice(format!("Failed to open link: {}", error)),
         }
         true
     }
@@ -336,25 +394,52 @@ impl App {
     }
 
     #[cfg(test)]
-    pub(super) fn try_open_link_at_with<F, E>(
+    pub(super) fn try_open_link_at_with<F, E>(&mut self, column: u16, row: u16, open_url: F) -> bool
+    where
+        F: FnMut(&str) -> Result<(), E>,
+        E: std::fmt::Display,
+    {
+        let (target, message_index) = if let Some((target, message_index)) =
+            super::super::ui::chat_link_target_from_screen(column, row)
+        {
+            (target, Some(message_index))
+        } else if let Some(target) = super::super::ui::link_target_from_screen(column, row) {
+            (target, None)
+        } else {
+            return false;
+        };
+
+        self.try_open_link_target_with(
+            &target,
+            message_index,
+            crate::config::config().display.html_file_open,
+            open_url,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn try_open_link_at_with_mode<F, E>(
         &mut self,
         column: u16,
         row: u16,
-        mut open_url: F,
+        html_file_open: crate::config::HtmlFileOpenMode,
+        open_url: F,
     ) -> bool
     where
         F: FnMut(&str) -> Result<(), E>,
         E: std::fmt::Display,
     {
-        let Some(url) = super::super::ui::link_target_from_screen(column, row) else {
+        let (target, message_index) = if let Some((target, message_index)) =
+            super::super::ui::chat_link_target_from_screen(column, row)
+        {
+            (target, Some(message_index))
+        } else if let Some(target) = super::super::ui::link_target_from_screen(column, row) {
+            (target, None)
+        } else {
             return false;
         };
 
-        match open_url(&url) {
-            Ok(()) => self.set_status_notice(format!("Opened link: {}", url)),
-            Err(e) => self.set_status_notice(format!("Failed to open link: {}", e)),
-        }
-        true
+        self.try_open_link_target_with(&target, message_index, html_file_open, open_url)
     }
 
     pub(super) fn scroll_max_estimate(&self) -> usize {

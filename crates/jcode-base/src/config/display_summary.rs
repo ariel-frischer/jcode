@@ -43,6 +43,7 @@ impl Config {
 
 **Display:**
 - Diff mode: {}
+- HTML file opening: {}
 - Centered: {}
 - Markdown spacing: {}
 - LaTeX rendering: {}
@@ -173,6 +174,10 @@ impl Config {
             self.dictation.key,
             self.dictation.timeout_secs,
             self.display.diff_mode.label(),
+            match self.display.html_file_open {
+                crate::config::HtmlFileOpenMode::External => "external",
+                crate::config::HtmlFileOpenMode::Inline => "inline",
+            },
             self.display.centered,
             self.display.markdown_spacing.label(),
             self.display.latex_rendering.as_str(),
