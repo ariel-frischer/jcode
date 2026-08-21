@@ -1,7 +1,7 @@
 use super::reconnect;
 use super::{
     RemoteRunState, auth_provider_hint_for_login_provider, handle_post_connect,
-    handle_server_event, process_remote_followups,
+    handle_server_event, handle_tick, process_remote_followups,
 };
 use crate::protocol::{
     MemoryActivitySnapshot, MemoryPipelineSnapshot, MemoryStateSnapshot, MemoryStepStatusSnapshot,
@@ -759,6 +759,43 @@ fn submit_prepared_remote_input_defers_until_history_loads() {
     assert!(
         app.is_processing,
         "the held prompt should be sent once history is loaded"
+    );
+}
+
+#[test]
+fn handoff_system_prompt_waits_for_history_before_rendering_and_sending() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.runtime_mode = crate::tui::app::AppRuntimeMode::RemoteClient;
+    app.queued_messages
+        .push("[SYSTEM: Handoff codeword salamander123]".to_string());
+
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    assert!(!remote.has_loaded_history());
+
+    rt.block_on(handle_tick(&mut app, &mut remote));
+
+    assert_eq!(app.queued_messages.len(), 1);
+    assert!(!app.is_processing);
+    assert!(
+        app.display_messages()
+            .iter()
+            .all(|message| !message.content.contains("salamander123")),
+        "pre-history display would be cleared by the incoming History payload"
+    );
+
+    remote.mark_history_loaded();
+    rt.block_on(handle_tick(&mut app, &mut remote));
+
+    assert!(app.queued_messages.is_empty());
+    assert!(app.is_processing);
+    assert!(
+        app.display_messages().iter().any(|message| {
+            message.role == "system" && message.content.contains("salamander123")
+        }),
+        "handoff briefing must be visible before the destination assistant responds"
     );
 }
 
