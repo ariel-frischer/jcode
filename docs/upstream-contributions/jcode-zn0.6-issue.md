@@ -120,21 +120,25 @@ Test-first evidence on the actual upstream-based worktree:
 6. `JCODE_IN_DEV_CARGO=1 ./scripts/dev_cargo.sh clippy -p jcode --lib --no-deps` passed. The only emitted warning was pre-existing dead-code noise in `jcode-harness-api-server`.
 7. `JCODE_IN_DEV_CARGO=1 ./scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode` passed.
 8. The built worktree binary exposes `--max-turns <N>` in `jcode run --help`.
-9. The built worktree binary rejects `--max-turns 0` with the stable preflight error before provider initialization.
+9. The built worktree binary rejects `--max-turns 0` and non-decimal values with the stable preflight error before provider initialization.
+10. Direct public-interface acceptance ran exact binary `b8b4c20b7` through `jcode run --max-turns 1` in plain, JSON, and NDJSON modes against an isolated localhost OpenAI-compatible HTTP/SSE endpoint. All three invocations exited 0.
+11. The endpoint observed three authenticated `POST /v1/chat/completions` requests with `model=local-acceptance`, `stream=true`, `stream_options.include_usage=true`, and the expected message payload.
+12. Plain output emitted `local-ok`, usage, and the stable stop message. JSON and NDJSON emitted `outcome=bounded_stop`, `stop_reason=max_turns_exceeded`, `safety_bound={bound:max_turns,source:invocation}`, and input/output usage 5/2. NDJSON also exposed real `https/sse` connection phases.
+13. Cleanup verified the localhost server was stopped and zero exact-branch `jcode` processes remained.
 
 Broader suite diagnosis:
 
 - The full `jcode` library suite ran 236 tests: 228 passed and 8 failed in existing upstream-base areas unrelated to this branch. Failures covered auth lifecycle sandbox state, debug-control-dependent restart snapshots, provider catalog/choice drift, a hosted-provider display-name expectation, and an existing auto-poke wording assertion.
 - The existing auto-poke wording test also fails in isolation at unchanged `commands_tests.rs:333`; this branch does not modify that helper or assertion. All changed-path and one-shot integration filters pass.
 
-No live provider call, upstream push, issue creation, pull request, or GitHub comment was performed.
+No cloud provider, upstream push, issue creation, pull request, or GitHub comment was performed. The direct public acceptance used a deterministic localhost HTTP/SSE endpoint; production-model validation remains optional and externally unavailable because OpenAI credits are exhausted and paid fallback is not approved.
 
 ## Proposed acceptance criteria
 
-- [ ] `jcode run --max-turns N` accepts positive whole numbers and rejects invalid values before provider initialization.
-- [ ] The run performs no more than `N` successfully completed top-level turns.
-- [ ] Plain output reports `maximum turns exceeded (max_turns_exceeded)` when bounded.
-- [ ] JSON and NDJSON terminal output include the stable bounded-stop fields when bounded.
-- [ ] Unset behavior and output remain backward compatible.
-- [ ] Existing auto-poke-specific limits remain unchanged.
-- [ ] Focused tests, formatting, and a built `jcode` binary pass on the upstream base.
+- [x] `jcode run --max-turns N` accepts positive whole numbers and rejects invalid values before provider initialization.
+- [x] The run performs no more than `N` successfully completed top-level turns.
+- [x] Plain output reports `maximum turns exceeded (max_turns_exceeded)` when bounded.
+- [x] JSON and NDJSON terminal output include the stable bounded-stop fields when bounded.
+- [x] Unset behavior and output remain backward compatible.
+- [x] Existing auto-poke-specific limits remain unchanged.
+- [x] Focused tests, formatting, a built `jcode` binary, and public plain/JSON/NDJSON HTTP/SSE acceptance pass on the upstream base.
