@@ -581,6 +581,14 @@ impl crate::tui::TuiState for App {
         self.display_messages_version
     }
 
+    fn inline_file_preview(&self, message_hash: u64) -> Option<&crate::tui::InlineFilePreview> {
+        self.inline_file_previews.get(&message_hash)
+    }
+
+    fn inline_file_previews_version(&self) -> u64 {
+        self.inline_file_previews_version
+    }
+
     fn streaming_text(&self) -> &str {
         &self.streaming.streaming_text
     }

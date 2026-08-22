@@ -16,6 +16,18 @@ fn markdown_link_regex() -> Option<&'static Regex> {
         .as_ref()
 }
 
+fn file_path_regex() -> Option<&'static Regex> {
+    static FILE_PATH_REGEX: OnceLock<Option<Regex>> = OnceLock::new();
+    FILE_PATH_REGEX
+        .get_or_init(|| {
+            Regex::new(
+                r#"(?:^|[\s'\"`(])((?:(?:\.{0,2}/|~/|/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9_-]+)?)|(?:[A-Za-z][A-Za-z0-9_.@+-]*\.[A-Za-z][A-Za-z0-9_-]*))(?:$|[\s'\"`),:;])"#,
+            )
+            .ok()
+        })
+        .as_ref()
+}
+
 pub(crate) fn trim_url_candidate(candidate: &str) -> &str {
     let mut trimmed = candidate;
     loop {
@@ -36,6 +48,20 @@ pub(crate) fn trim_url_candidate(candidate: &str) -> &str {
             return trimmed;
         }
         trimmed = next;
+    }
+}
+
+fn trim_file_mention_candidate(candidate: &str) -> &str {
+    let mut trimmed = candidate;
+    loop {
+        let before = trimmed.len();
+        trimmed = trim_url_candidate(trimmed);
+        if trimmed.ends_with(['\'', '"', '`']) {
+            trimmed = &trimmed[..trimmed.len() - 1];
+        }
+        if trimmed.len() == before {
+            return trimmed;
+        }
     }
 }
 
@@ -67,12 +93,53 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
         }
     }
 
+    for (mention_start, _) in raw_text.match_indices('@') {
+        let starts_token = mention_start == 0
+            || raw_text[..mention_start]
+                .chars()
+                .next_back()
+                .is_some_and(|character| {
+                    character.is_whitespace()
+                        || matches!(character, '\'' | '"' | '`' | '(' | '[' | '{')
+                });
+        if !starts_token {
+            continue;
+        }
+
+        let mention_end = raw_text[mention_start..]
+            .find(char::is_whitespace)
+            .map_or(raw_text.len(), |offset| mention_start + offset);
+        let trimmed = trim_file_mention_candidate(&raw_text[mention_start..mention_end]);
+        if trimmed.len() <= 1 {
+            continue;
+        }
+        let start_col = raw_text[..mention_start].width();
+        let end_col = start_col + trimmed.width();
+        if column >= start_col && column < end_col {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    if let Some(regex) = file_path_regex() {
+        for captures in regex.captures_iter(raw_text) {
+            let Some(path) = captures.get(1) else {
+                continue;
+            };
+            let start_col = raw_text[..path.start()].width();
+            let end_col = start_col + path.as_str().width();
+            if column >= start_col && column < end_col {
+                return Some(path.as_str().to_string());
+            }
+        }
+    }
+
     None
 }
 
 #[cfg(test)]
 mod tests {
     use super::{link_target_for_display_column, trim_url_candidate, url_regex};
+    use unicode_width::UnicodeWidthStr;
 
     #[test]
     fn url_regex_matches_supported_link_schemes() {
@@ -164,5 +231,78 @@ mod tests {
             Some("docs/guide.md#setup".to_string())
         );
         assert_eq!(link_target_for_display_column(text, 8), None);
+    }
+
+    #[test]
+    fn link_target_for_display_column_resolves_plain_relative_file_path() {
+        let text = "- ' docs/grok-4.6-vs-deepseek-v4-pro-deepswe-cost.md'";
+
+        assert_eq!(
+            link_target_for_display_column(text, 12),
+            Some("docs/grok-4.6-vs-deepseek-v4-pro-deepswe-cost.md".to_string())
+        );
+        assert_eq!(link_target_for_display_column(text, 1), None);
+
+        let bare = "See README.md for details";
+        assert_eq!(
+            link_target_for_display_column(bare, 6),
+            Some("README.md".to_string())
+        );
+    }
+
+    #[test]
+    fn link_target_for_display_column_resolves_file_mentions() {
+        let text = "Open @docs/guide.md, then @README";
+
+        assert_eq!(
+            link_target_for_display_column(text, "Open ".width()),
+            Some("@docs/guide.md".to_string())
+        );
+        assert_eq!(
+            link_target_for_display_column(text, "Open @docs/gui".width()),
+            Some("@docs/guide.md".to_string())
+        );
+        assert_eq!(
+            link_target_for_display_column(text, "Open @docs/guide.md".width()),
+            None,
+            "trailing punctuation is outside the mention hit target"
+        );
+        assert_eq!(
+            link_target_for_display_column(text, "Open @docs/guide.md, then ".width()),
+            Some("@README".to_string())
+        );
+    }
+
+    #[test]
+    fn file_mention_hit_testing_uses_display_width_without_reclassifying_emails() {
+        let text = "🙂 @../src/main.rs user@example.com";
+
+        assert_eq!(
+            link_target_for_display_column(text, 3),
+            Some("@../src/main.rs".to_string())
+        );
+        assert_eq!(
+            link_target_for_display_column(text, "🙂 @../src/main.rs us".width()),
+            Some("user@example.com".to_string()),
+            "existing plain-path classification remains unchanged"
+        );
+    }
+
+    #[test]
+    fn file_mentions_follow_inline_opening_delimiters() {
+        for text in [
+            "`@src/main.rs`",
+            "(@src/main.rs)",
+            "[@src/main.rs]",
+            "{@src/main.rs}",
+            "\"@src/main.rs\"",
+            "'@src/main.rs'",
+        ] {
+            assert_eq!(
+                link_target_for_display_column(text, 1),
+                Some("@src/main.rs".to_string()),
+                "mention should be clickable in {text:?}"
+            );
+        }
     }
 }

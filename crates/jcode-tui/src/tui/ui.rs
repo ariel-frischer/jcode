@@ -55,6 +55,8 @@ mod file_diff_ui;
 mod frame_metrics;
 #[path = "ui_header.rs"]
 pub(crate) mod header;
+#[path = "ui_inline_file_preview.rs"]
+mod inline_file_preview_ui;
 #[path = "ui_inline_image.rs"]
 pub(crate) mod inline_image_ui;
 #[path = "ui_inline_interactive.rs"]
@@ -968,6 +970,7 @@ struct BodyCacheKey {
     width: u16,
     diff_mode: crate::config::DiffDisplayMode,
     messages_version: u64,
+    inline_file_previews_version: u64,
     diagram_mode: crate::config::DiagramDisplayMode,
     centered: bool,
     /// Mermaid render geometry depends on the scoped transcript/pane aspect
@@ -1071,6 +1074,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|entry| entry.msg_count)
             .map(|entry| (entry.prepared.clone(), entry.msg_count));
@@ -1092,6 +1097,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|entry| entry.msg_count)
             .map(|entry| (entry.prepared.clone(), entry.msg_count));
@@ -1132,6 +1139,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|(_, entry)| entry.msg_count)
             .map(|(idx, entry)| (false, idx, entry.msg_count));
@@ -1154,6 +1163,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|(_, entry)| entry.msg_count)
             .map(|(idx, entry)| (true, idx, entry.msg_count));
@@ -1244,6 +1255,7 @@ struct FullPrepCacheKey {
     height: u16,
     diff_mode: crate::config::DiffDisplayMode,
     messages_version: u64,
+    inline_file_previews_version: u64,
     diagram_mode: crate::config::DiagramDisplayMode,
     centered: bool,
     /// The scoped Mermaid profile can also change when pane geometry changes
@@ -1731,6 +1743,7 @@ mod profile;
 pub(crate) mod selection_highlight;
 #[path = "ui/url.rs"]
 mod url_regex_support;
+pub(crate) use self::copy_selection::chat_inline_file_preview_message_from_screen;
 use self::copy_selection::{
     copy_point_from_snapshot, copy_selection_text_from_raw_lines, link_target_from_snapshot,
 };
@@ -2504,6 +2517,20 @@ pub(crate) fn link_target_from_screen(column: u16, row: u16) -> Option<String> {
     }
     let snapshot = copy_snapshot_for_pane(point.pane)?;
     link_target_from_snapshot(&snapshot, point)
+}
+
+pub(crate) fn chat_link_target_from_screen(column: u16, row: u16) -> Option<(String, usize)> {
+    let point = copy_point_from_screen(column, row)?;
+    if point.pane != crate::tui::CopySelectionPane::Chat {
+        return None;
+    }
+    let snapshot = copy_snapshot_for_pane(point.pane)?;
+    let target = link_target_from_snapshot(&snapshot, point)?;
+    let prepared = match &snapshot.data {
+        CopyViewportData::ChatFrame { prepared } => prepared,
+        CopyViewportData::Dense { .. } => return None,
+    };
+    Some((target, prepared.message_index_at_line(point.abs_line)?))
 }
 
 /// If a screen click landed on an inline-image label line, return the image

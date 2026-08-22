@@ -30,7 +30,7 @@ use helpers::*;
 use jcode_tui_messages::DisplayMessage;
 use ratatui::DefaultTerminal;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -70,6 +70,7 @@ pub(crate) mod helpers;
 mod hotkey_feedback;
 pub(crate) mod idle_animation_repaint;
 mod idle_heap_release;
+mod inline_file_preview;
 mod inline_interactive;
 mod input;
 mod input_help;
@@ -836,6 +837,8 @@ pub struct App {
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,
+    inline_file_previews: HashMap<u64, crate::tui::InlineFilePreview>,
+    inline_file_previews_version: u64,
     display_user_message_count: usize,
     display_edit_tool_message_count: usize,
     compacted_history_lazy: CompactedHistoryLazyState,
