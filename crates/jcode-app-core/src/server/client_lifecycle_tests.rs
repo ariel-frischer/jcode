@@ -165,6 +165,73 @@ async fn lifecycle_query_flushes_recorder_before_reading_typed_stream() {
 }
 
 #[tokio::test]
+async fn lifecycle_query_sanitizes_sidecar_events_and_keeps_warnings_bounded() {
+    use crate::session::lifecycle_types::{
+        HandoffLifecyclePayload, HandoffStartupOutcome, LIFECYCLE_SCHEMA_VERSION, LifecycleEvent,
+        LifecycleEventEnvelope,
+    };
+
+    let root = tempfile::tempdir().expect("create lifecycle query root");
+    let recorder = crate::lifecycle_observability::LifecycleRecorder::new_with_clock(
+        crate::config::LifecycleObservabilityConfig::default(),
+        root.path().to_path_buf(),
+        8,
+        std::sync::Arc::new(chrono::Utc::now),
+    );
+    let session_id = "query-session-sanitized";
+    let sensitive = "secret prompt command output environment todo";
+    let envelope = LifecycleEventEnvelope {
+        schema_version: LIFECYCLE_SCHEMA_VERSION,
+        session_id: session_id.to_string(),
+        sequence: 1,
+        recorded_at: chrono::Utc::now(),
+        event: LifecycleEvent::Handoff {
+            decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+            semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+            suppression_reason: None,
+            payload: HandoffLifecyclePayload {
+                chain_depth: 1,
+                generated_prompt_bytes: sensitive.len(),
+                todo_carryover_count: 2,
+                parent_session_id: sensitive.to_string(),
+                child_session_id: Some(sensitive.to_string()),
+                startup_acknowledged: Some(true),
+                startup_outcome: HandoffStartupOutcome::Completed,
+            },
+            process_manifest_id: Some(sensitive.to_string()),
+        },
+    };
+    let path = crate::session::lifecycle_path_in_dir(root.path(), session_id)
+        .expect("valid lifecycle path");
+    std::fs::create_dir_all(path.parent().expect("lifecycle parent"))
+        .expect("create lifecycle parent");
+    std::fs::write(
+        &path,
+        format!(
+            "{}\n{{\"schema_version\":1,\"secret\":\"{sensitive}\"}}\n",
+            serde_json::to_string(&envelope).expect("serialize legacy event")
+        ),
+    )
+    .expect("write legacy lifecycle sidecar");
+
+    let stream = super::read_lifecycle_query_stream(&recorder, session_id, root.path())
+        .await
+        .expect("read sanitized lifecycle stream");
+    let serialized = serde_json::to_string(&stream).expect("serialize sanitized query");
+    assert!(!serialized.contains(sensitive));
+    assert!(stream.events.iter().all(|event| {
+        let serialized = serde_json::to_string(event).expect("serialize event");
+        !serialized.contains(sensitive)
+    }));
+    assert!(stream.warnings.len() <= 32);
+    assert_eq!(stream.events[0].sequence, 1);
+    assert!(matches!(
+        stream.events[0].event,
+        LifecycleEvent::Handoff { .. }
+    ));
+}
+
+#[tokio::test]
 async fn session_control_handle_does_not_wait_for_busy_agent_lock() {
     let provider: Arc<dyn Provider> = Arc::new(PanicOnForkProvider {
         forked: Arc::new(AtomicBool::new(false)),

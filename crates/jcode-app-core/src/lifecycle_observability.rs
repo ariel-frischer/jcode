@@ -18,11 +18,13 @@ pub enum LifecycleSubmitOutcome {
     Accepted,
     Disabled,
     DuplicatePolicy,
+    Rejected,
     QueueFull,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleRecorderDiagnostic {
+    InvalidPayload,
     QueueFull,
     PersistenceFailure,
     LoggingFailure,
@@ -99,6 +101,13 @@ impl LifecycleRecorder {
             return LifecycleSubmitOutcome::Disabled;
         }
 
+        let Some(session_id) = sanitize_identifier(session_id) else {
+            record_diagnostic(
+                &self.diagnostics,
+                LifecycleRecorderDiagnostic::InvalidPayload,
+            );
+            return LifecycleSubmitOutcome::Rejected;
+        };
         let event = sanitize_event(event);
         let policy_fingerprint = match &event {
             LifecycleEvent::PolicySnapshot { snapshot } => Some(snapshot.fingerprint.clone()),
@@ -108,7 +117,7 @@ impl LifecycleRecorder {
             .sessions
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let state = sessions.entry(session_id.to_string()).or_default();
+        let state = sessions.entry(session_id.clone()).or_default();
         if policy_fingerprint
             .as_ref()
             .is_some_and(|fingerprint| state.policy_fingerprint.as_ref() == Some(fingerprint))
@@ -119,7 +128,7 @@ impl LifecycleRecorder {
         let sequence = state.next_sequence.saturating_add(1);
         let envelope = LifecycleEventEnvelope {
             schema_version: LIFECYCLE_SCHEMA_VERSION,
-            session_id: session_id.to_string(),
+            session_id,
             sequence,
             recorded_at: (self.clock)(),
             event,
@@ -230,7 +239,7 @@ fn sanitize_identifier(value: &str) -> Option<String> {
     .then(|| value.to_string())
 }
 
-fn sanitize_event(mut event: LifecycleEvent) -> LifecycleEvent {
+pub(crate) fn sanitize_event(mut event: LifecycleEvent) -> LifecycleEvent {
     match &mut event {
         LifecycleEvent::PolicySnapshot { snapshot } => {
             snapshot.fingerprint = sanitize_identifier(&snapshot.fingerprint)
@@ -266,4 +275,17 @@ fn sanitize_event(mut event: LifecycleEvent) -> LifecycleEvent {
         LifecycleEvent::StrategySwitch { .. } => {}
     }
     event
+}
+
+/// Return only the durable task identifier for lifecycle correlation.
+///
+/// The status file is the trust boundary. Its process identity, command,
+/// output, environment, and error fields are intentionally not projected.
+pub(crate) fn opaque_process_manifest_id(
+    status: &crate::background::TaskStatusFile,
+    session_id: &str,
+) -> Option<String> {
+    (status.session_id == session_id)
+        .then(|| sanitize_identifier(&status.task_id))
+        .flatten()
 }

@@ -203,6 +203,58 @@ fn lifecycle_read_skips_malformed_middle_records_and_newer_versions() -> Result<
 }
 
 #[test]
+fn lifecycle_compatibility_warnings_are_bounded_and_never_include_raw_content() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-warning-privacy";
+    let sensitive = "secret-command-output-and-path";
+    let first = lifecycle_test_event(session_id, 1);
+    let mut newer = serde_json::to_value(lifecycle_test_event(session_id, 2))?;
+    newer["schema_version"] =
+        serde_json::json!(jcode_session_types::lifecycle::LIFECYCLE_SCHEMA_VERSION + 1);
+    let active = crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?;
+    std::fs::create_dir_all(active.parent().unwrap())?;
+
+    let mut contents = format!("{}\n", serde_json::to_string(&first)?);
+    contents.push_str(&format!("{{\"secret\":\"{sensitive}\"}}\n"));
+    contents.push_str(&format!("{}\n", serde_json::to_string(&newer)?));
+    for _ in 0..28 {
+        contents.push_str(&format!("not-json-{sensitive}\n"));
+    }
+    contents.push_str(&format!("{{\"schema_version\":1,"));
+    std::fs::write(active, contents)?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(stream.events.len(), 1);
+    assert!(stream.warnings.len() <= 32);
+    let warnings = serde_json::to_string(&stream.warnings)?;
+    let messages = stream
+        .warnings
+        .iter()
+        .map(|warning| warning.message())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(!warnings.contains(sensitive));
+    assert!(!messages.contains(sensitive));
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::TornTail { .. }
+    )));
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::UnsupportedSchemaVersion { .. }
+    )));
+    Ok(())
+}
+
+#[test]
 fn lifecycle_rejects_oversized_records_and_prunes_expired_artifacts() -> Result<()> {
     let temp_root = tempfile::tempdir()?;
     let session_id = "session-retention";

@@ -253,7 +253,16 @@ async fn lifecycle_recorder_isolates_sink_and_queue_failures_and_filters_opaque_
         log_only.submit(TEST_SESSION_ID, unsafe_event),
         LifecycleSubmitOutcome::Accepted
     );
-    assert!(log_only.flush().await.is_empty());
+    assert_eq!(
+        log_only.submit("session id with spaces", compaction_event()),
+        LifecycleSubmitOutcome::Rejected
+    );
+    assert!(
+        log_only
+            .flush()
+            .await
+            .contains(&LifecycleRecorderDiagnostic::InvalidPayload)
+    );
     assert!(
         !crate::session::lifecycle_path_in_dir(harness.temp_root.path(), TEST_SESSION_ID)
             .expect("valid lifecycle path")
@@ -426,4 +435,162 @@ async fn server_owns_one_shared_lifecycle_recorder() {
     let first = server.lifecycle_recorder();
     let second = server.lifecycle_recorder();
     assert!(Arc::ptr_eq(&first, &second));
+}
+
+#[tokio::test]
+async fn lifecycle_recorder_redacts_sensitive_values_across_all_categories_and_sinks() {
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::lifecycle_observability::{LifecycleRecorder, LifecycleSubmitOutcome};
+    use crate::session::lifecycle_types::{
+        ContextUsage, HandoffLifecyclePayload, HandoffStartupOutcome, LifecycleDecisionType,
+        LifecycleEventEnvelope, LifecycleSemanticReason, LifecycleSuppressionReason,
+    };
+
+    let harness = LifecycleTestHarness::new();
+    let recorder = LifecycleRecorder::new_with_clock(
+        LifecycleObservabilityConfig {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: true,
+        },
+        harness.temp_root.path().to_path_buf(),
+        32,
+        Arc::new({
+            let timestamp = harness.timestamp(2);
+            move || timestamp
+        }),
+    );
+
+    let sensitive_values = [
+        "synthetic prompt value",
+        "synthetic secret value",
+        "synthetic command text",
+        "synthetic command output",
+        "synthetic environment value",
+        "synthetic raw error",
+        "synthetic todo text",
+    ];
+    let sensitive_id = sensitive_values.join(" ");
+    let events = vec![
+        LifecycleEvent::PolicySnapshot {
+            snapshot: EffectivePolicySnapshot {
+                policy_version: LIFECYCLE_POLICY_VERSION,
+                fingerprint: sensitive_id.clone(),
+                compaction: CompactionPolicySnapshot {
+                    mode: CompactionPolicyMode::Semantic,
+                    context_window_tokens: 128_000,
+                    threshold_ratio: 0.8,
+                    native_compaction: false,
+                },
+                handoff: HandoffPolicySnapshot {
+                    enabled: true,
+                    agent_enabled: true,
+                    confirmation_required: false,
+                    auto_start: true,
+                    max_chain_transitions: 4,
+                    copy_todos: true,
+                },
+            },
+        },
+        LifecycleEvent::Compaction {
+            decision_type: LifecycleDecisionType::Accepted,
+            semantic_reason: LifecycleSemanticReason::Automatic,
+            suppression_reason: None,
+            context_usage: Some(ContextUsage {
+                used_tokens: 10_000,
+                context_window_tokens: 12_000,
+                ratio: 0.833,
+            }),
+            process_manifest_id: Some(sensitive_id.clone()),
+        },
+        LifecycleEvent::Handoff {
+            decision_type: LifecycleDecisionType::Completed,
+            semantic_reason: LifecycleSemanticReason::ChildStartup,
+            suppression_reason: None,
+            payload: HandoffLifecyclePayload {
+                chain_depth: 2,
+                generated_prompt_bytes: sensitive_values[0].len(),
+                todo_carryover_count: 3,
+                parent_session_id: sensitive_id.clone(),
+                child_session_id: Some(sensitive_id.clone()),
+                startup_acknowledged: Some(true),
+                startup_outcome: HandoffStartupOutcome::Completed,
+            },
+            process_manifest_id: Some(sensitive_id.clone()),
+        },
+        LifecycleEvent::Retry {
+            decision_type: LifecycleDecisionType::Exhausted,
+            semantic_reason: LifecycleSemanticReason::RetryableFailure,
+            suppression_reason: Some(LifecycleSuppressionReason::QueueFull),
+            attempt: 3,
+            max_attempts: 3,
+            process_manifest_id: Some(sensitive_id.clone()),
+        },
+        LifecycleEvent::StrategySwitch {
+            decision_type: LifecycleDecisionType::Completed,
+            semantic_reason: LifecycleSemanticReason::ProviderFallback,
+            suppression_reason: None,
+        },
+        LifecycleEvent::Block {
+            decision_type: LifecycleDecisionType::Suppressed,
+            semantic_reason: LifecycleSemanticReason::Policy,
+            suppression_reason: Some(LifecycleSuppressionReason::PolicyDenied),
+            process_manifest_id: Some(sensitive_id.clone()),
+        },
+    ];
+
+    for event in &events {
+        assert_eq!(
+            recorder.submit(TEST_SESSION_ID, event.clone()),
+            LifecycleSubmitOutcome::Accepted
+        );
+    }
+    assert!(recorder.flush().await.is_empty());
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        harness.temp_root.path(),
+        TEST_SESSION_ID,
+        recorder.status(),
+    )
+    .expect("read sanitized lifecycle stream");
+    let sidecar = std::fs::read_to_string(
+        crate::session::lifecycle_path_in_dir(harness.temp_root.path(), TEST_SESSION_ID)
+            .expect("valid lifecycle path"),
+    )
+    .expect("read persisted lifecycle sidecar");
+    let query_projection = serde_json::to_string(&stream).expect("serialize query projection");
+    let log_projection = stream
+        .events
+        .iter()
+        .map(|event| {
+            serde_json::to_string(&LifecycleEventEnvelope {
+                schema_version: event.schema_version,
+                session_id: event.session_id.clone(),
+                sequence: event.sequence,
+                recorded_at: event.recorded_at,
+                event: crate::lifecycle_observability::sanitize_event(event.event.clone()),
+            })
+            .expect("serialize structured log projection")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for sensitive in sensitive_values {
+        assert!(
+            !sidecar.contains(sensitive),
+            "persisted value leaked: {sensitive}"
+        );
+        assert!(
+            !query_projection.contains(sensitive),
+            "query value leaked: {sensitive}"
+        );
+        assert!(
+            !log_projection.contains(sensitive),
+            "log value leaked: {sensitive}"
+        );
+    }
+    assert!(stream.events.iter().all(|event| {
+        let json = serde_json::to_string(event).expect("serialize event");
+        !json.contains("pid") && !json.contains("command") && !json.contains("output")
+    }));
 }

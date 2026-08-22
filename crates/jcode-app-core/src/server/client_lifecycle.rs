@@ -76,6 +76,7 @@ type SessionAgents = Arc<RwLock<HashMap<String, Arc<Mutex<Agent>>>>>;
 type ChannelSubscriptions = Arc<RwLock<HashMap<String, HashMap<String, HashSet<String>>>>>;
 const RELOAD_STARTING_GUARD_MAX_AGE: Duration = Duration::from_secs(30);
 const REQUEST_HANDLER_STALL_THRESHOLDS_MS: [u64; 3] = [2_000, 10_000, 60_000];
+const MAX_LIFECYCLE_QUERY_WARNINGS: usize = 32;
 
 async fn read_lifecycle_query_stream(
     lifecycle_recorder: &crate::lifecycle_observability::LifecycleRecorder,
@@ -88,6 +89,9 @@ async fn read_lifecycle_query_stream(
         resolved_session_id,
         lifecycle_recorder.status(),
     )?;
+    for event in &mut stream.events {
+        event.event = crate::lifecycle_observability::sanitize_event(event.event.clone());
+    }
     if diagnostics.iter().any(|diagnostic| {
         matches!(
             diagnostic,
@@ -95,9 +99,11 @@ async fn read_lifecycle_query_stream(
                 | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
         )
     }) {
-        stream
-            .warnings
-            .push(crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent);
+        if stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS {
+            stream
+                .warnings
+                .push(crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent);
+        }
     }
     if diagnostics.iter().any(|diagnostic| {
         matches!(
@@ -105,9 +111,11 @@ async fn read_lifecycle_query_stream(
             crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
         )
     }) {
-        stream.warnings.push(
-            crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
-        );
+        if stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS {
+            stream.warnings.push(
+                crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
+            );
+        }
     }
     Ok(stream)
 }

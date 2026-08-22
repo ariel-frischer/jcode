@@ -461,7 +461,7 @@ phases:
       tasks:
         - id: "T038"
           title: "Add seeded sensitive-content privacy fixtures"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -473,7 +473,7 @@ phases:
             - "Require process references to contain only opaque durable manifest IDs."
         - id: "T039"
           title: "Add process-manifest privacy and handoff-content tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -484,7 +484,7 @@ phases:
             - "Assert PID, command, output path, output content, environment values, secrets, prompt text, and todo text are absent."
         - id: "T040"
           title: "Add bounded compatibility-warning privacy tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -495,7 +495,7 @@ phases:
             - "Bound warning count and warning text size while preserving valid events."
         - id: "T041"
           title: "Enforce recorder-owned privacy validation and normalization"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"
@@ -507,7 +507,7 @@ phases:
             - "Keep decision callers unable to write persistence records or raw diagnostic strings directly."
         - id: "T042"
           title: "Apply sanitized projections consistently to logs and queries"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"
@@ -519,7 +519,7 @@ phases:
             - "Pass privacy fixtures without altering event ordering or query semantics."
         - id: "T043"
           title: "Use opaque process manifest identifiers at lifecycle call sites"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"

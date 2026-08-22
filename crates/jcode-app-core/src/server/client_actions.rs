@@ -834,6 +834,13 @@ pub(super) fn handoff_payload(
     }
 }
 
+pub(super) fn process_manifest_id_for_lifecycle(
+    status: &crate::background::TaskStatusFile,
+    session_id: &str,
+) -> Option<String> {
+    crate::lifecycle_observability::opaque_process_manifest_id(status, session_id)
+}
+
 async fn record_handoff_event(
     agent: &Arc<Mutex<Agent>>,
     decision_type: crate::session::lifecycle_types::LifecycleDecisionType,

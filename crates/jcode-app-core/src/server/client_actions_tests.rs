@@ -3,7 +3,7 @@
 use super::{
     NotifySessionContext, clone_split_session, create_handoff_child_session, handle_handoff,
     handle_notify_session, handle_rename_session, handle_resume_all_sessions, handle_set_feature,
-    handoff_payload,
+    handoff_payload, process_manifest_id_for_lifecycle,
 };
 use crate::agent::Agent;
 use crate::message::{ContentBlock, Message, Role, StreamEvent, ToolDefinition};
@@ -396,6 +396,82 @@ fn handoff_lifecycle_metadata_records_shape_without_prompt_or_todo_content() {
     );
     assert!(!json.contains("super-secret handoff prompt"));
     assert!(!json.contains("sensitive-todo-text"));
+}
+
+#[test]
+fn process_manifest_lifecycle_reference_is_opaque_and_session_bound() {
+    let status = crate::background::TaskStatusFile {
+        task_id: "task-manifest-opaque".to_string(),
+        tool_name: "bash".to_string(),
+        display_name: Some("secret command label".to_string()),
+        session_id: "session-parent-safe".to_string(),
+        status: crate::bus::BackgroundTaskStatus::Running,
+        exit_code: None,
+        error: Some("secret raw error".to_string()),
+        started_at: "2026-08-22T00:00:00Z".to_string(),
+        completed_at: None,
+        duration_secs: None,
+        pid: Some(12345),
+        owner_pid: Some(12345),
+        owner_instance: Some("secret owner instance".to_string()),
+        detached: true,
+        notify: true,
+        wake: false,
+        progress: Some(crate::bus::BackgroundTaskProgress {
+            kind: crate::bus::BackgroundTaskProgressKind::Determinate,
+            percent: Some(50.0),
+            message: Some("secret command output".to_string()),
+            current: None,
+            total: None,
+            unit: None,
+            updated_at: "2026-08-22T00:00:00Z".to_string(),
+            eta_seconds: None,
+            source: crate::bus::BackgroundTaskProgressSource::Reported,
+        }),
+        event_history: Vec::new(),
+        stall_wake_seconds: None,
+        managed_process: None,
+    };
+
+    let process_manifest_id = process_manifest_id_for_lifecycle(&status, "session-parent-safe");
+    assert_eq!(process_manifest_id.as_deref(), Some("task-manifest-opaque"));
+    assert!(process_manifest_id_for_lifecycle(&status, "other-session").is_none());
+
+    let unsafe_status = crate::background::TaskStatusFile {
+        task_id: "secret task id with spaces".to_string(),
+        ..status
+    };
+    assert!(process_manifest_id_for_lifecycle(&unsafe_status, "session-parent-safe").is_none());
+
+    let event = crate::session::lifecycle_types::LifecycleEvent::Handoff {
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Started,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+        suppression_reason: None,
+        payload: handoff_payload(
+            "session-parent-safe",
+            Some("session-child-safe".to_string()),
+            1,
+            128,
+            2,
+            Some(true),
+            crate::session::lifecycle_types::HandoffStartupOutcome::Started,
+        ),
+        process_manifest_id,
+    };
+    let json = serde_json::to_string(&event).expect("serialize process reference event");
+    assert!(json.contains("task-manifest-opaque"));
+    for sensitive in [
+        "secret command label",
+        "secret raw error",
+        "secret owner instance",
+        "secret command output",
+        "12345",
+    ] {
+        assert!(
+            !json.contains(sensitive),
+            "process detail leaked: {sensitive}"
+        );
+    }
 }
 
 #[tokio::test]
