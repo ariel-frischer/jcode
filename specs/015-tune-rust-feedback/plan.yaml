@@ -1,0 +1,403 @@
+plan:
+  branch: "agent/jcode-l89.4-feedback-tuning"
+  created: "2026-08-22"
+  spec_path: "specs/015-tune-rust-feedback/spec.yaml"
+
+summary: |
+  Extend the existing Rust development path rather than creating a second build
+  system. Add one versioned Python benchmark coordinator and matrix definition that
+  drive scripts/dev_cargo.sh and the server-owned selfdev coordinator, retain raw
+  machine-readable samples, validate environment comparability, and compute
+  deterministic nearest-rank p50/p95 reports. The benchmark lanes explicitly compare
+  the current adaptive Cargo job policy with 6 and 8 jobs and bound nextest and
+  non-incremental sccache trials. Every candidate receives an adopt-or-reject ledger
+  entry, and no default changes unless both p50 and p95 improve without reliability,
+  resource, or maintained runtime-budget regressions.
+
+  Keep scripts/dev_cargo.sh as the canonical Cargo policy and global-gate entry point.
+  Add a small deterministic scope resolver for eligible focused requests, with explicit
+  Cargo package, target, and feature arguments always taking precedence over inferred
+  values. Unknown, ambiguous, generated, build-script, cross-package, optional-feature,
+  broad, guardrail, and release-sensitive changes conservatively retain the established
+  broader command. Add a source-state-keyed test-discovery snapshot that can reject only
+  provably empty package/filter combinations before selfdev queue and Cargo-gate wait;
+  missing, stale, or ambiguous discovery preserves existing Cargo semantics. Validate
+  with focused Python, shell, and Rust tests, full-feature guardrails, coordinated
+  build/reload, maintained runtime budgets, and a newly built isolated-socket smoke.
+
+technical_context:
+  language: "Rust 2024, Python 3.11+, and Bash"
+  framework: "Tokio and Serde in jcode-app-core, Python standard library benchmark tooling, and repository-local Cargo shell policy"
+  primary_dependencies:
+    - name: "jcode-app-core selfdev coordinator"
+      version: "workspace"
+      purpose: "Canonical server-owned request queue, duplicate coalescing, source-state validation, early preflight seam, and multi-session execution ownership."
+    - name: "jcode-build-support SourceState"
+      version: "workspace"
+      purpose: "Existing redacted revision, dirty-state, repository, and worktree identity for benchmark provenance and stale-discovery rejection."
+    - name: "scripts/dev_cargo.sh"
+      version: "repository-local"
+      purpose: "Canonical feature precedence, adaptive or explicit job selection, sccache policy, global Cargo gate, and rust-actions timing receipt surface."
+    - name: "Python standard library"
+      version: ">=3.11"
+      purpose: "Provide argparse, dataclasses, JSON, subprocess control, resource sampling, hashing, percentile aggregation, fixture validation, and unittest without a new benchmark dependency."
+    - name: "Cargo metadata"
+      version: "current stable toolchain"
+      purpose: "Resolve workspace package and target ownership while preserving Cargo's authoritative manifest and feature definitions."
+  storage: "Versioned benchmark matrix and committed decision/validation evidence under specs/015-tune-rust-feedback; caller-selected JSON receipts and source-state-keyed discovery snapshots under isolated benchmark state or JCODE_HOME, with no raw source content or secrets."
+  testing:
+    framework: "Python unittest, shell contract tests, Rust test harness with Tokio tests, repository guardrails, and isolated built-binary validation"
+    approach: "TDD from deterministic fixtures: benchmark schema/percentiles first, scope and feature resolution second, zero-test preflight and selfdev queue bypass third, then bounded benchmark lanes, full-feature guardrails, runtime budgets, build/reload, and isolated-socket smoke. Serialize all Cargo-heavy checks except coordinator-owned duplicate scenarios."
+  target_platform: "Linux canonical for /proc resource sampling, RSS, swap, sockets, and controlled benchmark evidence; existing macOS and Windows Cargo behavior remains compatible and unsupported metrics are explicit."
+  project_type: "cli"
+  performance_goals: "Adopt only candidates whose representative intended scenarios improve both edit-to-feedback p50 and nearest-rank p95, with no higher failure/retry rate, no unacceptable RSS/swap/disk growth, no uncontrolled duplicate Cargo execution, and no maintained client or daemon runtime-budget regression."
+  constraints:
+    - "Keep the existing single-server, multi-client selfdev coordinator and global Cargo safety gate as the only concurrency authority."
+    - "Keep scripts/dev_cargo.sh as the canonical Cargo policy and preserve explicit JCODE_BUILD_JOBS/CARGO_BUILD_JOBS and explicit Cargo feature argument precedence."
+    - "Narrow only eligible inner-loop requests when package, target, and required optional features are demonstrably sufficient; otherwise preserve the established broad scope."
+    - "Never narrow explicit broad, all-feature, guardrail, release, generated, build-script, workspace-wide, or ambiguous requests."
+    - "Reject a zero-test request before queue/gate acquisition only from current source-state-keyed discovery evidence that proves the effective package/target/filter is empty."
+    - "Preserve exact Cargo test substring, exact-name, ignored, library, integration, and harness argument semantics whenever emptiness is not provable."
+    - "Compare adaptive jobs against explicit 6 and 8 only in equivalent isolated one-action scenarios."
+    - "Bound nextest to compatible focused-test scenarios and keep Cargo test as the fallback and default until adoption evidence passes."
+    - "Bound sccache to cold or fresh-worktree non-incremental lanes; never enable it by default for warm incremental development."
+    - "Retain every valid raw sample plus invalid/retried evidence and disclose incompatible environment conditions."
+    - "Do not change linker policy, revisit Cranelift, split crates speculatively, weaken guardrails, or change runtime budgets."
+    - "Run Cargo-heavy benchmark and validation commands serially except for explicitly coordinated duplicate-request scenarios."
+  scale_scope: "One local Jcode workspace and controlled host, six required scenario classes, three job policies, two bounded optional experiments, repeated baseline/candidate samples, and one long-lived server coordinating multiple local clients."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Changes stay within the existing selfdev request seam, dev_cargo policy, one benchmark coordinator, focused fixtures/tests, and evidence artifacts; unrelated compile/runtime optimization is excluded."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Explicit Cargo commands, broad/full-feature/release validation, arbitrary selfdev test behavior, persisted legacy requests, and fallback execution remain unchanged when inference or discovery cannot prove a safe optimization."
+    - name: "Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "Explicit per-request Cargo package, target, all-features, features, and no-default-features arguments win over inferred scope and existing profile defaults; configured and effective values are recorded."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Runtime coordination and preflight remain in jcode-app-core, source identity reuses jcode-build-support, and script-side policy remains in scripts/dev_cargo.sh without a new crate or reverse dependency."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every changed behavior maps to deterministic benchmark, scope, feature-precedence, optional-feature, zero-test, fallback, receipt, and compatibility tests before broad validation."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Invalid matrix/receipt data, incompatible comparisons, unsupported explicit feature combinations, and provably empty tests fail actionably; secrets and raw source content are excluded from receipts."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "The delivery sequence includes focused Python/shell/Rust checks, relevant builds, scripts/check_guardrails.sh with all-target/all-feature validation, and recorded pre-existing failure isolation if needed."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The plan strengthens Ariel's existing selfdev coordinator and dev_cargo path; nextest and sccache are explicitly bounded, reversible experiments rather than parallel permanent systems."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The plan carries every experiment through measured adoption or durable rejection while avoiding live, paid, destructive, or shared-daemon-disrupting validation."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Adoption requires raw p50/p95 and resource evidence, maintained runtime-budget checks, coordinated execution counts, and validation against the resolved newly built binary on an isolated socket."
+
+research_findings:
+  decisions:
+    - topic: "Benchmark ownership and artifact format"
+      decision: "Add one Python standard-library coordinator plus a versioned JSON matrix and JSON receipt/report schema; render the human review ledger from the same retained samples."
+      rationale: "Existing benchmark scripts already use repository-local Python/Bash, while JSON gives deterministic validation and reproduction without adding a Rust crate or YAML parser dependency."
+      alternatives_considered:
+        - "Extend the legacy human-only scripts/bench_selfdev_build.sh output"
+        - "Add a third-party benchmark framework or database"
+        - "Implement benchmark orchestration inside the runtime server"
+    - topic: "Measurement and comparison method"
+      decision: "Record all raw samples, classify invalid and retried samples separately, and calculate p50 plus nearest-rank p95 only over valid comparable samples."
+      rationale: "This directly implements the frozen evidence contract and prevents noisy or incomplete runs from becoming adoption evidence."
+      alternatives_considered:
+        - "Compare one-off wall-clock timings"
+        - "Use arithmetic means only"
+        - "Discard invalid samples without retaining reasons"
+    - topic: "Cargo job experiment"
+      decision: "Treat the current adaptive policy as the baseline behavior and use existing JCODE_BUILD_JOBS overrides for equivalent 6-job and 8-job candidate lanes."
+      rationale: "scripts/dev_cargo.sh already gives explicit overrides precedence and records effective job policy, so the experiment does not need a second job resolver or gate bypass."
+      alternatives_considered:
+        - "Hard-code a new default before measuring"
+        - "Run job-count candidates concurrently"
+        - "Change the global Cargo gate"
+    - topic: "Focused package and target resolution"
+      decision: "Use Cargo metadata plus a conservative repository-owned path rule table to infer only demonstrably sufficient package/target scopes; ambiguous and release-sensitive paths return the established broad command."
+      rationale: "Cargo metadata is authoritative for workspace ownership, while an explicit allowlist/fallback table is reviewable and safer than guessing from directory names."
+      alternatives_considered:
+        - "Always run the root package"
+        - "Infer solely from path prefixes"
+        - "Narrow every dirty worktree automatically"
+    - topic: "Feature precedence and optional-feature safety"
+      decision: "Centralize effective feature resolution in the dev_cargo path: explicit Cargo arguments first, then proven path-required features, then existing JCODE_DEV_FEATURE_PROFILE/defaults; reject conflicts that cannot compile affected code and otherwise broaden."
+      rationale: "dev_cargo already owns explicit feature detection and profile expansion, so extending that canonical resolver preserves PRIN-003 and avoids split behavior between direct Cargo and selfdev requests."
+      alternatives_considered:
+        - "Let inferred features overwrite explicit arguments"
+        - "Use minimal features for every focused command"
+        - "Maintain separate selfdev and shell feature resolvers"
+    - topic: "Zero-test preflight"
+      decision: "Persist bounded discovery snapshots keyed by source state and effective package/target/features, and reject only when a current snapshot proves the Cargo-compatible filter selects zero tests."
+      rationale: "A pre-Cargo cache can avoid queue and gate waiting, while strict source/scope keys and conservative fallback prevent stale or incomplete discovery from rejecting valid tests."
+      alternatives_considered:
+        - "Run cargo test --list before every request"
+        - "Parse Rust source and assume macros generate no tests"
+        - "Reject every prior zero-test exit heuristically"
+    - topic: "nextest experiment"
+      decision: "Evaluate nextest only through the benchmark coordinator in a predefined focused-test lane with availability, discovery, reporting, filter, resource, disk, and fallback checks."
+      rationale: "nextest may improve execution but has compatibility and operational differences; keeping it opt-in until the complete adoption gate passes preserves established Cargo behavior."
+      alternatives_considered:
+        - "Replace cargo test globally"
+        - "Add nextest as a required dependency immediately"
+        - "Benchmark broad stateful tests first"
+    - topic: "sccache experiment"
+      decision: "Use existing JCODE_SCCACHE and CARGO_INCREMENTAL controls only in isolated cold/fresh-worktree, non-incremental miss/hit lanes and record cache/disk/failure evidence."
+      rationale: "dev_cargo already intentionally skips sccache for incremental profiles; this tests the only lane where reusable hits are plausible without slowing the warm inner loop."
+      alternatives_considered:
+        - "Enable sccache for warm incremental selfdev builds"
+        - "Change release/profile defaults before evidence"
+        - "Ignore disk growth and cache failure fallback"
+    - topic: "Runtime and release validation"
+      decision: "Keep scripts/check_guardrails.sh and the maintained runtime-performance benchmark as independent gates, then test the resolved target/selfdev binary through a unique socket before coordinated build/reload evidence."
+      rationale: "Focused development speed cannot replace all-feature release correctness or prove behavior of the actual daemon binary."
+      alternatives_considered:
+        - "Treat cargo build as runtime evidence"
+        - "Test through the existing shared daemon"
+        - "Lower runtime budgets to accommodate a tuning regression"
+
+data_model:
+  entities:
+    - name: "BenchmarkMatrix"
+      description: "Versioned definition of required Rust development scenarios and controlled experiment variants."
+      fields:
+        - name: "schema_version"
+          type: "string"
+          description: "Matrix contract version used to validate and compare receipts."
+          constraints: "Required, non-empty, and identical for direct comparisons unless incompatibility is explicitly disclosed."
+        - name: "scenarios"
+          type: "list of BenchmarkScenario"
+          description: "Warm, cold, focused, invalid, broad, and coordinated-duplicate cases."
+          constraints: "Every required scenario class appears with preparation, command intent, sample policy, validity rules, and evidence requirements."
+        - name: "experiment_variants"
+          type: "list"
+          description: "Adaptive, 6-job, 8-job, nextest, sccache miss, and sccache hit configurations."
+          constraints: "Each variant declares eligibility, boundary, fallback, and resource metrics."
+      relationships:
+        - target: "BenchmarkReceipt"
+          type: "one-to-many"
+          description: "Each matrix execution produces receipts tied to this exact version."
+    - name: "BenchmarkReceipt"
+      description: "Machine-readable provenance, raw measurements, outcomes, and aggregates for one run."
+      fields:
+        - name: "run_identity"
+          type: "object"
+          description: "Baseline/candidate label, source revision, dirty fingerprint, lockfile, toolchain, host conditions, configuration, timestamp, and matrix version."
+          constraints: "Required, redacted, and comparison-compatible or explicitly marked incompatible."
+        - name: "samples"
+          type: "list of ScenarioSample"
+          description: "Raw valid, invalid, and retried observations."
+          constraints: "Retained without silent deletion and includes validity/retry reason."
+        - name: "aggregates"
+          type: "object"
+          description: "p50 and nearest-rank p95 timing/resource values derived from valid samples."
+          constraints: "Reproducible from retained samples and omitted when sample validity is insufficient."
+        - name: "action_counts"
+          type: "object"
+          description: "Requested, executed, follower, coalesced, reused, and cancelled counts."
+          constraints: "Internally consistent and tied to coordinator/gate evidence."
+      relationships:
+        - target: "ExperimentDecision"
+          type: "many-to-many"
+          description: "One decision may cite multiple baseline and candidate receipts."
+    - name: "ValidationScope"
+      description: "Configured, inferred, and effective Cargo package, target, and feature selection for one eligible request."
+      fields:
+        - name: "explicit_inputs"
+          type: "object"
+          description: "User-provided package, target, feature, no-default-feature, and all-feature arguments."
+          constraints: "Preserved exactly and receives highest precedence."
+        - name: "affected_paths"
+          type: "list of redacted repository-relative paths"
+          description: "Paths considered for safe scope inference."
+          constraints: "No file contents; ambiguous or release-sensitive paths force fallback."
+        - name: "effective_scope"
+          type: "object"
+          description: "Resolved package, target, features, and broad/focused mode."
+          constraints: "Must compile every affected optional-feature path or fail/broaden actionably."
+        - name: "resolution_source"
+          type: "explicit | inferred | default | conservative_fallback"
+          description: "Provenance shown in receipts."
+          constraints: "Always present for eligible resolution."
+      relationships:
+        - target: "TestDiscoverySnapshot"
+          type: "many-to-one"
+          description: "A test request may consult a snapshot with exactly matching source and effective scope."
+    - name: "TestDiscoverySnapshot"
+      description: "Bounded list of discovered Cargo-compatible test names for one current source and effective scope."
+      fields:
+        - name: "source_fingerprint"
+          type: "string"
+          description: "Existing redacted SourceState identity."
+          constraints: "Must exactly match the submitted request or the snapshot is unusable."
+        - name: "scope_key"
+          type: "string"
+          description: "Versioned package, target, feature, harness, and discovery identity."
+          constraints: "Exact match required; unknown targets or features are ambiguous."
+        - name: "test_names"
+          type: "list of strings"
+          description: "Names emitted by successful compatible discovery."
+          constraints: "Bounded and used with existing Cargo substring/exact filtering semantics."
+        - name: "complete"
+          type: "boolean"
+          description: "Whether discovery can prove emptiness for this scope."
+          constraints: "Only true snapshots may cause early rejection."
+      relationships:
+        - target: "ValidationScope"
+          type: "one-to-many"
+          description: "One exact snapshot may serve equivalent requests until source state changes."
+    - name: "ExperimentDecision"
+      description: "Durable adopt-or-reject conclusion for each evaluated tuning option."
+      fields:
+        - name: "candidate"
+          type: "string"
+          description: "Job count, scope rule, nextest mode, or sccache mode evaluated."
+          constraints: "Every evaluated configuration appears exactly once in the final ledger."
+        - name: "status"
+          type: "adopted | rejected"
+          description: "Final bounded conclusion."
+          constraints: "Adoption requires lower p50 and p95 plus all reliability/resource/runtime gates."
+        - name: "evidence"
+          type: "list of receipt references"
+          description: "Baseline/candidate samples and compatibility/resource results."
+          constraints: "Complete and reviewable."
+        - name: "reconsideration_condition"
+          type: "string"
+          description: "Evidence change that could justify reopening a rejected option."
+          constraints: "Required for rejection."
+      relationships:
+        - target: "BenchmarkReceipt"
+          type: "many-to-many"
+          description: "The decision cites all relevant evidence."
+
+api_contracts:
+  endpoints: []
+  commands:
+    - name: "scripts/bench_rust_feedback.py"
+      description: "Validate the matrix, execute or summarize bounded benchmark lanes, and emit JSON receipts/comparison reports."
+      inputs: "Explicit matrix path, baseline/candidate label, executable/repository identity, scenario or lane, sample count, output path, and bounded experiment options."
+      outputs: "Versioned JSON receipt and deterministic human-readable summary containing raw-sample references, p50/p95, resources, action counts, validity, and adoptability."
+      exit_codes: "Zero only for a complete valid requested operation; nonzero for invalid matrix/receipt, incomplete samples, incompatible comparison, subprocess failure, timeout, or failed adoption gate."
+    - name: "scripts/dev_cargo.sh"
+      description: "Existing Cargo wrapper with additive conservative scope resolution and visible effective-scope receipt fields."
+      inputs: "Existing Cargo argv and environment; explicit package/target/feature/job arguments retain precedence."
+      outputs: "Unchanged Cargo output plus non-secret configured/effective package, target, feature, job, cache, and resolution-source metadata in rust-actions receipts."
+      exit_codes: "Preserve Cargo and existing validation exit behavior; unsupported/conflicting inferred scope fails actionably or broadens before launch."
+    - name: "selfdev test"
+      description: "Existing server-owned queued test action with a conservative zero-test preflight before duplicate claim and queue/gate waiting."
+      inputs: "Unchanged command, reason, notify, and wake fields."
+      outputs: "Existing queued/follower output, or an actionable early zero-test result with effective scope and proof provenance."
+      exit_codes: "Existing tool contract; no early rejection when discovery is absent, stale, incomplete, or ambiguous."
+    - name: "scripts/check_guardrails.sh"
+      description: "Unchanged full repository delivery gate including all-target and all-feature validation."
+      inputs: "Existing options and stable Rust toolchain."
+      outputs: "Existing gate-by-gate validation results."
+      exit_codes: "Unchanged; any changed-surface failure blocks delivery."
+
+project_structure:
+  documentation:
+    - path: "specs/015-tune-rust-feedback/plan.yaml"
+      description: "Approved implementation architecture and delivery sequence."
+    - path: "specs/015-tune-rust-feedback/validation.md"
+      description: "Final acceptance matrix, exact commands/results, principle traceability, benchmark receipt index, and built-binary evidence."
+    - path: "specs/015-tune-rust-feedback/decisions.yaml"
+      description: "Durable adopted/rejected experiment ledger with evidence and reconsideration conditions."
+  source_code:
+    - path: "scripts/rust_feedback_matrix.json"
+      description: "Versioned required scenario, sample, metric, validity, and experiment definition."
+    - path: "scripts/bench_rust_feedback.py"
+      description: "Benchmark execution, provenance capture, resource observation, receipt validation, percentile aggregation, comparison, and reporting."
+    - path: "scripts/rust_validation_scope.py"
+      description: "Deterministic Cargo-metadata-backed package/target/feature resolver and discovery-snapshot utility used by dev_cargo and tests."
+    - path: "scripts/dev_cargo.sh"
+      description: "Canonical application point for inferred focused scope, explicit precedence, job overrides, cache policy, global gate, and additive receipt fields."
+    - path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+      description: "Pre-claim zero-test check, early actionable response, and unchanged queued execution fallback."
+    - path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+      description: "Additive persisted request/preflight metadata and helper wiring if required, with serde defaults for compatibility."
+  tests:
+    - path: "scripts/test_bench_rust_feedback.py"
+      description: "Matrix/receipt validation, nearest-rank percentiles, invalid/retry handling, environment comparability, action counts, and decision-gate fixtures."
+    - path: "scripts/test_rust_validation_scope.py"
+      description: "Package/target mapping, explicit feature precedence, optional-feature requirements, ambiguity, release-sensitive fallback, and discovery snapshot matching."
+    - path: "scripts/test_dev_cargo_jobs.sh"
+      description: "Existing adaptive and explicit job override contract extended with effective job receipt assertions."
+    - path: "scripts/test_dev_cargo_scope.sh"
+      description: "Shell integration tests for argv preservation, inferred scope insertion, broad fallback, explicit features, and rust-actions metadata."
+    - path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+      description: "Zero-test early rejection before claim/gate, valid/ambiguous/stale discovery fallback, Cargo filter compatibility, and duplicate coordinator behavior."
+    - path: "specs/015-tune-rust-feedback/evidence/*.json"
+      description: "Retained baseline/candidate raw benchmark receipts and bounded experiment evidence selected for final review."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze benchmark and evidence contracts"
+    goal: "Create a deterministic, versioned matrix and receipt/report validator before measuring or changing defaults."
+    deliverables:
+      - "Required warm, cold, focused, invalid, broad, and coordinated-duplicate scenario definitions."
+      - "Environment/source/toolchain provenance and metric schema with explicit not-applicable values."
+      - "Raw sample, invalidation, retry, nearest-rank p50/p95, comparability, and action-count fixture tests."
+      - "Baseline collection procedure and incomplete-run failure behavior."
+  - phase: 2
+    name: "Resolve focused validation scope safely"
+    goal: "Add one canonical narrow-or-fallback package, target, and feature resolver without changing explicit broad or feature contracts."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Cargo-metadata-backed package/target ownership and conservative path rules."
+      - "Explicit, inferred, default, and fallback feature precedence matrix."
+      - "Optional-feature regression fixtures and visible effective-scope receipts."
+      - "Direct dev_cargo and selfdev-compatible integration with broad fallback."
+  - phase: 3
+    name: "Reject provably empty tests before waiting"
+    goal: "Use current complete discovery evidence to fail zero-test requests before selfdev queue and Cargo-gate acquisition while preserving all uncertain cases."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Versioned source/scope-keyed discovery snapshot contract."
+      - "Pre-claim selfdev preflight and actionable zero-test output."
+      - "Positive, exact, substring, ignored, library, integration, stale, missing, and ambiguous compatibility tests."
+      - "Proof that early rejection creates no producer and acquires no Cargo gate."
+  - phase: 4
+    name: "Run bounded tuning experiments"
+    goal: "Compare candidates under the frozen matrix and adopt only repeatable operational wins."
+    dependencies:
+      - "Phase 1"
+      - "Phase 2"
+      - "Phase 3"
+    deliverables:
+      - "Equivalent adaptive, 6-job, and 8-job sample sets with timing, RSS, swap, exit, retry, and action-count evidence."
+      - "Coordinator-owned duplicate-request receipts with no uncontrolled Cargo execution."
+      - "Bounded nextest focused-test compatibility/resource/disk/fallback evidence."
+      - "Bounded non-incremental cold/fresh-worktree sccache miss/hit/resource/disk/failure evidence."
+      - "Complete adopted/rejected decision ledger, including reconsideration conditions."
+  - phase: 5
+    name: "Prove compatibility and runtime truth"
+    goal: "Close every acceptance and constitution gate using focused tests, full-feature validation, maintained runtime budgets, and the actual candidate binary."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Focused Python, shell, and Rust test receipts mapped to FR-001 through FR-021."
+      - "Unchanged explicit full-feature check/test/build/release behavior and scripts/check_guardrails.sh result."
+      - "Maintained client and daemon runtime-budget comparison with no accepted regression."
+      - "Coordinated selfdev build/reload result and resolved-executable isolated-socket smoke."
+      - "Final PRIN-002/003/005/007/008/010 compliance matrix and benchmark receipt index."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T13:44:40Z"
+  artifact_type: "plan"
