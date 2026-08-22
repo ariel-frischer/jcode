@@ -75,15 +75,22 @@ Record focused checks before broad validation.
 
 Reserved for reproducible baseline/candidate and experiment evidence.
 
+### Frozen baseline collection
+
+- Receipt: `specs/015-tune-rust-feedback/evidence/baseline.json`
+- Collection preflight: `python3 scripts/bench_rust_feedback.py validate-matrix scripts/rust_feedback_matrix.json` -> `PASS (exit 0)`
+- Artifact validation: `python3 scripts/bench_rust_feedback.py validate-receipt specs/015-tune-rust-feedback/evidence/baseline.json` -> `PASS (exit 0)`
+- Collection result: `INCOMPLETE`. The frozen matrix defines all six scenario intents and bounds, but it does not yet declare executable per-scenario commands. The invalid-zero-test behavior is also owned by dependent tasks T019-T021. The receipt therefore records every missing scenario and the next collection condition rather than fabricating measurements or bypassing the server-owned coordinator.
+
 | Scenario or lane | Baseline receipt | Candidate receipt | Valid samples | Invalid/retried samples | p50 result | nearest-rank p95 result | Resource/action-count result | Terminal result |
 |---|---|---|---|---|---|---|---|---|
-| Warm touched-file check | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Warm touched-file build | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Cold or fresh-worktree build | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Focused test | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Invalid zero-test request | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Broad validation | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Coordinated duplicate requests | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Warm touched-file check | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Warm touched-file build | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Cold or fresh-worktree build | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Focused test | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Invalid zero-test request | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: dependent behavior pending | N/A: dependent behavior pending | Zero underlying scenario actions recorded | `INCOMPLETE` |
+| Broad validation | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Coordinated duplicate requests | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | No uncontrolled duplicate action was launched | `INCOMPLETE` |
 | Adaptive versus 6 versus 8 jobs | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
 | Bounded nextest | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
 | Bounded sccache cold miss/reusable hit | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |

@@ -151,7 +151,7 @@ phases:
           - "The T009 duplicate-request fixtures pass and demonstrate no gate bypass."
       - id: "T011"
         title: "Collect and validate the frozen baseline receipt in specs/015-tune-rust-feedback/evidence/baseline.json"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"

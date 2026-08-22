@@ -1,0 +1,129 @@
+{
+  "action_counts": {
+    "cancelled": 0,
+    "coalesced": 0,
+    "executed": 1,
+    "followers": 0,
+    "requested": 1,
+    "reused": 0,
+    "underlying_actions": 1
+  },
+  "aggregates": {
+    "baseline_collection_preflight": {
+      "cache_observations": [
+        {
+          "reason": "cache metadata was not supplied",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 62,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 36335616,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 62,
+      "p95_execution_time_ms": 62,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 36335616,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 62,
+      "retry_sample_count": 0,
+      "valid_sample_count": 1
+    }
+  },
+  "collection": {
+    "collected_scenario_ids": [],
+    "complete_run": false,
+    "missing_scenario_ids": [
+      "warm_touched_file_check_build",
+      "cold_fresh_worktree_build",
+      "focused_test",
+      "invalid_zero_test",
+      "broad_validation",
+      "coordinated_duplicate"
+    ],
+    "next_collection_condition": "Collect controlled raw samples after executable commands exist for every frozen scenario and current source-state-keyed zero-test discovery can be exercised through the canonical coordinator.",
+    "preflight_command": "python3 scripts/bench_rust_feedback.py validate-matrix scripts/rust_feedback_matrix.json",
+    "preflight_exit_status": 0,
+    "reason": "The frozen matrix currently defines scenario intents and bounds but no executable per-scenario commands. In addition, the invalid-zero-test candidate behavior is owned by later dependent tasks T019-T021. T011 therefore records the baseline as explicitly incomplete instead of inventing measurements or bypassing the server-owned coordinator.",
+    "required_scenario_ids": [
+      "warm_touched_file_check_build",
+      "cold_fresh_worktree_build",
+      "focused_test",
+      "invalid_zero_test",
+      "broad_validation",
+      "coordinated_duplicate"
+    ],
+    "status": "incomplete"
+  },
+  "experiment_boundary": {
+    "bounded": true,
+    "default_changed": false,
+    "variant": "adaptive_jobs"
+  },
+  "fallback": {
+    "reason": "Recorded a validator-backed incomplete baseline rather than fabricating scenario measurements before executable scenario commands and dependent zero-test behavior are available.",
+    "used": true
+  },
+  "run_identity": {
+    "dirty_fingerprint": "sha256:236cc3639128e4f14cc7e4fa5a0e1b9f5a6439b0febb265b03ad7ab5080deae4",
+    "effective_configuration": {
+      "cargo_job_override": {
+        "reason": "no numeric explicit job override was set",
+        "status": "not_applicable"
+      },
+      "cargo_job_policy": "adaptive",
+      "incremental_override_set": false,
+      "matrix_path": "scripts/rust_feedback_matrix.json",
+      "sccache_enabled": false
+    },
+    "host_conditions": {
+      "architecture": "x86_64",
+      "kernel": "7.0.9-arch2-1",
+      "logical_cpu_count": 16,
+      "memory_bytes": 29039259648,
+      "os": "linux"
+    },
+    "label": "baseline-incomplete",
+    "lockfile_fingerprint": "sha256:bd794cdf676cd24257ba3b5b2515c83f003383175836417ca11d661020c69bd4",
+    "matrix_version": "1.0.0",
+    "source_revision": "da0c487381379b2cbd49991ada4d4ac0504453c3",
+    "timestamp": "2026-08-22T15:01:08Z",
+    "toolchain": "rustc 1.95.0 (59807616e 2026-04-14) (Arch Linux rust 1:1.95.0-1); binary: rustc; commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860; commit-date: 2026-04-14; host: x86_64-unknown-linux-gnu; release: 1.95.0; LLVM version: 22.1.3"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "metrics": {
+        "cache": {
+          "reason": "cache metadata was not supplied",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 62,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 36335616,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 62
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "baseline_collection_preflight",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    }
+  ],
+  "schema_version": "1.0.0"
+}
