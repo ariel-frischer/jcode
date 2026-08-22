@@ -80,6 +80,53 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
 }
 
 #[test]
+fn test_click_on_absolute_file_path_followed_by_period_opens_inline_preview() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let file = repository.path().join("how-my-dev-workflow-works.md");
+    std::fs::write(&file, "# Workflow\n\nWritten file content.\n").expect("write file");
+
+    let mut app = create_test_app();
+    app.display_messages = vec![DisplayMessage::assistant(format!(
+        "Written to {}.",
+        file.display()
+    ))];
+    app.bump_display_messages_version();
+
+    let backend = ratatui::backend::TestBackend::new(120, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    render_and_snap(&app, &mut terminal);
+    let buf = terminal.backend().buffer();
+    let area = *buf.area();
+    let (column, row) = (0..area.height)
+        .find_map(|row| {
+            let mut line = String::new();
+            for column in 0..area.width {
+                line.push_str(buf[(column, row)].symbol());
+            }
+            let byte = line.find(file.to_str()?)?;
+            Some((line[..byte].chars().count() as u16 + 8, row))
+        })
+        .expect("absolute file path must be visible");
+
+    let opened = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+    let opened_for_closure = opened.clone();
+    assert!(app.try_open_link_at_with(column, row, |target| {
+        *opened_for_closure.lock().unwrap() = Some(target.to_string());
+        Ok::<(), &'static str>(())
+    }));
+
+    assert_eq!(*opened.lock().unwrap(), None);
+    let preview = app
+        .inline_file_previews
+        .values()
+        .next()
+        .expect("absolute local file should open in the inline preview");
+    assert_eq!(preview.display_path, file.to_string_lossy());
+    assert_eq!(preview.content, "# Workflow\n\nWritten file content.\n");
+}
+
+#[test]
 fn test_clicking_html_file_uses_resolved_external_opener_by_default() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
