@@ -1,44 +1,26 @@
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+#[path = "build/docs_manifest.rs"]
+mod docs_manifest;
 
 fn main() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let repo = manifest.join("../..");
-    let docs_dir = repo.join("docs");
-    println!(
-        "cargo:rerun-if-changed={}",
-        repo.join("README.md").display()
-    );
-    println!("cargo:rerun-if-changed={}", docs_dir.display());
+    let docs_manifest_path = manifest.join("runtime-docs.txt");
+    println!("cargo:rerun-if-changed={}", docs_manifest_path.display());
 
-    let mut files = vec![repo.join("README.md")];
-    if let Ok(entries) = fs::read_dir(&docs_dir) {
-        files.extend(entries.flatten().map(|entry| entry.path()).filter(|path| {
-            path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("md")
-        }));
+    let docs_manifest =
+        fs::read_to_string(&docs_manifest_path).expect("read runtime documentation manifest");
+    let entries = docs_manifest::parse(&docs_manifest)
+        .unwrap_or_else(|error| panic!("invalid runtime documentation manifest: {error}"));
+    for entry in &entries {
+        println!("cargo:rerun-if-changed={}", repo.join(entry).display());
     }
-    files.sort();
-
-    let mut generated = String::from("pub(crate) static JCODE_DOCS: &[(&str, &str)] = &[\n");
-    for path in files {
-        let relative = path
-            .strip_prefix(&repo)
-            .expect("documentation is in repository");
-        let relative = slash_path(relative);
-        generated.push_str(&format!(
-            "    ({relative:?}, include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/../../{relative}\"))),\n"
-        ));
-    }
-    generated.push_str("];\n");
+    let generated = docs_manifest::generate(&repo, &entries)
+        .unwrap_or_else(|error| panic!("generate runtime documentation corpus: {error}"));
 
     let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("jcode_docs.rs");
     fs::write(out, generated).expect("write generated Jcode documentation corpus");
-}
-
-fn slash_path(path: &Path) -> String {
-    path.components()
-        .map(|part| part.as_os_str().to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("/")
 }

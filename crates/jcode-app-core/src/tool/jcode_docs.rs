@@ -8,6 +8,10 @@ use std::collections::HashSet;
 
 include!(concat!(env!("OUT_DIR"), "/jcode_docs.rs"));
 
+#[cfg(test)]
+#[path = "../../build/docs_manifest.rs"]
+mod docs_manifest;
+
 const DEFAULT_LIMIT: usize = 5;
 const MAX_LIMIT: usize = 10;
 const MAX_SECTION_CHARS: usize = 4_000;
@@ -258,6 +262,78 @@ fn relevant_excerpt(body: &str, terms: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    const RUNTIME_DOCS_MANIFEST: &str = include_str!("../../runtime-docs.txt");
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
+    fn legacy_embedded_paths() -> Vec<String> {
+        let repo = repo_root();
+        let mut paths = vec!["README.md".to_string()];
+        paths.extend(
+            std::fs::read_dir(repo.join("docs"))
+                .expect("read docs directory")
+                .map(|entry| entry.expect("read docs entry").path())
+                .filter(|path| {
+                    path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("md")
+                })
+                .map(|path| {
+                    path.strip_prefix(&repo)
+                        .expect("documentation is in repository")
+                        .components()
+                        .map(|part| part.as_os_str().to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join("/")
+                }),
+        );
+        paths.sort();
+        paths
+    }
+
+    #[test]
+    fn explicit_manifest_matches_the_legacy_runtime_corpus_exactly() {
+        let manifest = docs_manifest::parse(RUNTIME_DOCS_MANIFEST).expect("valid manifest");
+        assert_eq!(manifest, legacy_embedded_paths());
+    }
+
+    #[test]
+    fn manifest_generation_is_deterministic_and_preserves_current_bytes() {
+        let manifest = docs_manifest::parse(RUNTIME_DOCS_MANIFEST).expect("valid manifest");
+        let first = docs_manifest::generate(&repo_root(), &manifest).expect("generate docs");
+        let second = docs_manifest::generate(&repo_root(), &manifest).expect("generate docs again");
+        assert_eq!(first, second);
+
+        let embedded = JCODE_DOCS
+            .iter()
+            .map(|(path, body)| ((*path).to_string(), (*body).to_string()))
+            .collect::<Vec<_>>();
+        let expected = manifest
+            .iter()
+            .map(|path| {
+                (
+                    path.clone(),
+                    std::fs::read_to_string(repo_root().join(path)).expect("read listed doc"),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(embedded, expected);
+    }
+
+    #[test]
+    fn duplicate_manifest_entries_fail_visibly() {
+        let error = docs_manifest::parse("README.md\nREADME.md\n").unwrap_err();
+        assert!(error.contains("duplicate"), "{error}");
+    }
+
+    #[test]
+    fn missing_manifest_entries_fail_visibly() {
+        let repo = tempfile::TempDir::new().expect("temporary repo");
+        let error = docs_manifest::generate(repo.path(), &["missing.md".to_string()]).unwrap_err();
+        assert!(error.contains("missing.md"), "{error}");
+    }
 
     #[test]
     fn corpus_includes_current_docs_but_not_plans() {
