@@ -1,6 +1,65 @@
 use super::*;
 
 impl SelfDevTool {
+    async fn test_preflight(
+        repo_dir: &Path,
+        command: &str,
+        requested_source: &build::SourceState,
+    ) -> Option<Value> {
+        let script = std::env::var_os("JCODE_RUST_VALIDATION_SCOPE_SCRIPT")
+            .filter(|value| !value.is_empty())?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::process::Command::new("python3")
+                .arg(script)
+                .current_dir(repo_dir)
+                .env("JCODE_TEST_PREFLIGHT_COMMAND", command)
+                .env(
+                    "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT",
+                    &requested_source.fingerprint,
+                )
+                .output(),
+        )
+        .await
+        .ok()?
+        .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        serde_json::from_slice::<Value>(&output.stdout).ok()
+    }
+
+    fn proven_empty_test_output(mut preflight: Value, command: &str) -> Option<ToolOutput> {
+        let decision = preflight.get("decision").and_then(Value::as_str)?;
+        if decision != "proven_empty" && decision != "empty" {
+            return None;
+        }
+        preflight["decision"] = Value::String("proven_empty".to_string());
+        let effective_scope = preflight.get("effective_scope")?.as_object()?;
+        let package = effective_scope.get("package")?.as_str()?.trim();
+        let test_filter = effective_scope
+            .get("filter")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(command);
+        let proof_provenance = preflight.get("proof_provenance")?.as_str()?.trim();
+        if package.is_empty() || test_filter.is_empty() || proof_provenance.is_empty() {
+            return None;
+        }
+
+        Some(
+            ToolOutput::new(format!(
+                "Self-dev test rejected before queueing: effective scope package `{package}` with filter `{test_filter}` selects zero tests. Proof: {proof_provenance}. Check the package, target, features, and test filter before retrying."
+            ))
+            .with_metadata(json!({
+                "background": false,
+                "preflight": preflight,
+            })),
+        )
+    }
+
     pub(super) fn optimized_test_shell_command(command: &str) -> String {
         format!(
             r#"cargo() {{
@@ -1156,6 +1215,12 @@ export -f cargo
                 anyhow::anyhow!("Could not find the jcode repository directory for selfdev test")
             })?;
         let requested_source = SelfDevTool::requested_source_state(&repo_dir)?;
+        if let Some(preflight) =
+            SelfDevTool::test_preflight(&repo_dir, &command, &requested_source).await
+            && let Some(output) = SelfDevTool::proven_empty_test_output(preflight, &command)
+        {
+            return Ok(output);
+        }
         let shell_command = SelfDevBuildCommand {
             program: "bash".to_string(),
             args: vec![

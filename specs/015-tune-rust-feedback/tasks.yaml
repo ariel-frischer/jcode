@@ -276,7 +276,7 @@ phases:
           - "All T018 snapshot tests pass."
       - id: "T020"
         title: "Implement pre-claim zero-test rejection in crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
