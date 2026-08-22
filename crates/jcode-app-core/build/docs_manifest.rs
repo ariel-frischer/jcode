@@ -40,7 +40,7 @@ pub fn generate(repo: &Path, entries: &[String]) -> Result<String, String> {
         fs::read_to_string(&path)
             .map_err(|error| format!("runtime documentation {entry} is unavailable: {error}"))?;
         generated.push_str(&format!(
-            "    ({entry:?}, include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/../../{entry}\"))),\n"
+            "    ({entry:?}, include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/../../\", {entry:?}))),\n"
         ));
     }
     generated.push_str("];");

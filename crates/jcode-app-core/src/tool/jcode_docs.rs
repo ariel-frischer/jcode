@@ -335,6 +335,24 @@ mod tests {
         assert!(error.contains("missing.md"), "{error}");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn generated_rust_escapes_quoted_manifest_filenames() {
+        let repo = tempfile::TempDir::new().expect("temporary repo");
+        let entry = "quoted\"name.md".to_string();
+        std::fs::write(repo.path().join(&entry), "quoted path").expect("write quoted doc");
+
+        let generated = docs_manifest::generate(repo.path(), std::slice::from_ref(&entry))
+            .expect("generate quoted path");
+        let escaped_literal = format!("{entry:?}");
+        assert_eq!(
+            generated.matches(&escaped_literal).count(),
+            2,
+            "{generated}"
+        );
+        assert!(generated.contains("\"/../../\","), "{generated}");
+    }
+
     #[test]
     fn corpus_includes_current_docs_but_not_plans() {
         assert!(JCODE_DOCS.iter().any(|(path, _)| *path == "README.md"));
