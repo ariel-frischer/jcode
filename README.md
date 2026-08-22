@@ -691,23 +691,8 @@ jcode dictate
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
-The TUI `@` file picker is enabled by default and discovers suggestions in bounded
-background batches so typing remains responsive. Sending an existing `@path` includes the
-full UTF-8 file contents in the model-facing message while keeping the compact `@path` in
-the visible transcript. Missing, binary, or oversized paths remain literal so the agent can
-handle them normally. Set `enabled = false` to keep ordinary `@` input without filesystem-backed
-suggestions or submit-time expansion. It skips common generated and dependency directories by
-default. Add custom gitignore-style patterns in `~/.jcode/config.toml`:
-
-```toml
-[file_mentions]
-enabled = true
-ignore = ["private/", "*.generated.*"]
-```
-
-Custom patterns are additive to the built-in ignore list. In remote sessions, discovery and
-expansion use the connecting client's current working directory, then send the expanded contents
-to the remote agent. The persisted transcript keeps the compact `@path` form.
+The TUI includes responsive `@path` discovery and provider-time file expansion. See
+[File mentions](docs/FILE_MENTIONS.md) for configuration, limits, and remote-session behavior.
 
 <div align="center">
 

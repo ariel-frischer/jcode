@@ -580,6 +580,10 @@ pub(super) fn draw_help_overlay(frame: &mut Frame, area: Rect, scroll: usize, ap
         "Paste clipboard (text or image)",
     ));
     lines.push(key_entry(
+        "@path + Tab",
+        "Find and insert a file mention for model context",
+    ));
+    lines.push(key_entry(
         &alt("A"),
         "Quick-copy visible chat viewport plus nearby context",
     ));
