@@ -207,7 +207,7 @@ phases:
           - "The test harness does not acquire the real global Cargo gate or perform broad compilation."
       - id: "T015"
         title: "Integrate conservative focused scope and receipt metadata in scripts/dev_cargo.sh"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"

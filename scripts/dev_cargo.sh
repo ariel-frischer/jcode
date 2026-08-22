@@ -26,6 +26,7 @@ rust_action_log_started_at=""
 rust_action_log_path=""
 rust_action_log_execution="local"
 cargo_gate_wait_ms=0
+validation_scope_json=""
 
 start_rust_action_log() {
   case "${JCODE_RUST_ACTION_LOG:-1}" in
@@ -60,6 +61,7 @@ record_rust_action_log() {
   JCODE_LOG_PROFILE="$profile" \
   JCODE_LOG_REPO="$repo_root" \
   JCODE_LOG_EXECUTION="$rust_action_log_execution" \
+  JCODE_LOG_VALIDATION_SCOPE="$validation_scope_json" \
   python3 - "$rust_action_log_path" "${cargo_argv[@]}" <<'PY' || true
 import json
 import os
@@ -83,6 +85,10 @@ record = {
     "execution": os.environ["JCODE_LOG_EXECUTION"],
     "argv": sys.argv[2:],
 }
+if os.environ.get("JCODE_LOG_VALIDATION_SCOPE"):
+    record["validation_scope"] = json.loads(
+        os.environ["JCODE_LOG_VALIDATION_SCOPE"]
+    )
 line = (json.dumps(record, separators=(",", ":")) + "\n").encode()
 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
 try:
@@ -362,6 +368,197 @@ build_cargo_argv() {
   if [[ "$inserted" == "false" ]]; then
     printf '%s\0' "${feature_args[@]}"
   fi
+}
+
+cargo_scope_explicit_json() {
+  python3 - "$@" <<'PY'
+import json
+import sys
+
+args = sys.argv[1:]
+packages = []
+targets = []
+features = []
+no_default_features = False
+all_features = False
+i = 0
+while i < len(args):
+    arg = args[i]
+    if arg == "--":
+        break
+    if arg in {"-p", "--package"} and i + 1 < len(args):
+        packages.append(args[i + 1])
+        i += 2
+        continue
+    if arg.startswith("--package="):
+        packages.append(arg.split("=", 1)[1])
+    elif arg in {"--bin", "--test", "--example", "--bench"} and i + 1 < len(args):
+        targets.append(f"{arg[2:]}:{args[i + 1]}")
+        i += 2
+        continue
+    elif any(arg.startswith(prefix) for prefix in ("--bin=", "--test=", "--example=", "--bench=")):
+        option, value = arg[2:].split("=", 1)
+        targets.append(f"{option}:{value}")
+    elif arg in {"-F", "--features"} and i + 1 < len(args):
+        features.extend(part for part in args[i + 1].replace(",", " ").split() if part)
+        i += 2
+        continue
+    elif arg.startswith("--features="):
+        features.extend(part for part in arg.split("=", 1)[1].replace(",", " ").split() if part)
+    elif arg == "--no-default-features":
+        no_default_features = True
+    elif arg == "--all-features":
+        all_features = True
+    i += 1
+
+result = {
+    "packages": list(dict.fromkeys(packages)),
+    "targets": list(dict.fromkeys(targets)),
+    "features": list(dict.fromkeys(features)),
+    "no_default_features": no_default_features,
+    "all_features": all_features,
+}
+json.dump(result, sys.stdout, separators=(",", ":"))
+PY
+}
+
+cargo_request_requires_broad_scope() {
+  local arg profile="dev"
+  for arg in "$@"; do
+    case "$arg" in
+      --workspace|--all|--all-targets|--all-features|--release|-r)
+        return 0
+        ;;
+      --profile=*) profile="${arg#--profile=}" ;;
+    esac
+  done
+  case "$profile" in
+    release|release-lto) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_focused_validation_scope() {
+  local affected="${JCODE_DEV_CARGO_AFFECTED_PATHS:-}"
+  [[ -n "$affected" ]] || return 0
+
+  local resolver="${JCODE_DEV_CARGO_SCOPE_RESOLVER:-$repo_root/scripts/rust_validation_scope.py}"
+  local explicit_json result_json force_broad="false"
+  local -a affected_paths=()
+  while IFS= read -r path; do
+    [[ -n "$path" ]] && affected_paths+=("$path")
+  done <<<"$affected"
+  [[ ${#affected_paths[@]} -gt 0 ]] || return 0
+
+  explicit_json=$(cargo_scope_explicit_json "${cargo_argv[@]}")
+  if cargo_request_requires_broad_scope "${cargo_argv[@]}"; then
+    force_broad="true"
+  fi
+  result_json=$("$resolver" --workspace-root "$repo_root" \
+    --explicit-json "$explicit_json" --defaults-json '{}' "${affected_paths[@]}")
+
+  validation_scope_json=$(JCODE_SCOPE_RESULT="$result_json" \
+    JCODE_SCOPE_FORCE_BROAD="$force_broad" python3 - <<'PY'
+import json
+import os
+import sys
+
+result = json.loads(os.environ["JCODE_SCOPE_RESULT"])
+effective = dict(result.get("effective_scope") or {})
+source = result.get("resolution_source", "unknown")
+fallback = result.get("fallback_reason")
+if os.environ["JCODE_SCOPE_FORCE_BROAD"] == "true" and effective.get("mode") != "broad":
+    effective.update({"mode": "broad", "packages": [], "targets": []})
+    source = "conservative_fallback"
+    fallback = "explicit broad or release-sensitive Cargo request"
+
+configured_inputs = result.get("configured_inputs") or {
+    "explicit": result.get("explicit_inputs") or {},
+    "defaults": result.get("defaults") or {},
+}
+explicit = configured_inputs.get("explicit") or {}
+defaults = configured_inputs.get("defaults") or {}
+configured = {
+    "mode": defaults.get("mode", "broad"),
+    "packages": explicit.get("packages", defaults.get("packages", [])),
+    "targets": explicit.get("targets", defaults.get("targets", [])),
+    "features": explicit.get("features", defaults.get("features", [])),
+    "no_default_features": explicit.get(
+        "no_default_features", defaults.get("no_default_features", False)
+    ),
+    "all_features": explicit.get("all_features", defaults.get("all_features", False)),
+}
+if configured["packages"] or configured["targets"]:
+    configured["mode"] = "focused"
+if source == "explicit" and not any(
+    configured.get(field) for field in ("packages", "targets", "features")
+) and not configured["no_default_features"] and not configured["all_features"]:
+    source = "inferred"
+receipt = {
+    "configured_scope": configured,
+    "effective_scope": effective,
+    "resolution_source": source,
+    "fallback_reason": fallback,
+}
+json.dump(receipt, sys.stdout, separators=(",", ":"), sort_keys=True)
+PY
+  )
+
+  local -a resolved_argv=()
+  while IFS= read -r -d '' arg; do
+    resolved_argv+=("$arg")
+  done < <(JCODE_SCOPE_RECEIPT="$validation_scope_json" python3 - "${cargo_argv[@]}" <<'PY'
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+receipt = json.loads(os.environ["JCODE_SCOPE_RECEIPT"])
+scope = receipt["effective_scope"]
+if scope.get("mode") != "focused":
+    for arg in args:
+        print(arg, end="\0")
+    raise SystemExit
+
+insertion = []
+option_args = args[: args.index("--")] if "--" in args else args
+has_package = any(
+    arg in {"-p", "--package"} or arg.startswith("--package=")
+    for arg in option_args
+)
+has_target = any(
+    arg in {"--lib", "--bin", "--test", "--example", "--bench"}
+    or any(arg.startswith(prefix) for prefix in ("--bin=", "--test=", "--example=", "--bench="))
+    for arg in option_args
+)
+has_features = any(
+    arg in {"-F", "--features"} or arg.startswith("--features=")
+    for arg in option_args
+)
+if not has_package:
+    for package in scope.get("packages", []):
+        insertion.extend(("-p", package))
+if not has_target:
+    for target in scope.get("targets", []):
+        kind, _, name = target.partition(":")
+        if kind == "lib":
+            insertion.append("--lib")
+        elif kind in {"bin", "test", "example", "bench"} and name:
+            insertion.extend((f"--{kind}", name))
+features = scope.get("features", [])
+if features and not has_features:
+    insertion.extend(("--features", ",".join(features)))
+if scope.get("no_default_features") and "--no-default-features" not in option_args:
+    insertion.append("--no-default-features")
+if scope.get("all_features") and "--all-features" not in option_args:
+    insertion.append("--all-features")
+
+split = args.index("--") if "--" in args else len(args)
+for arg in args[:split] + insertion + args[split:]:
+    print(arg, end="\0")
+PY
+  )
+  cargo_argv=("${resolved_argv[@]}")
 }
 
 meminfo_kib() {
@@ -1110,6 +1307,7 @@ while IFS= read -r -d '' arg; do
   cargo_argv+=("$arg")
 done < <(build_cargo_argv "$@")
 
+resolve_focused_validation_scope
 start_rust_action_log
 
 if [[ "${JCODE_REMOTE_CARGO:-0}" == "1" ]]; then
