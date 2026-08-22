@@ -701,6 +701,110 @@ class RunnerContractTests(unittest.TestCase):
         self.assertFalse(self.module.is_complete_run(matrix, invalid))
 
 
+class CoordinatedDuplicateContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.module = load_benchmark_module()
+
+    @staticmethod
+    def coordinated_outcomes() -> list[dict[str, object]]:
+        return [
+            {
+                "request_id": "producer",
+                "outcome": "producer",
+                "underlying_action_id": "cargo-action-1",
+            },
+            {
+                "request_id": "follower",
+                "outcome": "follower",
+                "coalesced": True,
+                "underlying_action_id": "cargo-action-1",
+            },
+            {
+                "request_id": "late-reuse",
+                "outcome": "reused",
+                "underlying_action_id": "cargo-action-1",
+            },
+            {
+                "request_id": "cancelled",
+                "outcome": "cancelled",
+                "underlying_action_id": not_applicable(
+                    "cancelled before coordinator-authorized execution"
+                ),
+            },
+        ]
+
+    def collect_fixture(self, outcomes: list[dict[str, object]]) -> dict[str, object]:
+        collect = getattr(self.module, "collect_coordinated_duplicate_receipt", None)
+        if not callable(collect):
+            self.fail(
+                "coordinated duplicate runner must define callable "
+                "collect_coordinated_duplicate_receipt()"
+            )
+
+        submissions = iter(copy.deepcopy(outcomes))
+        submitted_request_ids: list[str] = []
+
+        def submit_request(request: dict[str, object]) -> dict[str, object]:
+            submitted_request_ids.append(str(request["request_id"]))
+            return next(submissions)
+
+        requests = [{"request_id": outcome["request_id"]} for outcome in outcomes]
+        with mock.patch.object(
+            self.module,
+            "run_scenario",
+            side_effect=AssertionError(
+                "duplicate fixtures must use the server-owned coordinator, not a "
+                "direct Cargo scenario"
+            ),
+        ):
+            receipt = collect(
+                runner_scenario("coordinated_duplicate"),
+                requests,
+                submit_request=submit_request,
+                coordinator_identity="selfdev-server-fixture",
+            )
+
+        self.assertEqual(
+            ["producer", "follower", "late-reuse", "cancelled"],
+            submitted_request_ids,
+        )
+        return receipt
+
+    def test_collects_producer_follower_late_reuse_and_cancellation(self) -> None:
+        receipt = self.collect_fixture(self.coordinated_outcomes())
+
+        self.assertEqual("selfdev-server-fixture", receipt["coordinator_identity"])
+        self.assertEqual(
+            ["producer", "follower", "reused", "cancelled"],
+            [outcome["outcome"] for outcome in receipt["request_outcomes"]],
+        )
+        self.assertEqual(
+            {
+                "requested": 4,
+                "executed": 1,
+                "followers": 1,
+                "coalesced": 1,
+                "reused": 1,
+                "cancelled": 1,
+                "underlying_actions": 1,
+            },
+            receipt["action_counts"],
+        )
+
+    def test_rejects_more_than_one_coordinator_authorized_underlying_action(
+        self,
+    ) -> None:
+        outcomes = self.coordinated_outcomes()
+        outcomes[1] = {
+            "request_id": "second-producer",
+            "outcome": "producer",
+            "underlying_action_id": "cargo-action-2",
+        }
+
+        with self.assertRaises((ValueError, TypeError)):
+            self.collect_fixture(outcomes)
+
+
 class ComparisonContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_benchmark_module()

@@ -128,7 +128,7 @@ phases:
           - "All T007 runner tests pass."
       - id: "T009"
         title: "Add failing coordinated duplicate-request receipt tests in scripts/test_bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
