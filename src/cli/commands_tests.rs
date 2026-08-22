@@ -1451,6 +1451,25 @@ async fn one_shot_output_modes_close_sessions_and_clear_active_pid_markers() {
         .await
         .unwrap_or_else(|error| panic!("{mode} run failed: {error:#}"));
 
+        let lifecycle = crate::session::read_lifecycle_stream_in_dir(
+            temp.path(),
+            &session_id,
+            crate::config::config()
+                .lifecycle_observability
+                .effective_status(),
+        )
+        .unwrap_or_else(|error| panic!("read {mode} lifecycle stream: {error:#}"));
+        assert!(
+            lifecycle
+                .events
+                .iter()
+                .any(|event| matches!(
+                    event.event,
+                    crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. }
+                )),
+            "{mode} run should persist its effective lifecycle policy snapshot"
+        );
+
         assert!(
             !marker.exists(),
             "{mode} run left an active PID marker behind"

@@ -2790,6 +2790,14 @@ pub(crate) async fn run_single_message_with_agent(
     emit_json: bool,
     emit_ndjson: bool,
 ) -> Result<()> {
+    let lifecycle_base_dir =
+        crate::storage::jcode_dir().unwrap_or_else(|_| std::env::temp_dir().join("jcode"));
+    let lifecycle_recorder = crate::lifecycle_observability::LifecycleRecorder::new(
+        crate::config::config().lifecycle_observability.clone(),
+        lifecycle_base_dir,
+    );
+    agent.attach_lifecycle_recorder(std::sync::Arc::clone(&lifecycle_recorder));
+
     let result: Result<()> = async {
         if emit_json {
             let text = run_single_message_command_capture_with_auto_poke(agent, message).await?;
@@ -2812,6 +2820,7 @@ pub(crate) async fn run_single_message_with_agent(
     // one-shot exit from looking like a stale-PID crash on the next startup
     // (issue #988).
     agent.mark_closed();
+    let _ = lifecycle_recorder.flush().await;
     result
 }
 
