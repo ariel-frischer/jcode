@@ -58,7 +58,7 @@ phases:
           - "Removing any required scenario or experiment contract makes the T002 matrix tests fail."
       - id: "T004"
         title: "Implement strict matrix and receipt validation primitives in scripts/bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
