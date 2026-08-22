@@ -1,12 +1,14 @@
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
+pub(crate) const INLINE_FILE_PREVIEW_HEADER_PREFIX: &str = "▾ Inline file · ";
+
 pub(super) fn render(preview: &crate::tui::InlineFilePreview) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "  ▾ Inline file · ",
+                format!("  {INLINE_FILE_PREVIEW_HEADER_PREFIX}"),
                 Style::default().fg(super::rgb(100, 190, 230)).bold(),
             ),
             Span::styled(

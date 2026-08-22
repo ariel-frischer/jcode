@@ -28,6 +28,54 @@ fn file_path_regex() -> Option<&'static Regex> {
         .as_ref()
 }
 
+fn is_supported_file_path(path: &str) -> bool {
+    if path.contains('/') || path.starts_with(['.', '~']) {
+        return true;
+    }
+
+    let extension = path.rsplit_once('.').map(|(_, extension)| extension);
+    extension.is_some_and(|extension| {
+        matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "bash"
+                | "c"
+                | "cc"
+                | "cfg"
+                | "conf"
+                | "cpp"
+                | "css"
+                | "csv"
+                | "fish"
+                | "go"
+                | "h"
+                | "hpp"
+                | "html"
+                | "ini"
+                | "java"
+                | "js"
+                | "json"
+                | "jsx"
+                | "log"
+                | "markdown"
+                | "md"
+                | "mdx"
+                | "py"
+                | "rs"
+                | "scss"
+                | "sh"
+                | "sql"
+                | "toml"
+                | "ts"
+                | "tsx"
+                | "txt"
+                | "xml"
+                | "yaml"
+                | "yml"
+                | "zsh"
+        )
+    })
+}
+
 pub(crate) fn trim_url_candidate(candidate: &str) -> &str {
     let mut trimmed = candidate;
     loop {
@@ -125,6 +173,9 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
             let Some(path) = captures.get(1) else {
                 continue;
             };
+            if !is_supported_file_path(path.as_str()) {
+                continue;
+            }
             let start_col = raw_text[..path.start()].width();
             let end_col = start_col + path.as_str().width();
             if column >= start_col && column < end_col {
@@ -283,8 +334,26 @@ mod tests {
         );
         assert_eq!(
             link_target_for_display_column(text, "🙂 @../src/main.rs us".width()),
-            Some("user@example.com".to_string()),
-            "existing plain-path classification remains unchanged"
+            None,
+            "email domains are not file paths"
+        );
+    }
+
+    #[test]
+    fn ordinary_dotted_prose_is_not_a_file_target() {
+        for text in [
+            "This is a.b in prose",
+            "Try foo.bar next",
+            "Visit example.com later",
+        ] {
+            let dotted = text.find('.').expect("fixture has a dotted word");
+            assert_eq!(link_target_for_display_column(text, dotted), None, "{text}");
+        }
+
+        let known_file = "Edit config.toml next";
+        assert_eq!(
+            link_target_for_display_column(known_file, 8),
+            Some("config.toml".to_string())
         );
     }
 

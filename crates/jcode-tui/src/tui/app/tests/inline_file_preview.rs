@@ -479,3 +479,24 @@ fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
             .is_some_and(|notice| notice.contains("not readable text"))
     );
 }
+
+#[test]
+fn clearing_transcript_releases_inline_file_preview_contents() {
+    let mut app = create_test_app();
+    app.push_display_message(DisplayMessage::user("src/main.rs"));
+    let message_hash = app.display_messages[0].stable_cache_hash();
+    app.inline_file_previews.insert(
+        message_hash,
+        crate::tui::InlineFilePreview {
+            display_path: "src/main.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            markdown: false,
+        },
+    );
+    let version = app.inline_file_previews_version;
+
+    app.clear_display_messages();
+
+    assert!(app.inline_file_previews.is_empty());
+    assert_ne!(app.inline_file_previews_version, version);
+}

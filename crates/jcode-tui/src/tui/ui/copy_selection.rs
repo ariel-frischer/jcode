@@ -20,10 +20,10 @@ pub(crate) fn chat_inline_file_preview_message_from_screen(column: u16, row: u16
         if prepared.message_index_at_line(line) != Some(message_index) {
             break;
         }
-        if prepared
-            .wrapped_plain_line(line)
-            .is_some_and(|text| text.trim_start().starts_with("▾ Inline file · "))
-        {
+        if prepared.wrapped_plain_line(line).is_some_and(|text| {
+            text.trim_start()
+                .starts_with(super::inline_file_preview_ui::INLINE_FILE_PREVIEW_HEADER_PREFIX)
+        }) {
             return Some(message_index);
         }
         if line == 0 {

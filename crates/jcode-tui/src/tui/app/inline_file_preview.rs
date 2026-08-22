@@ -1,6 +1,8 @@
 use super::*;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
+const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
+
 impl App {
     pub(super) fn try_collapse_inline_file_preview_at(&mut self, mouse: MouseEvent) -> bool {
         if !matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
@@ -59,6 +61,9 @@ impl App {
         } else {
             std::path::PathBuf::from(path_target)
         };
+        // Inline previews intentionally allow user-clicked local paths outside the
+        // repository. Unlike repository Markdown navigation, this does not send or
+        // mutate file contents; it only renders the selected local text in the TUI.
         let path = if candidate.is_absolute() {
             candidate
         } else {
@@ -95,7 +100,6 @@ impl App {
             return true;
         }
 
-        const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
         let metadata = match std::fs::metadata(&path) {
             Ok(metadata) => metadata,
             Err(error) => {
