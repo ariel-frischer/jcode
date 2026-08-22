@@ -251,7 +251,7 @@ phases:
           - "All uncertain or valid cases assert the established queued execution path remains available."
       - id: "T018"
         title: "Write failing source-state-keyed discovery snapshot tests in scripts/test_rust_validation_scope.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"

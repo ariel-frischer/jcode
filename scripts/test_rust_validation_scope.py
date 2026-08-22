@@ -12,7 +12,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 RESOLVER_MODULE_PATH = SCRIPTS_DIR / "rust_validation_scope.py"
 
 
-def load_resolver_module():
+def load_resolver_module(*, require_discovery: bool = False):
     """Load the implementation while reporting a contract failure, not ImportError."""
     if not RESOLVER_MODULE_PATH.is_file():
         raise AssertionError(
@@ -31,6 +31,13 @@ def load_resolver_module():
         raise AssertionError(
             "validation-scope implementation must define callable "
             "resolve_validation_scope()"
+        )
+    if require_discovery and not callable(
+        getattr(module, "evaluate_test_discovery_snapshot", None)
+    ):
+        raise AssertionError(
+            "validation-scope implementation must define callable "
+            "evaluate_test_discovery_snapshot()"
         )
     return module
 
@@ -119,6 +126,45 @@ def resolve(
         defaults=defaults,
         path_rules=path_rules(),
     )
+
+
+def discovery_snapshot(**overrides: object) -> dict[str, object]:
+    """Return a complete, bounded discovery snapshot for one exact scope."""
+    snapshot: dict[str, object] = {
+        "schema_version": "1.0",
+        "source_fingerprint": "source-state-a",
+        "package": "alpha",
+        "target": "test:api_contract",
+        "features": ["serde", "telemetry"],
+        "harness": "cargo-test",
+        "discovery_id": "cargo-test-list-v1",
+        "complete": True,
+        "test_names": [
+            "api::creates_record",
+            "api::creates_record_when_optional",
+            "api::deletes_record",
+            "ignored::migration_fixture",
+        ],
+    }
+    snapshot.update(overrides)
+    return snapshot
+
+
+def discovery_request(**overrides: object) -> dict[str, object]:
+    """Return the exact request identity paired with discovery_snapshot()."""
+    request: dict[str, object] = {
+        "source_fingerprint": "source-state-a",
+        "package": "alpha",
+        "target": "test:api_contract",
+        "features": ["telemetry", "serde"],
+        "harness": "cargo-test",
+        "discovery_id": "cargo-test-list-v1",
+        "filter": "creates_record",
+        "exact": False,
+        "ignored": False,
+    }
+    request.update(overrides)
+    return request
 
 
 class ValidationScopeContractTests(unittest.TestCase):
@@ -311,6 +357,160 @@ class ValidationScopeContractTests(unittest.TestCase):
         )
 
         self.assert_broad_fallback(result, "optional feature")
+
+
+class TestDiscoverySnapshotContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.resolver = load_resolver_module(require_discovery=True)
+
+    def evaluate(
+        self,
+        *,
+        snapshot: dict[str, object] | None = None,
+        request: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        return self.resolver.evaluate_test_discovery_snapshot(
+            discovery_snapshot() if snapshot is None else snapshot,
+            discovery_request() if request is None else request,
+        )
+
+    def assert_unknown(self, result: dict[str, object], reason: str) -> None:
+        self.assertEqual(result["schema_version"], "1.0")
+        self.assertEqual(result["decision"], "unknown")
+        self.assertIn(reason, result["reason"])
+
+    def test_complete_exact_identity_snapshot_can_prove_matches(self):
+        result = self.evaluate()
+
+        self.assertEqual(result["decision"], "matches")
+        self.assertEqual(
+            result["proof_provenance"],
+            "current complete test-discovery snapshot",
+        )
+        self.assertEqual(result["matched_test_names"], [
+            "api::creates_record",
+            "api::creates_record_when_optional",
+        ])
+        self.assertEqual(result["effective_scope"]["features"], ["serde", "telemetry"])
+
+    def test_complete_exact_identity_snapshot_can_prove_zero_substring_matches(self):
+        result = self.evaluate(
+            request=discovery_request(filter="does_not_exist", exact=False)
+        )
+
+        self.assertEqual(result["decision"], "empty")
+        self.assertEqual(result["matched_test_names"], [])
+        self.assertEqual(
+            result["proof_provenance"],
+            "current complete test-discovery snapshot",
+        )
+
+    def test_exact_name_filtering_is_distinct_from_cargo_substring_filtering(self):
+        substring = self.evaluate(
+            request=discovery_request(filter="api::creates_record", exact=False)
+        )
+        exact = self.evaluate(
+            request=discovery_request(filter="api::creates_record", exact=True)
+        )
+        exact_zero = self.evaluate(
+            request=discovery_request(filter="creates_record", exact=True)
+        )
+
+        self.assertEqual(len(substring["matched_test_names"]), 2)
+        self.assertEqual(exact["matched_test_names"], ["api::creates_record"])
+        self.assertEqual(exact_zero["decision"], "empty")
+
+    def test_ignored_selection_uses_only_discovered_ignored_tests(self):
+        snapshot = discovery_snapshot(
+            test_names=[
+                {"name": "api::creates_record", "ignored": False},
+                {"name": "ignored::migration_fixture", "ignored": True},
+            ]
+        )
+
+        ignored = self.evaluate(
+            snapshot=snapshot,
+            request=discovery_request(filter="migration", ignored=True),
+        )
+        non_ignored = self.evaluate(
+            snapshot=snapshot,
+            request=discovery_request(filter="migration", ignored=False),
+        )
+
+        self.assertEqual(
+            ignored["matched_test_names"], ["ignored::migration_fixture"]
+        )
+        self.assertEqual(non_ignored["decision"], "empty")
+
+    def test_stale_source_fingerprint_cannot_prove_emptiness(self):
+        result = self.evaluate(
+            snapshot=discovery_snapshot(source_fingerprint="source-state-old"),
+            request=discovery_request(filter="does_not_exist"),
+        )
+
+        self.assert_unknown(result, "source fingerprint")
+
+    def test_scope_identity_mismatches_cannot_prove_emptiness(self):
+        cases = {
+            "package": {"package": "beta"},
+            "target": {"target": "lib:alpha"},
+            "features": {"features": ["serde"]},
+            "harness": {"harness": "nextest"},
+            "discovery": {"discovery_id": "other-listing"},
+        }
+        for reason, overrides in cases.items():
+            with self.subTest(reason=reason):
+                result = self.evaluate(
+                    snapshot=discovery_snapshot(**overrides),
+                    request=discovery_request(filter="does_not_exist"),
+                )
+                self.assert_unknown(result, reason)
+
+    def test_unsupported_schema_incomplete_and_partial_snapshots_are_unknown(self):
+        cases = [
+            (discovery_snapshot(schema_version="2.0"), "schema"),
+            (discovery_snapshot(complete=False), "incomplete"),
+            ({"schema_version": "1.0", "complete": True}, "missing"),
+        ]
+        for snapshot, reason in cases:
+            with self.subTest(reason=reason):
+                result = self.evaluate(
+                    snapshot=snapshot,
+                    request=discovery_request(filter="does_not_exist"),
+                )
+                self.assert_unknown(result, reason)
+
+    def test_malformed_or_ambiguous_snapshots_are_unknown(self):
+        cases = [
+            (discovery_snapshot(test_names="api::creates_record"), "test_names"),
+            (discovery_snapshot(test_names=[""]), "test name"),
+            (discovery_snapshot(package=["alpha", "beta"]), "package"),
+            (discovery_snapshot(target=None), "target"),
+            (discovery_snapshot(features=["serde", 7]), "features"),
+        ]
+        for snapshot, reason in cases:
+            with self.subTest(reason=reason):
+                result = self.evaluate(
+                    snapshot=snapshot,
+                    request=discovery_request(filter="does_not_exist"),
+                )
+                self.assert_unknown(result, reason)
+
+    def test_snapshot_test_name_count_is_bounded(self):
+        limit = getattr(self.resolver, "MAX_DISCOVERY_TEST_NAMES", None)
+        self.assertIsInstance(limit, int)
+        self.assertGreater(limit, 0)
+        self.assertLessEqual(limit, 100_000)
+
+        result = self.evaluate(
+            snapshot=discovery_snapshot(
+                test_names=[f"case_{index}" for index in range(limit + 1)]
+            ),
+            request=discovery_request(filter="does_not_exist"),
+        )
+
+        self.assert_unknown(result, "bounded")
 
 
 if __name__ == "__main__":
