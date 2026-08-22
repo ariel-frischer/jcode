@@ -29,7 +29,7 @@ phases:
           - "Define before/after duplicate-action count, summed gate wait, edit-to-feedback p50/p95, and runtime-budget evidence locations."
       - id: "T002"
         title: "Add failing atomic claim and eligible validation tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"

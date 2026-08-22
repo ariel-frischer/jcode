@@ -1,6 +1,7 @@
 use super::*;
 use crate::bus::BackgroundTaskStatus;
 use std::ffi::OsStr;
+use std::sync::Arc;
 
 struct EnvVarGuard {
     key: &'static str,
@@ -232,6 +233,89 @@ async fn wait_for_task_completion(task_id: &str) -> background::TaskStatusFile {
             task_id
         );
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+async fn execute_concurrent_selfdev_requests(
+    repo_dir: &std::path::Path,
+    inputs: Vec<serde_json::Value>,
+) -> Vec<ToolOutput> {
+    let barrier = Arc::new(tokio::sync::Barrier::new(inputs.len()));
+    let mut handles = Vec::with_capacity(inputs.len());
+
+    for (index, input) in inputs.into_iter().enumerate() {
+        let barrier = Arc::clone(&barrier);
+        let repo_dir = repo_dir.to_path_buf();
+        handles.push(tokio::spawn(async move {
+            barrier.wait().await;
+            SelfDevTool::new()
+                .execute(
+                    input,
+                    create_test_context(&format!("concurrent-session-{index}"), Some(repo_dir)),
+                )
+                .await
+                .expect("concurrent selfdev request")
+        }));
+    }
+
+    let mut outputs = Vec::with_capacity(handles.len());
+    for handle in handles {
+        outputs.push(handle.await.expect("concurrent request task"));
+    }
+    outputs
+}
+
+fn request_for_output(output: &ToolOutput) -> BuildRequest {
+    let request_id = output
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata["request_id"].as_str())
+        .expect("request id metadata");
+    BuildRequest::load(request_id)
+        .expect("load request")
+        .expect("request exists")
+}
+
+fn assert_coalescing_metadata(
+    output: &ToolOutput,
+    request: &BuildRequest,
+    leader_request_id: &str,
+    forbidden_values: &[&str],
+) {
+    let metadata = output.metadata.as_ref().expect("coalescing metadata");
+    let identity_version = metadata["identity_version"]
+        .as_str()
+        .expect("visible identity version");
+    assert!(!identity_version.is_empty());
+    assert!(
+        identity_version.len() <= 32,
+        "identity version must be bounded"
+    );
+
+    let expected_role = if request.attached_to_request_id.is_some() {
+        "follower"
+    } else {
+        "leader"
+    };
+    assert_eq!(metadata["role"].as_str(), Some(expected_role));
+    assert_eq!(
+        metadata["coalesced"].as_bool(),
+        Some(expected_role == "follower")
+    );
+
+    if expected_role == "follower" {
+        let duplicate_of = metadata["duplicate_of"]
+            .as_str()
+            .or_else(|| metadata["duplicate_of"]["request_id"].as_str());
+        assert_eq!(duplicate_of, Some(leader_request_id));
+    }
+
+    let serialized = serde_json::to_string(metadata).expect("serialize metadata");
+    for forbidden in forbidden_values {
+        assert!(
+            !serialized.contains(forbidden),
+            "coalescing metadata exposed forbidden value: {forbidden}"
+        );
     }
 }
 
@@ -976,6 +1060,142 @@ async fn build_dedupes_identical_reason_and_version_with_attached_watcher() {
         watcher_request.attached_to_request_id.as_deref(),
         first_meta["request_id"].as_str()
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn atomic_claim_selects_exactly_one_leader() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    std::fs::write(
+        repo.path().join("private-source.txt"),
+        "RAW-SOURCE-SENTINEL",
+    )
+    .expect("private source fixture");
+
+    let inputs = (0..24)
+        .map(|_| json!({"action": "build", "reason": "atomic claim test"}))
+        .collect();
+    let outputs = execute_concurrent_selfdev_requests(repo.path(), inputs).await;
+    let requests = outputs.iter().map(request_for_output).collect::<Vec<_>>();
+    let leaders = requests
+        .iter()
+        .filter(|request| request.attached_to_request_id.is_none())
+        .collect::<Vec<_>>();
+    let followers = requests
+        .iter()
+        .filter(|request| request.attached_to_request_id.is_some())
+        .count();
+
+    assert_eq!(
+        leaders.len(),
+        1,
+        "concurrent find-then-save admitted multiple leaders: {:?}",
+        leaders
+            .iter()
+            .map(|request| request.request_id.as_str())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(followers, outputs.len() - 1);
+
+    let leader_request_id = leaders[0].request_id.clone();
+    for (output, request) in outputs.iter().zip(&requests) {
+        assert_coalescing_metadata(
+            output,
+            request,
+            &leader_request_id,
+            &["RAW-SOURCE-SENTINEL", &repo.path().display().to_string()],
+        );
+        let task_id = output
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata["task_id"].as_str())
+            .expect("task id metadata");
+        let status = wait_for_task_completion(task_id).await;
+        assert_eq!(status.status, BackgroundTaskStatus::Completed);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn exact_eligible_cargo_requests_attach_and_propagate_terminal_result() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    std::fs::write(
+        repo.path().join("private-source.txt"),
+        "RAW-SOURCE-SENTINEL",
+    )
+    .expect("private source fixture");
+
+    for command in [
+        "cargo build -p jcode",
+        "cargo test -p jcode --lib",
+        "cargo check -p jcode --all-targets",
+    ] {
+        let inputs = (0..8)
+            .map(|_| {
+                json!({
+                    "action": "test",
+                    "command": command,
+                    "reason": "exact eligible cargo request"
+                })
+            })
+            .collect();
+        let outputs = execute_concurrent_selfdev_requests(repo.path(), inputs).await;
+        let requests = outputs.iter().map(request_for_output).collect::<Vec<_>>();
+        let leaders = requests
+            .iter()
+            .filter(|request| request.attached_to_request_id.is_none())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            leaders.len(),
+            1,
+            "{command} should have exactly one producer"
+        );
+        assert_eq!(
+            requests
+                .iter()
+                .filter(|request| request.attached_to_request_id.is_some())
+                .count(),
+            outputs.len() - 1,
+            "{command} should attach every duplicate session"
+        );
+
+        let leader_request_id = leaders[0].request_id.clone();
+        let leader_error = leaders[0].error.clone();
+        for (output, request) in outputs.iter().zip(&requests) {
+            assert_coalescing_metadata(
+                output,
+                request,
+                &leader_request_id,
+                &["RAW-SOURCE-SENTINEL", &repo.path().display().to_string()],
+            );
+            let task_id = output
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata["task_id"].as_str())
+                .expect("task id metadata");
+            let status = wait_for_task_completion(task_id).await;
+            assert_eq!(
+                status.status,
+                BackgroundTaskStatus::Completed,
+                "{command} follower did not receive the producer terminal result"
+            );
+        }
+
+        for request in requests {
+            let terminal = BuildRequest::load(&request.request_id)
+                .expect("reload terminal request")
+                .expect("terminal request exists");
+            assert_eq!(terminal.state, BuildRequestState::Completed);
+            assert_eq!(terminal.error, leader_error);
+        }
+    }
 }
 
 #[tokio::test]
