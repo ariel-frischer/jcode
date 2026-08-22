@@ -1,7 +1,27 @@
 use super::*;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use std::io::Read;
 
 const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
+
+fn preview_path_target(target: &str) -> &str {
+    let target = target.split(['#', '?']).next().unwrap_or(target);
+    let Some((candidate, suffix)) = target.rsplit_once(':') else {
+        return target;
+    };
+    if suffix.parse::<u64>().is_err() {
+        return target;
+    }
+
+    let Some((path, line)) = candidate.rsplit_once(':') else {
+        return candidate;
+    };
+    if line.parse::<u64>().is_ok() {
+        path
+    } else {
+        candidate
+    }
+}
 
 impl App {
     pub(super) fn try_collapse_inline_file_preview_at(&mut self, mouse: MouseEvent) -> bool {
@@ -50,7 +70,7 @@ impl App {
         target: &str,
         message_index: usize,
     ) -> bool {
-        let path_target = target.split(['#', '?']).next().unwrap_or(target);
+        let path_target = preview_path_target(target);
         if path_target.contains("://") || path_target.starts_with("mailto:") {
             return false;
         }
@@ -67,14 +87,18 @@ impl App {
         let path = if candidate.is_absolute() {
             candidate
         } else {
-            let Some(working_dir) = self
-                .session
-                .working_dir
-                .as_deref()
-                .map(std::path::PathBuf::from)
-                .or_else(|| std::env::current_dir().ok())
-            else {
-                return false;
+            let working_dir = if let Some(working_dir) = self.session.working_dir.as_deref() {
+                std::path::PathBuf::from(working_dir)
+            } else {
+                match std::env::current_dir() {
+                    Ok(working_dir) => working_dir,
+                    Err(error) => {
+                        crate::logging::warn(&format!(
+                            "Failed to resolve inline preview working directory: {error}"
+                        ));
+                        return false;
+                    }
+                }
             };
             working_dir.join(candidate)
         };
@@ -100,26 +124,35 @@ impl App {
             return true;
         }
 
-        let metadata = match std::fs::metadata(&path) {
-            Ok(metadata) => metadata,
+        let file = match std::fs::File::open(&path) {
+            Ok(file) => file,
             Err(error) => {
-                self.set_status_notice(format!("Failed to inspect file: {error}"));
+                self.set_status_notice(format!("File is not readable text: {error}"));
                 return true;
             }
         };
-        if metadata.len() > MAX_INLINE_FILE_BYTES {
+        let mut bytes = Vec::with_capacity((MAX_INLINE_FILE_BYTES + 1) as usize);
+        if let Err(error) = file.take(MAX_INLINE_FILE_BYTES + 1).read_to_end(&mut bytes) {
+            self.set_status_notice(format!("File is not readable text: {error}"));
+            return true;
+        }
+        if bytes.len() as u64 > MAX_INLINE_FILE_BYTES {
             self.set_status_notice(format!(
                 "File is too large for inline preview: {path_target}"
             ));
             return true;
         }
-        let content = match std::fs::read_to_string(&path) {
+        let content = match String::from_utf8(bytes) {
             Ok(content) => content,
             Err(error) => {
                 self.set_status_notice(format!("File is not readable text: {error}"));
                 return true;
             }
         };
+        if content.contains('\0') {
+            self.set_status_notice("File is not readable text: binary content".to_string());
+            return true;
+        }
         let markdown = path
             .extension()
             .and_then(|extension| extension.to_str())

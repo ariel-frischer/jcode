@@ -80,6 +80,8 @@ mod overlays;
 mod pinned_ui;
 #[path = "ui_prepare.rs"]
 pub(crate) mod prepare;
+#[path = "ui_shared_helpers.rs"]
+mod shared_helpers;
 #[path = "ui_smoothness.rs"]
 mod smoothness;
 #[path = "ui_todo_changes.rs"]
@@ -152,6 +154,9 @@ pub(crate) use pinned_ui::{
 use pinned_ui::{
     collect_pinned_diffs_cached, draw_pinned_content_cached, draw_side_panel_markdown,
 };
+pub(crate) use shared_helpers::chat_link_target_from_screen;
+pub use shared_helpers::last_user_prompt_positions;
+use shared_helpers::{hash_text_for_cache, update_user_prompt_positions};
 #[cfg(test)]
 use transitions::extract_line_text;
 #[cfg(test)]
@@ -322,43 +327,6 @@ pub fn last_diff_pane_max_scroll() -> usize {
     #[cfg(not(test))]
     {
         LAST_DIFF_PANE_MAX_SCROLL.load(Ordering::Relaxed)
-    }
-}
-
-/// Get the last known user prompt line positions (from the most recent render frame).
-/// Returns positions as wrapped line indices from the top of content.
-pub fn last_user_prompt_positions() -> Vec<usize> {
-    #[cfg(test)]
-    {
-        return TEST_LAST_USER_PROMPT_POSITIONS.with(|v| v.borrow().clone());
-    }
-    #[cfg(not(test))]
-    {
-        LAST_USER_PROMPT_POSITIONS
-            .get_or_init(|| Mutex::new(Vec::new()))
-            .lock()
-            .map(|v| v.clone())
-            .unwrap_or_default()
-    }
-}
-
-fn update_user_prompt_positions(positions: &[usize]) {
-    #[cfg(test)]
-    {
-        TEST_LAST_USER_PROMPT_POSITIONS.with(|v| {
-            let mut v = v.borrow_mut();
-            v.clear();
-            v.extend_from_slice(positions);
-        });
-        return;
-    }
-    #[cfg(not(test))]
-    {
-        let mutex = LAST_USER_PROMPT_POSITIONS.get_or_init(|| Mutex::new(Vec::new()));
-        if let Ok(mut v) = mutex.lock() {
-            v.clear();
-            v.extend_from_slice(positions);
-        }
     }
 }
 
@@ -536,12 +504,6 @@ pub(crate) fn take_tail_follow_snap_request() -> bool {
     {
         TAIL_FOLLOW_SNAP_PENDING.swap(false, Ordering::Relaxed)
     }
-}
-
-pub(super) fn hash_text_for_cache(text: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    std::hash::Hasher::finish(&hasher)
 }
 
 #[path = "ui_layout.rs"]
@@ -2517,20 +2479,6 @@ pub(crate) fn link_target_from_screen(column: u16, row: u16) -> Option<String> {
     }
     let snapshot = copy_snapshot_for_pane(point.pane)?;
     link_target_from_snapshot(&snapshot, point)
-}
-
-pub(crate) fn chat_link_target_from_screen(column: u16, row: u16) -> Option<(String, usize)> {
-    let point = copy_point_from_screen(column, row)?;
-    if point.pane != crate::tui::CopySelectionPane::Chat {
-        return None;
-    }
-    let snapshot = copy_snapshot_for_pane(point.pane)?;
-    let target = link_target_from_snapshot(&snapshot, point)?;
-    let prepared = match &snapshot.data {
-        CopyViewportData::ChatFrame { prepared } => prepared,
-        CopyViewportData::Dense { .. } => return None,
-    };
-    Some((target, prepared.message_index_at_line(point.abs_line)?))
 }
 
 /// If a screen click landed on an inline-image label line, return the image

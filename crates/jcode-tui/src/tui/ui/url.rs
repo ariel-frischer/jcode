@@ -2,17 +2,34 @@ use regex::Regex;
 use std::sync::OnceLock;
 use unicode_width::UnicodeWidthStr;
 
+fn compile_static_regex(pattern: &str, label: &str) -> Option<Regex> {
+    match Regex::new(pattern) {
+        Ok(regex) => Some(regex),
+        Err(error) => {
+            crate::logging::warn(&format!("Failed to compile static {label} regex: {error}"));
+            None
+        }
+    }
+}
+
 pub(crate) fn url_regex() -> Option<&'static Regex> {
     static URL_REGEX: OnceLock<Option<Regex>> = OnceLock::new();
     URL_REGEX
-        .get_or_init(|| Regex::new(r#"(?i)(?:https?://|mailto:|file://)[^\s<>'\"]+"#).ok())
+        .get_or_init(|| {
+            compile_static_regex(r#"(?i)(?:https?://|mailto:|file://)[^\s<>'\"]+"#, "URL")
+        })
         .as_ref()
 }
 
 fn markdown_link_regex() -> Option<&'static Regex> {
     static MARKDOWN_LINK_REGEX: OnceLock<Option<Regex>> = OnceLock::new();
     MARKDOWN_LINK_REGEX
-        .get_or_init(|| Regex::new(r#"\[([^]\n]+)\]\(([^\s)]+)(?:\s+[^)]*)?\)"#).ok())
+        .get_or_init(|| {
+            compile_static_regex(
+                r#"\[([^]\n]+)\]\(([^\s)]+)(?:\s+[^)]*)?\)"#,
+                "Markdown link",
+            )
+        })
         .as_ref()
 }
 
@@ -20,16 +37,40 @@ fn file_path_regex() -> Option<&'static Regex> {
     static FILE_PATH_REGEX: OnceLock<Option<Regex>> = OnceLock::new();
     FILE_PATH_REGEX
         .get_or_init(|| {
-            Regex::new(
-                r#"(?:^|[\s'\"`(])((?:(?:\.{0,2}/|~/|/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9_-]+)?)|(?:[A-Za-z][A-Za-z0-9_.@+-]*\.[A-Za-z][A-Za-z0-9_-]*))(?:$|[\s'\"`),:;])"#,
-            )
-            .ok()
+            compile_static_regex(r#"(?:^|[\s'\"`(\[{])([^\s'\"`()<>\[\]{}]+)"#, "file path")
         })
         .as_ref()
 }
 
+fn file_path_without_location(path: &str) -> &str {
+    let without_anchor = path.split_once('#').map_or(path, |(path, _)| path);
+    let Some((candidate, suffix)) = without_anchor.rsplit_once(':') else {
+        return without_anchor;
+    };
+    if suffix.parse::<u64>().is_err() {
+        return without_anchor;
+    }
+
+    let Some((path, line)) = candidate.rsplit_once(':') else {
+        return candidate;
+    };
+    if line.parse::<u64>().is_ok() {
+        path
+    } else {
+        candidate
+    }
+}
+
 fn is_supported_file_path(path: &str) -> bool {
+    let path = file_path_without_location(path);
     if path.contains('/') || path.starts_with(['.', '~']) {
+        return true;
+    }
+
+    if matches!(
+        path.to_ascii_lowercase().as_str(),
+        "dockerfile" | "gemfile" | "justfile" | "makefile" | "procfile" | "rakefile" | "readme"
+    ) {
         return true;
     }
 
@@ -170,16 +211,17 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
 
     if let Some(regex) = file_path_regex() {
         for captures in regex.captures_iter(raw_text) {
-            let Some(path) = captures.get(1) else {
+            let Some(path_match) = captures.get(1) else {
                 continue;
             };
-            if !is_supported_file_path(path.as_str()) {
+            let path = trim_file_mention_candidate(path_match.as_str());
+            if !is_supported_file_path(path) {
                 continue;
             }
-            let start_col = raw_text[..path.start()].width();
-            let end_col = start_col + path.as_str().width();
+            let start_col = raw_text[..path_match.start()].width();
+            let end_col = start_col + path.width();
             if column >= start_col && column < end_col {
-                return Some(path.as_str().to_string());
+                return Some(path.to_string());
             }
         }
     }
@@ -345,6 +387,7 @@ mod tests {
             "This is a.b in prose",
             "Try foo.bar next",
             "Visit example.com later",
+            "Inspect self.input before continuing",
         ] {
             let dotted = text.find('.').expect("fixture has a dotted word");
             assert_eq!(link_target_for_display_column(text, dotted), None, "{text}");
@@ -355,6 +398,25 @@ mod tests {
             link_target_for_display_column(known_file, 8),
             Some("config.toml".to_string())
         );
+    }
+
+    #[test]
+    fn supported_file_targets_preserve_common_path_formats() {
+        for (text, expected) in [
+            ("Open ~/notes.md", "~/notes.md"),
+            ("Run Makefile", "Makefile"),
+            ("Read 2026-report.md", "2026-report.md"),
+            ("See docs/guide.md#anchor", "docs/guide.md#anchor"),
+            ("Inspect src/main.rs:42", "src/main.rs:42"),
+            ("Inspect src/main.rs:42:7", "src/main.rs:42:7"),
+        ] {
+            let column = text.find(expected).expect("fixture contains target");
+            assert_eq!(
+                link_target_for_display_column(text, column),
+                Some(expected.to_string()),
+                "target should remain intact in {text:?}"
+            );
+        }
     }
 
     #[test]

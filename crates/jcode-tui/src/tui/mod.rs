@@ -1,19 +1,7 @@
 pub mod account_picker;
 pub(crate) mod app;
-
-#[derive(Clone)]
-pub struct ContextSnapshot {
-    pub info: Option<crate::prompt::ContextInfo>,
-    pub revision: u64,
-    pub fresh: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BackgroundTaskRowStatus {
-    Running,
-    Completed,
-    Failed,
-}
+mod state_types;
+pub use state_types::{BackgroundTaskRowStatus, ContextSnapshot, InlineFilePreview};
 
 /// Compact presentation state for one retained background task.
 #[derive(Clone, Debug, PartialEq)]
@@ -694,13 +682,6 @@ pub trait TuiState {
         }
         false
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct InlineFilePreview {
-    pub display_path: String,
-    pub content: String,
-    pub markdown: bool,
 }
 
 #[cfg(feature = "dev-bins")]

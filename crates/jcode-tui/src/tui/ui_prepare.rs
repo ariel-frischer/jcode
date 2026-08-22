@@ -1,6 +1,13 @@
 use super::*;
 use crate::tui::ui::{self, WrappedLineMap};
 
+#[path = "ui_prepare/header_cache.rs"]
+mod header_cache;
+pub(crate) use header_cache::invalidate_header_prep_cache;
+use header_cache::prepare_header_cached;
+#[cfg(test)]
+use header_cache::HEADER_PREP_CACHE_TTL;
+
 /// Auxiliary render data for an assistant message that is otherwise recomputed
 /// by re-parsing markdown on every body rebuild. Building the body misses its
 /// cache whenever `display_messages_version` changes (e.g. an in-place edit to
@@ -979,129 +986,6 @@ fn prepare_messages_inner(app: &dyn TuiState, width: u16, height: u16) -> Prepar
         compose_ms: compose_start.elapsed().as_secs_f64() * 1000.0,
     });
     frame
-}
-
-/// TTL + cheap-signature cache for the prepared (built + wrapped) header.
-///
-/// `build_persistent_header`/`build_header_lines` look cheap but are not: per
-/// call they probe auth credential files (`AuthStatus::check_fast`), list and
-/// deserialize every goal JSON for the goal badge, reload the project skill
-/// overlay from disk, and stat release/binary channels for the update badges.
-/// On this hardware that costs 30-50ms, and it ran on every full-prep cache
-/// miss - i.e. on every streaming tick and every keystroke that changes the
-/// input-derived cache key - which showed up directly as input lag
-/// (TUI_SLOW_FRAME logs attributed 30-47ms of ~45ms slow frames to
-/// `full_prep_header_ms`).
-///
-/// The header's inputs fall into two groups:
-/// - cheap in-memory fields (model, session/server names, connection type,
-///   mcp list, ...) - hashed into a signature so changes rebuild immediately;
-/// - disk-backed surfaces (auth line, goal badge, skills list, update
-///   badges, changelog) - refreshed only when the TTL lapses, since they
-///   change rarely and independently of the render loop.
-///
-/// The TTL is sized to the *data*, not the frame rate. A 1s TTL made the
-/// header cost bimodal: cache hits were <1ms, but every lapse paid the full
-/// disk-probe rebuild (measured p50 48ms, max 273ms in TUI_SLOW_FRAME logs).
-/// Since `AuthStatus` already self-caches for 30-60s, ~29 of every 30
-/// second-boundary rebuilds re-walked goals, skills, and update badges only to
-/// produce a byte-identical header. Matching the auth cache floor keeps the
-/// refresh cadence meaningful while removing the redundant rebuilds; anything
-/// a user can change from inside the TUI is already covered by the signature
-/// and still repaints immediately.
-const HEADER_PREP_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
-
-struct HeaderPrepCacheState {
-    signature: u64,
-    built_at: Instant,
-    prepared: Arc<PreparedMessages>,
-}
-
-fn header_prep_cache() -> &'static std::sync::Mutex<Option<HeaderPrepCacheState>> {
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<HeaderPrepCacheState>>> =
-        std::sync::OnceLock::new();
-    CACHE.get_or_init(|| std::sync::Mutex::new(None))
-}
-
-/// Drop the prepared-header cache so the next frame re-probes the disk-backed
-/// surfaces (auth inventory, skills, goal badge, update badges).
-///
-/// The TTL alone is sized for background drift. Actions taken *inside* the TUI
-/// that change those surfaces - completing `/login`, adding an account,
-/// reloading skills - must be reflected immediately rather than up to a full
-/// TTL later, so they call this directly.
-pub(crate) fn invalidate_header_prep_cache() {
-    if let Ok(mut cache) = header_prep_cache().lock() {
-        *cache = None;
-    }
-}
-
-/// Hash of the header inputs that are cheap to read every frame. Anything
-/// expensive (disk probes) is intentionally excluded and covered by the TTL.
-fn header_prep_signature(app: &dyn TuiState, width: u16) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    width.hash(&mut hasher);
-    app.provider_model().hash(&mut hasher);
-    app.provider_name().hash(&mut hasher);
-    app.session_display_name().hash(&mut hasher);
-    app.server_display_name().hash(&mut hasher);
-    app.server_display_version().hash(&mut hasher);
-    app.server_display_icon().hash(&mut hasher);
-    app.connection_type().hash(&mut hasher);
-    app.upstream_provider().hash(&mut hasher);
-    app.is_replay().hash(&mut hasher);
-    app.is_remote_mode().hash(&mut hasher);
-    app.is_canary().hash(&mut hasher);
-    app.server_update_available().hash(&mut hasher);
-    app.mcp_servers().hash(&mut hasher);
-    app.connected_clients().hash(&mut hasher);
-    app.server_sessions().len().hash(&mut hasher);
-    app.working_dir().hash(&mut hasher);
-    // Credential changes alter the auth inventory lines. Hashing the auth
-    // generation (cheap atomic load) means `/login` and account edits repaint
-    // the header on the very next frame instead of waiting out the TTL, which
-    // is what lets the TTL itself be sized for slow background drift.
-    crate::auth::auth_status_generation().hash(&mut hasher);
-    // The goal badge renders the focused side-panel page title when a goal
-    // page is focused; keying on it keeps focus changes instant.
-    if let Some(page) = app.side_panel().focused_page() {
-        page.id.hash(&mut hasher);
-        page.title.hash(&mut hasher);
-    }
-    hasher.finish()
-}
-
-fn prepare_header_cached(app: &dyn TuiState, width: u16) -> Arc<PreparedMessages> {
-    let build = || {
-        let (mut all_header_lines, secondary_lines) = header::build_header_sections(app, width);
-        all_header_lines.extend(secondary_lines);
-        Arc::new(wrap_lines(all_header_lines, &[], &[], &[], width))
-    };
-
-    if cfg!(test) {
-        return build();
-    }
-
-    let signature = header_prep_signature(app, width);
-
-    if let Ok(cache) = header_prep_cache().lock()
-        && let Some(state) = cache.as_ref()
-        && state.signature == signature
-        && state.built_at.elapsed() < HEADER_PREP_CACHE_TTL
-    {
-        return state.prepared.clone();
-    }
-
-    let prepared = build();
-    if let Ok(mut cache) = header_prep_cache().lock() {
-        *cache = Some(HeaderPrepCacheState {
-            signature,
-            built_at: Instant::now(),
-            prepared: prepared.clone(),
-        });
-    }
-    prepared
 }
 
 fn prepare_body_cached(app: &dyn TuiState, width: u16) -> Arc<PreparedMessages> {

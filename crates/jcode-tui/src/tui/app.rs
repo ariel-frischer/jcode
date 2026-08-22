@@ -39,16 +39,6 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AppRuntimeMode {
-    /// Normal product TUI. The client renders state owned by the jcode server.
-    RemoteClient,
-    /// Deterministic playback of recorded session/server events. Never calls live providers.
-    Replay,
-    /// Local in-process harness used by unit tests and transitional UI fixtures only.
-    TestHarness,
-}
-
 mod auth;
 mod auth_account_picker_saved_accounts;
 mod catchup;
@@ -91,6 +81,8 @@ mod remote_notifications;
 mod replay;
 pub(crate) mod run_shell;
 mod runtime_memory;
+mod runtime_mode;
+pub use runtime_mode::AppRuntimeMode;
 mod shortcut_hints;
 mod split_view;
 mod state_ui;

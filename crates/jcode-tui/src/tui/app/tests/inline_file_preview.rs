@@ -87,7 +87,10 @@ fn test_relative_file_preview_falls_back_to_process_working_directory() {
     app.bump_display_messages_version();
     let opened = app.try_toggle_inline_file_preview("Cargo.toml", 0);
 
-    assert!(opened, "relative paths should resolve without a session working directory");
+    assert!(
+        opened,
+        "relative paths should resolve without a session working directory"
+    );
     assert_eq!(app.inline_file_previews.len(), 1);
 }
 
@@ -131,6 +134,28 @@ fn test_click_on_relative_file_uses_process_working_directory_without_session_cw
 }
 
 #[test]
+fn line_suffixed_path_previews_the_underlying_file() {
+    let _render_lock = scroll_render_test_lock();
+    let workdir = tempfile::tempdir().expect("create temporary working directory");
+    std::fs::write(workdir.path().join("main.rs"), "fn main() {}\n")
+        .expect("write line-suffixed preview fixture");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(workdir.path().display().to_string());
+    app.display_messages = vec![DisplayMessage::assistant("Inspect `main.rs:42:7`")];
+    app.bump_display_messages_version();
+
+    assert!(app.try_toggle_inline_file_preview("main.rs:42:7", 0));
+    let preview = app
+        .inline_file_previews
+        .values()
+        .next()
+        .expect("line-suffixed file preview");
+    assert_eq!(preview.display_path, "main.rs");
+    assert_eq!(preview.content, "fn main() {}\n");
+}
+
+#[test]
 fn test_click_on_home_relative_file_path_toggles_inline_preview() {
     let _render_lock = scroll_render_test_lock();
     let home = dirs::home_dir().expect("home directory");
@@ -139,9 +164,15 @@ fn test_click_on_home_relative_file_path_toggles_inline_preview() {
         .path()
         .strip_prefix(&home)
         .expect("tempdir must be under home");
-    let target = format!("~/{}", home_relative_dir.join("home-relative.txt").display());
-    std::fs::write(home_file_dir.path().join("home-relative.txt"), "home-relative content")
-        .expect("write home-relative file");
+    let target = format!(
+        "~/{}",
+        home_relative_dir.join("home-relative.txt").display()
+    );
+    std::fs::write(
+        home_file_dir.path().join("home-relative.txt"),
+        "home-relative content",
+    )
+    .expect("write home-relative file");
 
     let mut app = create_test_app();
     app.display_messages = vec![DisplayMessage::assistant(format!("Open `{target}`"))];
@@ -181,12 +212,18 @@ fn test_click_on_home_relative_file_path_toggles_inline_preview() {
 fn test_clicking_file_mentions_in_user_and_prior_messages_uses_session_cwd() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
-    std::fs::write(repository.path().join("current.txt"), "current mention content")
-        .expect("write current file");
+    std::fs::write(
+        repository.path().join("current.txt"),
+        "current mention content",
+    )
+    .expect("write current file");
     std::fs::write(repository.path().join("prior.txt"), "prior mention content")
         .expect("write prior file");
-    std::fs::write(repository.path().join("system.txt"), "system mention content")
-        .expect("write system file");
+    std::fs::write(
+        repository.path().join("system.txt"),
+        "system mention content",
+    )
+    .expect("write system file");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
@@ -316,11 +353,20 @@ fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
     let first = render_and_snap(&app, &mut terminal);
     let max_scroll = crate::tui::ui::last_max_scroll();
-    assert!(max_scroll > 40, "long preview must extend normal chat scroll");
+    assert!(
+        max_scroll > 40,
+        "long preview must extend normal chat scroll"
+    );
 
-    assert!(app.scroll_up(8), "chat scroll must move through the preview");
+    assert!(
+        app.scroll_up(8),
+        "chat scroll must move through the preview"
+    );
     let second = render_and_snap(&app, &mut terminal);
-    assert_ne!(first, second, "scrolling must reveal different preview rows");
+    assert_ne!(
+        first, second,
+        "scrolling must reveal different preview rows"
+    );
     assert!(app.auto_scroll_paused);
 }
 
@@ -345,7 +391,10 @@ fn test_clicking_visible_inline_file_body_collapses_preview() {
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
     render_and_snap(&app, &mut terminal);
-    assert!(app.scroll_up(12), "scrolling should expose the preview body");
+    assert!(
+        app.scroll_up(12),
+        "scrolling should expose the preview body"
+    );
     render_and_snap(&app, &mut terminal);
 
     let body_position = {
@@ -406,7 +455,10 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
     render_and_snap(&app, &mut terminal);
-    assert!(app.scroll_up(12), "scrolling should expose the preview body");
+    assert!(
+        app.scroll_up(12),
+        "scrolling should expose the preview body"
+    );
     render_and_snap(&app, &mut terminal);
 
     let body_rows = {
@@ -422,7 +474,10 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
             })
             .collect::<Vec<_>>()
     };
-    assert!(body_rows.len() >= 2, "a copy drag needs two visible preview rows");
+    assert!(
+        body_rows.len() >= 2,
+        "a copy drag needs two visible preview rows"
+    );
     let column = terminal.backend().buffer().area().left() + 3;
     let start_row = body_rows[0];
     let end_row = body_rows[1];
@@ -455,8 +510,11 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
 #[test]
 fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
     let repository = tempfile::tempdir().expect("repository tempdir");
-    std::fs::write(repository.path().join("large.txt"), vec![b'x'; 512 * 1024 + 1])
-        .expect("write oversized file");
+    std::fs::write(
+        repository.path().join("large.txt"),
+        vec![b'x'; 512 * 1024 + 1],
+    )
+    .expect("write oversized file");
     std::fs::write(repository.path().join("binary.bin"), [0xff, 0xfe, 0xfd])
         .expect("write binary file");
 

@@ -584,6 +584,10 @@ pub(super) fn draw_help_overlay(frame: &mut Frame, area: Rect, scroll: usize, ap
         "Quick-copy visible chat viewport plus nearby context",
     ));
     lines.push(key_entry(&alt("Y"), "Toggle chat selection/copy mode"));
+    lines.push(key_entry(
+        "Click a file path",
+        "Preview the file inline without leaving the transcript",
+    ));
     lines.push(key_entry(&alt("S"), "Toggle typing scroll lock"));
     lines.push(key_entry("Ctrl+P", "Toggle auto-poke for incomplete todos"));
     lines.push(key_entry(&alt("X"), "Show/dismiss todo list card in chat"));
