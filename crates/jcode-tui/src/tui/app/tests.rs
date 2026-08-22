@@ -208,11 +208,14 @@ fn command_palette_slash_command_preserves_composer_draft_and_cursor() {
 
     app.open_command_palette();
     app.command_palette.as_mut().expect("palette open").query = "clear".to_string();
-    app.handle_key(
-        crossterm::event::KeyCode::Enter,
-        crossterm::event::KeyModifiers::empty(),
-    )
-    .unwrap();
+    let action = app
+        .accept_command_palette_selection()
+        .expect("clear command selected");
+    assert_eq!(
+        action,
+        super::command_palette::CommandPaletteAction::SlashCommand("/clear".to_string())
+    );
+    app.dispatch_command_palette_action(action);
 
     assert_eq!(app.input(), "draft before slash command");
     assert_eq!(app.cursor_pos(), "draft before".len());
