@@ -50,15 +50,16 @@ The clearest examples of my custom delta include:
 - **Interactive TUI controls and file mentions:** a `Ctrl+P` command palette
   and model-picker flow, including remote-session support, plus related picker
   behavior such as keeping favorite models at the top, staging useful models
-  before the full catalog arrives, and keeping picker loading off the input
-  path. The composer also has an `@`-based fuzzy picker rooted at the session
-  workspace, configurable ignore paths, responsive discovery, and expansion of
-  selected files into model context.
+  before the full catalog arrives, showing clear model-switch notices, and
+  keeping picker loading off the input path. The composer also has an `@`-based
+  fuzzy picker rooted at the session workspace, configurable ignore paths,
+  responsive discovery, and expansion of selected files into model context.
 - **Clickable inline document previews:** click a file shown in an inline
   tool/diff preview or an `@filepath` mention to open or collapse it in the
   TUI. The fork fixes relative- and home-directory path resolution, detects
-  mentions in inline markup, and opens HTML mentions externally by default with
-  a configurable override.
+  mentions in inline markup, keeps ordinary file content readable across light
+  and dark themes, and opens HTML mentions externally by default with a
+  configurable override.
 - **Named session profiles:** reusable named policies for a session that bundle
   the provider, model, reasoning effort, tools, skills, and additive
   instructions. Profiles can be selected from the CLI or TUI, inherited by
@@ -76,7 +77,8 @@ The clearest examples of my custom delta include:
   next pending item. It never forces a transition. When enabled, the session
   prompt explains why handoff helps and how to leave a bounded continuation
   prompt with the outcome, decisions, risks, next steps, relevant files, and
-  Bead ID. Configure it under `[handoff]` in `~/.jcode/config.toml`, for example
+  Bead ID, and explicitly points the agent to `session_transition`. Configure
+  it under `[handoff]` in `~/.jcode/config.toml`. For example, set
   `poke_enabled = true`; the default remains disabled.
 
   The rationale is context quality first: completed milestones become irrelevant
@@ -87,25 +89,28 @@ The clearest examples of my custom delta include:
   not an automatic cost optimization. The poke is intentionally advisory so the
   agent can defer handoff when continuity is more valuable.
 - **Headless and session workflow fixes:** safer bounded `jcode run`
-  execution, restored prompt state across resume, and improvements to startup
-  behavior around child-session handoff.
+  execution and one-shot result delivery, restored prompt state across resume,
+  explicit socket handling during startup, and improvements to child-session
+  handoff behavior.
 - **Provider and session fixes:** OpenRouter reported-cost tracking and its
   downstream consumers, safer legacy provider-cost handling, redacted provider
   failure codes surfaced through the harness and Go SDK, fixes that prevent
-  stale provider rerouting on restore, and bounded, cancellable post-login
-  validation for `jcode login`.
+  stale provider rerouting on restore, safer standard-tier OpenAI request
+  defaults, and bounded, cancellable post-login validation for `jcode login`.
 - **Configurable debugging:** DAP debugger operations, adapter setup and
   launch transport, policy controls, and CLI/configuration switches for
   disabling the debugger when it is not wanted.
 - **Agent-oriented development tools:** the `agentgrep` context-saving search
-  workflow, session-feedback workflows, memory-sidecar work, and the companion
-  Go SDK maintained for this fork.
+  workflow, session-feedback workflows, memory-sidecar work, typed Go SDK event
+  compatibility, side-pane image events, and the companion Go SDK maintained
+  for this fork.
 - **Operational and process fixes:** foreground process-group ownership and
   cancellation cleanup, prevention of orphaned `jcode serve` processes during
   reinstall, restoration of terminal modes on signal exit, safe draining of
   terminal color-query replies, and startup/reload behavior intended for my
-  self-development workflow. Linux compositor launch hotkeys are also
-  explicitly opt-in rather than enabled during setup by default.
+  self-development workflow, including restoration of idle headless swarm
+  workers after reload. Linux compositor launch hotkeys are also explicitly
+  opt-in rather than enabled during setup by default.
 
 This is a representative list, not a claim that every upstream commit is
 absent here or that every item is enabled in every build. The commit history is
