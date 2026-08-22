@@ -354,7 +354,7 @@ phases:
           - "The lane stays within its declared scenario and time bounds."
       - id: "T026"
         title: "Run the bounded non-incremental cold sccache lane into specs/015-tune-rust-feedback/evidence/sccache.json"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"

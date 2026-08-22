@@ -1,0 +1,418 @@
+{
+  "action_counts": {
+    "cancelled": 0,
+    "coalesced": 0,
+    "executed": 3,
+    "followers": 0,
+    "requested": 3,
+    "reused": 0,
+    "underlying_actions": 3
+  },
+  "aggregates": {
+    "cold_fresh_worktree_build": {
+      "cache_observations": [
+        {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 0,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        },
+        {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 105237534,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        },
+        {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 105237534,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 4791,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 1547378688,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 4874,
+      "p95_execution_time_ms": 4798,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 1568215040,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 4882,
+      "retry_sample_count": 2,
+      "valid_sample_count": 3
+    }
+  },
+  "collection": {
+    "all_invalid_or_retried_evidence_retained": true,
+    "observed_total_seconds": 14.592,
+    "raw_source_retained": false,
+    "resource_bounds": {
+      "maximum_target_bytes_per_sample": 6442450944,
+      "maximum_total_seconds": 2700
+    },
+    "sample_bounds": {
+      "attempts_run": 3,
+      "maximum_attempts": 5,
+      "minimum_valid_samples": 3
+    },
+    "scenario_id": "cold_fresh_worktree_build",
+    "sensitive_environment_retained": false,
+    "variant_ids": [
+      "sccache_cold_miss",
+      "sccache_reusable_hit"
+    ]
+  },
+  "experiment_boundary": {
+    "bounded": true,
+    "default_changed": false,
+    "variant": "sccache_unavailable_with_nonincremental_cargo_fallback"
+  },
+  "fallback": {
+    "reason": "sccache is not installed, so both bounded candidate variants were rejected before cache execution and the established non-incremental Cargo build path was verified with fresh target state.",
+    "used": true
+  },
+  "run_identity": {
+    "dirty_fingerprint": "sha256:3d06a7f9c71773196d4b540971fb6d6761e1561a426badc5752d1a006a5ecadf",
+    "effective_configuration": {
+      "candidate_available": false,
+      "experiment_variants": [
+        "sccache_cold_miss",
+        "sccache_reusable_hit"
+      ],
+      "fallback_executor": "cargo build",
+      "fallback_package": "jcode-build-support",
+      "incremental": false,
+      "jobs": 6,
+      "matrix_path": "scripts/rust_feedback_matrix.json",
+      "samples": 3,
+      "sccache": "disabled"
+    },
+    "host_conditions": {
+      "architecture": "x86_64",
+      "cargo_heavy_scenarios_serialized": true,
+      "kernel": "7.0.9-arch2-1",
+      "logical_cpu_count": 16,
+      "memory_bytes": 29039259648,
+      "os": "linux",
+      "shared_daemon_touched": false
+    },
+    "label": "bounded-sccache-unavailable-cold-fallback",
+    "lockfile_fingerprint": "sha256:bd794cdf676cd24257ba3b5b2515c83f003383175836417ca11d661020c69bd4",
+    "matrix_version": "1.0.0",
+    "source_revision": "be4e72b6a2fd218f69570487876b4bd2f792c9f6",
+    "timestamp": "2026-08-22T17:01:42.094698Z",
+    "toolchain": "rustc 1.95.0 (59807616e 2026-04-14) (Arch Linux rust 1:1.95.0-1); binary: rustc; commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860; commit-date: 2026-04-14; host: x86_64-unknown-linux-gnu; release: 1.95.0; LLVM version: 22.1.3"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "metrics": {
+        "cache": {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 0,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        },
+        "execution_time_ms": 4743,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 1568215040,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 4824
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "cold_fresh_worktree_build",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "metrics": {
+        "cache": {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 105237534,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        },
+        "execution_time_ms": 4791,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 1489391616,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 4874
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 1
+      },
+      "scenario_id": "cold_fresh_worktree_build",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "metrics": {
+        "cache": {
+          "candidate": "sccache",
+          "candidate_availability": "unavailable",
+          "candidate_cache_state": {
+            "reason": "sccache is not installed, so miss/hit statistics cannot be collected",
+            "status": "not_applicable"
+          },
+          "fallback_executor": "cargo build",
+          "fallback_sccache": "disabled",
+          "incremental": false,
+          "previous_sample_target_bytes": 105237534,
+          "target_disk_bytes_after": 105237534,
+          "target_disk_bytes_before": 0,
+          "target_state": "empty_before_sample"
+        },
+        "execution_time_ms": 4798,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 1547378688,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 4882
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 2
+      },
+      "scenario_id": "cold_fresh_worktree_build",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    }
+  ],
+  "sccache_evaluation": {
+    "availability": {
+      "available": false,
+      "probe_command": [
+        "cargo",
+        "sccache",
+        "--version"
+      ],
+      "probe_exit_status": 101,
+      "probe_result": "help: find a package to install `sccache` with `cargo search cargo-sccache`",
+      "version": {
+        "reason": "cargo-sccache is not installed",
+        "status": "not_applicable"
+      }
+    },
+    "cache_effectiveness": {
+      "reason": "no sccache execution occurred, so requests, misses, hits, and hit rate cannot be measured",
+      "status": "not_applicable"
+    },
+    "cache_failure_behavior": "Candidate setup failure was detected before execution. JCODE_SCCACHE=off and CARGO_INCREMENTAL=0 selected the established fallback only for this bounded cold lane.",
+    "candidate_samples": {
+      "cold_miss": {
+        "reason": "candidate unavailable",
+        "status": "not_applicable"
+      },
+      "reusable_hit": {
+        "reason": "candidate unavailable, and no valid matching miss sample exists",
+        "status": "not_applicable"
+      }
+    },
+    "decision": "reject",
+    "decision_reason": "Unavailable candidate. No sccache default or warm incremental policy changed.",
+    "eligibility": {
+      "cold_miss": false,
+      "reason": "Both variants require sccache to be installed. No cache service or cache directory was created.",
+      "reusable_hit": false
+    },
+    "fallback_samples": [
+      {
+        "attempt": 1,
+        "command": [
+          "scripts/dev_cargo.sh",
+          "build",
+          "-p",
+          "jcode-build-support"
+        ],
+        "effective_cache_receipt": {
+          "configured": {
+            "cargo_incremental": "0",
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": false,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "exit_status": 0,
+        "incremental_disabled": true,
+        "sccache_disabled_for_fallback": true,
+        "target_directory": "target-attempt-1",
+        "target_disk_bytes_after": 105237534,
+        "target_empty_before": true,
+        "timed_out": false
+      },
+      {
+        "attempt": 2,
+        "command": [
+          "scripts/dev_cargo.sh",
+          "build",
+          "-p",
+          "jcode-build-support"
+        ],
+        "effective_cache_receipt": {
+          "configured": {
+            "cargo_incremental": "0",
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": false,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "exit_status": 0,
+        "incremental_disabled": true,
+        "sccache_disabled_for_fallback": true,
+        "target_directory": "target-attempt-2",
+        "target_disk_bytes_after": 105237534,
+        "target_empty_before": true,
+        "timed_out": false
+      },
+      {
+        "attempt": 3,
+        "command": [
+          "scripts/dev_cargo.sh",
+          "build",
+          "-p",
+          "jcode-build-support"
+        ],
+        "effective_cache_receipt": {
+          "configured": {
+            "cargo_incremental": "0",
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": false,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "exit_status": 0,
+        "incremental_disabled": true,
+        "sccache_disabled_for_fallback": true,
+        "target_directory": "target-attempt-3",
+        "target_disk_bytes_after": 105237534,
+        "target_empty_before": true,
+        "timed_out": false
+      }
+    ],
+    "fallback_verified": true,
+    "reconsideration_condition": "Re-run the same bounded miss/hit lane only after sccache is installed, using an isolated empty cache followed by an identity-matched reusable cache and the same cold non-incremental scenario.",
+    "warm_incremental_default_unchanged": true,
+    "worktree_behavior": {
+      "fresh_scenario_target_per_sample": true,
+      "isolated_task_worktree": true,
+      "repository_worktree": "/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning",
+      "reused_incremental_artifacts": false,
+      "source_revision_unchanged_during_samples": true
+    }
+  },
+  "schema_version": "1.0.0"
+}
