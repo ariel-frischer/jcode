@@ -1255,16 +1255,18 @@ pub fn record_command_family(command: &str) {
 fn telemetry_http_client() -> Option<&'static reqwest::blocking::Client> {
     TELEMETRY_HTTP_CLIENT
         .get_or_init(|| {
-            reqwest::blocking::Client::builder()
+            match reqwest::blocking::Client::builder()
                 .user_agent(jcode_provider_core::JCODE_USER_AGENT)
                 .build()
-                .map_err(|err| {
+            {
+                Ok(client) => Some(client),
+                Err(err) => {
                     logging::warn(&format!(
                         "telemetry HTTP client initialization failed: {err}"
                     ));
-                    err
-                })
-                .ok()
+                    None
+                }
+            }
         })
         .as_ref()
 }
@@ -1352,15 +1354,17 @@ where
 fn background_sender() -> Option<&'static SyncSender<Value>> {
     TELEMETRY_BACKGROUND_SENDER
         .get_or_init(|| {
-            spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
-                let _ = post_payload(payload, ASYNC_SEND_TIMEOUT);
-            })
-            .map_err(|err| {
-                logging::warn(&format!(
-                    "telemetry background worker failed to start: {err}"
-                ))
-            })
-            .ok()
+            match spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
+                let _delivered = post_payload(payload, ASYNC_SEND_TIMEOUT);
+            }) {
+                Ok(sender) => Some(sender),
+                Err(err) => {
+                    logging::warn(&format!(
+                        "telemetry background worker failed to start: {err}"
+                    ));
+                    None
+                }
+            }
         })
         .as_ref()
 }
@@ -1369,15 +1373,17 @@ fn background_sender() -> Option<&'static SyncSender<Value>> {
 fn transcript_background_sender() -> Option<&'static SyncSender<Value>> {
     TRANSCRIPT_BACKGROUND_SENDER
         .get_or_init(|| {
-            spawn_background_worker(64, |payload| {
-                let _ = post_transcript_payload(payload, ASYNC_SEND_TIMEOUT);
-            })
-            .map_err(|err| {
-                logging::warn(&format!(
-                    "transcript telemetry background worker failed to start: {err}"
-                ))
-            })
-            .ok()
+            match spawn_background_worker(64, |payload| {
+                let _delivered = post_transcript_payload(payload, ASYNC_SEND_TIMEOUT);
+            }) {
+                Ok(sender) => Some(sender),
+                Err(err) => {
+                    logging::warn(&format!(
+                        "transcript telemetry background worker failed to start: {err}"
+                    ));
+                    None
+                }
+            }
         })
         .as_ref()
 }
