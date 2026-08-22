@@ -71,7 +71,7 @@ phases:
           - "No dependency, public type, config, raw input receipt, or change to scripts/dev_cargo.sh is introduced."
       - id: "T005"
         title: "Implement atomic leader-or-follower persistence"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 mod build_queue;
@@ -147,6 +148,14 @@ struct BuildRequest {
     output_file: Option<String>,
     status_file: Option<String>,
     attached_to_request_id: Option<String>,
+}
+
+enum BuildRequestClaim {
+    Leader(BuildRequest),
+    Follower {
+        request: BuildRequest,
+        leader: BuildRequest,
+    },
 }
 
 impl BuildRequest {
@@ -310,6 +319,27 @@ impl BuildRequest {
         Ok(Self::pending_requests_for_scope(worktree_scope)?
             .into_iter()
             .find(|request| request.dedupe_key.as_deref() == Some(dedupe_key)))
+    }
+
+    fn claim_leader_or_follower(mut request: Self) -> Result<BuildRequestClaim> {
+        static CLAIM_MUTEX: Mutex<()> = Mutex::new(());
+
+        let _claim_guard = CLAIM_MUTEX
+            .lock()
+            .map_err(|_| anyhow::anyhow!("self-dev request claim mutex was poisoned"))?;
+
+        if let Some(dedupe_key) = request.dedupe_key.as_deref()
+            && let Some(leader) = Self::find_duplicate_pending(&request.worktree_scope, dedupe_key)?
+        {
+            request.state = BuildRequestState::Attached;
+            request.last_progress = Some("attached to existing build".to_string());
+            request.attached_to_request_id = Some(leader.request_id.clone());
+            request.save()?;
+            return Ok(BuildRequestClaim::Follower { request, leader });
+        }
+
+        request.save()?;
+        Ok(BuildRequestClaim::Leader(request))
     }
 
     fn find_by_request_or_task(
