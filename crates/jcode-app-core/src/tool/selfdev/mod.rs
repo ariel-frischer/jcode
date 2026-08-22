@@ -465,6 +465,8 @@ struct BuildLockGuard {
 
 type SelfDevBuildCommand = build::SelfDevBuildCommand;
 
+const COALESCING_IDENTITY_VERSION: &str = "selfdev-cargo-v1";
+
 impl Drop for BuildLockGuard {
     fn drop(&mut self) {
         // Windows does not allow deleting an open lock file. Close the handle
@@ -823,9 +825,73 @@ impl SelfDevTool {
     }
 
     fn build_dedupe_key(source: &build::SourceState, command: &SelfDevBuildCommand) -> String {
+        Self::versioned_dedupe_key("build", source, &command.display)
+    }
+
+    fn eligible_test_dedupe_key(
+        source: &build::SourceState,
+        rendered_command: &str,
+    ) -> Option<String> {
+        let rendered_command = rendered_command.trim();
+        if rendered_command.is_empty()
+            || rendered_command.chars().any(|character| {
+                matches!(
+                    character,
+                    '\'' | '"'
+                        | '`'
+                        | '\\'
+                        | ';'
+                        | '|'
+                        | '&'
+                        | '<'
+                        | '>'
+                        | '$'
+                        | '('
+                        | ')'
+                        | '{'
+                        | '}'
+                        | '['
+                        | ']'
+                        | '*'
+                        | '?'
+                        | '~'
+                        | '!'
+                        | '#'
+                        | '\n'
+                        | '\r'
+                )
+            })
+        {
+            return None;
+        }
+
+        let mut words = rendered_command.split_ascii_whitespace();
+        let program = words.next()?;
+        if !matches!(
+            program,
+            "cargo" | "scripts/dev_cargo.sh" | "./scripts/dev_cargo.sh"
+        ) {
+            return None;
+        }
+        if !matches!(words.next()?, "build" | "test" | "check") {
+            return None;
+        }
+
+        Some(Self::versioned_dedupe_key("test", source, rendered_command))
+    }
+
+    fn versioned_dedupe_key(
+        request_kind: &str,
+        source: &build::SourceState,
+        rendered_command: &str,
+    ) -> String {
         format!(
-            "{}:{}:{}",
-            source.worktree_scope, source.fingerprint, command.display
+            "{}:{}:{}:{}:{}",
+            COALESCING_IDENTITY_VERSION,
+            request_kind,
+            source.worktree_scope,
+            source.fingerprint,
+            rendered_command
         )
     }
 

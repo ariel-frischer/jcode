@@ -182,6 +182,77 @@ fn optimized_test_shell_command_routes_compile_subcommands_only() {
     assert!(shell.ends_with("cargo test -p jcode-base && cargo fmt --all -- --check"));
 }
 
+#[test]
+fn versioned_request_identity_preserves_scope_source_action_and_exact_command() {
+    let repo = create_repo_fixture();
+    let source = test_source_state(repo.path());
+    let build_command = SelfDevBuildCommand {
+        program: "scripts/dev_cargo.sh".to_string(),
+        args: vec!["build".to_string()],
+        display: "scripts/dev_cargo.sh build --profile selfdev -p jcode".to_string(),
+    };
+
+    let build_key = SelfDevTool::build_dedupe_key(&source, &build_command);
+    let test_key = SelfDevTool::eligible_test_dedupe_key(
+        &source,
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode",
+    )
+    .expect("single exact dev_cargo invocation should be eligible");
+
+    assert!(build_key.starts_with("selfdev-cargo-v1:build:"));
+    assert!(test_key.starts_with("selfdev-cargo-v1:test:"));
+    for dimension in [
+        source.worktree_scope.as_str(),
+        source.fingerprint.as_str(),
+        build_command.display.as_str(),
+    ] {
+        assert!(build_key.contains(dimension));
+        assert!(test_key.contains(dimension));
+    }
+    assert_ne!(
+        build_key, test_key,
+        "public action is an identity dimension"
+    );
+}
+
+#[test]
+fn eligible_test_identity_accepts_only_single_unambiguous_cargo_commands() {
+    let repo = create_repo_fixture();
+    let source = test_source_state(repo.path());
+
+    for command in [
+        "cargo build -p jcode",
+        "cargo test -p jcode --lib",
+        "cargo check -p jcode --all-targets",
+        "scripts/dev_cargo.sh build --profile selfdev -p jcode",
+        "./scripts/dev_cargo.sh test -p jcode-app-core",
+    ] {
+        let key = SelfDevTool::eligible_test_dedupe_key(&source, command)
+            .unwrap_or_else(|| panic!("expected eligible command: {command}"));
+        assert!(key.ends_with(command), "identity must retain exact command");
+    }
+
+    for command in [
+        "",
+        "cargo",
+        "cargo clippy -p jcode",
+        "cargo bench -p jcode",
+        "env RUSTFLAGS=-Dwarnings cargo check -p jcode",
+        "RUSTFLAGS=-Dwarnings cargo check -p jcode",
+        "cargo test -p jcode && cargo check -p jcode",
+        "cargo test -p jcode | tee test.log",
+        "cargo test -p jcode > test.log",
+        "cargo test -p 'jcode'",
+        "bash -lc cargo test -p jcode",
+        "echo cargo test -p jcode",
+    ] {
+        assert!(
+            SelfDevTool::eligible_test_dedupe_key(&source, command).is_none(),
+            "opaque or potentially side-effecting command must stay independent: {command}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn optimized_test_shell_command_executes_raw_cargo_test_through_wrapper() {

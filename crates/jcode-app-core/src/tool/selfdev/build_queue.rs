@@ -1150,10 +1150,8 @@ export -f cargo
             ],
             display: command.clone(),
         };
-        let dedupe_key = format!(
-            "test:{}:{}:{}",
-            requested_source.worktree_scope, requested_source.fingerprint, shell_command.display
-        );
+        let dedupe_key =
+            SelfDevTool::eligible_test_dedupe_key(&requested_source, &shell_command.display);
         let blocker = SelfDevTool::newest_active_request(&requested_source.worktree_scope)?;
         let (session_short_name, session_title) = SelfDevTool::load_session_labels(&ctx.session_id);
         let request_id = SelfDevTool::next_request_id();
@@ -1176,7 +1174,7 @@ export -f cargo
             completed_at: None,
             state: BuildRequestState::Queued,
             version: Some(requested_source.version_label.clone()),
-            dedupe_key: Some(dedupe_key),
+            dedupe_key,
             requested_source: Some(requested_source.clone()),
             built_source: None,
             published_version: None,
