@@ -52,6 +52,7 @@ pub enum AppRuntimeMode {
 mod auth;
 mod auth_account_picker_saved_accounts;
 mod catchup;
+mod command_suggestions_cache;
 mod commands;
 mod commands_colors;
 mod commands_dispatch;
@@ -63,6 +64,8 @@ mod commands_review;
 mod conversation_state;
 mod copy_selection;
 mod debug;
+
+use command_suggestions_cache::*;
 mod dictation;
 mod event_wrappers;
 mod file_mentions;
@@ -654,48 +657,6 @@ pub(super) struct OvernightAutoPokeState {
     pub diagnostic_sent: bool,
     pub morning_report_poked: bool,
     pub final_wrap_poked: bool,
-}
-
-#[derive(Clone, Debug, Default)]
-struct CommandCandidatesCache {
-    candidates: Vec<(String, &'static str)>,
-}
-
-/// Memoized result of [`App::command_suggestions`] for one exact input buffer.
-///
-/// The suggestion list is read up to eight times per rendered frame (input
-/// box, hint line, shell-mode routing, key handling, debug capture). Each
-/// uncached call re-ranks ~120 registered commands plus skills, allocating a
-/// lowercased `String` per candidate, and some prefixes (`/goals show `) hit
-/// the disk. Caching on the exact input plus the small amount of state that
-/// can change the answer collapses that to one computation per distinct
-/// input.
-#[derive(Clone, Debug)]
-struct CommandSuggestionsCache {
-    /// Exact (untrimmed) input buffer the suggestions were computed from.
-    input: String,
-    /// Guard state that changes the answer independently of `input`, so a
-    /// stale entry can never outlive a prompt/picker transition.
-    signature: CommandSuggestionsSignature,
-    /// Frame epoch the entry was built in. The suggestion list also depends on
-    /// mutable session data (rewind target count, model catalogs, skills,
-    /// goals on disk) that is impractical to enumerate in a signature, so the
-    /// memo is deliberately scoped to a single frame: it collapses the ~8
-    /// reads per frame into one computation and never survives into the next.
-    epoch: u64,
-    suggestions: Vec<(String, &'static str)>,
-}
-
-/// Non-input state that [`App::command_suggestions`] branches on before it
-/// ever consults the input buffer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CommandSuggestionsSignature {
-    pending_login: bool,
-    pending_account_input: bool,
-    pending_ssh_remote_name: bool,
-    /// `Some(kind)` while an inline picker preview is open, which suppresses
-    /// the textual suggestion list for the matching command.
-    inline_preview_kind: Option<crate::tui::PickerKind>,
 }
 
 /// Session-wide token and cache accounting accumulated across all turns.

@@ -14,7 +14,9 @@ fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selectio
 
     let suggestions = wait_for_file_mention_suggestions(&mut app);
     assert!(
-        suggestions.iter().any(|(value, _)| value == "Explain @src/"),
+        suggestions
+            .iter()
+            .any(|(value, _)| value == "Explain @src/"),
         "expected src directory suggestion, got {suggestions:?}"
     );
     assert!(
@@ -126,19 +128,21 @@ fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
     }
     std::fs::write(temp.path().join("root-file.txt"), "").expect("root file");
 
-    let (receiver, _cancel) =
-        super::file_mentions::start_file_mention_discovery_for_test(
-            temp.path().to_path_buf(),
-            String::new(),
-            Vec::new(),
-            11,
-        );
+    let (receiver, _cancel) = super::file_mentions::start_file_mention_discovery_for_test(
+        temp.path().to_path_buf(),
+        String::new(),
+        Vec::new(),
+        11,
+    );
     let first = receiver
         .recv_timeout(std::time::Duration::from_millis(100))
         .expect("first file batch");
 
     assert!(
-        first.candidates.iter().any(|candidate| candidate.path == "root-file.txt"),
+        first
+            .candidates
+            .iter()
+            .any(|candidate| candidate.path == "root-file.txt"),
         "root-level file missing from first batch: {:?}",
         first.candidates
     );
@@ -209,6 +213,31 @@ fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
 }
 
 #[test]
+fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("notes.md"), "private file contents")
+        .expect("write file mention fixture");
+    let mut app = create_test_app();
+    app.session.working_dir = Some(dir.path().to_string_lossy().into_owned());
+    app.is_processing = true;
+    app.queue_mode = true;
+    app.input = "Inspect @notes.md".to_string();
+    app.cursor_pos = app.input.len();
+
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("queue file mention");
+    assert_eq!(app.queued_messages(), &["Inspect @notes.md".to_string()]);
+
+    app.retrieve_pending_message_for_edit();
+
+    assert_eq!(app.input(), "Inspect @notes.md");
+    assert!(!app.input().contains("private file contents"));
+}
+
+#[test]
 fn stale_file_mention_generations_are_discarded() {
     let _env_lock = crate::storage::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -225,12 +254,16 @@ fn stale_file_mention_generations_are_discarded() {
 
     let suggestions = wait_for_file_mention_suggestions(&mut app);
     assert!(
-        suggestions.iter().any(|(value, _)| value == "@new-name.txt"),
+        suggestions
+            .iter()
+            .any(|(value, _)| value == "@new-name.txt"),
         "new query suggestions: {suggestions:?}"
     );
-    assert!(suggestions
-        .iter()
-        .all(|(value, _)| !value.contains("old-name")));
+    assert!(
+        suggestions
+            .iter()
+            .all(|(value, _)| !value.contains("old-name"))
+    );
 }
 
 #[test]

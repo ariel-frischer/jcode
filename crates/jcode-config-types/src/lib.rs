@@ -1,7 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+mod compaction_mode;
 mod display;
+mod file_mentions;
+pub use compaction_mode::CompactionMode;
 pub use display::DisplayConfig;
+pub use file_mentions::FileMentionsConfig;
 pub mod keybindings;
 mod serde_lenient;
 pub use keybindings::{
@@ -9,57 +13,6 @@ pub use keybindings::{
     KeybindingPlatform, KeybindingProvenance, PlatformDefault, default_binding, default_binding_or,
     keybinding_default, keybinding_defaults_report, validate_keybinding_defaults,
 };
-
-/// File mention completion behavior for the TUI composer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct FileMentionsConfig {
-    /// Whether typing `@` enables filesystem-backed file suggestions.
-    pub enabled: bool,
-    /// Additional gitignore-style path patterns excluded from `@` completion.
-    pub ignore: Vec<String>,
-}
-
-impl Default for FileMentionsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            ignore: Vec::new(),
-        }
-    }
-}
-
-/// Compaction mode
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum CompactionMode {
-    /// Compact when context hits a fixed threshold (default)
-    #[default]
-    Reactive,
-    /// Compact early based on predicted token growth rate
-    Proactive,
-    /// Compact based on semantic topic shifts and relevance scoring
-    Semantic,
-}
-
-impl CompactionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Reactive => "reactive",
-            Self::Proactive => "proactive",
-            Self::Semantic => "semantic",
-        }
-    }
-
-    pub fn parse(input: &str) -> Option<Self> {
-        match input.trim().to_ascii_lowercase().as_str() {
-            "reactive" => Some(Self::Reactive),
-            "proactive" => Some(Self::Proactive),
-            "semantic" => Some(Self::Semantic),
-            _ => None,
-        }
-    }
-}
 
 /// Session picker Enter action: "current-terminal" (default) or "new-terminal".
 /// Ctrl+Enter performs the alternate action.
