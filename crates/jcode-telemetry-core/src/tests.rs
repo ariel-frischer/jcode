@@ -120,6 +120,42 @@ fn successful_initialization_is_cached() {
 }
 
 #[test]
+fn successful_initialization_is_cached_across_concurrent_callers() {
+    const CALLERS: usize = 8;
+    let slot = std::sync::Arc::new(OnceLock::new());
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let start = std::sync::Arc::new(std::sync::Barrier::new(CALLERS));
+    let threads = (0..CALLERS)
+        .map(|_| {
+            let slot = std::sync::Arc::clone(&slot);
+            let attempts = std::sync::Arc::clone(&attempts);
+            let start = std::sync::Arc::clone(&start);
+            std::thread::spawn(move || {
+                start.wait();
+                cached_optional(
+                    &slot,
+                    || {
+                        attempts.fetch_add(1, Ordering::Relaxed);
+                        std::thread::sleep(Duration::from_millis(20));
+                        Ok::<_, std::io::Error>(7)
+                    },
+                    |_| unreachable!("successful initialization must not report an error"),
+                )
+                .copied()
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for thread in threads {
+        assert_eq!(
+            thread.join().expect("initializer caller must not panic"),
+            Some(7)
+        );
+    }
+    assert_eq!(attempts.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn transient_http_client_initialization_failure_can_recover() {
     let slot = OnceLock::new();
     let reported = std::sync::atomic::AtomicUsize::new(0);
