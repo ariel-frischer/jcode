@@ -78,7 +78,7 @@ phases:
     tasks:
       - id: "T005"
         title: "Add failing percentile, invalidation, retry, comparability, and action-count fixture tests in scripts/test_bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
