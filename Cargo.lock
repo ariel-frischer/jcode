@@ -3481,6 +3481,7 @@ dependencies = [
  "jcode-core",
  "jcode-dap",
  "jcode-import-core",
+ "jcode-lsp",
  "jcode-message-types",
  "jcode-notify-email",
  "jcode-overnight-core",
@@ -3788,6 +3789,21 @@ dependencies = [
  "jcode-storage",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "jcode-lsp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "uuid",
 ]
 
 [[package]]

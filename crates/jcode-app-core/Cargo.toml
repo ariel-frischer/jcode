@@ -91,6 +91,7 @@ jcode-base = { path = "../jcode-base", default-features = false }
 jcode-config-types = { path = "../jcode-config-types" }
 jcode-command-risk = { path = "../jcode-command-risk" }
 jcode-dap = { path = "../jcode-dap" }
+jcode-lsp = { path = "../jcode-lsp" }
 jcode-core = { path = "../jcode-core" }
 jcode-message-types = { path = "../jcode-message-types" }
 jcode-overnight-core = { path = "../jcode-overnight-core" }

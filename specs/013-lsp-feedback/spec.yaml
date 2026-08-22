@@ -1,0 +1,128 @@
+feature:
+  branch: agent/jcode-5v7-lsp
+  created: 2026-08-21
+  status: Draft
+  input: >-
+    Add a language-neutral, configurable LSP capability to Jcode, informed by
+    Oh My Pi. Synchronize edited documents with active language servers and
+    return bounded diagnostics, formatting results, and navigation data while
+    preserving existing behavior when no server is configured or available.
+
+user_stories:
+  - id: US-001
+    title: Configure language servers deterministically
+    priority: P1
+    as_a: Jcode operator
+    i_want: project and user language-server configuration with safe defaults
+    so_that: adapters activate only when explicitly or declaratively eligible
+    independent_test: merge built-in, user, and project fixtures and inspect the effective registry
+  - id: US-002
+    title: Receive diagnostics after edits
+    priority: P1
+    as_a: Jcode agent
+    i_want: successful edits to synchronize active servers and return diagnostics
+    so_that: edit repair can close the feedback loop without a separate manual test step
+    independent_test: run a fake server against a fixture edit and inspect normalized inline or deferred output
+  - id: US-003
+    title: Query language intelligence safely
+    priority: P1
+    as_a: Jcode agent
+    i_want: bounded status, hover, definition, references, symbols, and capability operations
+    so_that: I can use semantic project context when a server supports it
+    independent_test: exercise each supported and unsupported operation against a deterministic fake server
+  - id: US-004
+    title: Preserve ordinary workflows
+    priority: P1
+    as_a: Jcode operator
+    i_want: LSP to be optional, bounded, and policy compatible
+    so_that: missing binaries, slow servers, and disabled profiles never break ordinary edits
+    independent_test: run edit and tool tests with no server, missing binary, timeout, malformed output, and disabled policy
+  - id: US-005
+    title: Explain and measure the feature
+    priority: P2
+    as_a: Jcode maintainer
+    i_want: documentation and an offline benchmark
+    so_that: setup, troubleshooting, and regression review are reproducible
+    independent_test: execute docs examples against the fake server and parse benchmark output
+
+requirements:
+  functional:
+    - id: FR-001
+      description: Provide a standalone Rust jcode-lsp crate with language-neutral protocol, transport, configuration, and lifecycle modules.
+      testable: true
+      acceptance_criteria: crate unit tests cover framing, JSON-RPC correlation, configuration, diagnostics, and lifecycle.
+    - id: FR-002
+      description: Resolve built-in, user, and project server definitions with deterministic precedence, enable/disable, command, args, file types, language ID, root markers, timeouts, idle policy, and optional formatter/linter mode.
+      testable: true
+      acceptance_criteria: fixture tests prove project overrides user, user overrides built-ins, nested settings merge, and disabled or unavailable servers do not activate.
+    - id: FR-003
+      description: Implement bounded LSP Content-Length framing, request correlation, notifications, cancellation, malformed-message handling, and timeout behavior.
+      testable: true
+      acceptance_criteria: transport tests cover fragmented frames, multiple frames, malformed JSON, oversized frames, request timeout, server exit, and cancellation.
+    - id: FR-004
+      description: Synchronize opened and changed documents with active servers, track versions, reject stale diagnostics, and support batching plus deferred feedback for slow servers.
+      testable: true
+      acceptance_criteria: session tests prove didOpen/didChange versioning, stale diagnostic rejection, bounded batching, and deferred status.
+    - id: FR-005
+      description: Expose bounded LSP actions for status, diagnostics, hover, definition, references, symbols, capabilities, and explicitly gated formatting, rename, and code actions.
+      testable: true
+      acceptance_criteria: app-core tool tests verify action schemas, structured metadata, capability errors, and output bounds.
+    - id: FR-006
+      description: Wire edit and write feedback without making LSP a prerequisite for existing edit success.
+      testable: true
+      acceptance_criteria: edits succeed unchanged when LSP is disabled, unavailable, or times out; active servers receive synchronized content and diagnostics are attached when available.
+    - id: FR-007
+      description: Include a curated declarative catalog covering at least ten common ecosystems and binary-present plus project-marker activation.
+      testable: true
+      acceptance_criteria: catalog tests inspect Rust, TypeScript/JavaScript, Python, Go, C/C++, Java, C#, Kotlin, PHP, Ruby, and YAML entries and override/disable behavior.
+    - id: FR-008
+      description: Keep Tree-sitter optional and never use it as a replacement for LSP semantic diagnostics or navigation.
+      testable: true
+      acceptance_criteria: dependency and documentation checks show no required Tree-sitter edge and semantic operations remain LSP-backed.
+    - id: FR-009
+      description: Document security boundaries, installation and detection rules, configuration precedence, troubleshooting, safe local validation, and benchmark usage.
+      testable: true
+      acceptance_criteria: docs/LSP.md contains no-server, missing-binary, slow-server, malformed-message, cleanup, and permissions guidance.
+    - id: FR-010
+      description: Provide an offline benchmark for edit-to-feedback latency, diagnostic success, tool calls, and resource bounds.
+      testable: true
+      acceptance_criteria: benchmark emits machine-readable deterministic results without network or production services.
+  non_functional:
+    - id: NFR-001
+      category: performance
+      description: LSP requests and reads must be asynchronous, bounded, and isolated from Tokio worker starvation.
+      measurable_target: fake-server request dispatch p50 below 5 ms excluding server response time; diagnostic output capped at 128 KiB per request.
+    - id: NFR-002
+      category: reliability
+      description: Server exit, timeout, cancellation, and malformed protocol data must clean pending requests and owned processes.
+      measurable_target: repeated fake-server lifecycle fixtures leave zero live sessions or adapter children.
+    - id: NFR-003
+      category: security
+      description: Adapter commands use direct process spawning, never shell interpolation, and project configuration cannot widen a restrictive policy without explicit permission.
+      measurable_target: policy tests reject disabled tools and unsafe actions before process startup.
+
+success_criteria:
+  measurable_outcomes:
+    - id: SC-001
+      description: A configured fake server can be discovered, started, synchronized, queried, and cleaned up.
+      metric: deterministic fake-server scenario pass rate
+      target: 100 percent across 20 repetitions
+    - id: SC-002
+      description: Existing edits remain compatible with LSP disabled or unavailable.
+      metric: edit regression and no-server fixture pass rate
+      target: 100 percent
+    - id: SC-003
+      description: Diagnostics are bounded, version-aware, and actionable.
+      metric: normalized diagnostic fixture assertions
+      target: all required severity, range, stale, and deferred cases pass
+
+key_entities:
+  - name: ServerConfig
+    description: Declarative built-in, user, or project language-server definition.
+    attributes: [name, command, args, file_types, language_id, root_markers, enabled, timeouts, formatter]
+  - name: LspSession
+    description: Server-owned transport and document lifecycle for one project root.
+    attributes: [id, server, root, status, capabilities, documents, pending_requests, last_used]
+  - name: Diagnostic
+    description: Normalized bounded diagnostic tied to a URI and document version.
+    attributes: [severity, message, range, source, code, version, stale]
