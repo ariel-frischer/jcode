@@ -171,6 +171,57 @@ fn command_palette_models_command_opens_model_picker() {
 }
 
 #[test]
+fn command_palette_model_selection_preserves_composer_draft_and_cursor() {
+    let mut app = create_test_app();
+    configure_test_remote_models(&mut app);
+    app.set_input_for_test("draft before model picker");
+    app.cursor_pos = "draft before".len();
+
+    app.handle_key(
+        crossterm::event::KeyCode::Char('p'),
+        crossterm::event::KeyModifiers::CONTROL,
+    )
+    .unwrap();
+    for c in "models".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+    wait_for_model_picker_load(&mut app);
+
+    assert_eq!(app.input(), "draft before model picker");
+    assert_eq!(app.cursor_pos(), "draft before".len());
+}
+
+#[test]
+fn command_palette_slash_command_preserves_composer_draft_and_cursor() {
+    let mut app = create_test_app();
+    app.set_input_for_test("draft before slash command");
+    app.cursor_pos = "draft before".len();
+
+    app.open_command_palette();
+    app.command_palette.as_mut().expect("palette open").query = "clear".to_string();
+    let action = app
+        .accept_command_palette_selection()
+        .expect("clear command selected");
+    assert_eq!(
+        action,
+        super::command_palette::CommandPaletteAction::SlashCommand("/clear".to_string())
+    );
+    app.dispatch_command_palette_action(action);
+
+    assert_eq!(app.input(), "draft before slash command");
+    assert_eq!(app.cursor_pos(), "draft before".len());
+}
+
+#[test]
 fn profile_picker_filters_and_marks_active_profile() {
     let mut app = create_test_app();
     app.set_profile_names_for_test(["release", "review", "research"]);
