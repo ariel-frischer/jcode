@@ -196,6 +196,22 @@ fn command_palette_model_selection_preserves_composer_draft_and_cursor() {
     .unwrap();
     wait_for_model_picker_load(&mut app);
 
+    for _ in 0..3 {
+        if app.inline_interactive_state.is_none() {
+            break;
+        }
+        app.handle_key(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+
+    assert!(
+        app.inline_interactive_state.is_none(),
+        "model selection should close the picker"
+    );
+
     assert_eq!(app.input(), "draft before model picker");
     assert_eq!(app.cursor_pos(), "draft before".len());
 }
