@@ -29,7 +29,7 @@ phases:
           - "Define pass receipts for provenance completeness, changed oversized-file deltas, focused behavior and error paths, canonical guardrails, and the built selfdev binary."
       - id: "T002"
         title: "Record independent PR review concerns and stable disposition identifiers in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: null
