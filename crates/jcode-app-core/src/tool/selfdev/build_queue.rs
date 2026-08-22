@@ -218,27 +218,59 @@ export -f cargo
 
         let worktree_scope = request.worktree_scope.clone();
         let _lock = Self::wait_for_turn(&request_id, &worktree_scope, &mut queue_file).await?;
-        request.state = BuildRequestState::Building;
-        request.started_at = Some(Utc::now().to_rfc3339());
-        request.last_progress = Some("testing".to_string());
-        request.save()?;
-        Self::append_output_line(&mut queue_file, format!("Test starting now: {}", reason)).await;
-        drop(queue_file);
-
-        let result = if Self::is_test_session() {
-            let mut file = tokio::fs::File::create(&output_path)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create output file: {}", e))?;
-            Self::append_output_line(
-                &mut file,
-                format!("[test mode] Simulated selfdev test: {}", command.display),
-            )
-            .await;
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            Self::append_output_line(&mut file, "--- Command finished with exit code: 0 ---").await;
-            TaskResult::completed(Some(0))
+        request = BuildRequest::load(&request_id)?
+            .ok_or_else(|| anyhow::anyhow!("Missing queued test request {}", request_id))?;
+        let superseded = if request.dedupe_key.is_some() {
+            let expected_source = request.requested_source.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Missing requested source state for eligible test {}",
+                    request_id
+                )
+            })?;
+            let actual_source = Self::requested_source_state(&repo_dir)?;
+            (actual_source.fingerprint != expected_source.fingerprint).then(|| {
+                    TaskResult::superseded(
+                        None,
+                        format!(
+                            "Test source changed while queued. Marking this request as superseded without launching the command (expected {}, now {}).",
+                            expected_source.fingerprint, actual_source.fingerprint
+                        ),
+                    )
+                })
         } else {
-            Self::stream_build_command(repo_dir, command, output_path.clone()).await?
+            None
+        };
+
+        let result = if let Some(result) = superseded {
+            if let Some(detail) = result.error.as_deref() {
+                Self::append_output_line(&mut queue_file, detail).await;
+            }
+            result
+        } else {
+            request.state = BuildRequestState::Building;
+            request.started_at = Some(Utc::now().to_rfc3339());
+            request.last_progress = Some("testing".to_string());
+            request.save()?;
+            Self::append_output_line(&mut queue_file, format!("Test starting now: {}", reason))
+                .await;
+            drop(queue_file);
+
+            if Self::is_test_session() {
+                let mut file = tokio::fs::File::create(&output_path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create output file: {}", e))?;
+                Self::append_output_line(
+                    &mut file,
+                    format!("[test mode] Simulated selfdev test: {}", command.display),
+                )
+                .await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                Self::append_output_line(&mut file, "--- Command finished with exit code: 0 ---")
+                    .await;
+                TaskResult::completed(Some(0))
+            } else {
+                Self::stream_build_command(repo_dir, command, output_path.clone()).await?
+            }
         };
 
         let mut request = BuildRequest::load(&request_id)?

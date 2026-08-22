@@ -95,7 +95,7 @@ phases:
           - "Additive metadata reports identity_version, role, coalesced, and duplicate_of using bounded redacted values."
       - id: "T007"
         title: "Supersede stale eligible tests before command launch"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
