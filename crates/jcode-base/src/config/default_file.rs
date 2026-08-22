@@ -453,11 +453,14 @@ cross_provider_failover = "manual"
 # data received. Raise this for slow reasoning models (e.g. DeepSeek) that think
 # silently for minutes before emitting tokens. Default: 180.
 # Applies to every streaming provider path (OpenAI native, Anthropic, Copilot,
-# OpenRouter/OpenAI-compatible). The TUI's client-side stall guard also extends
-# to match this value. Also overridable per-launch via JCODE_STREAM_IDLE_TIMEOUT_SECS.
+# OpenRouter/OpenAI-compatible). The TUI warns after one minute without real
+# provider progress, then cancels and recovers after this budget plus 30 seconds.
+# Synthetic server keepalives do not reset that watchdog; active tools and
+# network-recovery waits are exempt. Also overridable per-launch via
+# JCODE_STREAM_IDLE_TIMEOUT_SECS.
 # This is the base budget: high reasoning efforts scale it up automatically
 # (high 2x, xhigh 3x, max/swarm 4x) since they think silently for much longer.
-# stream_idle_timeout_secs = 600
+# stream_idle_timeout_secs = 180
 # Maximum attempts for transient 429/5xx/network failures, including the first
 # request. Retries honor Retry-After and use capped exponential backoff.
 # Env overrides: JCODE_MAX_RETRIES, JCODE_RETRY_BACKOFF_CAP_SECS.
