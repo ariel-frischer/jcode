@@ -433,7 +433,7 @@ phases:
           - "Exact commands, receipts, and results are recorded without lowering or redefining budgets."
       - id: "T032"
         title: "Build and validate the resolved candidate binary on an isolated socket in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"

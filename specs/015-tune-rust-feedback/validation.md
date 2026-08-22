@@ -1,6 +1,6 @@
 # Rust Feedback Tuning Validation
 
-Status: **Validation in progress; focused checks and runtime budgets recorded**  
+Status: **Validation in progress; focused checks, runtime budgets, and isolated built-binary smoke recorded**
 Feature: `specs/015-tune-rust-feedback`  
 Source specification: `specs/015-tune-rust-feedback/spec.yaml`  
 Technical plan: `specs/015-tune-rust-feedback/plan.yaml`
@@ -176,10 +176,10 @@ Reserved to prove which executable was measured. Resolve symlinks before inspect
 
 | Item | Exact command | Observed value | Result |
 |---|---|---|---|
-| Candidate executable path | PENDING | PENDING | PENDING |
-| Resolved executable path | `readlink -f <candidate-or-shared-server-path>` | PENDING | PENDING |
-| Build revision/version identity | PENDING | PENDING | PENDING |
-| Shared daemon identity, if reloaded | PENDING | PENDING | PENDING |
+| Candidate executable path | `realpath target/selfdev/jcode` | `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning/target/selfdev/jcode` | PASS (exit 0) |
+| Resolved executable path | `readlink -f target/selfdev/jcode` | `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning/target/selfdev/jcode`; the candidate is a regular worktree executable, not the 70-byte shared-server symlink | PASS (exit 0) |
+| Build revision/version identity | `git rev-parse HEAD`; `./target/selfdev/jcode --version`; `sha256sum target/selfdev/jcode` | revision `31ab2cae8fd0f30d346b7552242f04ef1b1b841a`; version `jcode v0.79.636-dev (31ab2cae8, dirty)`; SHA-256 `18a1985f7425dda82d4a4d593d600d9e42582e67d9556e31841a67b86f61adb3` | PASS (exit 0); dirty is expected because T032 was marked InProgress before the build |
+| Shared daemon identity, if reloaded | `readlink -f "$HOME/.jcode/builds/shared-server/jcode"`; `sha256sum "$(readlink -f "$HOME/.jcode/builds/shared-server/jcode")"` | `/home/ari/.jcode/builds/versions/85f9f5e3b/jcode`; SHA-256 `29fc554983a1806f5162796a15c6eb862046425bc67bceab5fb3aee796bb89fb` | N/A: T032 deliberately did not reload the shared daemon; coordinated reload remains owned by T033 |
 
 ## Built-binary isolated-socket validation
 
@@ -193,10 +193,10 @@ Canonical command shape:
 
 | Step | Exact command or observation | Result | Evidence |
 |---|---|---|---|
-| Build `target/selfdev/jcode` | PENDING | PENDING | PENDING |
-| Resolve and confirm candidate binary identity | PENDING | PENDING | PENDING |
-| Run isolated-socket smoke against candidate | PENDING | PENDING | PENDING |
-| Confirm shared-daemon socket/process was not disturbed | PENDING | PENDING | PENDING |
+| Build `target/selfdev/jcode` | `RUSTUP_TOOLCHAIN=stable scripts/dev_cargo.sh build --profile selfdev --bin jcode` | PASS (exit 0) | Canonical `dev_cargo.sh` policy completed the selfdev build in `125.798 s`; only existing profile-spec and dead-code warnings were emitted. |
+| Resolve and confirm candidate binary identity | `realpath target/selfdev/jcode`; `git rev-parse HEAD`; `./target/selfdev/jcode --version`; `sha256sum target/selfdev/jcode` | PASS (exit 0) | Resolved worktree executable, revision, version, and digest are recorded in the preceding table. The separately resolved shared-server target and digest differ. |
+| Run isolated-socket smoke against candidate | `./target/selfdev/jcode run --no-update --no-selfdev --socket /run/user/1000/jcode-rust-feedback-t032-clean-1350408-1787420633.sock --tool-profile none --max-turns 1 --token-budget 16384 --deadline "$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)" 'Reply with exactly: T032_SMOKE_OK'` | PASS (exit 0) | The candidate returned the exact line `T032_SMOKE_OK` in `8.84 s`. The bounded single-turn client then reported its expected `max_turns_exceeded` stop reason after the completed response; upload/download were `10249/9` tokens and no tools were exposed. |
+| Confirm shared-daemon socket/process was not disturbed | Before and after: `stat -c '%i:%Y' /run/user/1000/jcode.sock /run/user/1000/jcode-debug.sock`; cleanup: `./target/selfdev/jcode --no-update --no-selfdev --socket /run/user/1000/jcode-rust-feedback-t032-clean-1350408-1787420633.sock server stop --force`; `test ! -e /run/user/1000/jcode-rust-feedback-t032-clean-1350408-1787420633.sock` | PASS (exit 0) | Shared socket identities remained `1283:1787403896` and `1284:1787403896`; cleanup returned exit 0, reported no persistent private daemon, and the unique socket was absent. No shared reload or stop command was issued. |
 
 ## Final acceptance summary
 
@@ -210,7 +210,7 @@ Canonical command shape:
 | Full-feature guardrails passed | FAIL (exit 1) | Seven pre-existing-at-T030-start gates failed at revision `ac31f6598b3aaa40387edf1ff4ef0ed69e9d6b97`; focused success was not substituted and ratchets were not rebaselined. |
 | Runtime budgets unchanged | PASS (exit 0) | Canonical collection and comparison both passed all nine maintained metrics with thresholds unchanged; receipt `$JCODE_SCRATCH_DIR/t031-runtime-budget.json`. |
 | Coordinated build/reload verified | PENDING | PENDING |
-| Resolved binary identity confirmed | PENDING | PENDING |
-| Isolated-socket built-binary smoke passed | PENDING | PENDING |
+| Resolved binary identity confirmed | PASS (exit 0) | Candidate path, resolved path, revision, version, and SHA-256 were recorded; the shared-server symlink was resolved separately and was not inspected as if it were a binary. |
+| Isolated-socket built-binary smoke passed | PASS (exit 0) | Unique socket returned exact `T032_SMOKE_OK`; cleanup succeeded and shared socket inode/timestamps were unchanged. |
 
 Final delivery decision: **PENDING**
