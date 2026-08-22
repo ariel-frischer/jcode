@@ -47,6 +47,7 @@ fn selected_run_profile_resolves_to_immutable_dispatch_options() {
             disabled_skills: Vec::new(),
             instructions: None,
             handoff: None,
+            file_mentions_ignore: Vec::new(),
         },
     );
     let config_before = toml::to_string(&config).expect("config should serialize");

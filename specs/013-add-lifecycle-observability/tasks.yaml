@@ -304,8 +304,7 @@ phases:
             - "Assert no direct sidecar reads occur in client-facing protocol code."
         - id: "T025"
           title: "Add end-to-end lifecycle command behavior tests"
-          status: "Blocked"
-          blocked_reason: 'Root jcode CLI test compilation is blocked by pre-existing unrelated errors: missing run_single_message_with_agent and SessionProfileConfig.file_mentions_ignore initializers.'
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-001"
@@ -433,8 +432,7 @@ phases:
             - "Do not discover, open, or parse lifecycle sidecars in the CLI process."
         - id: "T036"
           title: "Resolve session names and render typed lifecycle results"
-          status: "Blocked"
-          blocked_reason: Root jcode CLI test compilation is blocked by the same pre-existing unrelated test/profile errors; renderer source and existing test coverage are present.
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"

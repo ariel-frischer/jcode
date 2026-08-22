@@ -2780,17 +2780,26 @@ pub(crate) async fn run_single_message_command(
     run_safety::install(&mut agent, safety_candidates)?;
     let message = prepare_run_message(message, agent.session_id());
 
+    run_single_message_with_agent(&mut agent, provider, &message, emit_json, emit_ndjson).await
+}
+
+pub(crate) async fn run_single_message_with_agent(
+    agent: &mut crate::agent::Agent,
+    provider: std::sync::Arc<dyn crate::provider::Provider>,
+    message: &str,
+    emit_json: bool,
+    emit_ndjson: bool,
+) -> Result<()> {
     let result: Result<()> = async {
         if emit_json {
-            let text =
-                run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
-            let report = run_safety::report(&agent, &provider, text);
+            let text = run_single_message_command_capture_with_auto_poke(agent, message).await?;
+            let report = run_safety::report(agent, &provider, text);
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else if emit_ndjson {
-            run_single_message_command_ndjson(&mut agent, provider.clone(), &message).await?;
+            run_single_message_command_ndjson(agent, provider.clone(), message).await?;
         } else {
-            run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
-            run_safety::print_plain_stop(&agent);
+            run_single_message_command_plain_with_auto_poke(agent, message).await?;
+            run_safety::print_plain_stop(agent);
         }
         Ok(())
     }

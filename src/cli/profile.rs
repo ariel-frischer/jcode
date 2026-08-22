@@ -634,6 +634,7 @@ mod tests {
                 disabled_skills: Vec::new(),
                 instructions: Some("Keep the review focused and actionable.".to_owned()),
                 handoff: None,
+                file_mentions_ignore: Vec::new(),
             },
         );
         config
@@ -669,6 +670,7 @@ mod tests {
             disabled_skills: Vec::new(),
             instructions: None,
             handoff: None,
+            file_mentions_ignore: Vec::new(),
         }
     }
 
