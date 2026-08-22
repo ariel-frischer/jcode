@@ -60,6 +60,10 @@ pub fn read_lifecycle_stream_in_dir(
     session_id: &str,
     status: LifecycleObservabilityStatus,
 ) -> Result<SessionLifecycleStream> {
+    // Queries are also a maintenance boundary. Prune before reading so an
+    // expired active file cannot reappear in the returned stream, and so the
+    // retained artifact set remains bounded even when a session is idle.
+    prune_lifecycle_artifacts_in_dir(base, session_id, SystemTime::now())?;
     let paths = lifecycle_artifact_paths_in_dir(base, session_id)?;
     let mut events = Vec::new();
     let mut warnings = Vec::new();
@@ -96,7 +100,10 @@ pub fn prune_lifecycle_artifacts_in_dir(
         let Ok(metadata) = fs::metadata(&path) else {
             continue;
         };
-        if metadata.modified().unwrap_or(SystemTime::now()) < cutoff {
+        let modified = metadata
+            .modified()
+            .with_context(|| format!("read modification time for {}", path.display()))?;
+        if modified < cutoff {
             match fs::remove_file(&path) {
                 Ok(()) => removed += 1,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

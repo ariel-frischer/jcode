@@ -612,7 +612,7 @@ phases:
       tasks:
         - id: "T050"
           title: "Add size, age, and complete-record rotation boundary tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-004"
@@ -624,7 +624,7 @@ phases:
             - "Assert append and pruning failures do not change the caller's lifecycle decision."
         - id: "T051"
           title: "Add canonical cleanup and neighboring-session preservation tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-004"
@@ -635,7 +635,7 @@ phases:
             - "Invoke canonical cleanup and assert all selected-session artifacts are removed and every neighboring artifact remains."
         - id: "T052"
           title: "Implement deterministic rotation and age retention enforcement"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-004"
@@ -647,7 +647,7 @@ phases:
             - "Perform filesystem work outside runtime decision paths and surface bounded failures without preventing session continuation."
         - id: "T053"
           title: "Adopt canonical lifecycle cleanup in artifact removal"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-004"
@@ -658,7 +658,7 @@ phases:
             - "Remove all selected-session lifecycle artifacts without broad prefix deletion or neighboring-session impact."
         - id: "T054"
           title: "Use canonical cleanup for prepared-spawn rollback"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-004"
@@ -669,7 +669,7 @@ phases:
             - "Preserve rollback ordering, error handling, and cleanup of pre-existing snapshot, journal, and backup files."
         - id: "T055"
           title: "Use canonical cleanup for takeover rollback"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-004"
@@ -680,7 +680,7 @@ phases:
             - "Preserve import behavior and ensure lifecycle sidecars cannot be orphaned by rollback."
         - id: "T056"
           title: "Add storage failure and session-continuation regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-004"

@@ -338,6 +338,138 @@ async fn lifecycle_recorder_isolates_sink_and_queue_failures_and_filters_opaque_
 }
 
 #[tokio::test]
+async fn lifecycle_storage_failures_do_not_change_decisions_or_stop_session_progress() {
+    use crate::agent::Agent;
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::lifecycle_observability::LifecycleRecorder;
+    use crate::provider::Provider;
+    use crate::session::lifecycle_types::LifecycleObservabilityStatus;
+    use crate::tool::Registry;
+
+    let provider: Arc<dyn Provider> = Arc::new(LifecycleTestProvider);
+    let baseline_registry = Registry::new(provider.clone()).await;
+    let mut baseline_agent = Agent::new(provider.clone(), baseline_registry);
+    let baseline_decision = baseline_agent.request_manual_compaction();
+
+    let harness = LifecycleTestHarness::new();
+    let invalid_base = harness.temp_root.path().join("invalid-base");
+    std::fs::write(&invalid_base, b"not a directory").expect("create invalid lifecycle base");
+    let recorder = LifecycleRecorder::new_with_clock(
+        LifecycleObservabilityConfig::default(),
+        invalid_base.clone(),
+        8,
+        Arc::new({
+            let timestamp = harness.timestamp(0);
+            move || timestamp
+        }),
+    );
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+    agent.attach_lifecycle_recorder(recorder.clone());
+
+    let observed_decision = agent.request_manual_compaction();
+    assert_eq!(observed_decision, baseline_decision);
+    assert_eq!(agent.request_manual_compaction(), baseline_decision);
+    let diagnostics = recorder.flush().await;
+    assert!(diagnostics.contains(
+        &crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
+    ));
+
+    let append_root = tempfile::tempdir().expect("create append failure root");
+    let append_path = crate::session::lifecycle_path_in_dir(append_root.path(), TEST_SESSION_ID)
+        .expect("valid append failure path");
+    std::fs::create_dir_all(&append_path).expect("make active sidecar a directory");
+    assert!(
+        crate::session::append_lifecycle_event_in_dir(
+            append_root.path(),
+            &crate::session::lifecycle_types::LifecycleEventEnvelope {
+                schema_version: crate::session::lifecycle_types::LIFECYCLE_SCHEMA_VERSION,
+                session_id: TEST_SESSION_ID.to_string(),
+                sequence: 1,
+                recorded_at: harness.timestamp(1),
+                event: compaction_event(),
+            },
+        )
+        .is_err()
+    );
+
+    let rotation_root = tempfile::tempdir().expect("create rotation failure root");
+    let rotation_paths =
+        crate::session::lifecycle_artifact_paths_in_dir(rotation_root.path(), TEST_SESSION_ID)
+            .expect("valid rotation paths");
+    std::fs::create_dir_all(rotation_paths.active.parent().unwrap())
+        .expect("create rotation sessions directory");
+    std::fs::write(
+        &rotation_paths.active,
+        vec![b'x'; crate::session::LIFECYCLE_MAX_FILE_BYTES as usize],
+    )
+    .expect("fill active sidecar to its boundary");
+    std::fs::write(&rotation_paths.rotations[1], b"existing rotation")
+        .expect("create rotation source");
+    std::fs::create_dir(&rotation_paths.rotations[2])
+        .expect("make rotation destination a directory");
+    assert!(
+        crate::session::append_lifecycle_event_in_dir(
+            rotation_root.path(),
+            &crate::session::lifecycle_types::LifecycleEventEnvelope {
+                schema_version: crate::session::lifecycle_types::LIFECYCLE_SCHEMA_VERSION,
+                session_id: TEST_SESSION_ID.to_string(),
+                sequence: 1,
+                recorded_at: harness.timestamp(2),
+                event: compaction_event(),
+            },
+        )
+        .is_err()
+    );
+
+    let prune_root = tempfile::tempdir().expect("create prune failure root");
+    let prune_path = crate::session::lifecycle_path_in_dir(prune_root.path(), TEST_SESSION_ID)
+        .expect("valid prune failure path");
+    std::fs::create_dir_all(&prune_path).expect("make expired sidecar a directory");
+    let old = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(31 * 24 * 60 * 60))
+        .expect("31 days before now is representable");
+    std::fs::File::open(&prune_path)
+        .expect("open directory metadata")
+        .set_modified(old)
+        .expect("age directory metadata");
+    assert!(
+        crate::session::prune_lifecycle_artifacts_in_dir(
+            prune_root.path(),
+            TEST_SESSION_ID,
+            std::time::SystemTime::now(),
+        )
+        .is_err()
+    );
+
+    let cleanup_root = tempfile::tempdir().expect("create cleanup failure root");
+    let cleanup_path = crate::session::lifecycle_path_in_dir(cleanup_root.path(), TEST_SESSION_ID)
+        .expect("valid cleanup failure path");
+    std::fs::create_dir_all(&cleanup_path).expect("make cleanup sidecar a directory");
+    assert!(
+        crate::session::remove_session_artifacts_in_dir(cleanup_root.path(), TEST_SESSION_ID,)
+            .is_err()
+    );
+
+    let query_root = tempfile::tempdir().expect("create query failure root");
+    let query_path = crate::session::lifecycle_path_in_dir(query_root.path(), TEST_SESSION_ID)
+        .expect("valid query failure path");
+    std::fs::create_dir_all(&query_path).expect("make query sidecar a directory");
+    assert!(
+        crate::session::read_lifecycle_stream_in_dir(
+            query_root.path(),
+            TEST_SESSION_ID,
+            LifecycleObservabilityStatus {
+                enabled: true,
+                persist_session_events: true,
+                emit_structured_logs: false,
+            },
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
 async fn agent_retains_injected_recorder_and_emits_one_policy_snapshot() {
     use crate::agent::Agent;
     use crate::config::LifecycleObservabilityConfig;

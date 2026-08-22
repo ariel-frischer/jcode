@@ -861,13 +861,10 @@ fn import_session_from_file_with_target(
 }
 
 fn remove_prepared_takeover_session(session_id: &str) {
-    let Ok(snapshot) = crate::session::session_path(session_id) else {
-        return;
-    };
-    let journal = crate::session::session_journal_path_from_snapshot(&snapshot);
-    let backup = snapshot.with_extension("bak");
-    for path in [snapshot, journal, backup] {
-        let _ = std::fs::remove_file(path);
+    if let Ok(jcode_dir) = crate::storage::jcode_dir() {
+        // Keep takeover rollback aligned with canonical session deletion,
+        // including lifecycle sidecars, rotations, and pre-wipe artifacts.
+        let _ = crate::session::remove_session_artifacts_in_dir(&jcode_dir, session_id);
     }
     crate::session_list_cache::invalidate();
 }

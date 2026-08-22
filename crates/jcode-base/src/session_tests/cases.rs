@@ -118,6 +118,145 @@ fn lifecycle_append_rotates_complete_records_and_bounds_rotations() -> Result<()
 }
 
 #[test]
+fn lifecycle_retention_keeps_complete_records_with_bounded_rotations() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-boundary";
+
+    for sequence in 1..=11 {
+        crate::session::append_lifecycle_event_in_dir(
+            temp_root.path(),
+            &lifecycle_test_event(session_id, sequence),
+        )?;
+    }
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let retained_paths = std::iter::once(&paths.active)
+        .chain(paths.rotations.iter())
+        .filter(|path| path.exists())
+        .collect::<Vec<_>>();
+    assert!(!retained_paths.is_empty());
+    assert!(retained_paths.len() <= 1 + crate::session::LIFECYCLE_MAX_ROTATIONS);
+
+    let mut retained_sequences = Vec::new();
+    for path in retained_paths {
+        assert!(std::fs::metadata(path)?.len() <= crate::session::LIFECYCLE_MAX_FILE_BYTES);
+        for line in std::fs::read_to_string(path)?.lines() {
+            let event: jcode_session_types::lifecycle::LifecycleEventEnvelope =
+                serde_json::from_str(line)?;
+            retained_sequences.push(event.sequence);
+        }
+    }
+    retained_sequences.sort_unstable();
+    assert!(!retained_sequences.is_empty());
+    assert!(
+        retained_sequences
+            .windows(2)
+            .all(|window| window[0] < window[1])
+    );
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(
+        stream
+            .events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        retained_sequences
+    );
+    assert!(stream.warnings.is_empty());
+    Ok(())
+}
+
+#[test]
+fn lifecycle_retention_prunes_old_artifacts_before_size_rotation() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-age-boundary";
+
+    for sequence in 1..=3 {
+        crate::session::append_lifecycle_event_in_dir(
+            temp_root.path(),
+            &lifecycle_test_event(session_id, sequence),
+        )?;
+    }
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let old = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(31 * 24 * 60 * 60))
+        .expect("31 days before now is representable");
+    for path in std::iter::once(&paths.active).chain(paths.rotations.iter()) {
+        if path.exists() {
+            std::fs::File::open(path)?.set_modified(old)?;
+        }
+    }
+
+    // The active file is old and already near the size boundary. Age pruning
+    // wins deterministically, so the new event starts a fresh active stream
+    // instead of rotating an expired record into retained history.
+    crate::session::append_lifecycle_event_in_dir(
+        temp_root.path(),
+        &lifecycle_test_event(session_id, 4),
+    )?;
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    assert!(paths.active.exists());
+    assert!(paths.rotations.iter().all(|path| !path.exists()));
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(
+        stream
+            .events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        vec![4]
+    );
+    Ok(())
+}
+
+#[test]
+fn lifecycle_query_prunes_expired_artifacts_before_reading() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-query-retention";
+    let event = lifecycle_test_event(session_id, 1);
+    crate::session::append_lifecycle_event_in_dir(temp_root.path(), &event)?;
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let active = &paths.active;
+    let old = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(31 * 24 * 60 * 60))
+        .expect("31 days before now is representable");
+    std::fs::File::open(active)?.set_modified(old)?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert!(stream.events.is_empty());
+    assert!(!active.exists());
+    Ok(())
+}
+
+#[test]
 fn lifecycle_read_recovers_torn_tail_and_reports_bounded_warnings() -> Result<()> {
     let temp_root = tempfile::tempdir()?;
     let session_id = "session-read";
@@ -293,11 +432,26 @@ fn canonical_lifecycle_cleanup_preserves_neighboring_sessions() -> Result<()> {
         std::fs::write(&snapshot, "{}")?;
         std::fs::write(session_journal_path_from_snapshot(&snapshot), "{}\n")?;
         std::fs::write(snapshot.with_extension("json.bak"), "backup")?;
+        std::fs::write(snapshot.with_extension("bak"), "alternate backup")?;
         let active = crate::session::lifecycle_path_in_dir(temp_root.path(), id)?;
         std::fs::write(active, "")?;
+        for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+            std::fs::write(
+                crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), id, rotation)?,
+                "",
+            )?;
+        }
         std::fs::write(
-            crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), id, 1)?,
-            "",
+            snapshot.with_file_name(format!("{id}.json.pre-wipe-123.bak")),
+            "snapshot backup",
+        )?;
+        std::fs::write(
+            snapshot.with_file_name(format!("{id}.journal.jsonl.pre-wipe-123.bak")),
+            "journal backup",
+        )?;
+        std::fs::write(
+            snapshot.with_file_name(format!("{id}.journal.corrupt.jsonl")),
+            "corrupt journal",
         )?;
     }
 
@@ -305,8 +459,48 @@ fn canonical_lifecycle_cleanup_preserves_neighboring_sessions() -> Result<()> {
 
     assert!(!session_path_in_dir(temp_root.path(), session_id).exists());
     assert!(!crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?.exists());
+    for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+        assert!(
+            !crate::session::lifecycle_rotation_path_in_dir(
+                temp_root.path(),
+                session_id,
+                rotation,
+            )?
+            .exists()
+        );
+    }
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.json.pre-wipe-123.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.journal.jsonl.pre-wipe-123.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.journal.corrupt.jsonl")
+            .exists()
+    );
     assert!(session_path_in_dir(temp_root.path(), neighbor).exists());
     assert!(crate::session::lifecycle_path_in_dir(temp_root.path(), neighbor)?.exists());
+    for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+        assert!(
+            crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), neighbor, rotation,)?
+                .exists()
+        );
+    }
     Ok(())
 }
 

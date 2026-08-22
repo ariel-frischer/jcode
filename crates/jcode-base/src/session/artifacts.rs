@@ -15,6 +15,7 @@ pub fn session_artifact_paths_in_dir(base: &Path, session_id: &str) -> Result<Ve
         snapshot.clone(),
         journal.clone(),
         snapshot.with_extension("json.bak"),
+        snapshot.with_extension("bak"),
     ];
     paths.push(lifecycle.active);
     paths.extend(lifecycle.rotations);
