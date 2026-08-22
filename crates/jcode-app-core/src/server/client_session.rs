@@ -164,11 +164,12 @@ pub(super) async fn handle_clear_session(
             ("client_selfdev", client_selfdev.to_string()),
         ],
     );
-    let (preserve_debug, working_dir) = {
+    let (preserve_debug, working_dir, lifecycle_recorder) = {
         let agent_guard = agent.lock().await;
         (
             agent_guard.is_debug(),
             agent_guard.working_dir().map(str::to_string),
+            agent_guard.lifecycle_recorder(),
         )
     };
 
@@ -182,6 +183,9 @@ pub(super) async fn handle_clear_session(
         registry.clone(),
         working_dir.as_deref(),
     );
+    if let Some(lifecycle_recorder) = lifecycle_recorder {
+        new_agent.attach_lifecycle_recorder(lifecycle_recorder);
+    }
     let new_id = new_agent.session_id().to_string();
 
     if client_selfdev {

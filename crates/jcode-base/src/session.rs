@@ -53,6 +53,7 @@ pub use crash::{
 pub use jcode_session_types::{
     EnvSnapshot, GitState, SessionImproveMode, SessionStatus, StoredCompactionState,
     StoredDisplayRole, StoredMemoryInjection, StoredMessage, StoredTokenUsage,
+    lifecycle as lifecycle_types,
 };
 use journal::{PersistVectorMode, SessionJournalMeta, SessionPersistState};
 pub use lifecycle::{

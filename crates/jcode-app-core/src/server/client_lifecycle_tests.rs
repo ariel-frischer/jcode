@@ -1426,10 +1426,19 @@ async fn lightweight_comm_request_skips_full_session_initialization() {
     let shutdown_signals = Arc::new(RwLock::new(HashMap::new()));
     let soft_interrupt_queues: SessionInterruptQueues = Arc::new(RwLock::new(HashMap::new()));
     let mcp_pool = Arc::new(crate::mcp::SharedMcpPool::from_default_config());
+    let lifecycle_recorder = crate::lifecycle_observability::LifecycleRecorder::new(
+        crate::config::LifecycleObservabilityConfig {
+            enabled: false,
+            persist_session_events: false,
+            emit_structured_logs: false,
+        },
+        std::env::temp_dir().join("jcode-lifecycle-client-test"),
+    );
 
     let server_task = tokio::spawn(handle_client(
         server_stream,
         Arc::clone(&sessions),
+        lifecycle_recorder,
         _global_event_tx,
         provider_template,
         global_is_processing,

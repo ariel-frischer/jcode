@@ -191,6 +191,10 @@ pub enum Request {
     #[serde(rename = "get_history")]
     GetHistory { id: u64 },
 
+    /// Get the ordered, typed lifecycle stream for one session.
+    #[serde(rename = "get_lifecycle_events")]
+    GetLifecycleEvents { id: u64, session_id: String },
+
     /// Get only provider/model metadata and available models.
     #[serde(rename = "get_model_catalog")]
     GetModelCatalog { id: u64 },
@@ -1236,6 +1240,13 @@ pub enum ServerEvent {
         /// Session-scoped side panel pages and active focus state
         #[serde(default, skip_serializing_if = "snapshot_is_empty")]
         side_panel: SidePanelSnapshot,
+    },
+
+    /// Ordered lifecycle stream (response to GetLifecycleEvents).
+    #[serde(rename = "lifecycle_events")]
+    LifecycleEvents {
+        id: u64,
+        stream: jcode_session_types::lifecycle::SessionLifecycleStream,
     },
 
     /// Expanded compacted-history window (response to GetCompactedHistory).

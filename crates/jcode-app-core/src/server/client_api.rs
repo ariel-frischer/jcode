@@ -195,6 +195,37 @@ impl Client {
         })
     }
 
+    pub async fn get_lifecycle_events(
+        &mut self,
+        session_id: &str,
+    ) -> Result<crate::session::lifecycle_types::SessionLifecycleStream> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let request = Request::GetLifecycleEvents {
+            id,
+            session_id: session_id.to_string(),
+        };
+        let json = serde_json::to_string(&request)? + "\n";
+        self.writer.write_all(json.as_bytes()).await?;
+
+        for _ in 0..10 {
+            match self.read_event().await? {
+                ServerEvent::Ack { id: ack_id } if ack_id == id => continue,
+                ServerEvent::LifecycleEvents {
+                    id: response_id,
+                    stream,
+                } if response_id == id => return Ok(stream),
+                ServerEvent::Error {
+                    id: response_id,
+                    message,
+                    ..
+                } if response_id == id => anyhow::bail!(message),
+                _ => continue,
+            }
+        }
+        anyhow::bail!("Lifecycle response not received")
+    }
+
     pub async fn resume_session(&mut self, session_id: &str) -> Result<u64> {
         self.resume_session_with_options(session_id, false, false)
             .await

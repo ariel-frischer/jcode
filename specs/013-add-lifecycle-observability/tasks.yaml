@@ -88,7 +88,7 @@ phases:
             - "Cover canonical cleanup removing only the selected session's snapshot, journal, backup, active lifecycle sidecar, and rotations."
         - id: "T007"
           title: "Add recorder ordering, fan-out, privacy, and failure-isolation tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -100,7 +100,7 @@ phases:
             - "Assert forbidden prompt, command, output, environment, secret, error, and todo text cannot enter any output."
         - id: "T008"
           title: "Add additive lifecycle protocol round-trip tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -111,7 +111,7 @@ phases:
             - "Verify older protocol clients remain able to decode existing request and response variants."
         - id: "T009"
           title: "Add lifecycle CLI argument parsing tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -122,7 +122,7 @@ phases:
             - "Reject missing or malformed session arguments using established CLI error behavior."
         - id: "T010"
           title: "Add typed lifecycle command rendering tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -216,7 +216,7 @@ phases:
             - "Expose one lower-layer cleanup boundary for prepared-spawn rollback, takeover rollback, and canonical removal callers."
         - id: "T018"
           title: "Implement the server-owned non-blocking LifecycleRecorder core"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -228,7 +228,7 @@ phases:
             - "Treat queue, sink, logging, rotation, and flush failures as visible best-effort diagnostics that cannot alter runtime decisions."
         - id: "T019"
           title: "Add lifecycle request and response variants to the daemon protocol"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -239,7 +239,7 @@ phases:
             - "Preserve all existing wire tags, fields, and compatibility behavior."
         - id: "T020"
           title: "Own one recorder in Server and inject it into Agents"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: null
@@ -250,7 +250,7 @@ phases:
             - "Avoid global singleton state and preserve multi-client server authority."
         - id: "T021"
           title: "Retain the injected recorder and emit policy snapshots at Agent boundaries"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null

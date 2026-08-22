@@ -1575,3 +1575,47 @@ async fn one_shot_cleanup_preserves_the_original_command_error() {
         ));
     }
 }
+
+#[test]
+fn lifecycle_renderer_uses_typed_stream_for_human_and_json_output() {
+    use crate::session::lifecycle_types::{
+        LIFECYCLE_SCHEMA_VERSION, LifecycleCompatibilityWarning, LifecycleDecisionType,
+        LifecycleEvent, LifecycleEventEnvelope, LifecycleObservabilityStatus,
+        LifecycleSemanticReason, SessionLifecycleStream,
+    };
+
+    let stream = SessionLifecycleStream {
+        session_id: "synthetic-session-001".to_string(),
+        status: LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+        events: vec![LifecycleEventEnvelope {
+            schema_version: LIFECYCLE_SCHEMA_VERSION,
+            session_id: "synthetic-session-001".to_string(),
+            sequence: 1,
+            recorded_at: chrono::DateTime::from_timestamp(1_700_000_000, 0)
+                .expect("valid timestamp"),
+            event: LifecycleEvent::Block {
+                decision_type: LifecycleDecisionType::Suppressed,
+                semantic_reason: LifecycleSemanticReason::Policy,
+                suppression_reason: None,
+                process_manifest_id: None,
+            },
+        }],
+        warnings: vec![LifecycleCompatibilityWarning::PersistenceUnavailable],
+    };
+
+    let human = super::commands::render_session_lifecycle(&stream, false)
+        .expect("render human lifecycle stream");
+    assert!(human.contains("synthetic-session-001"));
+    assert!(human.contains("block"));
+    assert!(human.contains("persistence is unavailable"));
+
+    let json = super::commands::render_session_lifecycle(&stream, true)
+        .expect("render JSON lifecycle stream");
+    let decoded: SessionLifecycleStream =
+        serde_json::from_str(&json).expect("decode rendered lifecycle JSON");
+    assert_eq!(decoded, stream);
+}

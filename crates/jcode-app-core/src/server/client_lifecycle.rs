@@ -423,6 +423,7 @@ async fn refresh_session_control_handle(
 pub(super) async fn handle_client(
     stream: Stream,
     sessions: SessionAgents,
+    lifecycle_recorder: Arc<crate::lifecycle_observability::LifecycleRecorder>,
     _global_event_tx: broadcast::Sender<ServerEvent>,
     provider_template: Arc<dyn Provider>,
     _global_is_processing: Arc<RwLock<bool>>,
@@ -482,6 +483,7 @@ pub(super) async fn handle_client(
                         Arc::clone(&writer),
                         LightweightControlContext {
                             sessions: &sessions,
+                            lifecycle_recorder: &lifecycle_recorder,
                             global_session_id: &global_session_id,
                             provider_template: &provider_template,
                             swarm_members: &swarm_members,
@@ -602,6 +604,7 @@ pub(super) async fn handle_client(
             )
         })
         .await?;
+    new_agent.attach_lifecycle_recorder(Arc::clone(&lifecycle_recorder));
     let agent_new_ms = t0.elapsed().as_millis();
 
     new_agent.set_memory_enabled(crate::config::config().features.memory);
@@ -1706,6 +1709,56 @@ pub(super) async fn handle_client(
                 send_swarm_plan_to_session(&client_session_id, &swarm_members, &swarm_plans).await;
                 if let Some(snapshot) = try_available_models_snapshot(&agent) {
                     last_available_models_snapshot = Some(snapshot);
+                }
+            }
+
+            Request::GetLifecycleEvents { id, session_id } => {
+                let result = async {
+                    let resolved_id = crate::session::find_session_by_name_or_id(&session_id)?;
+                    let diagnostics = lifecycle_recorder.flush().await;
+                    let base = crate::storage::jcode_dir()?;
+                    let mut stream = crate::session::read_lifecycle_stream_in_dir(
+                        &base,
+                        &resolved_id,
+                        lifecycle_recorder.status(),
+                    )?;
+                    if diagnostics.iter().any(|diagnostic| {
+                        matches!(
+                            diagnostic,
+                            crate::lifecycle_observability::LifecycleRecorderDiagnostic::QueueFull
+                                | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
+                        )
+                    }) {
+                        stream.warnings.push(
+                            crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent,
+                        );
+                    }
+                    if diagnostics.iter().any(|diagnostic| {
+                        matches!(
+                            diagnostic,
+                            crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
+                        )
+                    }) {
+                        stream.warnings.push(
+                            crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
+                        );
+                    }
+                    Ok::<_, anyhow::Error>(stream)
+                }
+                .await;
+                match result {
+                    Ok(stream) => {
+                        let _ = client_event_tx.send(ServerEvent::LifecycleEvents { id, stream });
+                    }
+                    Err(_) => {
+                        let _ = client_event_tx.send(ServerEvent::Error {
+                            id,
+                            message: "unable to query lifecycle events for the selected session"
+                                .to_string(),
+                            retry_after_secs: None,
+                            provider_code: Some("invalid_session".to_string()),
+                        });
+                    }
                 }
             }
 

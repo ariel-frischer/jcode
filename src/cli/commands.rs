@@ -1458,6 +1458,57 @@ pub async fn run_dictate_command(type_output: bool) -> Result<()> {
     }
 }
 
+pub(crate) fn render_session_lifecycle(
+    stream: &crate::session::lifecycle_types::SessionLifecycleStream,
+    json: bool,
+) -> Result<String> {
+    if json {
+        return serde_json::to_string_pretty(stream).map_err(Into::into);
+    }
+
+    let mut output = format!(
+        "Session {} lifecycle (enabled={}, persistence={}, structured_logs={})\n",
+        stream.session_id,
+        stream.status.enabled,
+        stream.status.persist_session_events,
+        stream.status.emit_structured_logs
+    );
+    if stream.events.is_empty() {
+        output.push_str("No lifecycle events.\n");
+    }
+    for envelope in &stream.events {
+        let category = match &envelope.event {
+            crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. } => {
+                "policy_snapshot"
+            }
+            crate::session::lifecycle_types::LifecycleEvent::Compaction { .. } => "compaction",
+            crate::session::lifecycle_types::LifecycleEvent::Handoff { .. } => "handoff",
+            crate::session::lifecycle_types::LifecycleEvent::Retry { .. } => "retry",
+            crate::session::lifecycle_types::LifecycleEvent::StrategySwitch { .. } => {
+                "strategy_switch"
+            }
+            crate::session::lifecycle_types::LifecycleEvent::Block { .. } => "block",
+        };
+        output.push_str(&format!(
+            "#{:<6} {} {}\n",
+            envelope.sequence,
+            envelope.recorded_at.to_rfc3339(),
+            category
+        ));
+    }
+    for warning in &stream.warnings {
+        output.push_str(&format!("warning: {}\n", warning.message()));
+    }
+    Ok(output)
+}
+
+pub async fn run_session_lifecycle_command(session_ref: &str, json: bool) -> Result<()> {
+    let mut client = crate::server::Client::connect().await?;
+    let stream = client.get_lifecycle_events(session_ref).await?;
+    print!("{}", render_session_lifecycle(&stream, json)?);
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct SessionRenameOutput {
     session_id: String,

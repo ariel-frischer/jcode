@@ -272,6 +272,8 @@ pub struct Agent {
     stdin_request_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::tool::StdinInputRequest>>,
     /// Canonical reducer-backed view of runtime provider/model selection.
     provider_runtime_state: ProviderRuntimeState,
+    /// Server-owned lifecycle recorder. Standalone agents leave this unset.
+    lifecycle_recorder: Option<Arc<crate::lifecycle_observability::LifecycleRecorder>>,
     /// When true, this session is an inline swarm worker: stream a throttled
     /// output tail to the global bus so the coordinator's inline gallery can
     /// render a live viewport. Off for normal sessions to avoid bus traffic.
@@ -459,6 +461,7 @@ impl Agent {
             rewind_undo_snapshot: None,
             stdin_request_tx: None,
             provider_runtime_state: ProviderRuntimeState::observed(initial_provider_model),
+            lifecycle_recorder: None,
             inline_output_tap: false,
             inline_tail: inline_tail::InlineTailBuffer::default(),
             transcript_telemetry_sent: false,
@@ -469,6 +472,84 @@ impl Agent {
             agent.disabled_tools.clone(),
         );
         agent
+    }
+
+    pub fn attach_lifecycle_recorder(
+        &mut self,
+        recorder: Arc<crate::lifecycle_observability::LifecycleRecorder>,
+    ) {
+        self.lifecycle_recorder = Some(recorder);
+        self.emit_effective_lifecycle_policy_snapshot();
+    }
+
+    pub fn has_lifecycle_recorder(&self) -> bool {
+        self.lifecycle_recorder.is_some()
+    }
+
+    pub(crate) fn lifecycle_recorder(
+        &self,
+    ) -> Option<Arc<crate::lifecycle_observability::LifecycleRecorder>> {
+        self.lifecycle_recorder.clone()
+    }
+
+    pub fn emit_effective_lifecycle_policy_snapshot(&self) {
+        use crate::session::lifecycle_types::{
+            CompactionPolicyMode, CompactionPolicySnapshot, EffectivePolicySnapshot,
+            HandoffPolicySnapshot, LIFECYCLE_POLICY_VERSION, LifecycleEvent,
+        };
+
+        let Some(recorder) = self.lifecycle_recorder.as_ref() else {
+            return;
+        };
+        let config = crate::config::config();
+        let config_dir = crate::storage::jcode_dir().ok();
+        let Ok(handoff) = config
+            .resolve_handoff_policy(self.session_profile_name.as_deref(), config_dir.as_deref())
+        else {
+            return;
+        };
+        let compaction_mode = match config.compaction.mode {
+            jcode_config_types::CompactionMode::Reactive => CompactionPolicyMode::Reactive,
+            jcode_config_types::CompactionMode::Proactive => CompactionPolicyMode::Proactive,
+            jcode_config_types::CompactionMode::Semantic => CompactionPolicyMode::Semantic,
+        };
+        let fingerprint = format!(
+            "{:016x}",
+            stable_hash_json(&serde_json::json!({
+                "compaction_mode": config.compaction.mode.as_str(),
+                "context_window_tokens": self.provider.context_window(),
+                "threshold_ratio": config.compaction.proactive_floor,
+                "handoff_enabled": handoff.enabled,
+                "handoff_agent_enabled": handoff.agent_enabled,
+                "handoff_confirmation": handoff.agent_requires_confirmation,
+                "handoff_auto_start": handoff.auto_start,
+                "handoff_max_chain": handoff.max_chain_transitions,
+                "handoff_copy_todos": handoff.copy_todos,
+            }))
+        );
+        let _ = recorder.submit(
+            &self.session.id,
+            LifecycleEvent::PolicySnapshot {
+                snapshot: EffectivePolicySnapshot {
+                    policy_version: LIFECYCLE_POLICY_VERSION,
+                    fingerprint,
+                    compaction: CompactionPolicySnapshot {
+                        mode: compaction_mode,
+                        context_window_tokens: self.provider.context_window() as u64,
+                        threshold_ratio: config.compaction.proactive_floor,
+                        native_compaction: false,
+                    },
+                    handoff: HandoffPolicySnapshot {
+                        enabled: handoff.enabled,
+                        agent_enabled: handoff.agent_enabled,
+                        confirmation_required: handoff.agent_requires_confirmation,
+                        auto_start: handoff.auto_start,
+                        max_chain_transitions: handoff.max_chain_transitions,
+                        copy_todos: handoff.copy_todos,
+                    },
+                },
+            },
+        );
     }
 
     fn current_skills_snapshot(&self) -> Arc<SkillRegistry> {

@@ -57,6 +57,7 @@ pub(super) fn parse_swarm_spawn_mode(
 
 pub(super) struct LightweightControlContext<'a> {
     pub(super) sessions: &'a SessionAgents,
+    pub(super) lifecycle_recorder: &'a Arc<crate::lifecycle_observability::LifecycleRecorder>,
     pub(super) global_session_id: &'a Arc<RwLock<String>>,
     pub(super) provider_template: &'a Arc<dyn Provider>,
     pub(super) swarm_members: &'a Arc<RwLock<HashMap<String, SwarmMember>>>,
@@ -84,6 +85,7 @@ pub(super) async fn handle_lightweight_control_request(
 ) -> Result<()> {
     let LightweightControlContext {
         sessions,
+        lifecycle_recorder,
         global_session_id,
         provider_template,
         swarm_members,
@@ -128,6 +130,55 @@ pub(super) async fn handle_lightweight_control_request(
     });
 
     match request {
+        Request::GetLifecycleEvents { id, session_id } => {
+            let result = async {
+                let resolved_id = crate::session::find_session_by_name_or_id(&session_id)?;
+                let diagnostics = lifecycle_recorder.flush().await;
+                let base = crate::storage::jcode_dir()?;
+                let mut stream = crate::session::read_lifecycle_stream_in_dir(
+                    &base,
+                    &resolved_id,
+                    lifecycle_recorder.status(),
+                )?;
+                if diagnostics.iter().any(|diagnostic| {
+                    matches!(
+                        diagnostic,
+                        crate::lifecycle_observability::LifecycleRecorderDiagnostic::QueueFull
+                            | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
+                    )
+                }) {
+                    stream.warnings.push(
+                        crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent,
+                    );
+                }
+                if diagnostics.iter().any(|diagnostic| {
+                    matches!(
+                        diagnostic,
+                        crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
+                    )
+                }) {
+                    stream.warnings.push(
+                        crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
+                    );
+                }
+                Ok::<_, anyhow::Error>(stream)
+            }
+            .await;
+            match result {
+                Ok(stream) => {
+                    let _ = client_event_tx.send(ServerEvent::LifecycleEvents { id, stream });
+                }
+                Err(_) => {
+                    let _ = client_event_tx.send(ServerEvent::Error {
+                        id,
+                        message: "unable to query lifecycle events for the selected session"
+                            .to_string(),
+                        retry_after_secs: None,
+                        provider_code: Some("invalid_session".to_string()),
+                    });
+                }
+            }
+        }
         Request::CommShare {
             id,
             session_id: req_session_id,
