@@ -68,6 +68,9 @@ impl SessionPromptOverlay {
         if parts.is_empty() {
             return;
         }
+        // Keep this after project guidance so the explicitly selected profile can
+        // refine it. The ordering is intentional even though it places immutable
+        // profile text after the provider prompt-cache boundary.
         if !split.dynamic_part.is_empty() {
             split.dynamic_part.push_str("\n\n");
         }

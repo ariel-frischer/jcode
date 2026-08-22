@@ -99,10 +99,6 @@ pub(crate) struct Args {
     #[arg(short, long, global = true)]
     pub(crate) model: Option<String>,
 
-    /// Named session profile from [profiles.<name>] in config.toml for headless runs.
-    #[arg(long, global = true)]
-    pub(crate) profile: Option<String>,
-
     /// Reasoning effort override for this invocation.
     #[arg(
         long,
@@ -202,6 +198,10 @@ pub(crate) enum Command {
 
     /// Run a single message and exit
     Run {
+        /// Named session profile from [profiles.<name>] in config.toml.
+        #[arg(long)]
+        profile: Option<String>,
+
         /// Emit a machine-readable JSON result instead of streaming text
         #[arg(long, conflicts_with = "ndjson")]
         json: bool,

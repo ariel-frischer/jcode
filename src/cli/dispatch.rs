@@ -234,6 +234,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             message,
             json,
             ndjson,
+            profile,
         }) => {
             let split_list = |value: &str| {
                 value
@@ -244,7 +245,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                     .collect::<Vec<_>>()
             };
             let run_profile = super::profile::resolve_run_profile(
-                args.profile.as_deref(),
+                profile.as_deref(),
                 super::profile::RunProfileOverrides {
                     provider: args.provider_was_explicit.then_some(args.provider),
                     model: args.model.clone(),

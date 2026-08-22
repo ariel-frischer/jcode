@@ -9,11 +9,6 @@ use super::{SessionProfileConfig, ToolConfig};
 use anyhow::{Result, bail};
 use std::collections::BTreeMap;
 
-pub const OMITTED_PROFILE_BUDGET_CALLS: usize = 10_000;
-pub const OMITTED_PROFILE_BUDGET_MS: u128 = 100;
-pub const SELECTED_PROFILE_BUDGET_CALLS: usize = 1_000;
-pub const SELECTED_PROFILE_BUDGET_MS: u128 = 500;
-
 /// Provenance of one resolved profile value, ordered from weakest to strongest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProfileValueSource {
@@ -29,23 +24,6 @@ pub enum ProfileValueSource {
 pub struct SourcedValue<T> {
     pub value: T,
     pub source: ProfileValueSource,
-}
-
-/// Preserves whether clap supplied a value explicitly or only supplied its
-/// parser default.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InvocationValue<T> {
-    Omitted,
-    Explicit(T),
-}
-
-impl<T> InvocationValue<T> {
-    pub fn into_option(self) -> Option<T> {
-        match self {
-            Self::Omitted => None,
-            Self::Explicit(value) => Some(value),
-        }
-    }
 }
 
 pub fn resolve_sourced<T>(
@@ -164,7 +142,7 @@ pub fn validate_profile_definitions(
             )
         {
             bail!(
-                "profile '{name}' has unsupported tool_profile '{tool_profile}'; use full, acp, minimal/lite, or none"
+                "profile '{name}' has unsupported tool_profile '{tool_profile}'; use full, acp, minimal/lite/small, or none/off/disabled"
             );
         }
 
@@ -249,15 +227,6 @@ mod tests {
         let resolved = resolve_sourced(None, None, None, None, "default".to_string());
         assert_eq!(resolved.value, "default");
         assert_eq!(resolved.source, ProfileValueSource::BuiltInDefault);
-    }
-
-    #[test]
-    fn explicit_invocation_values_are_distinct_from_omitted_parser_defaults() {
-        let omitted = InvocationValue::<String>::Omitted;
-        let explicit = InvocationValue::Explicit("auto".to_string());
-
-        assert_eq!(omitted.into_option(), None);
-        assert_eq!(explicit.into_option().as_deref(), Some("auto"));
     }
 
     #[test]

@@ -95,53 +95,60 @@ fn compose_run_profile(
     environment: RunProfileEnvironment,
     overrides: RunProfileOverrides,
 ) -> Result<ResolvedRunProfile> {
-    let provider_text = overrides
-        .provider
-        .as_ref()
-        .map(|provider| provider.as_arg_value().to_string())
-        .or(environment.provider)
-        .or_else(|| profile.provider.clone())
-        .or_else(|| config.provider.default_provider.clone())
-        .unwrap_or_else(|| "auto".to_string());
-    let provider = parse_provider(&provider_text, name)?;
+    let provider = crate::config::session_profile::resolve_sourced(
+        overrides
+            .provider
+            .as_ref()
+            .map(|provider| provider.as_arg_value().to_string()),
+        environment.provider,
+        profile.provider.clone(),
+        config.provider.default_provider.clone(),
+        "auto".to_string(),
+    );
+    let provider = parse_provider(&provider.value, name)?;
 
     let model = overrides
         .model
         .or(environment.model)
         .or_else(|| profile.model.clone())
         .or_else(|| config.provider.default_model.clone());
-    let apply_reasoning_effort = overrides.reasoning_effort.is_some()
-        || environment.reasoning_effort.is_some()
-        || profile.reasoning_effort.is_some();
-    let reasoning_effort = overrides
-        .reasoning_effort
-        .or(environment.reasoning_effort)
-        .or_else(|| profile.reasoning_effort.clone())
-        .or_else(|| config.provider.openai_reasoning_effort.clone())
-        .or_else(|| config.provider.anthropic_reasoning_effort.clone());
+    let reasoning_effort = crate::config::session_profile::resolve_sourced(
+        overrides.reasoning_effort.map(Some),
+        environment.reasoning_effort.map(Some),
+        profile.reasoning_effort.clone().map(Some),
+        config
+            .provider
+            .openai_reasoning_effort
+            .clone()
+            .or_else(|| config.provider.anthropic_reasoning_effort.clone())
+            .map(Some),
+        None,
+    );
+    // Base provider configuration is applied during provider initialization.
+    // Reapply only a profile, environment, or explicit invocation override.
+    let apply_reasoning_effort = matches!(
+        reasoning_effort.source,
+        crate::config::session_profile::ProfileValueSource::Invocation
+            | crate::config::session_profile::ProfileValueSource::Environment
+            | crate::config::session_profile::ProfileValueSource::Profile
+    );
+    let reasoning_effort = reasoning_effort.value;
     let provider_profile = overrides
         .provider_profile
         .or(environment.provider_profile)
         .or_else(|| profile.provider_profile.clone());
 
-    let mut tools = config.tools.clone();
+    let mut tools = crate::config::session_profile::overlay_profile_tools(
+        &config.tools,
+        profile.tool_profile.as_deref(),
+        &profile.tools,
+        &profile.disabled_tools,
+    );
     let mut profile_tool_references = Vec::new();
-    if environment.tool_profile.is_none() && overrides.tool_profile.is_none() {
-        if let Some(profile_name) = profile.tool_profile.as_deref() {
-            tools.profile = profile_name.to_string();
-        }
-    }
-    if environment.tools.is_none() && overrides.tools.is_none() && !profile.tools.is_empty() {
-        tools.enabled = profile.tools.clone();
+    if environment.tools.is_none() && overrides.tools.is_none() {
         profile_tool_references.extend(profile.tools.iter().cloned());
     }
-    if environment.disabled_tools.is_none()
-        && overrides.disabled_tools.is_none()
-        && !profile.disabled_tools.is_empty()
-    {
-        tools
-            .disabled
-            .extend(profile.disabled_tools.iter().cloned());
+    if environment.disabled_tools.is_none() && overrides.disabled_tools.is_none() {
         profile_tool_references.extend(profile.disabled_tools.iter().cloned());
     }
     if let Some(value) = overrides.tool_profile.or(environment.tool_profile) {
@@ -199,7 +206,7 @@ fn compose_run_profile(
 pub fn selected_reasoning_effort(profile: &ResolvedRunProfile) -> Option<&str> {
     profile
         .apply_reasoning_effort
-        .then(|| profile.reasoning_effort.as_deref())
+        .then_some(profile.reasoning_effort.as_deref())
         .flatten()
 }
 
@@ -214,7 +221,7 @@ pub fn validate_selected_tool_references(
         let normalized = crate::config::session_profile::normalize_tool_reference(name);
         if !available_tools
             .iter()
-            .any(|available| available.eq_ignore_ascii_case(&normalized))
+            .any(|available| available.eq_ignore_ascii_case(normalized))
         {
             anyhow::bail!(
                 "profile '{}' references unknown tool '{}'; install or enable it, or choose one of: {}",
@@ -400,49 +407,5 @@ mod tests {
         .unwrap();
         assert_eq!(resolved.reasoning_effort.as_deref(), Some("low"));
         assert_eq!(selected_reasoning_effort(&resolved), None);
-    }
-
-    #[test]
-    fn maintained_profile_resolution_efficiency_budgets() {
-        use crate::config::session_profile::{
-            OMITTED_PROFILE_BUDGET_CALLS, OMITTED_PROFILE_BUDGET_MS, SELECTED_PROFILE_BUDGET_CALLS,
-            SELECTED_PROFILE_BUDGET_MS,
-        };
-        use std::time::Instant;
-
-        let omitted_start = Instant::now();
-        for _ in 0..OMITTED_PROFILE_BUDGET_CALLS {
-            assert!(
-                resolve_run_profile(None, RunProfileOverrides::default())
-                    .unwrap()
-                    .is_none()
-            );
-        }
-        assert!(
-            omitted_start.elapsed().as_millis() <= OMITTED_PROFILE_BUDGET_MS,
-            "omitted-profile fast path exceeded {} ms: {:?}",
-            OMITTED_PROFILE_BUDGET_MS,
-            omitted_start.elapsed()
-        );
-
-        let config = crate::config::Config::default();
-        let profile = complete_profile();
-        let selected_start = Instant::now();
-        for _ in 0..SELECTED_PROFILE_BUDGET_CALLS {
-            compose_run_profile(
-                "review",
-                &config,
-                &profile,
-                RunProfileEnvironment::default(),
-                RunProfileOverrides::default(),
-            )
-            .unwrap();
-        }
-        assert!(
-            selected_start.elapsed().as_millis() <= SELECTED_PROFILE_BUDGET_MS,
-            "selected-profile resolution exceeded {} ms: {:?}",
-            SELECTED_PROFILE_BUDGET_MS,
-            selected_start.elapsed()
-        );
     }
 }

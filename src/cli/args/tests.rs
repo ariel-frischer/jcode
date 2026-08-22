@@ -2,32 +2,25 @@ use super::*;
 use crate::cli::provider_init::ProviderChoice;
 
 #[test]
-fn session_profile_and_reasoning_effort_are_global_run_options() {
-    for argv in [
-        vec![
-            "jcode",
-            "--profile",
-            "review",
-            "--reasoning-effort",
-            "high",
-            "run",
-            "inspect",
-        ],
-        vec![
-            "jcode",
-            "run",
-            "--profile",
-            "review",
-            "--reasoning-effort",
-            "high",
-            "inspect",
-        ],
-    ] {
-        let args = Args::try_parse_from_with_provenance(argv).expect("global options should parse");
-        assert_eq!(args.profile.as_deref(), Some("review"));
-        assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
-        assert!(matches!(args.command, Some(Command::Run { .. })));
-    }
+fn session_profile_is_run_scoped_and_reasoning_effort_remains_global() {
+    let args = Args::try_parse_from_with_provenance([
+        "jcode",
+        "--reasoning-effort",
+        "high",
+        "run",
+        "--profile",
+        "review",
+        "inspect",
+    ])
+    .expect("run profile and global reasoning override should parse");
+    assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
+    assert!(matches!(
+        args.command,
+        Some(Command::Run {
+            profile: Some(ref profile),
+            ..
+        }) if profile == "review"
+    ));
 }
 
 #[test]
@@ -662,10 +655,12 @@ fn run_json_subcommand_parses() {
             json,
             ndjson,
             message,
+            profile,
         }) => {
             assert!(json);
             assert!(!ndjson);
             assert_eq!(message, "hello");
+            assert_eq!(profile, None);
         }
         other => panic!("unexpected command: {:?}", other),
     }
@@ -679,10 +674,12 @@ fn run_ndjson_subcommand_parses() {
             json,
             ndjson,
             message,
+            profile,
         }) => {
             assert!(!json);
             assert!(ndjson);
             assert_eq!(message, "hello");
+            assert_eq!(profile, None);
         }
         other => panic!("unexpected command: {:?}", other),
     }
@@ -895,4 +892,26 @@ fn api_bridge_socket_flags_do_not_collide() {
         ),
         "`--socket` after api-bridge must bind the daemon socket, never the API socket"
     );
+}
+
+#[test]
+fn session_and_cloud_provider_profile_flags_do_not_collide() {
+    let args = Args::try_parse_from([
+        "jcode",
+        "cloud",
+        "sessions",
+        "upload-latest",
+        "--profile",
+        "aws-prod",
+    ])
+    .expect("cloud profile should parse");
+
+    let Some(Command::Cloud(command)) = args.command else {
+        panic!("expected cloud command");
+    };
+    let CloudCommand::Sessions { action } = command;
+    let CloudSessionsCommand::UploadLatest { jade, .. } = action else {
+        panic!("expected upload-latest command");
+    };
+    assert_eq!(jade.profile.as_deref(), Some("aws-prod"));
 }
