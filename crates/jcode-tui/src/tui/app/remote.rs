@@ -1195,6 +1195,7 @@ async fn dispatch_pending_server_reload(app: &mut App, remote: &mut RemoteConnec
     }
 }
 
+#[cfg(test)]
 pub(super) fn handle_disconnected_key(
     app: &mut App,
     code: KeyCode,
