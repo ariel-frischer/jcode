@@ -39,6 +39,7 @@ pub(crate) struct FileMentionDiscovery {
     pub candidates: Vec<FileMentionCandidate>,
 }
 
+#[cfg(test)]
 fn discover_file_mentions(
     root: &Path,
     query: &str,
@@ -138,6 +139,7 @@ fn process_file_mention_entry(
 }
 
 /// Test-only entry point for deterministic batch and responsiveness checks.
+#[cfg(test)]
 pub(super) fn start_file_mention_discovery_for_test(
     root: PathBuf,
     query: String,

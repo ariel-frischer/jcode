@@ -768,6 +768,10 @@ async fn populate_auth_test_target_report(
     .expect("validation without cancellation cannot fail")
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Auth-test validation carries explicit smoke, prompt, report, and cancellation controls"
+)]
 async fn populate_auth_test_target_report_with_cancellation(
     target: AuthTestTarget,
     model: Option<&str>,
