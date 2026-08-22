@@ -211,7 +211,7 @@ pub fn validate_selected_tool_references(
         if matches!(name.trim(), "*" | "all") {
             continue;
         }
-        let normalized = name.trim().to_ascii_lowercase();
+        let normalized = crate::config::session_profile::normalize_tool_reference(name);
         if !available_tools
             .iter()
             .any(|available| available.eq_ignore_ascii_case(&normalized))
@@ -360,6 +360,30 @@ mod tests {
         assert!(error.contains("review"));
         assert!(error.contains("definitely-not-installed-session-profile-skill"));
         assert!(error.contains("install"));
+    }
+
+    #[test]
+    fn selected_tool_references_accept_existing_canonical_aliases() {
+        let config = crate::config::Config::default();
+        let profile = crate::config::SessionProfileConfig {
+            tools: vec!["grep".to_string()],
+            disabled_tools: vec!["shell_exec".to_string()],
+            ..Default::default()
+        };
+        let resolved = compose_run_profile(
+            "review",
+            &config,
+            &profile,
+            RunProfileEnvironment::default(),
+            RunProfileOverrides::default(),
+        )
+        .unwrap();
+
+        validate_selected_tool_references(
+            &resolved,
+            &["agentgrep".to_string(), "bash".to_string()],
+        )
+        .expect("ToolConfig aliases should validate against canonical registry names");
     }
 
     #[test]

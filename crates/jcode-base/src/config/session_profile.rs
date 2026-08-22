@@ -101,6 +101,12 @@ pub fn overlay_profile_tools(
     overlaid
 }
 
+/// Resolve a persisted tool reference through the same canonical alias table
+/// used by [`ToolConfig`].
+pub fn normalize_tool_reference(name: &str) -> &str {
+    jcode_tool_types::resolve_tool_name(name.trim())
+}
+
 /// Format a diagnostic without reproducing user-authored values. This is used
 /// for sensitive fields such as instructions and remains safe for all fields.
 pub fn safe_profile_diagnostic(
