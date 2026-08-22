@@ -172,6 +172,10 @@ pub(crate) enum Command {
         #[arg(long, conflicts_with = "json")]
         ndjson: bool,
 
+        /// Stop after this many completed turns
+        #[arg(long, value_name = "N")]
+        max_turns: Option<String>,
+
         /// The message to send
         message: String,
     },

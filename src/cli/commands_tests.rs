@@ -1345,6 +1345,7 @@ async fn one_shot_output_modes_close_sessions_and_clear_active_pid_markers() {
             .expect("active PID directory")
             .join(&session_id);
         assert!(marker.exists(), "{mode} session should start active");
+        let mut turn_limit = run_safety::RunTurnLimit::parse(None).expect("unbounded limit");
 
         run_single_message_with_agent(
             &mut agent,
@@ -1352,6 +1353,7 @@ async fn one_shot_output_modes_close_sessions_and_clear_active_pid_markers() {
             "Return the test response.",
             emit_json,
             emit_ndjson,
+            &mut turn_limit,
         )
         .await
         .unwrap_or_else(|error| panic!("{mode} run failed: {error:#}"));
@@ -1405,6 +1407,7 @@ async fn resumed_one_shot_closes_the_restored_session() {
         marker.exists(),
         "restored session should be active while running"
     );
+    let mut turn_limit = run_safety::RunTurnLimit::parse(None).expect("unbounded limit");
 
     run_single_message_with_agent(
         &mut resumed,
@@ -1412,6 +1415,7 @@ async fn resumed_one_shot_closes_the_restored_session() {
         "Finish the resumed one-shot session.",
         true,
         false,
+        &mut turn_limit,
     )
     .await
     .expect("run resumed one-shot session");
@@ -1450,6 +1454,7 @@ async fn one_shot_cleanup_preserves_the_original_command_error() {
         let marker = crate::storage::active_pids_dir()
             .expect("active PID directory")
             .join(&session_id);
+        let mut turn_limit = run_safety::RunTurnLimit::parse(None).expect("unbounded limit");
 
         let error = match run_single_message_with_agent(
             &mut agent,
@@ -1457,6 +1462,7 @@ async fn one_shot_cleanup_preserves_the_original_command_error() {
             "Fail this run.",
             emit_json,
             emit_ndjson,
+            &mut turn_limit,
         )
         .await
         {

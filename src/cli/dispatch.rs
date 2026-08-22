@@ -234,6 +234,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             message,
             json,
             ndjson,
+            max_turns,
         }) => {
             commands::run_single_message_command(
                 &args.provider,
@@ -242,6 +243,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 &message,
                 json,
                 ndjson,
+                max_turns.as_deref(),
             )
             .await?;
         }

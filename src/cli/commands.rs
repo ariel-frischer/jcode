@@ -16,6 +16,7 @@ mod menubar;
 mod provider_setup;
 mod report_info;
 mod restart;
+mod run_safety;
 
 pub(crate) use super::auth_test::run_post_login_validation;
 #[cfg(test)]
@@ -2423,7 +2424,9 @@ pub async fn run_single_message_command(
     message: &str,
     emit_json: bool,
     emit_ndjson: bool,
+    max_turns: Option<&str>,
 ) -> Result<()> {
+    let mut turn_limit = run_safety::RunTurnLimit::parse(max_turns)?;
     let provider = if emit_json || emit_ndjson {
         super::provider_init::init_provider_quiet(choice, model).await?
     } else {
@@ -2455,7 +2458,15 @@ pub async fn run_single_message_command(
         return Err(error);
     }
 
-    run_single_message_with_agent(&mut agent, provider, message, emit_json, emit_ndjson).await
+    run_single_message_with_agent(
+        &mut agent,
+        provider,
+        message,
+        emit_json,
+        emit_ndjson,
+        &mut turn_limit,
+    )
+    .await
 }
 
 async fn run_single_message_with_agent(
@@ -2464,10 +2475,13 @@ async fn run_single_message_with_agent(
     message: &str,
     emit_json: bool,
     emit_ndjson: bool,
+    turn_limit: &mut run_safety::RunTurnLimit,
 ) -> Result<()> {
     let result: Result<()> = async {
         if emit_json {
-            let text = run_single_message_command_capture_with_auto_poke(agent, message).await?;
+            let text =
+                run_single_message_command_capture_with_auto_poke(agent, message, turn_limit)
+                    .await?;
             let report = RunCommandReport {
                 session_id: agent.session_id().to_string(),
                 provider: provider.name().to_string(),
@@ -2475,11 +2489,14 @@ async fn run_single_message_with_agent(
                 text,
                 usage: agent.last_usage().clone(),
             };
+            let report =
+                run_safety::annotate_json(serde_json::to_value(report)?, turn_limit.stop_reason());
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else if emit_ndjson {
-            run_single_message_command_ndjson(agent, provider, message).await?;
+            run_single_message_command_ndjson(agent, provider, message, turn_limit).await?;
         } else {
-            run_single_message_command_plain_with_auto_poke(agent, message).await?;
+            run_single_message_command_plain_with_auto_poke(agent, message, turn_limit).await?;
+            run_safety::print_plain_stop(turn_limit.stop_reason());
         }
         Ok(())
     }
@@ -2750,15 +2767,19 @@ fn build_run_todo_validation_message(
 async fn run_single_message_command_plain_with_auto_poke(
     agent: &mut crate::agent::Agent,
     message: &str,
+    turn_limit: &mut run_safety::RunTurnLimit,
 ) -> Result<()> {
     let mut next_message = message.to_string();
-    let max_turns = run_command_auto_poke_max_turns();
+    let auto_poke_max_turns = run_command_auto_poke_max_turns();
     let mut turns_completed = 0usize;
     let mut confidence_spike_challenged = false;
     let mut gate_digest_delivered = false;
     loop {
         agent.run_once(&next_message).await?;
         turns_completed += 1;
+        if turn_limit.complete_turn() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -2771,8 +2792,8 @@ async fn run_single_message_command_plain_with_auto_poke(
             gate_digest,
         ) {
             Some(RunAutoPokeFollowUp::GateDigest { message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         eprintln!(
                             "We stopped poking after {max_turns} turn(s); some quality-review points are still open."
                         );
@@ -2791,8 +2812,8 @@ async fn run_single_message_command_plain_with_auto_poke(
                 confidence_spike_challenge,
                 ..
             }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         eprintln!(
                             "We stopped poking after {max_turns} turn(s); the agent's completion confidence still needs validation."
                         );
@@ -2807,8 +2828,8 @@ async fn run_single_message_command_plain_with_auto_poke(
                 continue;
             }
             Some(RunAutoPokeFollowUp::Incomplete { count, message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         eprintln!(
                             "We stopped poking after {max_turns} turn(s); {} todo(s) are still unfinished.",
                             count
@@ -2831,9 +2852,10 @@ async fn run_single_message_command_plain_with_auto_poke(
 async fn run_single_message_command_capture_with_auto_poke(
     agent: &mut crate::agent::Agent,
     message: &str,
+    turn_limit: &mut run_safety::RunTurnLimit,
 ) -> Result<String> {
     let mut next_message = message.to_string();
-    let max_turns = run_command_auto_poke_max_turns();
+    let auto_poke_max_turns = run_command_auto_poke_max_turns();
     let mut outputs = Vec::new();
     let mut turns_completed = 0usize;
     let mut confidence_spike_challenged = false;
@@ -2841,6 +2863,9 @@ async fn run_single_message_command_capture_with_auto_poke(
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
         turns_completed += 1;
+        if turn_limit.complete_turn() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -2853,8 +2878,8 @@ async fn run_single_message_command_capture_with_auto_poke(
             gate_digest,
         ) {
             Some(RunAutoPokeFollowUp::GateDigest { message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         eprintln!(
                             "We stopped poking after {max_turns} turn(s); some quality-review points are still open."
                         );
@@ -2873,8 +2898,8 @@ async fn run_single_message_command_capture_with_auto_poke(
                 confidence_spike_challenge,
                 ..
             }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         outputs.push(format!(
                             "We stopped poking after {max_turns} turn(s); the agent's completion confidence still needs validation."
                         ));
@@ -2886,8 +2911,8 @@ async fn run_single_message_command_capture_with_auto_poke(
                 continue;
             }
             Some(RunAutoPokeFollowUp::Incomplete { count, message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         outputs.push(format!(
                             "We stopped poking after {max_turns} turn(s); {} todo(s) are still unfinished.",
                             count
@@ -2917,6 +2942,7 @@ async fn run_single_message_command_ndjson(
     agent: &mut crate::agent::Agent,
     provider: std::sync::Arc<dyn crate::provider::Provider>,
     message: &str,
+    turn_limit: &mut run_safety::RunTurnLimit,
 ) -> Result<()> {
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let session_id = agent.session_id().to_string();
@@ -2935,7 +2961,7 @@ async fn run_single_message_command_ndjson(
         }),
     )?;
 
-    let max_turns = run_command_auto_poke_max_turns();
+    let auto_poke_max_turns = run_command_auto_poke_max_turns();
     let mut next_message = message.to_string();
     let mut result: Result<()> = Ok(());
     let mut turns_completed = 0usize;
@@ -2977,6 +3003,9 @@ async fn run_single_message_command_ndjson(
             break;
         }
         turns_completed += 1;
+        if turn_limit.complete_turn() {
+            break;
+        }
         if !run_command_auto_poke_enabled() {
             break;
         }
@@ -2989,8 +3018,8 @@ async fn run_single_message_command_ndjson(
             gate_digest,
         ) {
             Some(RunAutoPokeFollowUp::GateDigest { message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         eprintln!(
                             "We stopped poking after {max_turns} turn(s); some quality-review points are still open."
                         );
@@ -3009,8 +3038,8 @@ async fn run_single_message_command_ndjson(
                 message,
                 confidence_spike_challenge,
             }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         write_json_line(
                             &mut stdout,
                             &serde_json::json!({
@@ -3038,8 +3067,8 @@ async fn run_single_message_command_ndjson(
                 continue;
             }
             Some(RunAutoPokeFollowUp::Incomplete { count, message }) => {
-                if run_command_auto_poke_limit_reached(turns_completed, max_turns) {
-                    if let Some(max_turns) = max_turns {
+                if run_command_auto_poke_limit_reached(turns_completed, auto_poke_max_turns) {
+                    if let Some(max_turns) = auto_poke_max_turns {
                         write_json_line(
                             &mut stdout,
                             &serde_json::json!({
@@ -3069,9 +3098,8 @@ async fn run_single_message_command_ndjson(
 
     match result {
         Ok(()) => {
-            write_json_line(
-                &mut stdout,
-                &serde_json::json!({
+            let done = run_safety::annotate_json(
+                serde_json::json!({
                     "type": "done",
                     "session_id": session_id,
                     "provider": provider.name(),
@@ -3083,7 +3111,9 @@ async fn run_single_message_command_ndjson(
                     "connection_phase": state.connection_phase,
                     "status_detail": state.status_detail,
                 }),
-            )?;
+                turn_limit.stop_reason(),
+            );
+            write_json_line(&mut stdout, &done)?;
             Ok(())
         }
         Err(err) => {
