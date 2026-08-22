@@ -132,21 +132,23 @@ Test-first evidence on the actual upstream-based worktree:
 4. `JCODE_IN_DEV_CARGO=1 cargo fmt -p jcode-tui -- --check` passed.
 5. `JCODE_IN_DEV_CARGO=1 ./scripts/dev_cargo.sh clippy -p jcode-tui --lib --no-deps` passed with no warnings in changed files.
 6. `./scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode` passed.
-7. The built binary resolved to this worktree, reported `jcode v0.79.14-dev (a63dbc454, dirty)`, accepted `--help`, and contained the new preview status strings.
+7. The clean pre-runtime binary reported `jcode v0.79.15-dev (96d756d9a)` and accepted `--help`.
+8. Direct end-user acceptance used that exact binary on a private daemon/socket and owned 120x40 PTY. A real SGR terminal mouse click on rendered `README.md` opened the inline preview and displayed `Expanded file: README.md`; a second real mouse click inside the visible preview body restored the transcript and displayed `Collapsed inline file preview`.
+9. Runtime cleanup verified the private client, PTY driver, daemon, and socket were all absent; the shared daemon was untouched.
 
 Known unrelated upstream-base validation noise:
 
 - Whole-workspace `cargo fmt --all -- --check` reports formatting drift in `crates/jcode-app-core/src/tool/bash.rs` and `bash_tests.rs`, which this branch does not modify.
 - `clippy ... -D warnings` is blocked by pre-existing warnings in `ui_messages.rs`, `app/helpers.rs`, `auth_account_picker_saved_accounts.rs`, `session_picker/loading_tests.rs`, and `ui_tests/palette_topology.rs`. No reported warning points at the changed implementation files.
 
-No live provider call, upstream push, issue creation, pull request, or GitHub comment was performed.
+No successful live provider turn, upstream push, issue creation, pull request, or GitHub comment was performed. One unrelated isolated onboarding submission failed immediately with `credit_balance_exhausted` before producing a response; the direct mouse acceptance used no provider.
 
 ## Proposed acceptance criteria
 
-- [ ] Clicking a valid repository-relative, absolute, `~/...`, or `@path` text-file reference in rendered chat opens an inline preview attached to the correct message.
-- [ ] Relative paths resolve from the session CWD, with process-CWD fallback when session CWD is unavailable.
-- [ ] URL and Markdown-link behavior remains unchanged.
-- [ ] Invalid, missing, directory, oversized, and non-text targets fail safely and do not invoke an external opener.
-- [ ] Preview rendering remains readable in light and dark terminal themes.
-- [ ] Clicking the visible preview body collapses it; dragging still supports text selection.
-- [ ] Focused tests, `jcode-tui` formatting, and a built `jcode` binary pass on the upstream base.
+- [x] Clicking a valid repository-relative, absolute, `~/...`, or `@path` text-file reference in rendered chat opens an inline preview attached to the correct message.
+- [x] Relative paths resolve from the session CWD, with process-CWD fallback when session CWD is unavailable.
+- [x] URL and Markdown-link behavior remains unchanged.
+- [x] Invalid, missing, directory, oversized, and non-text targets fail safely and do not invoke an external opener.
+- [x] Preview rendering remains readable in light and dark terminal themes.
+- [x] Clicking the visible preview body collapses it; dragging still supports text selection.
+- [x] Focused tests, `jcode-tui` formatting, a built `jcode` binary, and exact-binary PTY acceptance pass on the upstream base.
