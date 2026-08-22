@@ -1460,13 +1460,10 @@ async fn one_shot_output_modes_close_sessions_and_clear_active_pid_markers() {
         )
         .unwrap_or_else(|error| panic!("read {mode} lifecycle stream: {error:#}"));
         assert!(
-            lifecycle
-                .events
-                .iter()
-                .any(|event| matches!(
-                    event.event,
-                    crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. }
-                )),
+            lifecycle.events.iter().any(|event| matches!(
+                event.event,
+                crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. }
+            )),
             "{mode} run should persist its effective lifecycle policy snapshot"
         );
 
