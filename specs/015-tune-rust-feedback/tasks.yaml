@@ -170,7 +170,7 @@ phases:
     tasks:
       - id: "T012"
         title: "Write failing package, target, feature, and fallback resolver tests in scripts/test_rust_validation_scope.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
