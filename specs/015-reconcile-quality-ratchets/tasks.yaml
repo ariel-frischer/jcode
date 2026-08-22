@@ -5,7 +5,7 @@ tasks:
   plan_path: "specs/015-reconcile-quality-ratchets/plan.yaml"
 
 summary:
-  total_tasks: 35
+  total_tasks: 38
   total_phases: 7
   parallel_opportunities: 15
   estimated_complexity: "high"
@@ -38,6 +38,7 @@ phases:
         acceptance_criteria:
           - "Inventory every applicable independent review comment using a stable PR, review, or Bead-comment identifier."
           - "For each concern, record the bounded issue, affected paths or baseline scopes, and an initial disposition of implemented, rejected_with_evidence, or out_of_scope."
+          - "Record PR #1 remediation commit b115b9e34 and PR #2 remediation commit d37d86736 as pushed but absent from dev, distinguish correctness blockers from nonblocking design suggestions, and retain the remaining PR #2 path-format gaps as unresolved until tested and repaired."
           - "Leave no applicable review concern without an owner, evidence requirement, and final-resolution condition."
 
   - number: 2
@@ -54,7 +55,8 @@ phases:
         dependencies: ["T002"]
         acceptance_criteria:
           - "Enumerate the reported 74 production-size, 31 test-size, and 36 swallowed-error path deltas with category, scope, baseline commit, previous value, current measured value, and candidate reconciled value."
-          - "Map each intentional portion to existing owning commit ancestors, owning Beads, merged-state evidence, and one or more review-disposition identifiers."
+          - "Map each intentional portion to causal source commit ancestors, reconciliation Bead jcode-l89.5, bounded historical-Bead search evidence, merged-state evidence, and one or more review-disposition identifiers."
+          - "When a bounded search finds no historical Bead, record not_found with the exact search evidence rather than fabricating ownership; the delta remains eligible only when its causal commit and current intentional state are otherwise proven."
           - "Split mixed or aggregate mismatches so intentional and unexplained portions are independently measurable, and mark untraced, reverted, superseded, or disputed portions as rejected."
       - id: "T004"
         title: "Audit the blocker branch changed oversized-file surface against 85f9f5e3b in specs/015-reconcile-quality-ratchets/validation.md"
@@ -97,6 +99,8 @@ phases:
         dependencies: ["T004"]
         acceptance_criteria:
           - "Exercise the blocker-owned telemetry success path and the exceptional path identified by independent review."
+          - "Prove transient HTTP-client and background-worker initialization failures are not cached permanently and can recover on a later attempt."
+          - "Prove worker-spawn failure remains observable without a panic and that queue behavior remains bounded."
           - "Assert that telemetry failures remain explicit or deliberately observable rather than silently discarded."
           - "Keep the complete lib.rs branch delta flat or smaller after adding or consolidating tests, with equivalent or stronger coverage documented."
       - id: "T007"
@@ -158,6 +162,7 @@ phases:
         acceptance_criteria:
           - "The complete file, including colocated tests, is flat or smaller than 85f9f5e3b."
           - "Telemetry success and exceptional behavior remains covered and explicit."
+          - "Extract the delivery/client/worker support into a focused submodule when needed to keep lib.rs flat or smaller, and avoid OnceLock<Option<_>> failure caching so transient initialization can retry."
           - "Any test consolidation documents equivalent or stronger coverage and does not delete behavior solely to meet the ratchet."
       - id: "T012"
         title: "Keep translation repairs flat or smaller in crates/jcode-harness-api-server/src/translate.rs"
@@ -207,6 +212,42 @@ phases:
           - "The file has no positive branch-base size delta."
           - "The reviewed ACP error remains explicit and the public command behavior remains compatible."
           - "No unrelated CLI behavior or contract changes are included."
+      - id: "T036"
+        title: "Add focused PR #1 and PR #2 review-regression tests across the TUI input and URL test modules"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "PR #1 tests cover compact queue retrieval, final-dispatch expansion and total-size rejection on every local and remote path, compact persisted history with provider-time materialization, client-CWD remote semantics, gitignore globs, disconnected-worker observability, and literal closing-tag escaping."
+          - "PR #2 tests reject ordinary dotted prose and accept `~/notes.md`, extensionless files such as Makefile, leading-digit filenames, anchors, and `:line` suffixes without losing the suffix contract."
+          - "Preview cleanup and shared header behavior are covered without weakening Markdown or URL precedence."
+      - id: "T037"
+        title: "Integrate the pushed PR #1 correctness remediation into the dev-based TUI implementation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/input.rs"
+        dependencies: ["T036"]
+        acceptance_criteria:
+          - "Implement the behavior proven by maintainer remediation b115b9e34 without blindly merging the feature branch or duplicating already-integrated feature commits."
+          - "All submission paths expand once at final dispatch, enforce the total input limit, keep composer and persisted history compact, and materialize provider context against documented client-CWD semantics."
+          - "Gitignore-style exclusions, worker disconnect handling, and closing-tag escaping satisfy the focused review tests; nonblocking style suggestions receive explicit dispositions."
+      - id: "T038"
+        title: "Integrate the pushed PR #2 remediation and close its remaining path-format gaps"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/ui/url.rs"
+        dependencies: ["T036"]
+        acceptance_criteria:
+          - "Implement the behavior proven by maintainer remediation d37d86736 without blindly merging unrelated branch history."
+          - "Bare-path detection avoids ordinary `word.word` prose while supporting home-relative single-file paths, extensionless files, leading-digit filenames, anchors, and line suffixes."
+          - "Inline preview cleanup, shared header constants, outside-repository rationale, and Markdown/URL/path precedence satisfy focused tests and documented review dispositions."
       - id: "T016"
         title: "Verify every changed oversized file is flat or smaller and record the audit in specs/015-reconcile-quality-ratchets/validation.md"
         status: "Pending"
@@ -214,7 +255,7 @@ phases:
         parallel: false
         story_id: "US-002"
         file_path: "specs/015-reconcile-quality-ratchets/validation.md"
-        dependencies: ["T009", "T010", "T011", "T012", "T013", "T014", "T015"]
+        dependencies: ["T009", "T010", "T011", "T012", "T013", "T014", "T015", "T037", "T038"]
         acceptance_criteria:
           - "A file-by-file comparison against 85f9f5e3b reports zero positive deltas for all modified already-oversized files."
           - "Focused tests, compile checks, warnings, and changed-surface ratchets pass before historical baselines are changed."
@@ -236,7 +277,7 @@ phases:
         dependencies: ["T003", "T016"]
         acceptance_criteria:
           - "Add passing fixtures for complete code_size, test_size, and swallowed_error records and their review dispositions."
-          - "Add failing fixtures for missing required fields, duplicate category and scope records, mismatched previous or reconciled values, missing budget membership, invalid or non-ancestor commits, invalid Bead identifiers, and unresolved review dispositions."
+          - "Add failing fixtures for missing required fields, duplicate category and scope records, mismatched previous or reconciled values, missing budget membership, invalid or non-ancestor commits, invalid reconciliation Bead identifiers, fabricated source-Bead ownership, incomplete bounded searches, and unresolved review dispositions."
           - "Tests use only Python's standard library and deterministic temporary Git or fixture state."
       - id: "T018"
         title: "Add controlled future-growth rejection tests in scripts/tests/test_quality_ratchets.py"
@@ -259,7 +300,7 @@ phases:
         file_path: "scripts/quality_ratchet_provenance.json"
         dependencies: ["T017"]
         acceptance_criteria:
-          - "Represent every approved code-size, test-size, and swallowed-error transition with a unique id, category, scope, previous_value, reconciled_value, baseline_commit, owning_commits, owning_beads, review_disposition_ids, and merged_state_evidence."
+          - "Represent every approved code-size, test-size, and swallowed-error transition with a unique id, category, scope, previous_value, reconciled_value, baseline_commit, causal source commits, reconciliation_bead, source_bead_search, optional source_beads, review_disposition_ids, and merged_state_evidence."
           - "Include every applicable review concern with stable source, concern, disposition, and evidence fields."
           - "Exclude untraced, reverted, superseded, disputed, or unexplained growth from approved reconciled values."
       - id: "T020"
@@ -271,7 +312,7 @@ phases:
         file_path: "scripts/check_quality_ratchet_provenance.py"
         dependencies: ["T017", "T019"]
         acceptance_criteria:
-          - "Validate ledger schema, category and scope uniqueness, review-disposition references, and required ownership fields with actionable per-record errors."
+          - "Validate ledger schema, category and scope uniqueness, review-disposition references, causal source commits, reconciliation ownership, and bounded source-Bead search fields with actionable per-record errors."
           - "Cross-check previous and reconciled values against historical and current budget entries, including swallowed-error pattern, file, and aggregate dimensions."
           - "Use Git to require existing baseline and owning commits and require every owning commit to be an ancestor of the accepted merged state."
           - "Exit zero only when the complete ledger and all adjusted budget scopes are consistent."
@@ -363,7 +404,8 @@ phases:
         file_path: "specs/015-reconcile-quality-ratchets/validation.md"
         dependencies: ["T016", "T025"]
         acceptance_criteria:
-          - "Narrow telemetry and remote TUI tests pass without warnings or hidden failures."
+          - "Narrow telemetry, file-mention submission, inline-preview path detection, and remote TUI tests pass without warnings or hidden failures."
+          - "The final PR #1 and PR #2 generated-spec conformance matrices have no unresolved correctness requirement marked FAIL."
           - "The ACP public error-path scenario retains its accepted observable behavior."
           - "The swallowed-error checker reports no newly introduced occurrence in the changed source surface."
       - id: "T028"
@@ -459,7 +501,7 @@ phases:
         file_path: "specs/015-reconcile-quality-ratchets/validation.md"
         dependencies: ["T033"]
         acceptance_criteria:
-          - "The final diff contains only blocker-owned no-growth repairs, the provenance gate and ledger, traced budget reconciliations, focused tests, and required documentation."
+          - "The final diff contains only blocker-owned no-growth repairs, the reviewed PR #1/#2 correctness remediations and remaining path-format repair, the provenance gate and ledger, traced budget reconciliations, focused tests, and required documentation."
           - "Every modified already-oversized file remains flat or smaller against 85f9f5e3b and no growth was shifted into another oversized file."
           - "Every changed baseline scope matches one complete ledger record, and every applicable independent review concern has a final evidence-backed disposition."
       - id: "T035"

@@ -17,7 +17,8 @@ summary: |
   Keep the existing Python ratchet scripts and JSON budgets as the enforcement
   authority. Add one repository-local JSON provenance ledger and a standard-library
   Python validator that cross-checks ledger records, baseline values, owning Git
-  commits, Bead identifiers, and review dispositions before the three ratchets run.
+  commits, reconciliation ownership, bounded historical-Bead search results, and
+  review dispositions before the three ratchets run.
   Reconcile only the approved ledger entries into the existing budgets, retain the
   current per-file, per-pattern, and total no-growth checks, add controlled negative
   tests proving future growth is rejected, and finish with focused behavior tests,
@@ -53,7 +54,7 @@ technical_context:
   constraints:
     - "Do not use automatic ratchet update output as ownership evidence."
     - "Only deltas traced to intentional commits that are ancestors of the accepted merged state may be reconciled."
-    - "Every reconciled delta must include previous and new values, owning commit, owning Bead, and PR-review disposition."
+    - "Every reconciled delta must include previous and new values, causal source commit, reconciliation Bead, bounded source-Bead search result, and PR-review disposition; never fabricate missing historical ownership."
     - "Untraced, reverted, superseded, or disputed deltas remain rejected."
     - "The blocker branch must be flat or smaller against 85f9f5e3b in every modified already-oversized file, including current positive deltas in bash.rs, telemetry-core/lib.rs, and state_ui_input_helpers.rs."
     - "Preserve existing observable behavior, test coverage, explicit error handling, and unrelated budget values."
@@ -113,7 +114,7 @@ research_findings:
         - "Embed large provenance objects independently in all three budget files"
         - "Use YAML and add a Python YAML dependency"
     - topic: "Provenance validation"
-      decision: "Cross-check required fields, unique category/scope records, previous and reconciled values, current budget membership, owning commit existence and accepted ancestry, Bead syntax, and stable review dispositions."
+      decision: "Cross-check required fields, unique category/scope records, previous and reconciled values, current budget membership, causal source commit existence and accepted ancestry, reconciliation Bead syntax, bounded source-Bead search results, and stable review dispositions."
       rationale: "A ledger that is not mechanically tied to the budgets can drift and conceal unexplained growth. Git and JSON checks provide deterministic local evidence."
       alternatives_considered:
         - "Human review only"
@@ -171,10 +172,18 @@ data_model:
           type: "list of Git object IDs"
           description: "Intentional merged commits accounting for the measured delta."
           constraints: "Non-empty; every commit must exist and be in accepted ancestry."
-        - name: "owning_beads"
+        - name: "reconciliation_bead"
+          type: "Bead ID"
+          description: "Durable ownership for the reconciliation decision."
+          constraints: "Required and resolvable during review."
+        - name: "source_bead_search"
+          type: "object"
+          description: "Bounded search evidence for historical Beads associated with the causal commits."
+          constraints: "Records queries and either matching Bead IDs or an explicit not_found result; historical ownership is never fabricated."
+        - name: "source_beads"
           type: "list of Bead IDs"
-          description: "Durable work ownership for the commits."
-          constraints: "Non-empty and resolvable during review."
+          description: "Historical work ownership found by the bounded search."
+          constraints: "May be empty only when source_bead_search records not_found; every listed Bead must be resolvable."
         - name: "review_disposition_ids"
           type: "list of strings"
           description: "Links the delta to independent review outcomes."

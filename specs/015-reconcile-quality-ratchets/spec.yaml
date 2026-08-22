@@ -72,15 +72,15 @@ requirements:
     - id: "FR-002"
       description: "The reconciliation MUST record durable provenance for every historical code-size baseline delta."
       testable: true
-      acceptance_criteria: "Each code-size delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+      acceptance_criteria: "Each code-size delta records the affected scope, previous and reconciled values, causal source commit, reconciliation Bead, bounded source-Bead search result, and PR review disposition; missing historical Beads are never fabricated."
     - id: "FR-003"
       description: "The reconciliation MUST record durable provenance for every historical test-size baseline delta."
       testable: true
-      acceptance_criteria: "Each test-size delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+      acceptance_criteria: "Each test-size delta records the affected scope, previous and reconciled values, causal source commit, reconciliation Bead, bounded source-Bead search result, and PR review disposition; missing historical Beads are never fabricated."
     - id: "FR-004"
       description: "The reconciliation MUST record durable provenance for every historical swallowed-error baseline delta."
       testable: true
-      acceptance_criteria: "Each swallowed-error delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+      acceptance_criteria: "Each swallowed-error delta records the affected scope, previous and reconciled values, causal source commit, reconciliation Bead, bounded source-Bead search result, and PR review disposition; missing historical Beads are never fabricated."
     - id: "FR-005"
       description: "The reconciliation MUST incorporate every applicable independent PR review comment and record a disposition for each reviewed concern."
       testable: true
@@ -166,7 +166,7 @@ key_entities:
       - "quality category and affected scope"
       - "previous and reconciled baseline values"
       - "owning commit"
-      - "owning Bead"
+      - "reconciliation Bead and bounded source-Bead search result"
       - "PR review comment and disposition"
       - "evidence of intentional merged state"
   - name: "Quality Ratchet"
@@ -201,7 +201,7 @@ edge_cases:
 
 assumptions:
   - "The blocker branch and its branch base are known and provide the comparison boundary for file-size deltas."
-  - "Owning commits and Beads exist or can be identified for intentional historical baseline deltas."
+  - "Causal source commits can be identified for intentional historical baseline deltas; a bounded search may honestly find no historical Bead, in which case the reconciliation Bead owns the durable disposition and the missing source Bead is recorded rather than invented."
   - "Independent PR review comments are available with stable identifiers or links suitable for durable dispositions."
   - "Existing accepted behavior and coverage expectations can be established from current tests and public or integration workflows."
   - "A baseline may change only to describe already-merged intentional state, never to pre-authorize future growth."
