@@ -135,6 +135,29 @@ fn command_palette_dispatches_shortcut_commands() {
 }
 
 #[test]
+fn command_palette_tab_dispatches_selected_shortcut() {
+    let mut app = create_test_app();
+    assert!(!app.queue_mode);
+    app.open_command_palette();
+    for c in "queue".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+
+    app.handle_key(
+        crossterm::event::KeyCode::Tab,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+
+    assert!(app.queue_mode);
+    assert!(!app.command_palette_is_open());
+}
+
+#[test]
 fn command_palette_models_command_opens_model_picker() {
     let mut app = create_test_app();
     configure_test_remote_models(&mut app);
