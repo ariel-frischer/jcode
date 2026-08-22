@@ -16,10 +16,17 @@ cat >"$tmp/bin/cargo" <<'EOF'
 set -euo pipefail
 python3 - "$TEST_CARGO_LOG" "$@" <<'PY'
 import json
+import os
 import sys
 
 with open(sys.argv[1], "a", encoding="utf-8") as output:
     output.write(json.dumps(sys.argv[2:]) + "\n")
+if os.environ.get("TEST_CARGO_FAIL_ALL_FEATURES") == "1" and "--all-features" in sys.argv[2:]:
+    print(
+        "optional-feature fixture: telemetry-only source failed full-feature validation",
+        file=sys.stderr,
+    )
+    raise SystemExit(42)
 PY
 printf 'running 1 test\n'
 EOF
@@ -31,8 +38,14 @@ import os
 import sys
 
 case = os.environ["TEST_SCOPE_CASE"]
+args = sys.argv[1:]
 with open(os.environ["TEST_RESOLVER_LOG"], "a", encoding="utf-8") as output:
-    output.write(json.dumps(sys.argv[1:]) + "\n")
+    output.write(json.dumps(args) + "\n")
+
+try:
+    explicit = json.loads(args[args.index("--explicit-json") + 1])
+except (ValueError, IndexError, json.JSONDecodeError):
+    explicit = {}
 
 if case == "conflict":
     print("rust-validation-scope: explicit feature selection conflicts with required feature telemetry", file=sys.stderr)
@@ -105,6 +118,21 @@ results = {
         "resolution_source": "conservative_fallback",
         "fallback_reason": "workspace path requires broad validation",
     },
+    "broad-explicit": {
+        "explicit_inputs": explicit,
+        "defaults": {},
+        "affected_paths": ["crates/alpha/src/lib.rs"],
+        "effective_scope": {
+            "mode": "broad",
+            "packages": explicit.get("packages", []),
+            "targets": explicit.get("targets", []),
+            "features": explicit.get("features", []),
+            "no_default_features": explicit.get("no_default_features", False),
+            "all_features": explicit.get("all_features", False),
+        },
+        "resolution_source": "explicit",
+        "fallback_reason": "explicit broad or release-sensitive Cargo request",
+    },
 }
 json.dump(results[case], sys.stdout)
 sys.stdout.write("\n")
@@ -136,6 +164,7 @@ run_dev_cargo() {
     export TEST_GATE_LOG="$gate_log"
     export TEST_RESOLVER_LOG="$resolver_log"
     export TEST_SCOPE_CASE="$scope_case"
+    export TEST_CARGO_FAIL_ALL_FEATURES="${TEST_CARGO_FAIL_ALL_FEATURES:-0}"
     export JCODE_BUILD_GIT_HASH=test
     export JCODE_BUILD_JOBS=1
     export JCODE_BUILD_TMPDIR="$tmp/work/cargo-tmp"
@@ -236,6 +265,69 @@ assert effective["features"] == json.loads(sys.argv[6]), effective
 PY
 }
 
+assert_full_feature_receipt() {
+  local receipt_index="$1"
+  local expected_argv="$2"
+  local expected_action="$3"
+  local expected_profile="$4"
+  local expected_exit="$5"
+  python3 - "$action_log" "$receipt_index" "$expected_argv" "$expected_action" \
+    "$expected_profile" "$expected_exit" <<'PY'
+import json
+import sys
+
+records = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+index = int(sys.argv[2])
+assert len(records) > index, f"missing receipt {index}; got {len(records)} receipt(s)"
+record = records[index]
+expected_exit = int(sys.argv[6])
+assert record.get("argv") == json.loads(sys.argv[3]), record
+assert record.get("action") == sys.argv[4], record
+assert record.get("profile") == sys.argv[5], record
+assert record.get("exit_code") == expected_exit, record
+assert record.get("success") is (expected_exit == 0), record
+scope = record.get("validation_scope")
+assert isinstance(scope, dict), f"receipt missing validation_scope: {record!r}"
+assert scope.get("resolution_source") == "explicit", scope
+configured = scope.get("configured_scope")
+effective = scope.get("effective_scope")
+assert isinstance(configured, dict), scope
+assert isinstance(effective, dict), scope
+assert configured.get("all_features") is True, configured
+assert effective.get("all_features") is True, effective
+assert effective.get("mode") == "broad", effective
+assert effective.get("packages") == [], effective
+assert effective.get("targets") == [], effective
+PY
+}
+
+assert_focused_success_receipt() {
+  local receipt_index="$1"
+  local expected_argv="$2"
+  python3 - "$action_log" "$receipt_index" "$expected_argv" <<'PY'
+import json
+import sys
+
+records = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]
+record = records[int(sys.argv[2])]
+assert record.get("argv") == json.loads(sys.argv[3]), record
+assert record.get("action") == "check", record
+assert record.get("profile") == "dev", record
+assert record.get("exit_code") == 0, record
+assert record.get("success") is True, record
+scope = record.get("validation_scope")
+assert isinstance(scope, dict), record
+assert scope.get("resolution_source") == "explicit", scope
+effective = scope.get("effective_scope")
+assert isinstance(effective, dict), scope
+assert effective.get("mode") == "focused", effective
+assert effective.get("packages") == ["beta"], effective
+assert effective.get("targets") == ["bin:beta-cli"], effective
+assert effective.get("features") == ["user"], effective
+assert effective.get("all_features") is False, effective
+PY
+}
+
 # Eligible focused requests insert inferred Cargo selection before harness argv
 # while preserving every caller-provided argument and its ordering.
 reset_logs
@@ -277,8 +369,43 @@ grep -Fq 'conflicts with required feature telemetry' "$tmp/conflict.stderr"
 
 # Explicit workspace/all-feature guardrails are never narrowed or reordered.
 reset_logs
-run_dev_cargo fallback 'crates/alpha/src/lib.rs' check --workspace --all-features --quiet
-assert_last_cargo_argv '["check","--workspace","--all-features","--quiet"]'
-assert_scope_receipt conservative_fallback broad '[]' '[]' '[]'
+run_dev_cargo broad-explicit 'crates/alpha/src/lib.rs' check --workspace --all-targets --all-features --quiet
+assert_last_cargo_argv '["check","--workspace","--all-targets","--all-features","--quiet"]'
+assert_full_feature_receipt 0 '["check","--workspace","--all-targets","--all-features","--quiet"]' check dev 0
+
+# Explicit full-feature test and build commands retain their broad targets,
+# feature selection, exit contract, and rust-actions receipt fields.
+reset_logs
+run_dev_cargo broad-explicit 'crates/alpha/src/lib.rs' test --workspace --all-targets --all-features --quiet
+assert_last_cargo_argv '["test","--workspace","--all-targets","--all-features","--quiet"]'
+assert_full_feature_receipt 0 '["test","--workspace","--all-targets","--all-features","--quiet"]' test dev 0
+
+reset_logs
+run_dev_cargo broad-explicit 'crates/alpha/src/lib.rs' build --workspace --all-targets --all-features --quiet
+assert_last_cargo_argv '["build","--workspace","--all-targets","--all-features","--quiet"]'
+assert_full_feature_receipt 0 '["build","--workspace","--all-targets","--all-features","--quiet"]' build dev 0
+
+# Release-sensitive commands remain broad even when affected paths would
+# otherwise be eligible for inferred package and target narrowing.
+reset_logs
+run_dev_cargo broad-explicit 'crates/alpha/src/lib.rs' build --workspace --all-targets --all-features --release --quiet
+assert_last_cargo_argv '["build","--workspace","--all-targets","--all-features","--release","--quiet"]'
+assert_full_feature_receipt 0 '["build","--workspace","--all-targets","--all-features","--release","--quiet"]' build release 0
+
+# A source defect hidden behind an optional feature can pass a focused command,
+# but the explicit full-feature release gate still fails and records that exit.
+reset_logs
+run_dev_cargo explicit 'crates/alpha/src/lib.rs' check -p beta --bin beta-cli \
+  --no-default-features --features user --quiet
+assert_last_cargo_argv '["check","-p","beta","--bin","beta-cli","--no-default-features","--features","user","--quiet"]'
+if TEST_CARGO_FAIL_ALL_FEATURES=1 run_dev_cargo broad-explicit \
+  'crates/alpha/src/telemetry/mod.rs' build --workspace --all-targets \
+  --all-features --release --quiet 2>"$tmp/full-feature.stderr"; then
+  echo 'expected missing optional-feature fixture to fail the full-feature release gate' >&2
+  exit 1
+fi
+grep -Fq 'telemetry-only source failed full-feature validation' "$tmp/full-feature.stderr"
+assert_focused_success_receipt 0 '["check","-p","beta","--bin","beta-cli","--no-default-features","--features","user","--quiet"]'
+assert_full_feature_receipt 1 '["build","--workspace","--all-targets","--all-features","--release","--quiet"]' build release 42
 
 echo 'dev_cargo focused-scope integration tests passed'

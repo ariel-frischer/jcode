@@ -385,7 +385,7 @@ phases:
     tasks:
       - id: "T028"
         title: "Add explicit full-feature and release compatibility regressions in scripts/test_dev_cargo_scope.sh"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"
