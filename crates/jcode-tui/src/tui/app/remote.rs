@@ -339,7 +339,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
         needs_redraw = true;
     }
 
-    detect_and_cancel_stall(app, remote).await;
+    needs_redraw |= detect_and_cancel_stall(app, remote).await;
     needs_redraw |= recover_stuck_remote_history(app, remote).await;
     needs_redraw |= detect_starved_queued_followup(app);
     needs_redraw |= app.maybe_finish_background_client_reload();
@@ -1671,17 +1671,22 @@ fn detect_starved_queued_followup(app: &mut App) -> bool {
 /// Client-side stall budget before the TUI cancels an in-flight turn.
 ///
 /// The server relays provider events over the local socket; when the upstream
-/// model reasons silently, no events cross the socket, so a hardcoded short
-/// watchdog cannot distinguish a dead connection from a healthy long think
-/// (issue #434). Derive it from `[provider] stream_idle_timeout_secs`, scaled by
-/// the largest reasoning-effort multiplier because effort is invisible here,
-/// plus grace so the server-side idle timeout (which produces a visible error
-/// event) always fires first. Never below 2 minutes.
-fn stall_timeout() -> Duration {
+/// model reasons silently, no real progress events cross the socket, so a
+/// hardcoded short watchdog cannot distinguish a dead connection from a healthy
+/// long think (issue #434). Derive it from `[provider]
+/// stream_idle_timeout_secs`, scaled by the active reasoning effort, plus grace
+/// so the server-side idle timeout (which produces a visible error event) can
+/// fire first. Never below 2 minutes.
+fn stall_timeout_for_effort(effort: Option<&str>) -> Duration {
     const MIN_STALL_TIMEOUT: Duration = Duration::from_secs(2 * 60);
     const GRACE: Duration = Duration::from_secs(30);
-    let provider_idle = crate::provider::max_stream_idle_timeout();
+    let provider_idle = crate::provider::stream_idle_timeout_for_effort(effort);
     provider_idle.saturating_add(GRACE).max(MIN_STALL_TIMEOUT)
+}
+
+fn stall_timeout(app: &App) -> Duration {
+    let effort = app.remote_reasoning_effort_hint();
+    stall_timeout_for_effort(effort.as_deref())
 }
 
 /// Human-readable stall duration for user-facing stall messages, e.g.
@@ -1697,18 +1702,42 @@ fn format_stall_duration(timeout: Duration) -> String {
     }
 }
 
-async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) {
-    let stall_timeout = stall_timeout();
-    let is_running_tool = matches!(app.status, ProcessingStatus::RunningTool(_));
-    if app.is_processing && !is_running_tool {
-        let stalled = app
+fn stall_phase(status: &ProcessingStatus) -> &'static str {
+    match status {
+        ProcessingStatus::Sending => "sending request",
+        ProcessingStatus::Connecting(_) => "waiting for provider",
+        ProcessingStatus::Thinking(_) => "model reasoning",
+        ProcessingStatus::Streaming => "response streaming",
+        ProcessingStatus::WaitingForNetwork { .. } => "waiting for network",
+        ProcessingStatus::RunningTool(_) => "tool execution",
+        ProcessingStatus::Idle => "unknown processing phase",
+    }
+}
+
+fn stall_watchdog_applies(app: &App) -> bool {
+    match app.status {
+        ProcessingStatus::WaitingForNetwork { .. } => false,
+        // ToolStart is still provider output: the model may be streaming the
+        // tool-call JSON and can stall before ToolExec. ToolExec pauses the TPS
+        // clock, which is the existing boundary for actual local tool runtime.
+        ProcessingStatus::RunningTool(_) => app.streaming.streaming_tps_start.is_some(),
+        _ => true,
+    }
+}
+
+async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) -> bool {
+    const STALL_WARNING_AFTER: Duration = Duration::from_secs(60);
+    let stall_timeout = stall_timeout(app);
+    if app.is_processing && stall_watchdog_applies(app) {
+        let inactivity = app
             .last_stream_activity
-            .map(|t| t.elapsed() > stall_timeout)
+            .map(|t| t.elapsed())
             .unwrap_or_else(|| {
                 app.processing_started
-                    .map(|t| t.elapsed() > stall_timeout)
-                    .unwrap_or(false)
+                    .map(|t| t.elapsed())
+                    .unwrap_or_default()
             });
+        let stalled = inactivity > stall_timeout;
         if stalled {
             if let Some(snapshot) = app.remote_resume_activity.clone() {
                 let elapsed = app
@@ -1727,13 +1756,12 @@ async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) {
                     Some(tool_name) => ProcessingStatus::RunningTool(tool_name),
                     None => ProcessingStatus::Thinking(Instant::now()),
                 };
-                return;
+                return true;
             }
+            let phase = stall_phase(&app.status);
             crate::logging::warn(&format!(
-                "Stream stall detected: no server events for {:?}, cancelling",
-                app.last_stream_activity
-                    .map(|t| t.elapsed())
-                    .or(app.processing_started.map(|t| t.elapsed()))
+                "Stream stall detected: no provider progress for {:?} in phase {phase}, cancelling",
+                inactivity
             ));
             let _ = remote.cancel_with_reason("stall_guard").await;
             app.is_processing = false;
@@ -1758,7 +1786,7 @@ async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) {
             }
             let stall_desc = format_stall_duration(stall_timeout);
             if !app.schedule_pending_remote_retry(&format!(
-                "⚠ Stream stalled (no response for {stall_desc}). Processing cancelled.",
+                "⚠ Stream stalled in {phase} (no provider progress for {stall_desc}). Processing cancelled.",
             )) {
                 // Keep a dispatched-but-unfinished queued follow-up on the
                 // queue instead of silently dropping it (issue #391).
@@ -1766,16 +1794,31 @@ async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) {
                 app.clear_pending_remote_retry();
                 if recovered {
                     app.push_display_message(DisplayMessage::system(format!(
-                        "⚠ Stream stalled (no response for {stall_desc}). Processing cancelled. Your queued follow-up stays queued.",
+                        "⚠ Stream stalled in {phase} (no provider progress for {stall_desc}). Processing cancelled. Your queued follow-up stays queued.",
                     )));
                 } else {
                     app.push_display_message(DisplayMessage::system(format!(
-                        "⚠ Stream stalled (no response for {stall_desc}). Processing cancelled. You can resend your message. Raise `[provider] stream_idle_timeout_secs` in config.toml if your model thinks silently for longer.",
+                        "⚠ Stream stalled in {phase} (no provider progress for {stall_desc}). Processing cancelled. You can resend your message. Raise `[provider] stream_idle_timeout_secs` in config.toml if your model thinks silently for longer.",
                     )));
                 }
             }
+            return true;
+        }
+
+        if inactivity >= STALL_WARNING_AFTER {
+            let detail = format!(
+                "No provider progress for {}; phase: {}; watchdog recovery at {}",
+                format_stall_duration(inactivity),
+                stall_phase(&app.status),
+                format_stall_duration(stall_timeout),
+            );
+            if app.status_detail.as_deref() != Some(detail.as_str()) {
+                app.status_detail = Some(detail);
+                return true;
+            }
         }
     }
+    false
 }
 
 fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
@@ -2126,7 +2169,7 @@ mod stall_guard_tests {
     fn stall_timeout_never_below_two_minutes() {
         // Even with the default 180s provider idle timeout, the client stall
         // guard must give the server-side timeout room to fire first.
-        let timeout = stall_timeout();
+        let timeout = stall_timeout_for_effort(Some("max"));
         assert!(
             timeout >= Duration::from_secs(2 * 60),
             "stall timeout regressed below 2 minutes: {timeout:?}"
@@ -2134,11 +2177,102 @@ mod stall_guard_tests {
         // And it must exceed the max provider idle budget so a healthy silent
         // reasoning stretch is cancelled server-side (visible error + retry)
         // rather than by the client watchdog (issue #434).
-        let provider_idle = crate::provider::max_stream_idle_timeout();
+        let provider_idle = crate::provider::stream_idle_timeout_for_effort(Some("max"));
         assert!(
             timeout > provider_idle,
             "stall timeout {timeout:?} must exceed provider idle timeout {provider_idle:?}"
         );
+    }
+
+    #[test]
+    fn stall_timeout_uses_the_active_reasoning_effort() {
+        let base = crate::provider::stream_idle_timeout();
+        assert_eq!(
+            stall_timeout_for_effort(Some("low")),
+            base.saturating_add(Duration::from_secs(30))
+                .max(Duration::from_secs(2 * 60))
+        );
+        assert_eq!(
+            stall_timeout_for_effort(Some("xhigh")),
+            (base * 3)
+                .saturating_add(Duration::from_secs(30))
+                .max(Duration::from_secs(2 * 60))
+        );
+        assert!(stall_timeout_for_effort(Some("low")) < stall_timeout_for_effort(Some("xhigh")));
+    }
+
+    #[test]
+    fn stall_watchdog_ignores_healthy_long_running_phases() {
+        let mut app = App::new_for_remote(None);
+
+        app.status = ProcessingStatus::RunningTool("websearch".to_string());
+        app.streaming.streaming_tps_start = None;
+        assert!(!stall_watchdog_applies(&app));
+
+        app.status = ProcessingStatus::WaitingForNetwork {
+            listener: "route change".to_string(),
+        };
+        assert!(!stall_watchdog_applies(&app));
+
+        app.status = ProcessingStatus::Thinking(Instant::now());
+        assert!(stall_watchdog_applies(&app));
+        app.status = ProcessingStatus::Streaming;
+        assert!(stall_watchdog_applies(&app));
+    }
+
+    #[test]
+    fn stalled_tool_call_generation_is_not_mistaken_for_running_tool_execution() {
+        let mut app = App::new_for_remote(None);
+        app.status = ProcessingStatus::RunningTool("websearch".to_string());
+
+        app.streaming.streaming_tps_start = Some(Instant::now());
+        assert!(
+            stall_watchdog_applies(&app),
+            "ToolStart/ToolInput are still provider output and must remain watched"
+        );
+
+        app.streaming.streaming_tps_start = None;
+        assert!(
+            !stall_watchdog_applies(&app),
+            "ToolExec pauses TPS and marks actual long-running tool execution"
+        );
+    }
+
+    #[tokio::test]
+    async fn stalled_provider_is_cancelled_with_an_actionable_phase_diagnostic() {
+        use tokio::io::AsyncBufReadExt;
+
+        let mut app = App::new_for_remote(None);
+        app.is_processing = true;
+        app.status = ProcessingStatus::Thinking(Instant::now());
+        let timeout = stall_timeout(&app);
+        app.processing_started = Some(Instant::now() - timeout - Duration::from_secs(1));
+        app.last_stream_activity = app.processing_started;
+
+        let mut remote = RemoteConnection::dummy();
+        let peer = remote
+            .take_dummy_peer()
+            .expect("dummy remote should retain peer stream");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        assert!(detect_and_cancel_stall(&mut app, &mut remote).await);
+
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("stall watchdog cancel should reach the server peer");
+        assert!(matches!(
+            serde_json::from_str::<crate::protocol::Request>(&line)
+                .expect("cancel request should deserialize"),
+            crate::protocol::Request::Cancel { .. }
+        ));
+        assert!(!app.is_processing);
+        assert!(app.display_messages.iter().any(|message| {
+            message.content.contains("stalled in model reasoning")
+                && message.content.contains("stream_idle_timeout_secs")
+        }));
     }
 
     #[test]

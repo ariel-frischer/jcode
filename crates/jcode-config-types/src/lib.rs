@@ -1510,6 +1510,8 @@ pub struct ProviderConfig {
     /// Max seconds to wait for streaming data before timing out a request with
     /// no data received. Base budget only: high reasoning efforts scale it up
     /// automatically (see `jcode_base::provider::stream_idle_timeout_for_effort`).
+    /// The TUI warns after one minute without provider progress and recovers after
+    /// this effort-scaled budget plus 30 seconds. Active tools are not interrupted.
     /// Default: 180. Overridable via `JCODE_STREAM_IDLE_TIMEOUT_SECS`.
     pub stream_idle_timeout_secs: u64,
     /// Maximum request attempts for transient provider errors, including the
