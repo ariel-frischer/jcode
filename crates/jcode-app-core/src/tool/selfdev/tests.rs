@@ -1198,6 +1198,403 @@ async fn exact_eligible_cargo_requests_attach_and_propagate_terminal_result() {
     }
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn eligible_cargo_near_misses_remain_independent() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let lock = SelfDevTool::try_acquire_build_lock("test-worktree-scope")
+        .expect("lock attempt")
+        .expect("hold queue lock");
+
+    let commands = [
+        "cargo build -p jcode",
+        "cargo build -p jcode --profile selfdev",
+        "cargo build -p jcode --features desktop",
+        "cargo build -p jcode-app-core",
+        "cargo build -p jcode --bin jcode",
+        "cargo build -p jcode --lib",
+        "cargo test -p jcode",
+        "cargo check -p jcode",
+    ];
+    let outputs = execute_concurrent_selfdev_requests(
+        repo.path(),
+        commands
+            .iter()
+            .map(|command| {
+                json!({
+                    "action": "test",
+                    "command": command,
+                    "reason": "eligible near miss"
+                })
+            })
+            .chain(std::iter::once(json!({
+                "action": "build",
+                "reason": "different public action"
+            })))
+            .collect(),
+    )
+    .await;
+    let requests = outputs.iter().map(request_for_output).collect::<Vec<_>>();
+
+    assert!(
+        requests
+            .iter()
+            .all(|request| request.attached_to_request_id.is_none()),
+        "action, profile, features, package, target, and arguments are exact identity dimensions: {:?}",
+        requests
+            .iter()
+            .map(|request| (&request.command, &request.attached_to_request_id))
+            .collect::<Vec<_>>()
+    );
+
+    drop(lock);
+    for output in &outputs {
+        let task_id = output
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata["task_id"].as_str())
+            .expect("task id metadata");
+        assert_eq!(
+            wait_for_task_completion(task_id).await.status,
+            BackgroundTaskStatus::Completed
+        );
+    }
+}
+
+#[tokio::test]
+async fn different_source_fingerprints_do_not_attach() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let lock = SelfDevTool::try_acquire_build_lock("test-worktree-scope")
+        .expect("lock attempt")
+        .expect("hold queue lock");
+    let tool = SelfDevTool::new();
+
+    let first = tool
+        .execute(
+            json!({"action": "build", "reason": "source fingerprint A"}),
+            create_test_context("source-a", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("first build should queue");
+    let mut first_request = request_for_output(&first);
+    first_request
+        .requested_source
+        .as_mut()
+        .expect("requested source")
+        .fingerprint = "different-source-fingerprint".to_string();
+    let changed_source = first_request
+        .requested_source
+        .as_ref()
+        .expect("changed requested source");
+    first_request.dedupe_key = Some(SelfDevTool::build_dedupe_key(
+        changed_source,
+        &SelfDevBuildCommand {
+            program: String::new(),
+            args: Vec::new(),
+            display: first_request.command.clone(),
+        },
+    ));
+    first_request
+        .save()
+        .expect("persist changed source identity");
+
+    let second = tool
+        .execute(
+            json!({"action": "build", "reason": "source fingerprint B"}),
+            create_test_context("source-b", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("second build should queue independently");
+    let second_request = request_for_output(&second);
+    assert!(second_request.attached_to_request_id.is_none());
+    assert_ne!(
+        first_request
+            .requested_source
+            .as_ref()
+            .map(|source| source.fingerprint.as_str()),
+        second_request
+            .requested_source
+            .as_ref()
+            .map(|source| source.fingerprint.as_str())
+    );
+
+    drop(lock);
+    for output in [&first, &second] {
+        let task_id = output.metadata.as_ref().unwrap()["task_id"]
+            .as_str()
+            .expect("task id");
+        let _ = wait_for_task_completion(task_id).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn opaque_shell_commands_remain_independent_and_keep_exact_semantics() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let lock = SelfDevTool::try_acquire_build_lock("test-worktree-scope")
+        .expect("lock attempt")
+        .expect("hold queue lock");
+    let commands = [
+        "cargo test -p jcode && printf done",
+        "cargo test -p jcode > test.log",
+        "cargo test -p jcode | tee test.log",
+        "RUSTFLAGS=-Dwarnings cargo test -p jcode",
+        "'cargo' test -p jcode",
+        "cargo test -p jcode; cargo check -p jcode",
+        "cargo clippy -p jcode",
+        "cargo bench -p jcode",
+    ];
+    let outputs = execute_concurrent_selfdev_requests(
+        repo.path(),
+        commands
+            .iter()
+            .map(|command| {
+                json!({
+                    "action": "test",
+                    "command": command,
+                    "reason": "opaque command compatibility"
+                })
+            })
+            .collect(),
+    )
+    .await;
+    let requests = outputs.iter().map(request_for_output).collect::<Vec<_>>();
+
+    for (request, expected_command) in requests.iter().zip(commands) {
+        assert!(request.attached_to_request_id.is_none());
+        assert_eq!(request.command, expected_command);
+    }
+
+    drop(lock);
+    for output in &outputs {
+        let task_id = output.metadata.as_ref().unwrap()["task_id"]
+            .as_str()
+            .expect("task id");
+        assert_eq!(
+            wait_for_task_completion(task_id).await.status,
+            BackgroundTaskStatus::Completed
+        );
+    }
+}
+
+#[tokio::test]
+async fn dirty_source_drift_supersedes_eligible_test_before_launch() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let lock = SelfDevTool::try_acquire_build_lock("test-worktree-scope")
+        .expect("lock attempt")
+        .expect("hold queue lock");
+    let mut unrelated = request_fixture(
+        "unrelated-active-work",
+        BuildRequestState::Building,
+        Utc::now().to_rfc3339(),
+    );
+    unrelated.worktree_scope = "unrelated-worktree-scope".to_string();
+    unrelated.save().expect("save unrelated active work");
+
+    let output = SelfDevTool::new()
+        .execute(
+            json!({
+                "action": "test",
+                "command": "cargo test -p jcode --lib",
+                "reason": "queued source drift"
+            }),
+            create_test_context("dirty-drift", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("eligible test should queue");
+    let mut request = request_for_output(&output);
+    request
+        .requested_source
+        .as_mut()
+        .expect("requested source")
+        .fingerprint = "obsolete-dirty-fingerprint".to_string();
+    request.save().expect("persist drifted requested source");
+    drop(lock);
+
+    let task_id = output.metadata.as_ref().unwrap()["task_id"]
+        .as_str()
+        .expect("task id");
+    let status = wait_for_task_completion(task_id).await;
+    assert_eq!(status.status, BackgroundTaskStatus::Superseded);
+    let terminal = BuildRequest::load(&request.request_id)
+        .expect("reload request")
+        .expect("request exists");
+    assert_eq!(terminal.state, BuildRequestState::Superseded);
+    let command_output = std::fs::read_to_string(
+        terminal
+            .output_file
+            .as_ref()
+            .expect("output file for request"),
+    )
+    .expect("read request output");
+    assert!(
+        !command_output.contains("Simulated selfdev test"),
+        "superseded validation must not launch its command"
+    );
+    assert_eq!(
+        BuildRequest::load(&unrelated.request_id)
+            .expect("reload unrelated work")
+            .expect("unrelated work exists")
+            .state,
+        BuildRequestState::Building,
+        "superseding stale work must not interrupt unrelated active work"
+    );
+}
+
+#[tokio::test]
+async fn cancelling_attached_follower_does_not_cancel_producer() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let tool = SelfDevTool::new();
+
+    let leader = tool
+        .execute(
+            json!({"action": "build", "reason": "shared producer"}),
+            create_test_context("producer-session", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("leader should queue");
+    let follower = tool
+        .execute(
+            json!({"action": "build", "reason": "shared follower"}),
+            create_test_context("follower-session", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("follower should attach");
+    let follower_request = request_for_output(&follower);
+    assert!(follower_request.attached_to_request_id.is_some());
+
+    tool.execute(
+        json!({"action": "cancel-build", "request_id": follower_request.request_id}),
+        create_test_context("follower-session", Some(repo.path().to_path_buf())),
+    )
+    .await
+    .expect("follower cancellation should succeed");
+
+    let leader_task_id = leader.metadata.as_ref().unwrap()["task_id"]
+        .as_str()
+        .expect("leader task id");
+    assert_eq!(
+        wait_for_task_completion(leader_task_id).await.status,
+        BackgroundTaskStatus::Completed
+    );
+    assert_eq!(
+        request_for_output(&leader).state,
+        BuildRequestState::Completed
+    );
+    assert_eq!(
+        BuildRequest::load(&follower_request.request_id)
+            .expect("reload follower")
+            .expect("follower exists")
+            .state,
+        BuildRequestState::Cancelled
+    );
+}
+
+#[tokio::test]
+async fn attached_follower_receives_producer_failure() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let lock = SelfDevTool::try_acquire_build_lock("test-worktree-scope")
+        .expect("lock attempt")
+        .expect("hold queue lock");
+    let tool = SelfDevTool::new();
+    let leader = tool
+        .execute(
+            json!({"action": "build", "reason": "producer failure"}),
+            create_test_context("failed-producer", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("producer should queue");
+    let follower = tool
+        .execute(
+            json!({"action": "build", "reason": "failure follower"}),
+            create_test_context("failure-follower", Some(repo.path().to_path_buf())),
+        )
+        .await
+        .expect("follower should attach");
+    let mut producer = request_for_output(&leader);
+    let follower_request = request_for_output(&follower);
+    assert_eq!(
+        follower_request.attached_to_request_id.as_deref(),
+        Some(producer.request_id.as_str())
+    );
+
+    producer.state = BuildRequestState::Failed;
+    producer.error = Some("producer failed sentinel".to_string());
+    producer.completed_at = Some(Utc::now().to_rfc3339());
+    producer.save().expect("persist producer failure");
+
+    let follower_task_id = follower.metadata.as_ref().unwrap()["task_id"]
+        .as_str()
+        .expect("follower task id");
+    let result = wait_for_task_completion(follower_task_id).await;
+    assert_eq!(result.status, BackgroundTaskStatus::Failed);
+    assert_eq!(result.error.as_deref(), Some("producer failed sentinel"));
+    let terminal = BuildRequest::load(&follower_request.request_id)
+        .expect("reload follower")
+        .expect("follower exists");
+    assert_eq!(terminal.state, BuildRequestState::Failed);
+    assert_eq!(terminal.error.as_deref(), Some("producer failed sentinel"));
+
+    let leader_task_id = leader.metadata.as_ref().unwrap()["task_id"]
+        .as_str()
+        .expect("leader task id");
+    let _ = background::global().cancel(leader_task_id).await;
+    drop(lock);
+}
+
+#[test]
+fn stale_persisted_producer_is_not_reused() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let mut stale = request_fixture(
+        "stale-owner",
+        BuildRequestState::Building,
+        (Utc::now() - chrono::Duration::minutes(2)).to_rfc3339(),
+    );
+    stale.background_task_id = Some("missing-background-task".to_string());
+    stale.dedupe_key = Some("stale-dedupe-key".to_string());
+    stale.save().expect("save stale producer");
+
+    assert!(
+        BuildRequest::find_duplicate_pending(&stale.worktree_scope, "stale-dedupe-key")
+            .expect("reconcile duplicate lookup")
+            .is_none()
+    );
+    let reconciled = BuildRequest::load(&stale.request_id)
+        .expect("reload stale producer")
+        .expect("stale producer exists");
+    assert_eq!(reconciled.state, BuildRequestState::Failed);
+    assert!(
+        reconciled
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("status file is missing"))
+    );
+}
+
 #[tokio::test]
 async fn cancel_build_marks_request_cancelled_and_removes_it_from_queue() {
     let _storage_guard = crate::storage::lock_test_env();

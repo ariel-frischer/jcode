@@ -41,7 +41,7 @@ phases:
           - "The tests identify leader/follower role and visible identity version without exposing raw source, diffs, paths, or secret values."
       - id: "T003"
         title: "Add failing near-miss and lifecycle safety tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
