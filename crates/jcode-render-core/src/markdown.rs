@@ -422,10 +422,10 @@ pub fn parse_markdown(text: &str) -> Document {
                 table_row.push(current_cell.trim().to_string());
                 current_cell.clear();
             }
-            Event::End(TagEnd::TableHead) | Event::End(TagEnd::TableRow) => {
-                if !table_row.is_empty() {
-                    table_rows.push(std::mem::take(&mut table_row));
-                }
+            Event::End(TagEnd::TableHead) | Event::End(TagEnd::TableRow)
+                if !table_row.is_empty() =>
+            {
+                table_rows.push(std::mem::take(&mut table_row));
             }
             Event::End(TagEnd::Table) => {
                 in_table = false;
