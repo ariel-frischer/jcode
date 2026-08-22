@@ -263,7 +263,7 @@ phases:
           - "Exact-name and Cargo-compatible substring filtering produce deterministic positive and zero-match results."
       - id: "T019"
         title: "Implement bounded discovery snapshot validation and matching in scripts/rust_validation_scope.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

@@ -16,6 +16,9 @@ from typing import Mapping, Sequence
 
 
 SCHEMA_VERSION = "1.0"
+DISCOVERY_SCHEMA_VERSION = "1.0"
+MAX_DISCOVERY_TEST_NAMES = 100_000
+DISCOVERY_PROVENANCE = "current complete test-discovery snapshot"
 DEFAULT_PATH_RULES: dict[str, object] = {
     "required_features": {},
     "generated_prefixes": ["target/"],
@@ -334,6 +337,149 @@ def _result(
         "effective_scope": dict(effective_scope),
         "resolution_source": resolution_source,
         "fallback_reason": fallback_reason,
+    }
+
+
+def _discovery_unknown(reason: str) -> dict[str, object]:
+    return {
+        "schema_version": DISCOVERY_SCHEMA_VERSION,
+        "decision": "unknown",
+        "reason": reason,
+        "proof_provenance": None,
+        "matched_test_names": [],
+        "effective_scope": None,
+    }
+
+
+def _discovery_identity(
+    value: Mapping[str, object], label: str
+) -> tuple[dict[str, object] | None, str | None]:
+    identity: dict[str, object] = {}
+    for field in (
+        "source_fingerprint",
+        "package",
+        "target",
+        "harness",
+        "discovery_id",
+    ):
+        item = value.get(field)
+        if not isinstance(item, str) or not item:
+            return None, f"{label} {field} must be a non-empty string"
+        identity[field] = item
+
+    features = value.get("features")
+    if not isinstance(features, list) or any(
+        not isinstance(feature, str) or not feature for feature in features
+    ):
+        return None, f"{label} features must be a list of non-empty strings"
+    if len(features) != len(set(features)):
+        return None, f"{label} features are ambiguous because they contain duplicates"
+    identity["features"] = sorted(features)
+    return identity, None
+
+
+def _discovered_tests(
+    value: object,
+) -> tuple[list[tuple[str, bool]] | None, str | None]:
+    if not isinstance(value, list):
+        return None, "snapshot test_names must be a list"
+    if len(value) > MAX_DISCOVERY_TEST_NAMES:
+        return None, "snapshot test_names exceeds the bounded discovery limit"
+
+    tests: list[tuple[str, bool]] = []
+    seen: dict[str, bool] = {}
+    for item in value:
+        if isinstance(item, str):
+            name = item
+            ignored = False
+        elif isinstance(item, Mapping):
+            name = item.get("name")
+            ignored = item.get("ignored", False)
+            if set(item) - {"name", "ignored"}:
+                return None, "snapshot test name entry contains unsupported fields"
+        else:
+            return None, "snapshot test name entries must be strings or objects"
+        if not isinstance(name, str) or not name:
+            return None, "snapshot test name must be a non-empty string"
+        if not isinstance(ignored, bool):
+            return None, "snapshot test name ignored flag must be a boolean"
+        if name in seen:
+            return None, f"snapshot test name is ambiguous because it is duplicated: {name}"
+        seen[name] = ignored
+        tests.append((name, ignored))
+    return tests, None
+
+
+def evaluate_test_discovery_snapshot(
+    discovery_snapshot: Mapping[str, object],
+    request: Mapping[str, object],
+) -> dict[str, object]:
+    """Evaluate a bounded discovery snapshot without rejecting uncertain requests."""
+    if not isinstance(discovery_snapshot, Mapping):
+        return _discovery_unknown("snapshot must be an object")
+    if not isinstance(request, Mapping):
+        return _discovery_unknown("request must be an object")
+    if discovery_snapshot.get("schema_version") != DISCOVERY_SCHEMA_VERSION:
+        return _discovery_unknown("snapshot schema version is unsupported")
+    if discovery_snapshot.get("complete") is not True:
+        return _discovery_unknown("snapshot is incomplete")
+
+    snapshot_identity, error = _discovery_identity(discovery_snapshot, "snapshot")
+    if error:
+        return _discovery_unknown(f"snapshot identity is missing or malformed: {error}")
+    request_identity, error = _discovery_identity(request, "request")
+    if error:
+        return _discovery_unknown(f"request identity is missing or malformed: {error}")
+    assert snapshot_identity is not None and request_identity is not None
+
+    identity_labels = {
+        "source_fingerprint": "source fingerprint",
+        "package": "package",
+        "target": "target",
+        "features": "features",
+        "harness": "harness",
+        "discovery_id": "discovery identity",
+    }
+    for field, reason in identity_labels.items():
+        if snapshot_identity[field] != request_identity[field]:
+            return _discovery_unknown(f"{reason} does not match the snapshot")
+
+    tests, error = _discovered_tests(discovery_snapshot.get("test_names"))
+    if error:
+        return _discovery_unknown(error)
+    assert tests is not None
+
+    test_filter = request.get("filter", "")
+    exact = request.get("exact", False)
+    ignored = request.get("ignored", False)
+    if not isinstance(test_filter, str):
+        return _discovery_unknown("request filter must be a string")
+    if not isinstance(exact, bool):
+        return _discovery_unknown("request exact flag must be a boolean")
+    if not isinstance(ignored, bool):
+        return _discovery_unknown("request ignored flag must be a boolean")
+
+    matched = [
+        name
+        for name, discovered_ignored in tests
+        if discovered_ignored == ignored
+        and (name == test_filter if exact else test_filter in name)
+    ]
+    effective_scope = {
+        "source_fingerprint": request_identity["source_fingerprint"],
+        "package": request_identity["package"],
+        "target": request_identity["target"],
+        "features": request_identity["features"],
+        "harness": request_identity["harness"],
+        "discovery_id": request_identity["discovery_id"],
+    }
+    return {
+        "schema_version": DISCOVERY_SCHEMA_VERSION,
+        "decision": "matches" if matched else "empty",
+        "reason": "snapshot proves matching tests" if matched else "snapshot proves zero matching tests",
+        "proof_provenance": DISCOVERY_PROVENANCE,
+        "matched_test_names": matched,
+        "effective_scope": effective_scope,
     }
 
 
