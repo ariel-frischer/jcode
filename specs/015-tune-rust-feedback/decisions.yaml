@@ -37,10 +37,11 @@ summary:
     warm_incremental_cache: "sccache disabled"
   rationale: >-
     No evaluated option satisfies every adoption gate. The frozen baseline is incomplete,
-    maintained runtime-budget evidence is still pending, nextest and sccache are unavailable,
-    and the fixed-job comparison is limited to one warm-check scenario. This ledger therefore
-    rejects every bounded candidate as a default change while preserving the established
-    correctness-first fallbacks.
+    nextest and sccache are unavailable, and the fixed-job comparison is limited to one
+    warm-check scenario. The canonical maintained runtime-budget collection and comparison
+    passed all nine metrics with thresholds unchanged, but that passing gate does not cure
+    the candidates' remaining evidence gaps. This ledger therefore rejects every bounded
+    candidate as a default change while preserving the established correctness-first fallbacks.
 
 decisions:
   - candidate: adaptive_jobs
@@ -64,11 +65,12 @@ decisions:
       failures_and_retries: "all exits were zero; retained retry_sample_count was 4 in each sampled scenario"
       resources: "zero swap; warm-check p95 RSS 125038592 bytes; coordinated-duplicate p95 RSS 226746368 bytes"
       duplicate_execution: "pass: 135 requests produced 20 authorized underlying actions, including one action per duplicate sample"
-      runtime_budgets: "not evaluated yet"
+      runtime_budgets: "pass: canonical collection and reviewed-baseline comparison exited 0; all nine unchanged maintained metrics passed"
     rationale: >-
       Reject adaptive jobs as a newly adopted experiment because it has no independent complete
-      comparator, cannot demonstrate lower p50 and p95 than baseline, and lacks maintained
-      runtime-budget evidence. This does not remove the pre-existing adaptive policy.
+      comparator and cannot demonstrate lower p50 and p95 than baseline. The maintained runtime
+      budget gate passed, but the incomplete representative comparison still blocks adoption.
+      This does not remove the pre-existing adaptive policy.
     safe_default_or_fallback: "Retain the existing adaptive policy as the unchanged baseline and preserve explicit numeric job overrides."
     reconsideration_condition: >-
       Reconsider an affirmative adoption claim after a complete representative baseline and
@@ -94,11 +96,11 @@ decisions:
       failures_and_retries: "all exits were zero and retry_sample_count matched adaptive at 4"
       resources: "zero swap; 6-job p95 RSS 124420096 bytes versus adaptive 125038592 bytes"
       duplicate_execution: "not measured for the 6-job candidate; only adaptive used the coordinated-duplicate lane"
-      runtime_budgets: "not evaluated yet"
+      runtime_budgets: "pass: canonical collection and reviewed-baseline comparison exited 0; all nine unchanged maintained metrics passed"
     rationale: >-
       The measured warm-check p50 and p95 improved, but one package check is not the complete
-      representative matrix, coordinated-duplicate behavior was not measured under six jobs,
-      and maintained runtime budgets remain pending. The full adoption gate is therefore unmet.
+      representative matrix and coordinated-duplicate behavior was not measured under six jobs.
+      The maintained runtime budget gate passed, but the full adoption gate remains unmet.
     safe_default_or_fallback: "Keep adaptive jobs as the default; users may retain the existing explicit 6-job override."
     reconsideration_condition: >-
       Re-run six jobs across the complete representative matrix, including coordinated duplicate
@@ -125,8 +127,8 @@ decisions:
       failures_and_retries: "all exits were zero and retry_sample_count matched adaptive at 4"
       resources: "zero swap; 8-job p95 RSS 124567552 bytes versus adaptive 125038592 bytes"
       duplicate_execution: "not measured for the 8-job candidate"
-      runtime_budgets: "not evaluated yet"
-    rationale: "The candidate fails the mandatory both-percentiles gate and also lacks complete representative, duplicate, and runtime-budget evidence."
+      runtime_budgets: "pass: canonical collection and reviewed-baseline comparison exited 0; all nine unchanged maintained metrics passed"
+    rationale: "The candidate fails the mandatory both-percentiles gate and lacks complete representative and duplicate evidence; the passing maintained runtime gate does not authorize adoption."
     safe_default_or_fallback: "Keep adaptive jobs as the default; users may retain the existing explicit 8-job override."
     reconsideration_condition: >-
       Reconsider only after a complete equivalent matrix shows repeatable improvements in both
@@ -152,11 +154,11 @@ decisions:
       failures_and_retries: "resolver contract samples had zero nonzero exits and zero retries"
       resources: "resolver p95 RSS remained below 40 MB with zero swap; Cargo resource impact was not measured"
       duplicate_execution: "not applicable to resolver-only samples"
-      runtime_budgets: "not evaluated yet"
+      runtime_budgets: "pass: canonical collection and reviewed-baseline comparison exited 0; all nine unchanged maintained metrics passed"
     rationale: >-
       Correctness and conservative fallback behavior are demonstrated, but the receipt explicitly
-      cannot prove an edit-to-feedback p50/p95 win and the maintained runtime gates remain open.
-      Performance adoption is therefore rejected from the available evidence.
+      cannot prove an edit-to-feedback p50/p95 win. The maintained runtime gate passed, but the
+      missing paired Cargo feedback comparison still rejects performance adoption.
     safe_default_or_fallback: "Use the established broad validation scope whenever the caller does not explicitly select a narrower scope."
     reconsideration_condition: >-
       Collect paired broad-versus-focused Cargo samples for representative eligible paths, pass

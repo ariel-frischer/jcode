@@ -421,7 +421,7 @@ phases:
           - "The exact command, revision, duration, and terminal result are recorded."
       - id: "T031"
         title: "Run maintained client and daemon runtime budgets and record comparison evidence in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"

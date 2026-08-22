@@ -1,6 +1,6 @@
 # Rust Feedback Tuning Validation
 
-Status: **Scaffold frozen, evidence pending**  
+Status: **Validation in progress; focused checks and runtime budgets recorded**  
 Feature: `specs/015-tune-rust-feedback`  
 Source specification: `specs/015-tune-rust-feedback/spec.yaml`  
 Technical plan: `specs/015-tune-rust-feedback/plan.yaml`
@@ -41,7 +41,7 @@ Machine-readable benchmark evidence belongs under `specs/015-tune-rust-feedback/
 | FR-019 | Run focused Python, shell, and exact Rust tests for benchmark math/contracts, scope/feature resolution, zero-test preflight, compatibility, fallback, and receipt correctness before broad validation. | Exact command/result ledger in the focused-check subsection below | PASS (exit 0): all six focused ledger entries passed serial Cargo validation |
 | FR-020 | Run focused checks, `scripts/check_guardrails.sh`, coordinated self-development build/reload, resolve the active executable, and smoke-test the newly built binary through a unique socket. | Delivery sections below; build/reload and isolated-socket receipts | PENDING |
 | FR-021 | Complete the principle matrix below with affected requirements, exact checks, evidence, outcomes, and explicit non-applicability where required. | Principle traceability section below | PENDING |
-| NFR-001 | Compare representative baseline/candidate p50 and p95 for every adopted scenario and run every applicable maintained client/daemon runtime-budget check unchanged. | Benchmark comparison receipts; runtime budgets section below | PENDING |
+| NFR-001 | Compare representative baseline/candidate p50 and p95 for every adopted scenario and run every applicable maintained client/daemon runtime-budget check unchanged. | Benchmark comparison receipts; runtime budgets section below | PASS (exit 0): no experiment was adopted, and the unchanged canonical nine-metric runtime collection and baseline comparison both passed |
 | NFR-002 | Validate no increase in failures/retries and zero false successes in optional-feature and full-feature regression fixtures. | Comparison report; focused and full-feature test receipts | PENDING |
 | NFR-003 | Receipt/schema validation proves every accepted comparison retains raw samples, percentile method, environment identity, schema version, command intent, and terminal outcome. | `scripts/test_bench_rust_feedback.py`; `specs/015-tune-rust-feedback/evidence/*.json` | PENDING |
 | NFR-004 | Zero-test and scope-resolution tests verify actionable early rejection and visible effective package, target, features, and resolution source in every focused receipt. | Selfdev exact-test receipt; `scripts/test_dev_cargo_scope.sh`; focused receipts | PENDING |
@@ -124,14 +124,41 @@ Guardrail isolation at task start:
 
 ## Runtime budgets
 
-Reserved for maintained client and daemon budget evidence. Thresholds remain unchanged.
+The maintained thresholds and tolerances in `docs/RUNTIME_PERFORMANCE_BUDGET.md` were used unchanged. The candidate was rebuilt first, then the canonical collector measured only private runtimes and the canonical comparator evaluated the report against the reviewed Linux reference. Both commands exited 0 and all nine stable metric IDs passed.
 
-| Budget or workflow | Baseline | Candidate | Maintained threshold/tolerance | Result | Evidence |
-|---|---|---|---|---|---|
-| Applicable client runtime budgets | PENDING | PENDING | Existing maintained budget | PENDING | PENDING |
-| Applicable daemon runtime budgets | PENDING | PENDING | Existing maintained budget | PENDING | PENDING |
-| Self-development feedback latency | PENDING | PENDING | Adopt only when intended p50 and p95 improve | PENDING | PENDING |
-| RSS, swap, and disk impact | PENDING | PENDING | No unacceptable regression | PENDING | PENDING |
+Exact workflow:
+
+```bash
+python3 -m venv "$JCODE_SCRATCH_DIR/t031-runtime-venv"
+"$JCODE_SCRATCH_DIR/t031-runtime-venv/bin/python" -m pip install -r scripts/requirements-runtime-benchmarks.txt
+cargo build --profile selfdev
+"$JCODE_SCRATCH_DIR/t031-runtime-venv/bin/python" scripts/bench_runtime_budgets.py collect \
+  --binary "$(realpath target/selfdev/jcode)" \
+  --output "$JCODE_SCRATCH_DIR/t031-runtime-budget.json"
+"$JCODE_SCRATCH_DIR/t031-runtime-venv/bin/python" scripts/bench_runtime_budgets.py compare \
+  --report "$JCODE_SCRATCH_DIR/t031-runtime-budget.json" \
+  --baseline docs/runtime-performance-baselines/linux-reference.json
+```
+
+| Maintained metric | Reviewed Linux reference | Candidate | Unchanged threshold/tolerance | Result |
+|---|---:|---:|---|---|
+| `first_visible_ms` median / p95 | 14.795 / 18.577 ms | 13.138 / 13.829 ms | baseline + `max(15%, 20 ms)` | PASS |
+| `input_ready_ms` median / p95 | 84.492 / 98.040 ms | 76.737 / 78.429 ms | baseline + `max(15%, 20 ms)` | PASS |
+| `daemon_ready_ms` median | 108.773 ms | 50.978 ms | deterministic ceiling 80 ms | PASS |
+| `idle_cpu_percent` median | 0.000% | 0.000% | baseline + 0.5 percentage points | PASS |
+| `idle_rss_mib` median | 89.070 MiB | 92.867 MiB | baseline + `max(10%, 8 MiB)` | PASS |
+| `session_scaling_mib_per_session` median | 0.001 MiB/session | 0.001 MiB/session | baseline + `max(15%, 2 MiB/session)` | PASS |
+| `frame_update_work_count` exact | 0 | 0 | unchanged frame must perform zero relayouts | PASS |
+| `protocol_round_trip_ms` median / p95 | 0.088 / 0.348 ms | 0.058 / 0.250 ms | baseline + `max(15%, 1 ms)` | PASS |
+| `tool_round_trip_ms` median / p95 | 3.586 / 4.357 ms | 1.804 / 2.038 ms | baseline + `max(15%, 1 ms)` | PASS |
+
+Receipt and identity evidence:
+
+- Collection started `2026-08-22T17:27:54.233026+00:00`; the complete build, collection, and comparison workflow finished in 418.22 seconds.
+- Report: `$JCODE_SCRATCH_DIR/t031-runtime-budget.json`, schema `1.0.0`; reviewed baseline: `docs/runtime-performance-baselines/linux-reference.json`.
+- Resolved candidate: `target/selfdev/jcode`; SHA-256 `167991ea78d7562bf69b85a48beddb2e3e5da45156a0adea39b255b4c18ba9f0`; reported version/revision `jcode v0.79.625-dev (384c09d5f)`.
+- The collector verified the requested/resolved candidate and its private daemon executable. Cleanup recorded `owned_processes_stopped: true`, `private_paths_removed: true`, and no diagnostics.
+- No development-feedback experiment was adopted. `decisions.yaml` continues to reject all seven candidates for their recorded incomplete, unavailable, or percentile failures. The passing runtime report removes runtime regression as an open gate but does not authorize any default change.
 
 ## Coordinated build and reload
 
@@ -181,7 +208,7 @@ Canonical command shape:
 | Benchmark evidence complete and comparable | PENDING | PENDING |
 | Every experiment adopted or rejected | PENDING | PENDING |
 | Full-feature guardrails passed | FAIL (exit 1) | Seven pre-existing-at-T030-start gates failed at revision `ac31f6598b3aaa40387edf1ff4ef0ed69e9d6b97`; focused success was not substituted and ratchets were not rebaselined. |
-| Runtime budgets unchanged | PENDING | PENDING |
+| Runtime budgets unchanged | PASS (exit 0) | Canonical collection and comparison both passed all nine maintained metrics with thresholds unchanged; receipt `$JCODE_SCRATCH_DIR/t031-runtime-budget.json`. |
 | Coordinated build/reload verified | PENDING | PENDING |
 | Resolved binary identity confirmed | PENDING | PENDING |
 | Isolated-socket built-binary smoke passed | PENDING | PENDING |
