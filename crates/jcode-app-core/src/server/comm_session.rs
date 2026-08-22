@@ -459,11 +459,11 @@ fn clear_headed_startup_message(session_id: &str) {
 
 fn cleanup_prepared_visible_spawn_session(session_id: &str) {
     clear_headed_startup_message(session_id);
-    if let Ok(path) = crate::session::session_path(session_id) {
-        let _ = std::fs::remove_file(path);
-    }
-    if let Ok(path) = crate::session::session_journal_path(session_id) {
-        let _ = std::fs::remove_file(path);
+    if let Ok(jcode_dir) = crate::storage::jcode_dir() {
+        // Rollback is best-effort, but it must use the same validated artifact
+        // boundary as normal session removal so lifecycle sidecars and
+        // rotations cannot be orphaned.
+        let _ = crate::session::remove_session_artifacts_in_dir(&jcode_dir, session_id);
     }
 }
 

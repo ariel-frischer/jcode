@@ -38,6 +38,8 @@ fn recover_crashed_sessions_for_allowed_ids(allowed_ids: &HashSet<String>) -> Re
     for entry in std::fs::read_dir(&sessions_dir)? {
         let entry = entry?;
         let path = entry.path();
+        // Recovery is snapshot-driven. Lifecycle JSONL sidecars and rotations
+        // are internal diagnostics and never represent recoverable sessions.
         if path.extension().map(|e| e == "json").unwrap_or(false)
             && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
             && stem.starts_with("session_recovery_")
@@ -75,6 +77,8 @@ fn recover_crashed_sessions_matching(allowed_ids: Option<&HashSet<String>>) -> R
     for entry in std::fs::read_dir(&sessions_dir)? {
         let entry = entry?;
         let path = entry.path();
+        // Recovery is snapshot-driven. Lifecycle JSONL sidecars and rotations
+        // are internal diagnostics and never represent recoverable sessions.
         if path.extension().map(|e| e == "json").unwrap_or(false)
             && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
             && let Ok(mut session) = Session::load(stem)

@@ -1,7 +1,8 @@
 use super::{
     AmbientConfig, Config, DiffDisplayMode, DisplayConfig, HookCommands, LatexRenderingMode,
-    McpToolsMode, ProviderConfig, RunSafetyConfig, SessionPickerResumeAction, SwarmSpawnMode,
-    ToolConfig, config_env_fingerprint, populate_context_limits_from_config_ref,
+    LifecycleObservabilityConfig, McpToolsMode, ProviderConfig, RunSafetyConfig,
+    SessionPickerResumeAction, SwarmSpawnMode, ToolConfig, config_env_fingerprint,
+    populate_context_limits_from_config_ref,
 };
 use std::ffi::OsString;
 use std::path::Path;
@@ -12,6 +13,216 @@ fn restore_env_var(key: &str, previous: Option<OsString>) {
     } else {
         crate::env::remove_var(key);
     }
+}
+
+#[test]
+fn lifecycle_observability_defaults_are_local_and_enabled_for_persistence() {
+    let config = Config::default();
+    assert_eq!(
+        config.lifecycle_observability,
+        LifecycleObservabilityConfig {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        }
+    );
+
+    let provider_before = config.provider.default_provider.clone();
+    assert_eq!(config.provider.default_provider, provider_before);
+    assert_eq!(
+        config.lifecycle_observability.effective_status().enabled,
+        true
+    );
+    assert_eq!(
+        config
+            .lifecycle_observability
+            .effective_status()
+            .persist_session_events,
+        true
+    );
+    assert_eq!(
+        config
+            .lifecycle_observability
+            .effective_status()
+            .emit_structured_logs,
+        false
+    );
+}
+
+#[test]
+fn lifecycle_observability_persisted_values_and_master_suppression_parse() {
+    let config: Config = toml::from_str(
+        "[lifecycle_observability]\nenabled = false\npersist_session_events = true\nemit_structured_logs = true\n",
+    )
+    .expect("lifecycle observability config should parse");
+
+    assert!(!config.lifecycle_observability.enabled);
+    assert!(config.lifecycle_observability.persist_session_events);
+    assert!(config.lifecycle_observability.emit_structured_logs);
+
+    let status = config.lifecycle_observability.effective_status();
+    assert_eq!(status.enabled, false);
+    assert_eq!(status.persist_session_events, false);
+    assert_eq!(status.emit_structured_logs, false);
+}
+
+#[test]
+fn lifecycle_observability_environment_overrides_take_precedence_and_reject_invalid_values() {
+    let _lock = crate::storage::lock_test_env();
+    let previous = [
+        (
+            "JCODE_LIFECYCLE_OBSERVABILITY_ENABLED",
+            std::env::var_os("JCODE_LIFECYCLE_OBSERVABILITY_ENABLED"),
+        ),
+        (
+            "JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS",
+            std::env::var_os("JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS"),
+        ),
+        (
+            "JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS",
+            std::env::var_os("JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS"),
+        ),
+    ];
+
+    crate::env::set_var("JCODE_LIFECYCLE_OBSERVABILITY_ENABLED", "off");
+    crate::env::set_var(
+        "JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS",
+        "yes",
+    );
+    crate::env::set_var(
+        "JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS",
+        "invalid",
+    );
+
+    let mut config: Config = toml::from_str(
+        "[lifecycle_observability]\nenabled = true\npersist_session_events = false\nemit_structured_logs = true\n",
+    )
+    .expect("lifecycle observability config should parse");
+    let provider_before = config.provider.default_provider.clone();
+    config.apply_env_overrides();
+
+    assert!(!config.lifecycle_observability.enabled);
+    assert!(config.lifecycle_observability.persist_session_events);
+    assert!(config.lifecycle_observability.emit_structured_logs);
+    assert_eq!(config.provider.default_provider, provider_before);
+
+    for (key, value) in previous {
+        restore_env_var(key, value);
+    }
+}
+
+#[test]
+fn lifecycle_observability_status_and_template_are_discoverable() {
+    let config = Config::default();
+    let summary = config.display_string();
+    assert!(summary.contains("**Lifecycle observability:**"));
+    assert!(summary.contains("Enabled: configured=true effective=true"));
+    assert!(summary.contains("Persist session events: configured=true effective=true"));
+    assert!(summary.contains("Emit structured logs: configured=false effective=false"));
+
+    let template = Config::default_config_file_contents();
+    assert!(template.contains("[lifecycle_observability]"));
+    assert!(template.contains("JCODE_LIFECYCLE_OBSERVABILITY_ENABLED"));
+    assert!(template.contains("persist_session_events = true"));
+    assert!(template.contains("emit_structured_logs = false"));
+}
+
+#[test]
+fn lifecycle_observability_unset_values_use_documented_defaults() {
+    let config: Config = toml::from_str("[lifecycle_observability]\n")
+        .expect("an empty lifecycle observability table should parse");
+
+    assert_eq!(
+        config.lifecycle_observability,
+        LifecycleObservabilityConfig::default()
+    );
+}
+
+#[test]
+fn lifecycle_observability_does_not_change_other_config_state() {
+    let baseline = serde_json::to_value(Config::default()).expect("serialize baseline config");
+    let mut baseline_without_lifecycle = baseline.clone();
+    baseline_without_lifecycle
+        .as_object_mut()
+        .expect("config serializes as an object")
+        .remove("lifecycle_observability");
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let mut config = Config::default();
+                config.lifecycle_observability = LifecycleObservabilityConfig {
+                    enabled,
+                    persist_session_events,
+                    emit_structured_logs,
+                };
+                let mut value = serde_json::to_value(config).expect("serialize lifecycle config");
+                value
+                    .as_object_mut()
+                    .expect("config serializes as an object")
+                    .remove("lifecycle_observability");
+                assert_eq!(value, baseline_without_lifecycle);
+            }
+        }
+    }
+}
+
+#[test]
+fn lifecycle_observability_effective_status_covers_all_output_combinations() {
+    let default_config = Config::default();
+    let provider_before = default_config.provider.default_provider.clone();
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let config: Config = toml::from_str(&format!(
+                    "[lifecycle_observability]\nenabled = {enabled}\npersist_session_events = {persist_session_events}\nemit_structured_logs = {emit_structured_logs}\n"
+                ))
+                .expect("every lifecycle observability combination should parse");
+                let status = config.lifecycle_observability.effective_status();
+
+                assert_eq!(status.enabled, enabled);
+                assert_eq!(
+                    status.persist_session_events,
+                    enabled && persist_session_events
+                );
+                assert_eq!(status.emit_structured_logs, enabled && emit_structured_logs);
+                assert_eq!(config.provider.default_provider, provider_before);
+            }
+        }
+    }
+
+    let unset: Config = toml::from_str("").expect("unset lifecycle config should use defaults");
+    assert_eq!(
+        unset.lifecycle_observability,
+        default_config.lifecycle_observability
+    );
+}
+
+#[test]
+fn lifecycle_observability_configuration_never_changes_telemetry_consent() {
+    let consent_before = (
+        crate::telemetry::is_enabled(),
+        crate::telemetry::content_sharing_enabled(),
+    );
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let config: Config = toml::from_str(&format!(
+                    "[lifecycle_observability]\nenabled = {enabled}\npersist_session_events = {persist_session_events}\nemit_structured_logs = {emit_structured_logs}\n"
+                ))
+                .expect("lifecycle observability combination should parse");
+                let _ = config.lifecycle_observability.effective_status();
+            }
+        }
+    }
+
+    let consent_after = (
+        crate::telemetry::is_enabled(),
+        crate::telemetry::content_sharing_enabled(),
+    );
+    assert_eq!(consent_after, consent_before);
 }
 
 #[test]

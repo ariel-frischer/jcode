@@ -372,6 +372,42 @@ fn takeover_with_no_complete_messages_leaves_claude_running() {
     claude.wait().unwrap();
 }
 
+#[test]
+fn takeover_rollback_removes_lifecycle_sidecar_rotations() {
+    let _guard = crate::storage::lock_test_env();
+    let temp = tempfile::TempDir::new().unwrap();
+    let _home = EnvVarGuard::set_path("JCODE_HOME", temp.path());
+    let session_id = "session_takeover_lifecycle_compat";
+
+    let mut session = Session::create_with_id(session_id.to_string(), None, None);
+    session.save().unwrap();
+    let sessions_dir = temp.path().join("sessions");
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        std::fs::write(
+            sessions_dir.join(format!("{session_id}{suffix}")),
+            "lifecycle rollback fixture",
+        )
+        .unwrap();
+    }
+
+    remove_prepared_takeover_session(session_id);
+
+    assert!(!sessions_dir.join(format!("{session_id}.json")).exists());
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        assert!(!sessions_dir.join(format!("{session_id}{suffix}")).exists());
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn takeover_rejects_a_transcript_from_a_different_live_session() {

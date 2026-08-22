@@ -90,6 +90,7 @@ fn log_task_completion(result: Result<(), tokio::task::JoinError>) {
 #[derive(Clone)]
 pub(super) struct ServerRuntime {
     sessions: Arc<RwLock<HashMap<String, Arc<Mutex<Agent>>>>>,
+    lifecycle_recorder: Arc<crate::lifecycle_observability::LifecycleRecorder>,
     event_tx: broadcast::Sender<ServerEvent>,
     provider: Arc<dyn Provider>,
     is_processing: Arc<RwLock<bool>>,
@@ -123,6 +124,7 @@ impl ServerRuntime {
     pub(super) fn from_server(server: &super::Server) -> Self {
         Self {
             sessions: Arc::clone(&server.sessions),
+            lifecycle_recorder: Arc::clone(&server.lifecycle_recorder),
             event_tx: server.event_tx.clone(),
             provider: Arc::clone(&server.provider),
             is_processing: Arc::clone(&server.is_processing),
@@ -345,6 +347,7 @@ impl ServerRuntime {
                 handle_client(
                     stream,
                     Arc::clone(&self.sessions),
+                    Arc::clone(&self.lifecycle_recorder),
                     self.event_tx.clone(),
                     Arc::clone(&self.provider),
                     Arc::clone(&self.is_processing),

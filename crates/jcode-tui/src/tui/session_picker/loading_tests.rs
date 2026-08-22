@@ -71,6 +71,50 @@ fn collect_recent_session_stems_expands_candidate_window_past_recent_empty_stubs
 }
 
 #[test]
+fn lifecycle_sidecars_do_not_change_session_picker_candidates() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let session_id = "session_picker_lifecycle_1770000000000";
+    write_picker_snapshot(&temp.path().join(format!("{session_id}.json")), true);
+    std::fs::write(
+        temp.path().join(format!("{session_id}.journal.jsonl")),
+        "{\"append_messages\":[{\"role\":\"user\"}]}\n",
+    )
+    .expect("write journal");
+
+    let baseline =
+        collect_recent_session_candidates(temp.path(), 10).expect("collect baseline candidates");
+    assert_eq!(baseline, vec![session_id.to_string()]);
+
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        std::fs::write(
+            temp.path().join(format!("{session_id}{suffix}")),
+            "not a session transcript",
+        )
+        .expect("write lifecycle sidecar");
+    }
+
+    let with_lifecycle_artifacts = collect_recent_session_candidates(temp.path(), 10)
+        .expect("collect candidates with lifecycle artifacts");
+    assert_eq!(with_lifecycle_artifacts, baseline);
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        assert_eq!(
+            session_file_stem_for_candidate(&format!("{session_id}{suffix}")),
+            None
+        );
+    }
+}
+
+#[test]
 fn trivial_hidden_only_snapshot_detector_skips_system_stub() {
     let bytes = br#"{"messages":[{"role":"user","content":[{"type":"text","text":"<system-reminder>boot</system-reminder>"}],"display_role":"system"}]}"#;
     assert!(snapshot_bytes_look_trivial_hidden_only(bytes));

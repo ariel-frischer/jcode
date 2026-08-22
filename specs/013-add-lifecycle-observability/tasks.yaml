@@ -1,0 +1,944 @@
+tasks:
+    branch: "013-add-lifecycle-observability"
+    created: "2026-08-21"
+    spec_path: "specs/013-add-lifecycle-observability/spec.yaml"
+    plan_path: "specs/013-add-lifecycle-observability/plan.yaml"
+summary:
+    total_tasks: 68
+    total_phases: 8
+    parallel_opportunities: 37
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Register the lifecycle contract and test surfaces without changing existing runtime behavior"
+      tasks:
+        - id: "T001"
+          title: "Register the dependency-light lifecycle contract module"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-session-types/src/lib.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Expose a dedicated lifecycle module through jcode-session-types without adding an upward crate dependency."
+            - "Keep existing public exports, serde representations, and unrelated session types unchanged."
+        - id: "T002"
+          title: "Create the app-core lifecycle recorder test harness"
+          status: "Completed"
+          type: "setup"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/lifecycle_observability_tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Provide tempfile-backed session directories, deterministic clocks or timestamps, and Tokio helpers for recorder tests."
+            - "Ensure fixtures contain only synthetic non-sensitive identifiers and never require the shared daemon or remote telemetry."
+        - id: "T003"
+          title: "Create the lifecycle observability documentation skeleton"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "docs/LIFECYCLE_OBSERVABILITY.md"
+          dependencies: []
+          acceptance_criteria:
+            - "Create headings for schema, categories, privacy, configuration, query usage, retention, compatibility warnings, and cleanup."
+            - "Use privacy-safe placeholder examples and explicitly exclude prompts, commands, output, secrets, aggregate storage, and remote telemetry."
+    - number: 2
+      title: "Foundational"
+      purpose: "Define failing contract tests and implement shared configuration, storage, recorder, protocol, and injection infrastructure before story work"
+      tasks:
+        - id: "T004"
+          title: "Add lifecycle schema and serialization contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-session-types/src/lifecycle.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Cover schema version 1, all policy_snapshot, compaction, handoff, retry, strategy_switch, and block variants, and required typed fields."
+            - "Assert serde-tagged JSON round trips preserve sequence, timestamp, policy fingerprint, safe reasons, suppression reasons, and opaque process references."
+            - "Add fixtures showing unsupported newer schema versions are reported rather than decoded as known events."
+        - id: "T005"
+          title: "Add configuration precedence and effective-status tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Cover built-in defaults enabled=true, persist_session_events=true, and emit_structured_logs=false."
+            - "Cover persisted configuration, environment overrides, invalid boolean fallback, and master-switch suppression."
+            - "Assert lifecycle settings do not read, enable, or mutate remote telemetry consent."
+        - id: "T006"
+          title: "Add sidecar path, persistence, retention, and cleanup tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Cover validated active and numbered lifecycle paths, append ordering, complete-record rotation, three-rotation bounds, and 30-day age pruning."
+            - "Cover torn final lines, malformed middle records, unsupported versions, oversized records, and bounded compatibility warnings."
+            - "Cover canonical cleanup removing only the selected session's snapshot, journal, backup, active lifecycle sidecar, and rotations."
+        - id: "T007"
+          title: "Add recorder ordering, fan-out, privacy, and failure-isolation tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/lifecycle_observability_tests.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Cover disabled mode, persistence-only mode, structured-log-only mode, both-output mode, monotonic per-session sequencing, and policy snapshot deduplication."
+            - "Cover bounded try-send behavior, flush barriers, queue failure, append failure, rotation failure, and log failure without changing the caller outcome."
+            - "Assert forbidden prompt, command, output, environment, secret, error, and todo text cannot enter any output."
+        - id: "T008"
+          title: "Add additive lifecycle protocol round-trip tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-protocol/src/protocol_tests"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Cover GetLifecycleEvents request and LifecycleEvents response serialization, request IDs, structured field preservation, invalid-session errors, and empty-history responses."
+            - "Verify older protocol clients remain able to decode existing request and response variants."
+        - id: "T009"
+          title: "Add lifecycle CLI argument parsing tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "src/cli/args/tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Parse `jcode session lifecycle <session>` and the optional --json flag through the existing session command family."
+            - "Reject missing or malformed session arguments using established CLI error behavior."
+        - id: "T010"
+          title: "Add typed lifecycle command rendering tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Cover session-name and numeric-ID resolution, human output, stable JSON output, empty history, warnings, unavailable persistence, and daemon errors."
+            - "Assert rendering uses SessionLifecycleStream and never reads sidecar files directly."
+        - id: "T011"
+          title: "Implement versioned lifecycle contracts and safe category enums"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-session-types/src/lifecycle.rs"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Define LifecycleEventEnvelope, exhaustive LifecycleEvent categories, decision and semantic reason enums, suppression reasons, context usage, policy snapshots, handoff payload, process reference, status, stream, and compatibility warning types."
+            - "Use closed typed fields, serde defaults where compatibility requires them, and no free-form sensitive strings."
+            - "Pass all schema and serialization tests without changing transcript, replay, or existing session contracts."
+        - id: "T012"
+          title: "Implement lifecycle configuration defaults and effective status"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config.rs"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Add LifecycleObservabilityConfig with the three documented booleans and the specified defaults."
+            - "Compute effective output booleans so enabled=false suppresses both outputs while preserving configured values for diagnostics where appropriate."
+            - "Keep lifecycle configuration independent from jcode-telemetry-core and remote consent."
+        - id: "T013"
+          title: "Implement lifecycle environment override resolution"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config/env_overrides.rs"
+          dependencies: ["T005", "T012"]
+          acceptance_criteria:
+            - "Resolve JCODE_LIFECYCLE_OBSERVABILITY_ENABLED, JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS, and JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS after persisted config and before built-in defaults."
+            - "Apply established invalid-value fallback and diagnostic behavior without logging secret values."
+        - id: "T014"
+          title: "Expose lifecycle status in config summaries and generated defaults"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config/display_summary.rs"
+          dependencies: ["T005", "T012", "T013"]
+          acceptance_criteria:
+            - "Show configured and effective lifecycle master, persistence, and structured-log values in the existing config/status experience."
+            - "Update the generated config template with the lifecycle section and matching environment variable names."
+            - "Do not expose credentials, prompts, profile instructions, or remote telemetry state."
+        - id: "T015"
+          title: "Implement validated lifecycle sidecar path helpers"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/session/storage_paths.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Resolve the active <session-id>.lifecycle.jsonl file and numbered rotations beneath the canonical sessions directory."
+            - "Validate opaque session identifiers and prevent traversal or neighboring-session access."
+            - "Keep lifecycle files internal so existing session scanners do not treat them as snapshots, journals, transcripts, or sessions."
+        - id: "T016"
+          title: "Implement bounded lifecycle JSONL persistence and resilient reads"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/session/lifecycle.rs"
+          dependencies: ["T006", "T011", "T015"]
+          acceptance_criteria:
+            - "Append complete JSONL records, rotate before a complete event exceeds 1 MiB, retain at most three rotations, and prune artifacts older than 30 days."
+            - "Read rotations oldest-to-newest, preserve sequence ordering, skip an incomplete final line, and return bounded warnings for malformed middle records and unsupported versions."
+            - "Return persistence errors and warnings without panicking, blocking lifecycle decision callers, or rewriting files during read-only queries."
+        - id: "T017"
+          title: "Implement canonical session artifact enumeration and removal"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/session/artifacts.rs"
+          dependencies: ["T006", "T015"]
+          acceptance_criteria:
+            - "Enumerate snapshot, journal, backup, active lifecycle sidecar, and lifecycle rotations for one validated session."
+            - "Remove only artifacts owned by the selected session and preserve neighboring sessions even when names share prefixes."
+            - "Expose one lower-layer cleanup boundary for prepared-spawn rollback, takeover rollback, and canonical removal callers."
+        - id: "T018"
+          title: "Implement the server-owned non-blocking LifecycleRecorder core"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/src/lifecycle_observability.rs"
+          dependencies: ["T007", "T011", "T012", "T016"]
+          acceptance_criteria:
+            - "Own effective enablement, privacy-safe typed submission, per-session sequence allocation, policy fingerprint deduplication, bounded try-send delivery, serialized sink work, and flush barriers."
+            - "Fan out the same filtered event envelope to optional jcode-base persistence and jcode-logging event_info output."
+            - "Treat queue, sink, logging, rotation, and flush failures as visible best-effort diagnostics that cannot alter runtime decisions."
+        - id: "T019"
+          title: "Add lifecycle request and response variants to the daemon protocol"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-protocol/src/wire.rs"
+          dependencies: ["T008", "T011"]
+          acceptance_criteria:
+            - "Add GetLifecycleEvents and LifecycleEvents variants using jcode-session-types without duplicating lifecycle structs."
+            - "Preserve all existing wire tags, fields, and compatibility behavior."
+        - id: "T020"
+          title: "Own one recorder in Server and inject it into Agents"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/server.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "Construct one Arc<LifecycleRecorder> per server and inject it into newly created, restored, recovered, and handoff-created Agents."
+            - "Avoid global singleton state and preserve multi-client server authority."
+        - id: "T021"
+          title: "Retain the injected recorder and emit policy snapshots at Agent boundaries"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/src/agent.rs"
+          dependencies: ["T018", "T020"]
+          acceptance_criteria:
+            - "Store the recorder on Agent instances and emit the effective credential-free policy snapshot at creation, restore, and policy-fingerprint changes."
+            - "Deduplicate unchanged fingerprints and include only safe effective policy values."
+            - "Keep Agent construction and restore behavior unchanged when observability is disabled."
+    - number: 3
+      title: "User Story 1 - Inspect a session lifecycle"
+      purpose: "Record every supported lifecycle decision and expose one ordered typed stream through the protocol and CLI"
+      story_reference: "US-001"
+      independent_test: "Exercise compaction, handoff, retry, strategy-switch, and block paths in a synthetic session, query the session through the daemon protocol and CLI, and verify ordered typed events with decision context and bounded warnings."
+      tasks:
+        - id: "T022"
+          title: "Add focused decision-event tests for compaction, retry, strategy, and block paths"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Cover manual, automatic, native fallback, applied, failed, and suppressed compaction decisions with context usage, semantic reason, and suppression reason."
+            - "Cover retry scheduling, retry exhaustion, transparent strategy switches, tool-policy blocks, destructive-command blocks, and run-safety blocks."
+            - "Compare recorder-enabled and recorder-disabled outcomes and assert decisions remain identical."
+        - id: "T023"
+          title: "Add focused handoff lifecycle metadata tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Cover suppressed, staged, successful, failed, pending, and incomplete handoff child-startup outcomes."
+            - "Assert chain depth, generated prompt byte size, todo carryover count, parent and child IDs, acknowledgment, terminal outcome, and safe process references are represented when applicable."
+            - "Assert prompts, todo text, command text, output, environment, and raw errors are absent."
+        - id: "T024"
+          title: "Add server query flush and typed stream handling tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-protocol/src/protocol_tests"
+          dependencies: ["T008", "T018", "T019"]
+          acceptance_criteria:
+            - "Request exactly one resolved session, flush records accepted before the request, and return ordered retained events plus effective status."
+            - "Cover empty history, invalid session IDs, missing sessions, torn tails, unsupported versions, and bounded warnings."
+            - "Assert no direct sidecar reads occur in client-facing protocol code."
+        - id: "T025"
+          title: "Add end-to-end lifecycle command behavior tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T010", "T019"]
+          acceptance_criteria:
+            - "Cover short-name and numeric-ID resolution and both human-readable and --json rendering from the typed stream."
+            - "Assert all six event categories can be distinguished and sequence ordering is preserved."
+            - "Cover command errors and unavailable persistence without exposing internal paths or raw parse lines."
+        - id: "T026"
+          title: "Instrument compaction and context-limit recovery decisions"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/compaction.rs"
+          dependencies: ["T022", "T021"]
+          acceptance_criteria:
+            - "Submit typed compaction action and completion events for manual, automatic, native fallback, applied, failed, and suppressed outcomes."
+            - "Include context usage, decision type, semantic reason, and required suppression reason without raw provider or prompt text."
+            - "Keep compaction control flow and returned outcomes unchanged when recording fails or is disabled."
+        - id: "T027"
+          title: "Instrument blocking-mode and compaction retries"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/turn_loops.rs"
+          dependencies: ["T022", "T021"]
+          acceptance_criteria:
+            - "Record retry scheduling, retry completion or exhaustion, and safe semantic reasons through LifecycleRecorder."
+            - "Do not serialize generic errors, prompts, provider content, or command text."
+            - "Preserve retry count, backoff, stop conditions, and terminal behavior."
+        - id: "T028"
+          title: "Instrument streaming retries and model strategy switches"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+          dependencies: ["T022", "T021"]
+          acceptance_criteria:
+            - "Record streaming retry and transparent provider/model strategy-switch events with closed reasons and safe metadata."
+            - "Keep provider selection and streaming behavior unchanged when recording is disabled or fails."
+        - id: "T029"
+          title: "Instrument canonical tool-policy and run-safety block decisions"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/agent/turn_execution.rs"
+          dependencies: ["T022", "T021"]
+          acceptance_criteria:
+            - "Record canonical block decisions for tool policy and run safety with typed semantic and suppression reasons."
+            - "Do not classify generic errors as blocks or include tool arguments, commands, output, or secrets."
+            - "Preserve the original denial and continuation behavior."
+        - id: "T030"
+          title: "Instrument handoff policy suppression and staging metadata"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/session_transition.rs"
+          dependencies: ["T023", "T021"]
+          acceptance_criteria:
+            - "Record policy suppression, staging, chain-depth, prompt-byte, and todo-count metadata through the recorder."
+            - "Use explicit pending or suppressed states instead of inventing child outcomes."
+            - "Never pass handoff prompt or todo text into the event API."
+        - id: "T031"
+          title: "Instrument child allocation, acknowledgment, and terminal handoff outcomes"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_actions.rs"
+          dependencies: ["T023", "T021"]
+          acceptance_criteria:
+            - "Record parent and child session IDs, chain depth, prompt byte size, todo count, startup acknowledgment, and pending/started/completed/failed/incomplete outcome states."
+            - "Use the durable Background TaskStatusFile task ID only as an opaque process_manifest_id when an active process is relevant."
+            - "Preserve child startup and handoff control flow when recording or persistence fails."
+        - id: "T032"
+          title: "Handle lifecycle queries through the server flush and storage path"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+          dependencies: ["T024", "T018", "T016"]
+          acceptance_criteria:
+            - "Resolve and validate exactly one session, flush accepted recorder events, read retained lifecycle artifacts, and return SessionLifecycleStream."
+            - "Return effective status and bounded compatibility or persistence warnings."
+            - "Map invalid and missing sessions to the specified protocol errors without affecting active session execution."
+        - id: "T033"
+          title: "Add the correlated typed lifecycle client helper"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/server/client_api.rs"
+          dependencies: ["T024", "T019"]
+          acceptance_criteria:
+            - "Send GetLifecycleEvents with a request ID and return the typed SessionLifecycleStream from the matching response."
+            - "Handle protocol errors, unexpected responses, and connection failures using existing client API conventions."
+        - id: "T034"
+          title: "Add lifecycle subcommand arguments to the session CLI"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/args.rs"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Add `session lifecycle <session> [--json]` without changing existing session command parsing."
+            - "Preserve help text, argument validation, and command-family compatibility."
+        - id: "T035"
+          title: "Dispatch lifecycle queries through the configured daemon socket"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-001"
+          file_path: "src/cli/dispatch.rs"
+          dependencies: ["T025", "T033", "T034"]
+          acceptance_criteria:
+            - "Route lifecycle queries through the existing daemon client and configured socket."
+            - "Do not discover, open, or parse lifecycle sidecars in the CLI process."
+        - id: "T036"
+          title: "Resolve session names and render typed lifecycle results"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "src/cli/commands.rs"
+          dependencies: ["T025", "T034", "T035"]
+          acceptance_criteria:
+            - "Resolve numeric IDs and supported short names, render human output, and emit stable structured JSON for the same SessionLifecycleStream."
+            - "Include effective status, ordered events, and bounded warnings while omitting internal storage layout."
+        - id: "T037"
+          title: "Add the representative ordered lifecycle query smoke path"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T026", "T027", "T028", "T029", "T030", "T031", "T032", "T036"]
+          acceptance_criteria:
+            - "Exercise representative compaction, handoff, retry, strategy-switch, and block decisions against a private daemon socket."
+            - "Query one session through the built CLI and verify typed ordered JSON, effective status, and no direct sidecar dependency."
+            - "Assert query completion meets the two-second target for the bounded fixture."
+    - number: 4
+      title: "User Story 3 - Protect sensitive session content"
+      purpose: "Prove the canonical event boundary is privacy-safe across persistence, structured logs, and queries"
+      story_reference: "US-003"
+      independent_test: "Seed representative prompts, secrets, commands, output, environment values, errors, and todo text into every lifecycle path and assert none appears in persisted, logged, or queried representations."
+      tasks:
+        - id: "T038"
+          title: "Add seeded sensitive-content privacy fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/lifecycle_observability_tests.rs"
+          dependencies: ["T018", "T032"]
+          acceptance_criteria:
+            - "Seed unique synthetic prompts, secrets, command text, command output, environment values, raw errors, and todo text across all supported event categories."
+            - "Assert zero seeded values appear in recorder input normalization, persisted JSONL, flattened structured logs, and query results."
+            - "Require process references to contain only opaque durable manifest IDs."
+        - id: "T039"
+          title: "Add process-manifest privacy and handoff-content tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs"
+          dependencies: ["T031"]
+          acceptance_criteria:
+            - "Assert active-process lifecycle events expose only process_manifest_id and session association."
+            - "Assert PID, command, output path, output content, environment values, secrets, prompt text, and todo text are absent."
+        - id: "T040"
+          title: "Add bounded compatibility-warning privacy tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Assert malformed-tail, malformed-middle, unsupported-version, dropped-event, and unavailable-persistence warnings contain no raw line content or secret-bearing paths."
+            - "Bound warning count and warning text size while preserving valid events."
+        - id: "T041"
+          title: "Enforce recorder-owned privacy validation and normalization"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/lifecycle_observability.rs"
+          dependencies: ["T038", "T039"]
+          acceptance_criteria:
+            - "Accept only closed enums, counts, sizes, timestamps, safe policy values, session identifiers, and opaque process manifest identifiers."
+            - "Reject or normalize unsupported payloads before either sink receives them."
+            - "Keep decision callers unable to write persistence records or raw diagnostic strings directly."
+        - id: "T042"
+          title: "Apply sanitized projections consistently to logs and queries"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+          dependencies: ["T038", "T040", "T041"]
+          acceptance_criteria:
+            - "Return the same filtered typed event representation used for persistence and structured local logging."
+            - "Surface only bounded compatibility and persistence warnings with safe categories and no raw filesystem or event content."
+            - "Pass privacy fixtures without altering event ordering or query semantics."
+        - id: "T043"
+          title: "Use opaque process manifest identifiers at lifecycle call sites"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/client_actions.rs"
+          dependencies: ["T039", "T041"]
+          acceptance_criteria:
+            - "Derive process_manifest_id only from the durable Background TaskStatusFile task_id."
+            - "Do not copy PID, commands, output paths, output contents, environment, or process handles into lifecycle payloads."
+            - "Preserve handoff and long-running process behavior when the manifest is unavailable."
+    - number: 5
+      title: "User Story 2 - Control local lifecycle observability"
+      purpose: "Expose effective configuration and independently selectable local outputs without changing runtime decisions or remote telemetry consent"
+      story_reference: "US-002"
+      independent_test: "Evaluate every meaningful master, persistence, and structured-log combination through config, status, recorder, and CLI checks, then verify only selected local outputs are produced and decisions are unchanged."
+      tasks:
+        - id: "T044"
+          title: "Add the complete lifecycle configuration combination matrix"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T012", "T013", "T014"]
+          acceptance_criteria:
+            - "Cover all master/output switch combinations, persisted values, environment precedence, unset values, and invalid values."
+            - "Assert effective status reports persistence and structured logs inactive when enabled=false."
+            - "Assert lifecycle settings never alter remote telemetry consent."
+        - id: "T045"
+          title: "Add disabled and partial-output recorder behavior tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/lifecycle_observability_tests.rs"
+          dependencies: ["T018", "T041"]
+          acceptance_criteria:
+            - "Assert enabled=false emits neither sidecars nor structured lifecycle logs."
+            - "Assert persistence-only and structured-log-only modes emit exactly one selected output and preserve the filtered event."
+            - "Assert all runtime outcomes match a recorder-free execution."
+        - id: "T046"
+          title: "Add effective status and CLI automation output tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "src/cli/commands_tests.rs"
+          dependencies: ["T014", "T036"]
+          acceptance_criteria:
+            - "Assert human and JSON lifecycle query output reports effective enabled, persistence, and structured-log values."
+            - "Assert output-specific values are visibly suppressed by the master switch and that no secret config content is rendered."
+        - id: "T047"
+          title: "Integrate lifecycle status into the existing config/status experience"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config/display_summary.rs"
+          dependencies: ["T044", "T046"]
+          acceptance_criteria:
+            - "Expose configured and effective lifecycle observability values through existing built-in status output."
+            - "Keep status additive and stable for users who do not configure lifecycle observability."
+        - id: "T048"
+          title: "Enforce master-switch and independent sink selection in the recorder"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/lifecycle_observability.rs"
+          dependencies: ["T045", "T041"]
+          acceptance_criteria:
+            - "Evaluate current effective status before accepting each event and route only to enabled local sinks."
+            - "Prevent disabled mode from creating sidecars, queue work, or structured lifecycle logs."
+            - "Keep sink failures best-effort and preserve runtime decisions."
+        - id: "T049"
+          title: "Verify local lifecycle settings remain telemetry-independent"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-base/src/config_tests.rs"
+          dependencies: ["T044", "T048"]
+          acceptance_criteria:
+            - "Run every lifecycle configuration combination and assert remote telemetry consent and configuration remain byte-for-byte behaviorally unchanged."
+            - "Assert no lifecycle module imports or calls jcode-telemetry-core."
+    - number: 6
+      title: "User Story 4 - Keep lifecycle artifacts bounded"
+      purpose: "Enforce fixed-size rotation, age retention, and complete session-scoped cleanup without blocking execution"
+      story_reference: "US-004"
+      independent_test: "Drive synthetic lifecycle streams across size and age boundaries, inspect retained rotations, remove the session through canonical cleanup, and verify all owned artifacts disappear while neighboring sessions remain intact."
+      tasks:
+        - id: "T050"
+          title: "Add size, age, and complete-record rotation boundary tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Exercise events near and beyond 1 MiB, assert no event is split, and retain at most one active file plus three rotations."
+            - "Exercise artifacts older than 30 days and simultaneous age and size eligibility."
+            - "Assert append and pruning failures do not change the caller's lifecycle decision."
+        - id: "T051"
+          title: "Add canonical cleanup and neighboring-session preservation tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session_tests/cases.rs"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Create active and rotated lifecycle artifacts alongside snapshot, journal, backup, and similarly prefixed neighboring sessions."
+            - "Invoke canonical cleanup and assert all selected-session artifacts are removed and every neighboring artifact remains."
+        - id: "T052"
+          title: "Implement deterministic rotation and age retention enforcement"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session/lifecycle.rs"
+          dependencies: ["T050"]
+          acceptance_criteria:
+            - "Rotate before a complete event would exceed 1 MiB, retain three rotations, and prune artifacts older than 30 days during append, query, and maintenance."
+            - "Keep ordering and complete-record guarantees across rotations."
+            - "Perform filesystem work outside runtime decision paths and surface bounded failures without preventing session continuation."
+        - id: "T053"
+          title: "Adopt canonical lifecycle cleanup in artifact removal"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/session/artifacts.rs"
+          dependencies: ["T051"]
+          acceptance_criteria:
+            - "Make the canonical enumerator include active and numbered lifecycle sidecars with validated session ownership."
+            - "Remove all selected-session lifecycle artifacts without broad prefix deletion or neighboring-session impact."
+        - id: "T054"
+          title: "Use canonical cleanup for prepared-spawn rollback"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/comm_session.rs"
+          dependencies: ["T053"]
+          acceptance_criteria:
+            - "Replace ad hoc rollback deletion with the shared session artifact cleanup boundary."
+            - "Preserve rollback ordering, error handling, and cleanup of pre-existing snapshot, journal, and backup files."
+        - id: "T055"
+          title: "Use canonical cleanup for takeover rollback"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-base/src/import.rs"
+          dependencies: ["T053"]
+          acceptance_criteria:
+            - "Replace takeover rollback file deletion with canonical session artifact cleanup."
+            - "Preserve import behavior and ensure lifecycle sidecars cannot be orphaned by rollback."
+        - id: "T056"
+          title: "Add storage failure and session-continuation regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/lifecycle_observability_tests.rs"
+          dependencies: ["T052", "T054", "T055"]
+          acceptance_criteria:
+            - "Inject append, rotation, pruning, cleanup, and query-read failures and assert the lifecycle decision and session progress remain unchanged."
+            - "Assert failures remain diagnosable through bounded warnings or local diagnostics without leaking sensitive data."
+    - number: 7
+      title: "User Story 5 - Preserve existing session workflows"
+      purpose: "Prove lifecycle sidecars remain internal and existing discovery, search, reporting, recovery, import, export, replay, and runtime decisions stay compatible"
+      story_reference: "US-005"
+      independent_test: "Run focused compatibility fixtures with lifecycle artifacts absent, active, rotated, expired, and disabled across every named workflow and compare runtime decisions with observability disabled."
+      tasks:
+        - id: "T057"
+          title: "Add session picker compatibility fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/session_picker/loading_tests.rs"
+          dependencies: ["T052", "T055"]
+          acceptance_criteria:
+            - "Assert active lifecycle sidecars and numbered rotations are ignored by session candidate discovery."
+            - "Preserve established ordering, names, and candidate counts with sidecars present, absent, rotated, expired, or disabled."
+        - id: "T058"
+          title: "Add session search compatibility fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/tool/session_search_tests.rs"
+          dependencies: ["T052"]
+          acceptance_criteria:
+            - "Assert lifecycle sidecars and rotations are not indexed as sessions or searchable user content."
+            - "Preserve established session search results and behavior across representative artifact states."
+        - id: "T059"
+          title: "Add productivity and crash-recovery compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-productivity-core/src"
+          dependencies: ["T052"]
+          acceptance_criteria:
+            - "Assert productivity scans ignore lifecycle files and rotations."
+            - "Assert crash recovery remains snapshot and journal compatible when lifecycle artifacts are present, torn, rotated, or absent."
+        - id: "T060"
+          title: "Add import, takeover, export, and replay compatibility tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-base/src/import.rs"
+          dependencies: ["T054", "T055"]
+          acceptance_criteria:
+            - "Assert import and takeover rollback remove lifecycle artifacts through the canonical boundary."
+            - "Assert export and replay remain transcript-based and never ingest internal lifecycle JSONL content."
+        - id: "T061"
+          title: "Add enabled-versus-disabled decision equivalence tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/agent_tests.rs"
+          dependencies: ["T026", "T027", "T028", "T029", "T030", "T031", "T048"]
+          acceptance_criteria:
+            - "Compare compaction, handoff, retry, strategy-switch, block, and ordinary execution outcomes with lifecycle observability enabled and disabled."
+            - "Assert event recording, persistence, logging, and query failures cannot change provider selection, retries, handoffs, blocks, compaction, or user-visible session outcomes."
+        - id: "T062"
+          title: "Add explicit scanner exclusions where compatibility requires them"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/session_picker/loading.rs"
+          dependencies: ["T057", "T058", "T059", "T060"]
+          acceptance_criteria:
+            - "If existing suffix or glob matching is insufficient, explicitly exclude active and rotated lifecycle artifacts from session, transcript, productivity, recovery, import, or export scanners."
+            - "Make no broad unrelated scanner refactor and preserve current behavior when no sidecars exist."
+            - "Document why lifecycle files remain internal rather than treating them as user content."
+        - id: "T063"
+          title: "Add integrated compatibility smoke coverage"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-005"
+          file_path: "tests/e2e/session_flow.rs"
+          dependencies: ["T057", "T058", "T059", "T060", "T061", "T062"]
+          acceptance_criteria:
+            - "Run representative picker, search, reporting, recovery, import, export, replay, cleanup, and ordinary lifecycle flows with sidecars present and absent."
+            - "Assert zero regressions and no lifecycle files are surfaced as sessions, transcripts, or user content."
+    - number: 8
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Complete documentation, run repository validation, exercise the newly built runtime, and review scope and privacy boundaries"
+      tasks:
+        - id: "T064"
+          title: "Complete lifecycle observability documentation"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "docs/LIFECYCLE_OBSERVABILITY.md"
+          dependencies: ["T063"]
+          acceptance_criteria:
+            - "Document schema versioning, all categories and fields, policy snapshots, process manifest references, privacy guarantees, configuration precedence, effective status, CLI and protocol query examples, rotation, retention, warnings, cleanup, and failure isolation."
+            - "Use only privacy-safe examples and state that JSONL sidecars are internal rather than a transcript or replay contract."
+            - "Document unchanged remote telemetry consent and all explicit non-goals."
+        - id: "T065"
+          title: "Verify generated configuration template and public documentation links"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T014", "T064"]
+          acceptance_criteria:
+            - "Confirm the shipped lifecycle_observability defaults and all three environment overrides are present and accurately described."
+            - "Confirm documentation references use stable built-in interfaces and never require direct sidecar access."
+        - id: "T066"
+          title: "Run focused affected-crate tests, checks, and build"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "Cargo.toml"
+          dependencies: ["T064", "T065"]
+          acceptance_criteria:
+            - "Run focused session-types, base, app-core, protocol, CLI, TUI picker, productivity, import, export, and E2E tests using exact test targets."
+            - "Run formatting, affected-crate check/build, dependency-boundary validation, and clippy or equivalent repository-required checks without adding unapproved dependencies."
+            - "Record any proven pre-existing unrelated failure without weakening or rebaselining guardrails."
+        - id: "T067"
+          title: "Run repository guardrails and isolated-socket selfdev acceptance"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T066"]
+          acceptance_criteria:
+            - "Run scripts/check_guardrails.sh with the repository-required validation scope and preserve current baselines."
+            - "Build the new selfdev binary, run it against a private socket, produce representative lifecycle decisions, query ordered JSON, report effective settings, compare decision outcomes, and clean artifacts with the session."
+            - "Verify the runtime query completes within two seconds for the bounded acceptance fixture and does not inspect the shared daemon."
+        - id: "T068"
+          title: "Perform final scope, privacy, compatibility, and artifact review"
+          status: "Completed"
+          type: "refactor"
+          parallel: false
+          story_id: null
+          file_path: "specs/013-add-lifecycle-observability/tasks.yaml"
+          dependencies: ["T067"]
+          acceptance_criteria:
+            - "Review the final diff against spec and plan requirements, confirming one server-owned recorder, one per-session source of truth, additive protocol and CLI behavior, bounded artifacts, and canonical cleanup."
+            - "Confirm no global database, aggregate event store, benchmark campaign, Locus integration, workflow engine, remote telemetry change, raw content capture, or unrelated refactor was introduced."
+            - "Confirm all task acceptance evidence and validation commands are recorded before implementation handoff."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-003", "US-002", "US-004", "US-005"]
+        - story_id: "US-003"
+          depends_on: ["US-001"]
+          blocks: ["US-002", "US-004", "US-005"]
+        - story_id: "US-002"
+          depends_on: ["US-003"]
+          blocks: ["US-004", "US-005"]
+        - story_id: "US-004"
+          depends_on: ["US-002"]
+          blocks: ["US-005"]
+        - story_id: "US-005"
+          depends_on: ["US-004"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: [8]
+        - phase: 8
+          blocks: []
+parallel_execution:
+    - phase: 1
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "The test harness and documentation skeleton touch different files and have no dependencies."
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T004", "T005", "T006", "T007", "T008", "T009"]
+          rationale: "Focused contract tests cover disjoint schema, config, storage, recorder, protocol, and CLI surfaces after setup."
+        - tasks: ["T020"]
+          rationale: "Server ownership wiring is isolated from protocol and storage implementation once the recorder core exists."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T023", "T024", "T025"]
+          rationale: "Handoff, protocol, and CLI behavior tests use separate fixtures and can be prepared independently."
+        - tasks: ["T026", "T027", "T028", "T029"]
+          rationale: "Compaction, retry, streaming strategy, and execution block integrations touch different decision modules."
+        - tasks: ["T030", "T031"]
+          rationale: "Handoff policy and child-startup instrumentation use separate modules after the shared handoff tests."
+        - tasks: ["T032", "T033"]
+          rationale: "Server query handling and typed client correlation are separate protocol-boundary implementations."
+        - tasks: ["T035"]
+          rationale: "CLI socket dispatch is isolated after arguments and client helper contracts are available."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T038", "T039", "T040"]
+          rationale: "Privacy fixtures cover recorder inputs, process metadata, and storage warnings independently."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T044", "T045"]
+          rationale: "Configuration and recorder output matrices are independent focused tests."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T050", "T051"]
+          rationale: "Rotation boundaries and canonical cleanup test separate storage behaviors."
+        - tasks: ["T054", "T055"]
+          rationale: "Prepared-spawn and takeover rollback callers can adopt the shared cleanup helper independently."
+    - phase: 7
+      parallel_groups:
+        - tasks: ["T057", "T058", "T059", "T060", "T061"]
+          rationale: "Picker, search, productivity/recovery, import/export, and decision-equivalence regressions cover disjoint compatibility surfaces."
+    - phase: 8
+      parallel_groups:
+        - tasks: ["T064", "T065"]
+          rationale: "Feature documentation and generated-config verification are separate documentation surfaces."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3]
+        description: "Setup, shared typed/configuration/storage/recorder infrastructure, all supported lifecycle decision emissions, and the built-in protocol plus CLI query for one session."
+        validation: "Run the focused schema, recorder, decision, protocol, CLI, and isolated-socket tests; verify one representative session returns ordered typed JSON with effective status and completes within two seconds."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Versioned privacy-safe lifecycle contracts, effective configuration, bounded sidecar storage, canonical cleanup, recorder core, protocol variants, and Agent injection are ready for story integration."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3]
+          deliverable: "Operators can query one session's ordered compaction, handoff, retry, strategy-switch, and block events through the built-in daemon protocol and jcode session lifecycle command."
+        - milestone: "Privacy and Control Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Lifecycle outputs are privacy-safe, independently selectable, master-switch controlled, status-visible, and telemetry-independent."
+        - milestone: "Bounded and Compatible"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "Rotation, age retention, canonical cleanup, and all existing session workflow compatibility checks pass."
+        - milestone: "Release Ready"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8]
+          deliverable: "Documentation, guardrails, affected-crate validation, and newly built isolated-runtime acceptance demonstrate the complete operator outcome."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-21T23:59:54Z"
+    artifact_type: "tasks"

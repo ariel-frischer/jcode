@@ -143,6 +143,41 @@ fn journal_entries_are_searchable() {
 }
 
 #[test]
+fn lifecycle_sidecars_are_not_indexed_or_searchable() {
+    with_temp_home(|home| {
+        let session = save_test_session(
+            "lifecycle-search-session",
+            vec![(Role::User, vec![text("ordinary searchable session")])],
+        );
+        let sessions_dir = home.join("sessions");
+        let sidecar_only_text = "lifecycle-sidecar-only-needle";
+        for suffix in [
+            ".lifecycle.jsonl",
+            ".lifecycle.1.jsonl",
+            ".lifecycle.2.jsonl",
+            ".lifecycle.3.jsonl",
+        ] {
+            std::fs::write(
+                sessions_dir.join(format!("{}{}", session.id, suffix)),
+                format!("{{\"event\":\"{sidecar_only_text}\"}}\n"),
+            )
+            .expect("write lifecycle sidecar");
+        }
+
+        let collection = collect_session_files(&sessions_dir, 10).expect("collect session files");
+        assert_eq!(collection.files.len(), 1);
+        assert_eq!(collection.files[0].session_id_hint, session.id);
+
+        let options = SearchOptions::for_test("current-session");
+        let report = run_report(home, sidecar_only_text, &options);
+        assert!(
+            report.results.is_empty(),
+            "lifecycle sidecar content must not become searchable user content"
+        );
+    });
+}
+
+#[test]
 fn empty_sessions_dir_returns_no_results_instead_of_panicking() {
     with_temp_home(|home| {
         let options = SearchOptions::for_test("current-session");

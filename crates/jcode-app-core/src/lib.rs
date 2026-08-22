@@ -32,6 +32,7 @@ pub mod build;
 pub mod catchup;
 pub mod channel;
 pub mod external_auth;
+pub mod lifecycle_observability;
 pub mod mission;
 pub mod network_retry;
 pub mod notifications;
@@ -50,6 +51,10 @@ pub mod startup_profile;
 pub mod tool;
 pub mod turn_cancel_registry;
 pub mod update;
+
+#[cfg(test)]
+#[path = "lifecycle_observability_tests.rs"]
+pub(crate) mod lifecycle_observability_tests;
 
 use std::sync::Mutex;
 

@@ -34,8 +34,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+mod artifacts;
 mod crash;
 mod journal;
+mod lifecycle;
 mod load_telemetry;
 mod maintenance;
 mod memory_profile;
@@ -43,6 +45,7 @@ mod model;
 mod persistence;
 mod render;
 mod storage_paths;
+pub use artifacts::{remove_session_artifacts_in_dir, session_artifact_paths_in_dir};
 pub use crash::{
     CrashedSessionsInfo, detect_crashed_sessions, find_recent_crashed_sessions,
     find_session_by_name_or_id, recover_crashed_sessions, recover_crashed_sessions_by_ids,
@@ -50,8 +53,13 @@ pub use crash::{
 pub use jcode_session_types::{
     EnvSnapshot, GitState, SessionImproveMode, SessionStatus, StoredCompactionState,
     StoredDisplayRole, StoredMemoryInjection, StoredMessage, StoredTokenUsage,
+    lifecycle as lifecycle_types,
 };
 use journal::{PersistVectorMode, SessionJournalMeta, SessionPersistState};
+pub use lifecycle::{
+    LIFECYCLE_MAX_AGE_DAYS, LIFECYCLE_MAX_FILE_BYTES, append_lifecycle_event_in_dir,
+    prune_lifecycle_artifacts_in_dir, read_lifecycle_stream_in_dir,
+};
 pub use maintenance::prune_old_session_backups;
 pub use memory_profile::SessionMemoryProfileSnapshot;
 use memory_profile::{
@@ -68,8 +76,12 @@ pub use render::{
 pub use storage_paths::session_journal_path_from_snapshot;
 #[cfg(test)]
 pub(crate) use storage_paths::session_path_in_dir;
+pub use storage_paths::{
+    LIFECYCLE_MAX_ROTATIONS, LifecycleArtifactPaths, lifecycle_artifact_paths_in_dir,
+    lifecycle_path, lifecycle_path_in_dir, lifecycle_rotation_path_in_dir, session_exists,
+    session_journal_path, session_path,
+};
 use storage_paths::{estimate_json_bytes, persist_vector_mode_label};
-pub use storage_paths::{session_exists, session_journal_path, session_path};
 
 fn stored_messages_to_messages(messages: &[StoredMessage]) -> Vec<Message> {
     messages.iter().map(StoredMessage::to_message).collect()

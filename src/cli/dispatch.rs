@@ -400,6 +400,9 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             commands::run_memory_command(map_memory_subcommand(subcmd))?;
         }
         Some(Command::Session(subcmd)) => match subcmd {
+            SessionCommand::Lifecycle { session, json } => {
+                commands::run_session_lifecycle_command(&session, json).await?
+            }
             SessionCommand::Rename {
                 session,
                 name,

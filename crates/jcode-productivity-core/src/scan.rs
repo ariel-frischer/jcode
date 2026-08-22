@@ -72,32 +72,10 @@ pub fn scan_all() -> Result<ScanResult> {
         };
     }
 
-    // Enumerate candidate transcript files.
-    let mut files: Vec<(String, u64, i128)> = Vec::new();
-    if let Ok(rd) = std::fs::read_dir(&dir) {
-        for entry in rd.flatten() {
-            let path = entry.path();
-            let is_json = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.eq_ignore_ascii_case("json"))
-                .unwrap_or(false);
-            if !is_json {
-                continue;
-            }
-            let name = match path.file_name().and_then(|n| n.to_str()) {
-                Some(n) => n.to_string(),
-                None => continue,
-            };
-            let meta = match entry.metadata() {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            let len = meta.len();
-            let mtime_ns = mtime_ns(&meta);
-            files.push((name, len, mtime_ns));
-        }
-    }
+    // Lifecycle JSONL sidecars are internal artifacts, not transcripts. Keep
+    // the productivity input boundary snapshot-only so observability metadata
+    // cannot become user-facing reporting content.
+    let files = collect_json_session_files(&dir);
 
     let cache_hits = AtomicU64::new(0);
     let parse_errors = AtomicU64::new(0);
@@ -155,6 +133,33 @@ pub fn scan_all() -> Result<ScanResult> {
         scan_secs: started.elapsed().as_secs_f64(),
         summaries,
     })
+}
+
+fn collect_json_session_files(dir: &Path) -> Vec<(String, u64, i128)> {
+    let mut files = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return files;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_json = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("json"))
+            .unwrap_or(false);
+        if !is_json {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        files.push((name.to_string(), meta.len(), mtime_ns(&meta)));
+    }
+    files
 }
 
 #[cfg(unix)]
@@ -242,6 +247,38 @@ fn parse_session_file(path: &Path) -> Result<SessionSummary> {
     let bytes = std::fs::read(path)?;
     let raw: RawSession = serde_json::from_slice(&bytes)?;
     Ok(summarize(raw))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_json_session_files;
+
+    #[test]
+    fn productivity_scan_ignores_lifecycle_sidecars_and_rotations() {
+        let temp = tempfile::tempdir().expect("create productivity fixture");
+        std::fs::write(
+            temp.path().join("session_productivity_1770000000000.json"),
+            "{}",
+        )
+        .expect("write session snapshot");
+        for suffix in [
+            ".lifecycle.jsonl",
+            ".lifecycle.1.jsonl",
+            ".lifecycle.2.jsonl",
+            ".lifecycle.3.jsonl",
+        ] {
+            std::fs::write(
+                temp.path()
+                    .join(format!("session_productivity_1770000000000{suffix}")),
+                "lifecycle metadata is not a transcript",
+            )
+            .expect("write lifecycle sidecar");
+        }
+
+        let files = collect_json_session_files(temp.path());
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].0, "session_productivity_1770000000000.json");
+    }
 }
 
 fn summarize(raw: RawSession) -> SessionSummary {

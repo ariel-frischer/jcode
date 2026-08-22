@@ -967,6 +967,16 @@ pub(crate) enum ModelCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum SessionCommand {
+    /// Inspect a session's ordered lifecycle event stream
+    Lifecycle {
+        /// Session ID or memorable short name, e.g. fox
+        session: String,
+
+        /// Emit stable structured JSON instead of human-readable output
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Rename a saved session's human-readable name/title
     Rename {
         /// Session ID or memorable short name, e.g. fox

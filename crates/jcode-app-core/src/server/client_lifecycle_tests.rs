@@ -107,6 +107,131 @@ impl Provider for CountingProvider {
 }
 
 #[tokio::test]
+async fn lifecycle_query_flushes_recorder_before_reading_typed_stream() {
+    let root = tempfile::tempdir().expect("create lifecycle query root");
+    let recorder = crate::lifecycle_observability::LifecycleRecorder::new_with_clock(
+        crate::config::LifecycleObservabilityConfig::default(),
+        root.path().to_path_buf(),
+        8,
+        std::sync::Arc::new(chrono::Utc::now),
+    );
+    let session_id = "query-session-typed";
+    assert_eq!(
+        recorder.submit(
+            session_id,
+            crate::session::lifecycle_types::LifecycleEvent::Retry {
+                decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Started,
+                semantic_reason:
+                    crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                suppression_reason: None,
+                attempt: 1,
+                max_attempts: 3,
+                process_manifest_id: None,
+            },
+        ),
+        crate::lifecycle_observability::LifecycleSubmitOutcome::Accepted
+    );
+    assert_eq!(
+        recorder.submit(
+            session_id,
+            crate::session::lifecycle_types::LifecycleEvent::Block {
+                decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
+                suppression_reason: Some(
+                    crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied,
+                ),
+                process_manifest_id: None,
+            },
+        ),
+        crate::lifecycle_observability::LifecycleSubmitOutcome::Accepted
+    );
+
+    let stream = super::read_lifecycle_query_stream(&recorder, session_id, root.path())
+        .await
+        .expect("read flushed lifecycle stream");
+    assert_eq!(stream.session_id, session_id);
+    assert_eq!(stream.events.len(), 2);
+    assert_eq!(stream.events[0].sequence, 1);
+    assert_eq!(stream.events[1].sequence, 2);
+    assert!(matches!(
+        stream.events[0].event,
+        crate::session::lifecycle_types::LifecycleEvent::Retry { .. }
+    ));
+    assert!(matches!(
+        stream.events[1].event,
+        crate::session::lifecycle_types::LifecycleEvent::Block { .. }
+    ));
+    assert!(stream.warnings.is_empty());
+}
+
+#[tokio::test]
+async fn lifecycle_query_sanitizes_sidecar_events_and_keeps_warnings_bounded() {
+    use crate::session::lifecycle_types::{
+        HandoffLifecyclePayload, HandoffStartupOutcome, LIFECYCLE_SCHEMA_VERSION, LifecycleEvent,
+        LifecycleEventEnvelope,
+    };
+
+    let root = tempfile::tempdir().expect("create lifecycle query root");
+    let recorder = crate::lifecycle_observability::LifecycleRecorder::new_with_clock(
+        crate::config::LifecycleObservabilityConfig::default(),
+        root.path().to_path_buf(),
+        8,
+        std::sync::Arc::new(chrono::Utc::now),
+    );
+    let session_id = "query-session-sanitized";
+    let sensitive = "secret prompt command output environment todo";
+    let envelope = LifecycleEventEnvelope {
+        schema_version: LIFECYCLE_SCHEMA_VERSION,
+        session_id: session_id.to_string(),
+        sequence: 1,
+        recorded_at: chrono::Utc::now(),
+        event: LifecycleEvent::Handoff {
+            decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+            semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+            suppression_reason: None,
+            payload: HandoffLifecyclePayload {
+                chain_depth: 1,
+                generated_prompt_bytes: sensitive.len(),
+                todo_carryover_count: 2,
+                parent_session_id: sensitive.to_string(),
+                child_session_id: Some(sensitive.to_string()),
+                startup_acknowledged: Some(true),
+                startup_outcome: HandoffStartupOutcome::Completed,
+            },
+            process_manifest_id: Some(sensitive.to_string()),
+        },
+    };
+    let path = crate::session::lifecycle_path_in_dir(root.path(), session_id)
+        .expect("valid lifecycle path");
+    std::fs::create_dir_all(path.parent().expect("lifecycle parent"))
+        .expect("create lifecycle parent");
+    std::fs::write(
+        &path,
+        format!(
+            "{}\n{{\"schema_version\":1,\"secret\":\"{sensitive}\"}}\n",
+            serde_json::to_string(&envelope).expect("serialize legacy event")
+        ),
+    )
+    .expect("write legacy lifecycle sidecar");
+
+    let stream = super::read_lifecycle_query_stream(&recorder, session_id, root.path())
+        .await
+        .expect("read sanitized lifecycle stream");
+    let serialized = serde_json::to_string(&stream).expect("serialize sanitized query");
+    assert!(!serialized.contains(sensitive));
+    assert!(stream.events.iter().all(|event| {
+        let serialized = serde_json::to_string(event).expect("serialize event");
+        !serialized.contains(sensitive)
+    }));
+    assert!(stream.warnings.len() <= 32);
+    assert_eq!(stream.events[0].sequence, 1);
+    assert!(matches!(
+        stream.events[0].event,
+        LifecycleEvent::Handoff { .. }
+    ));
+}
+
+#[tokio::test]
 async fn session_control_handle_does_not_wait_for_busy_agent_lock() {
     let provider: Arc<dyn Provider> = Arc::new(PanicOnForkProvider {
         forked: Arc::new(AtomicBool::new(false)),
@@ -1426,10 +1551,19 @@ async fn lightweight_comm_request_skips_full_session_initialization() {
     let shutdown_signals = Arc::new(RwLock::new(HashMap::new()));
     let soft_interrupt_queues: SessionInterruptQueues = Arc::new(RwLock::new(HashMap::new()));
     let mcp_pool = Arc::new(crate::mcp::SharedMcpPool::from_default_config());
+    let lifecycle_recorder = crate::lifecycle_observability::LifecycleRecorder::new(
+        crate::config::LifecycleObservabilityConfig {
+            enabled: false,
+            persist_session_events: false,
+            emit_structured_logs: false,
+        },
+        std::env::temp_dir().join("jcode-lifecycle-client-test"),
+    );
 
     let server_task = tokio::spawn(handle_client(
         server_stream,
         Arc::clone(&sessions),
+        lifecycle_recorder,
         _global_event_tx,
         provider_template,
         global_is_processing,

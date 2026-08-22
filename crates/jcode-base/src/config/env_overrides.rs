@@ -24,6 +24,24 @@ impl Config {
             self.run_safety.deadline = Some(v);
         }
 
+        // Local lifecycle observability. Invalid values retain the persisted
+        // setting, matching the existing boolean override behavior.
+        if let Ok(v) = std::env::var("JCODE_LIFECYCLE_OBSERVABILITY_ENABLED")
+            && let Some(parsed) = parse_env_bool(&v)
+        {
+            self.lifecycle_observability.enabled = parsed;
+        }
+        if let Ok(v) = std::env::var("JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS")
+            && let Some(parsed) = parse_env_bool(&v)
+        {
+            self.lifecycle_observability.persist_session_events = parsed;
+        }
+        if let Ok(v) = std::env::var("JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS")
+            && let Some(parsed) = parse_env_bool(&v)
+        {
+            self.lifecycle_observability.emit_structured_logs = parsed;
+        }
+
         // Keybindings
         if let Ok(v) = std::env::var("JCODE_SCROLL_UP_KEY") {
             self.keybindings.scroll_up = v;
