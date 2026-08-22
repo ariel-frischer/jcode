@@ -28,6 +28,10 @@ This document is the durable requirement-to-check matrix and receipt index for f
 | C07 | broad | Run `scripts/check_guardrails.sh` once, serially, on stable Rust after focused checks pass. Pass only when provenance executes before the three ratchets and the canonical formatting, all-target/all-feature, Clippy-with-warnings-denied, lockfile, warning, size, panic, swallowed-error, dependency, re-export, frame-budget, and unused-dependency gates succeed without unrelated threshold changes. | T021, T030 |
 | C08 | built-product | Run `cargo build --profile selfdev`, resolve `target/selfdev/jcode`, then execute deterministic public and integration scenarios with `target/selfdev/jcode run --no-update --socket <unique-private-socket> '<prompt>'`. Pass only when public command, server, provider-mock, tool, and explicit error-path outcomes match accepted behavior and evidence confirms the shared daemon was neither measured nor disturbed. | T031-T033 |
 
+### Focused behavior commands
+
+- **T005 app-core lifecycle:** `cargo test -p jcode-app-core server::client_lifecycle::tests::lifecycle_query -- --nocapture`. The focused tests cover successful flush-and-read behavior, observable persistence failure without loss of the readable stream, explicit sidecar read-error propagation, sanitization, and bounded compatibility warnings. Removing the persistence warning or swallowing the sidecar read error makes this command fail. Receipt on 2026-08-22: formatting check passed and the command passed 4 tests with 1,279 filtered out. A controlled mutation replacing `PersistenceUnavailable` with `DroppedEvent` failed the exact persistence-warning test, after which the original source bytes were restored.
+
 ## Requirement-to-check acceptance matrix
 
 Each row maps to one direct check. Supporting evidence may be referenced by that check, but completion is determined by the single assigned check.
