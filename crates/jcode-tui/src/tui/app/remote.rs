@@ -1739,7 +1739,7 @@ async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteConnection) -
             });
         let stalled = inactivity > stall_timeout;
         if stalled {
-            if let Some(snapshot) = app.remote_resume_activity.clone() {
+            if let Some(snapshot) = app.remote_resume_activity.take() {
                 let elapsed = app
                     .last_stream_activity
                     .map(|t| t.elapsed())
@@ -2273,6 +2273,55 @@ mod stall_guard_tests {
             message.content.contains("stalled in model reasoning")
                 && message.content.contains("stream_idle_timeout_secs")
         }));
+    }
+
+    #[tokio::test]
+    async fn resumed_history_snapshot_only_defers_stall_cancellation_once() {
+        use tokio::io::AsyncBufReadExt;
+
+        let mut app = App::new_for_remote(None);
+        app.is_processing = true;
+        app.status = ProcessingStatus::Thinking(Instant::now());
+        app.remote_resume_activity = Some(RemoteResumeActivity {
+            session_id: "resumed-stall".to_string(),
+            observed_at: Instant::now(),
+            current_tool_name: None,
+        });
+        let timeout = stall_timeout(&app);
+        app.processing_started = Some(Instant::now() - timeout - Duration::from_secs(1));
+        app.last_stream_activity = app.processing_started;
+
+        let mut remote = RemoteConnection::dummy();
+        let peer = remote
+            .take_dummy_peer()
+            .expect("dummy remote should retain peer stream");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        assert!(detect_and_cancel_stall(&mut app, &mut remote).await);
+        assert!(
+            app.is_processing,
+            "first stale snapshot gets one grace period"
+        );
+        assert!(
+            app.remote_resume_activity.is_none(),
+            "snapshot evidence must be consumed so it cannot defer forever"
+        );
+
+        app.last_stream_activity = Some(Instant::now() - timeout - Duration::from_secs(1));
+        assert!(detect_and_cancel_stall(&mut app, &mut remote).await);
+
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("second stall observation should send cancel");
+        assert!(matches!(
+            serde_json::from_str::<crate::protocol::Request>(&line)
+                .expect("cancel request should deserialize"),
+            crate::protocol::Request::Cancel { .. }
+        ));
+        assert!(!app.is_processing);
     }
 
     #[test]
