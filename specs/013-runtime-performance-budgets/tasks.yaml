@@ -1,0 +1,394 @@
+tasks:
+    branch: "013-runtime-performance-budgets"
+    created: "2026-08-21"
+    spec_path: "specs/013-runtime-performance-budgets/spec.yaml"
+    plan_path: "specs/013-runtime-performance-budgets/plan.yaml"
+summary:
+    total_tasks: 26
+    total_phases: 6
+    parallel_opportunities: 8
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Establish the reproducible Python dependency contract for rendered-terminal benchmarks."
+      tasks:
+        - id: "T001"
+          title: "Pin and preflight pyte in scripts/requirements-runtime-benchmarks.txt"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "scripts/requirements-runtime-benchmarks.txt"
+          dependencies: []
+          acceptance_criteria:
+            - "Pin pyte 0.8.2 without adding an unrelated benchmark framework."
+            - "Verify a focused Screen/Stream fixture under the active Python 3.11+ interpreter; add a separate interpreter pin only if that check proves incompatibility."
+    - number: 2
+      title: "Foundational"
+      purpose: "Freeze and implement the shared report, identity, isolation, aggregation, and CLI contracts required by every story."
+      tasks:
+        - id: "T002"
+          title: "Add report, aggregation, and compatibility contract tests in scripts/test_runtime_budget.py"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "scripts/test_runtime_budget.py"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Red tests cover schema-versioned MetricDefinition, MetricResult, RuntimeReport, RuntimeBaseline, EnvironmentProvenance, and all five classifications."
+            - "Tests cover median, deterministic nearest-rank p95, strict-above tolerance boundaries, incomplete samples, unsupported metrics, and incompatible baseline parameters."
+        - id: "T003"
+          title: "Add executable identity and owned-runtime failure tests in scripts/test_bench_runtime_budgets.py"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "scripts/test_bench_runtime_budgets.py"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Red tests reject missing, non-executable, symlink-mismatched, stale, post-run-changed, and daemon-mismatched binaries before accepting samples."
+            - "Tests prove unique private paths, verified socket ownership, bounded cleanup of runner-owned process groups, and preservation of pre-existing sockets and unrelated processes."
+        - id: "T004"
+          title: "Implement shared runtime budget primitives in scripts/runtime_budget.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "scripts/runtime_budget.py"
+          dependencies: ["T002", "T003"]
+          acceptance_criteria:
+            - "Implement versioned report/baseline models, complete-sample validation, median and nearest-rank p95 aggregation, classification, and environment compatibility checks."
+            - "Implement requested/resolved/running executable identity with version or revision, freshness, SHA-256, private state paths, process ownership, socket ownership, and safe cleanup primitives."
+        - id: "T005"
+          title: "Create canonical subcommand and reporting shell in scripts/bench_runtime_budgets.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "scripts/bench_runtime_budgets.py"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "Expose collect, compare, and baseline parsers with the plan-defined required inputs and stable documented exit-code categories."
+            - "Render human output only from the same validated model serialized as JSON, with no implicit baseline mutation or provider/network access."
+    - number: 3
+      title: "User Story 1 - Maintain a canonical runtime budget"
+      purpose: "Provide one auditable contract covering all seven runtime metric groups, their provenance, and required review action."
+      story_reference: "US-001"
+      independent_test: "Generate a fixture report and verify all seven metric groups include units, sampling parameters, raw evidence, aggregation, policy, provenance, classification, and review action."
+      tasks:
+        - id: "T006"
+          title: "Add seven-group report completeness tests in scripts/test_runtime_budget.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "scripts/test_runtime_budget.py"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Red fixtures require first-visible, input-ready, daemon-ready, idle CPU/RSS, session scaling, frame/update work, and protocol/tool round-trip groups."
+            - "A missing group, wrong unit, wrong sample parameters, missing raw samples, or absent review action makes the report invalid rather than passing."
+        - id: "T007"
+          title: "Implement canonical metric inventory and report validation in scripts/runtime_budget.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "scripts/runtime_budget.py"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "Encode the exact sample counts, warm-ups, settle intervals, populations, aggregations, deterministic ceilings, and noisy tolerances from FR-001 through FR-007."
+            - "Require executable, daemon, environment, command, baseline, cleanup, and per-metric provenance without changing normal Jcode CLI, config, protocol, or persistence behavior."
+        - id: "T008"
+          title: "Document the maintained contract in docs/RUNTIME_PERFORMANCE_BUDGET.md"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "docs/RUNTIME_PERFORMANCE_BUDGET.md"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "Document one canonical full-report command and map each metric to its existing owning collector or guardrail."
+            - "Document definitions, exact sampling, aggregation, gates/tolerances, classifications, provenance, unsupported-platform behavior, review action, and the rule that developer-velocity work cannot silently regress a budget."
+    - number: 4
+      title: "User Story 2 - Reproduce runtime comparisons"
+      purpose: "Collect complete evidence from the requested new binary on private runtimes without touching the active shared daemon."
+      story_reference: "US-002"
+      independent_test: "Run collect with fixture subprocesses and an isolated socket, then prove valid samples identify the requested daemon while missing, stale, mismatched, timed-out, failed, and partial runs are rejected."
+      tasks:
+        - id: "T009"
+          title: "Add rendered startup collector tests in scripts/test_bench_startup_visible_ready.py"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/test_bench_startup_visible_ready.py"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Red tests distinguish meaningful pyte-rendered content from terminal control traffic and require a visibly accepted typed readiness probe."
+            - "Tests require an explicit candidate/private environment, one excluded warm-up, ten complete paired samples, structured output, and invalid partial or timed-out runs."
+        - id: "T010"
+          title: "Extend rendered startup collection in scripts/bench_startup_visible_ready.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/bench_startup_visible_ready.py"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Collect first-visible and input-ready evidence through pyte for one warm-up plus ten recorded runs against only the explicit binary and isolated runtime."
+            - "Emit all samples and structured failure details for coordinator aggregation without weakening existing standalone behavior."
+        - id: "T011"
+          title: "Add private daemon readiness tests in scripts/test_bench_startup.py"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/test_bench_startup.py"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Red tests require five structured readiness samples, a five-second timeout per attempt, candidate/process/socket identity, and complete-run rejection."
+            - "Failed launch, wrong socket owner, timeout, nonzero exit, and partial evidence are invalid outcomes."
+        - id: "T012"
+          title: "Extend daemon readiness collection in scripts/bench_startup.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/bench_startup.py"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Run five private daemon attempts from the explicit candidate with a five-second per-attempt timeout and structured raw results."
+            - "Verify executable and socket ownership and clean up only runner-owned processes after success or failure."
+        - id: "T013"
+          title: "Add idle and session scaling tests in scripts/test_bench_memory_cli.py"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/test_bench_memory_cli.py"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Red tests require a five-second settle, five one-second idle CPU/RSS samples, and three trials for each 1, 4, and 8 equivalent-client population."
+            - "Tests require daemon RSS, attributable session memory, median incremental MiB per session, population validation, unsupported-platform evidence, and owned cleanup."
+        - id: "T014"
+          title: "Extend private resource and scaling collection in scripts/bench_memory_cli.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/bench_memory_cli.py"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Reuse procfs sampling and runtime-memory attribution to emit the prescribed idle and 1/4/8 scaling evidence from one private shared daemon per scenario."
+            - "Preserve existing collector interfaces where possible and report unsupported or incomplete evidence explicitly instead of fabricating a pass."
+        - id: "T015"
+          title: "Add collect orchestration and local round-trip tests in scripts/test_bench_runtime_budgets.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "scripts/test_bench_runtime_budgets.py"
+          dependencies: ["T009", "T011", "T013"]
+          acceptance_criteria:
+            - "Red integration fixtures require five warm-ups plus thirty recorded versioned protocol operations and thirty deterministic local-tool operations with no provider or network dependency."
+            - "Tests prove collector timeout/nonzero/partial failures propagate, all raw samples are retained, report output is atomic, and the active shared runtime remains untouched."
+        - id: "T016"
+          title: "Implement complete private collection orchestration in scripts/bench_runtime_budgets.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "scripts/bench_runtime_budgets.py"
+          dependencies: ["T010", "T012", "T014", "T015"]
+          acceptance_criteria:
+            - "Coordinate existing startup, procfs, memory-attribution, protocol/harness, local-tool, and frame guardrail surfaces into one seven-group report."
+            - "Validate candidate identity before collection, running daemon identity and socket ownership before samples, unchanged SHA-256 after collection, and owned cleanup on every path."
+            - "Return invalid/nonzero for missing required Linux support, incomplete samples, timeouts, subprocess failures, or identity mismatches."
+    - number: 5
+      title: "User Story 3 - Apply risk-appropriate performance gates"
+      purpose: "Fail deterministic regressions while routing machine-sensitive regressions through an explicit, attributable baseline review."
+      story_reference: "US-003"
+      independent_test: "Compare fixtures below, exactly at, and strictly above every gate or tolerance and verify pass, review_required, deterministic_failure, invalid, and unsupported outcomes plus non-mutating baseline behavior."
+      tasks:
+        - id: "T017"
+          title: "Add comparison, exit-code, and ratchet tests in scripts/test_bench_runtime_budgets.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/test_bench_runtime_budgets.py"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "Red tests cover below, exact-boundary, and above-boundary cases for the 80 ms daemon gate, exact frame-work invariants, and every same-environment tolerance."
+            - "Tests require distinct pass, review_required, deterministic_failure, invalid, and unsupported output/exit behavior and reject incompatible environments or schemas."
+            - "Compare never writes a baseline; baseline creation requires a complete valid report, explicit output, non-empty reason, and explicit overwrite approval."
+        - id: "T018"
+          title: "Implement comparison and explicit baseline commands in scripts/bench_runtime_budgets.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/bench_runtime_budgets.py"
+          dependencies: ["T017"]
+          acceptance_criteria:
+            - "Apply deterministic failure only to daemon readiness and maintained exact frame-work limits; classify noisy out-of-tolerance metrics as review_required."
+            - "Use strict-above boundaries, preserve raw samples and baseline path/fingerprint, distinguish review-required exit behavior, and never auto-ratchet."
+            - "Create a proposed baseline only from complete compatible evidence with an attributable reason and visible output-file change."
+        - id: "T019"
+          title: "Create reviewed Linux reference baseline in docs/runtime-performance-baselines/linux-reference.json"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "docs/runtime-performance-baselines/linux-reference.json"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "After Ariel designates a stable Linux host and load/power conditions, derive the file from repeated complete healthy reports rather than invented values."
+            - "Record schema version, raw samples, aggregates, executable/environment/toolchain/command provenance, timestamp, reason, and the reviewed same-machine tolerances."
+            - "Keep baseline creation as an explicit diff; if stable conditions are not approved, leave this task pending and do not weaken comparison behavior."
+        - id: "T020"
+          title: "Finalize gate and ratchet guidance in docs/RUNTIME_PERFORMANCE_BUDGET.md"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "docs/RUNTIME_PERFORMANCE_BUDGET.md"
+          dependencies: ["T018", "T019"]
+          acceptance_criteria:
+            - "Document deterministic failures versus noisy review-required regressions, exact boundary behavior, exit codes, compatible-environment rules, and explicit baseline creation/update review."
+            - "Require before/after evidence, written explanation, and maintainer approval or a fix for any regression above a gate or tolerance."
+    - number: 6
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Validate the complete workflow against focused fixtures, repository guardrails, and the actual newly built isolated runtime before a bounded commit."
+      tasks:
+        - id: "T021"
+          title: "Extend attribution regression coverage in scripts/test_analyze_runtime_memory_log.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/test_analyze_runtime_memory_log.py"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Focused fixtures prove the parser validates expected session populations and preserves attributable memory evidence used by the scaling report."
+            - "Existing parser behavior remains compatible outside the new structured evidence needed by the budget."
+        - id: "T022"
+          title: "Expose attributable population evidence in scripts/analyze_runtime_memory_log.py"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "scripts/analyze_runtime_memory_log.py"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Provide only the structured population and attribution output required by the canonical scaling collector while preserving existing output and callers."
+        - id: "T023"
+          title: "Run focused Python behavior suites from scripts/test_bench_runtime_budgets.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/test_bench_runtime_budgets.py"
+          dependencies: ["T020", "T022"]
+          acceptance_criteria:
+            - "Run the exact runtime-budget, coordinator, startup-visible, startup-daemon, memory, and attribution unittest modules and record commands/outcomes."
+            - "All acceptance fixtures pass, including compatibility, negative, boundary, completeness, identity, isolation, cleanup, and non-mutation cases."
+        - id: "T024"
+          title: "Run deterministic frame and repository gates through scripts/check_guardrails.sh"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "The existing exact desktop frame-work state-space test passes without silently changing its limits."
+            - "Run scripts/check_guardrails.sh once after focused checks and record any unrelated pre-existing failure separately rather than weakening the gate."
+        - id: "T025"
+          title: "Validate a newly built private runtime with scripts/bench_runtime_budgets.py"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/bench_runtime_budgets.py"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Build the selfdev candidate serially, invoke its absolute resolved path with a unique socket/private state, and record version/revision/SHA-256 plus running daemon identity."
+            - "Complete an isolated collect smoke including one local protocol or tool round trip, then prove owned shutdown and zero changes to the active shared daemon or sessions."
+            - "Do not run provider/network, live, costly, or production-adjacent validation."
+        - id: "T026"
+          title: "Review, validate, and commit the bounded artifact set from specs/013-runtime-performance-budgets/tasks.yaml"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "specs/013-runtime-performance-budgets/tasks.yaml"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Validate Autospec artifacts, inspect explicit status/diffs, and confirm every specification requirement maps to direct recorded evidence."
+            - "Stage only owned files and create one focused commit reporting its identifier and exact checks."
+            - "Do not mutate Beads, merge, push, install/reload Jcode, or remove the worktree."
+dependencies:
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002", "US-003"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-001", "US-002"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "The report-model fixtures and subprocess/ownership fixtures are in different test modules and share only the dependency preflight."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T009", "T011", "T013"]
+          rationale: "Startup-visible, daemon-readiness, and resource-scaling red tests target separate collectors after the canonical contract is frozen."
+        - tasks: ["T010", "T012", "T014"]
+          rationale: "The three collector implementations modify separate files after their respective red tests exist; Cargo-heavy or runtime executions remain serialized."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3]
+        description: "Dependency preflight, shared contracts, and the complete canonical seven-metric report definition for US-001."
+        validation: "Run scripts/test_runtime_budget.py and fixture-level CLI serialization checks, then inspect docs/RUNTIME_PERFORMANCE_BUDGET.md for all seven metric definitions and policies."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Tested versioned models, identity/isolation primitives, and canonical CLI subcommand shell."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3]
+          deliverable: "One maintained, auditable runtime-budget contract covering all required metric groups."
+        - milestone: "Reproducible Collection Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "Private-runtime collection from the verified candidate across startup, resources, scaling, frame work, and local round trips."
+        - milestone: "Risk-Appropriate Gates Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Deterministic gates, noisy comparison classifications, and explicit reviewed baseline workflow."
+        - milestone: "Delivery Validated"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Focused suites, guardrails, new-build isolated smoke, and a bounded implementation commit with exact evidence."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-21T15:40:53Z"
+    artifact_type: "tasks"

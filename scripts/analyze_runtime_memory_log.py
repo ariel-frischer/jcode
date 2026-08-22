@@ -473,6 +473,48 @@ def last_attribution_sample(samples: list[Sample]) -> Sample | None:
     return None
 
 
+def build_scaling_evidence(
+    samples: list[Sample], *, expected_population: int
+) -> dict[str, int]:
+    """Return the latest complete server-session attribution for a population."""
+    attribution_samples = [sample for sample in samples if sample.sessions is not None]
+    attribution = next(
+        (
+            sample
+            for sample in reversed(attribution_samples)
+            if (sample.sessions or {}).get("live_count") == expected_population
+        ),
+        attribution_samples[-1] if attribution_samples else None,
+    )
+    if attribution is None:
+        raise ValueError("runtime memory attribution omitted session population")
+
+    sessions = attribution.sessions or {}
+    observed_population = sessions.get("live_count")
+    if not isinstance(observed_population, int | float) or isinstance(
+        observed_population, bool
+    ):
+        raise ValueError("runtime memory attribution omitted session population")
+    observed_population = int(observed_population)
+    if observed_population != expected_population:
+        raise ValueError(
+            f"expected population {expected_population}, observed population {observed_population}"
+        )
+
+    attributed_session_bytes = sessions.get("total_json_bytes")
+    if not isinstance(attributed_session_bytes, int | float) or isinstance(
+        attributed_session_bytes, bool
+    ):
+        raise ValueError("runtime memory attribution omitted attributable session bytes")
+
+    return {
+        "expected_population": expected_population,
+        "observed_population": observed_population,
+        "attributed_session_bytes": int(attributed_session_bytes),
+        "attribution_timestamp_ms": attribution.timestamp_ms,
+    }
+
+
 def build_coverage_report(sample: Sample) -> dict[str, Any]:
     """Decompose PSS into attributed live, unattributed live heap, allocator
     retention, file-backed, and stack buckets.

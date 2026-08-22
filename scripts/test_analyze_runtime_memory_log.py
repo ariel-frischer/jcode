@@ -120,6 +120,32 @@ class RuntimeMemoryAnalyzerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expected.*4.*observed.*3"):
             self.build_scaling_evidence(samples, expected_population=4)
 
+    def test_scaling_evidence_uses_latest_matching_sample_before_teardown(self) -> None:
+        samples = [
+            sample(
+                timestamp_ms=21,
+                instance_id="server",
+                pss_mb=144,
+                allocated_mb=80,
+                live_sessions=1,
+                total_json_mb=12,
+            ),
+            sample(
+                timestamp_ms=22,
+                instance_id="server",
+                pss_mb=140,
+                allocated_mb=76,
+                live_sessions=0,
+                total_json_mb=0,
+            ),
+        ]
+
+        evidence = self.build_scaling_evidence(samples, expected_population=1)
+
+        self.assertEqual(evidence["observed_population"], 1)
+        self.assertEqual(evidence["attribution_timestamp_ms"], 21)
+        self.assertEqual(evidence["attributed_session_bytes"], 12 * MB)
+
     def test_scaling_evidence_rejects_incomplete_attribution(self) -> None:
         missing_population = sample(
             timestamp_ms=31,

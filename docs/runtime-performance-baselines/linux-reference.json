@@ -1,0 +1,417 @@
+{
+  "collected_at": "2026-08-22T00:10:11.370568+00:00",
+  "definitions": {
+    "daemon_ready_ms": {
+      "aggregation": [
+        "median"
+      ],
+      "id": "daemon_ready_ms",
+      "policy": {
+        "ceiling": 80.0,
+        "kind": "deterministic",
+        "review_action": "fail"
+      },
+      "sampling": {
+        "recorded_count": 5,
+        "timeout_seconds": 5
+      },
+      "unit": "milliseconds"
+    },
+    "first_visible_ms": {
+      "aggregation": [
+        "median",
+        "nearest_rank_p95"
+      ],
+      "id": "first_visible_ms",
+      "policy": {
+        "absolute_tolerance": 20.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.15,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 10,
+        "warm_up_count": 1
+      },
+      "unit": "milliseconds"
+    },
+    "frame_update_work_count": {
+      "aggregation": [
+        "exact"
+      ],
+      "id": "frame_update_work_count",
+      "policy": {
+        "kind": "deterministic",
+        "review_action": "fail",
+        "unchanged_transcript_layout_work": 0
+      },
+      "sampling": {
+        "recorded_count": 1
+      },
+      "unit": "work_count"
+    },
+    "idle_cpu_percent": {
+      "aggregation": [
+        "median"
+      ],
+      "id": "idle_cpu_percent",
+      "policy": {
+        "absolute_tolerance": 0.5,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.0,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 5,
+        "sample_interval_seconds": 1,
+        "settle_seconds": 5
+      },
+      "unit": "percentage_points"
+    },
+    "idle_rss_mib": {
+      "aggregation": [
+        "median"
+      ],
+      "id": "idle_rss_mib",
+      "policy": {
+        "absolute_tolerance": 8.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.1,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 5,
+        "sample_interval_seconds": 1,
+        "settle_seconds": 5
+      },
+      "unit": "mib"
+    },
+    "input_ready_ms": {
+      "aggregation": [
+        "median",
+        "nearest_rank_p95"
+      ],
+      "id": "input_ready_ms",
+      "policy": {
+        "absolute_tolerance": 20.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.15,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 10,
+        "warm_up_count": 1
+      },
+      "unit": "milliseconds"
+    },
+    "protocol_round_trip_ms": {
+      "aggregation": [
+        "median",
+        "nearest_rank_p95"
+      ],
+      "id": "protocol_round_trip_ms",
+      "policy": {
+        "absolute_tolerance": 1.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.15,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 30,
+        "warm_up_count": 5
+      },
+      "unit": "milliseconds"
+    },
+    "session_scaling_mib_per_session": {
+      "aggregation": [
+        "median"
+      ],
+      "id": "session_scaling_mib_per_session",
+      "policy": {
+        "absolute_tolerance": 2.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.15,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "populations": [
+          1,
+          4,
+          8
+        ],
+        "recorded_count": 3,
+        "trials_per_population": 3
+      },
+      "unit": "mib_per_session"
+    },
+    "tool_round_trip_ms": {
+      "aggregation": [
+        "median",
+        "nearest_rank_p95"
+      ],
+      "id": "tool_round_trip_ms",
+      "policy": {
+        "absolute_tolerance": 1.0,
+        "kind": "noisy_comparison",
+        "relative_tolerance": 0.15,
+        "review_action": "maintainer_review"
+      },
+      "sampling": {
+        "recorded_count": 30,
+        "warm_up_count": 5
+      },
+      "unit": "milliseconds"
+    }
+  },
+  "environment": {
+    "command_parameters": {
+      "command": "python3 scripts/bench_runtime_budgets.py collect",
+      "metrics": {
+        "daemon_ready_ms": {
+          "recorded_count": 5,
+          "timeout_seconds": 5
+        },
+        "first_visible_ms": {
+          "recorded_count": 10,
+          "warm_up_count": 1
+        },
+        "frame_update_work_count": {
+          "recorded_count": 1
+        },
+        "idle_cpu_percent": {
+          "recorded_count": 5,
+          "sample_interval_seconds": 1,
+          "settle_seconds": 5
+        },
+        "idle_rss_mib": {
+          "recorded_count": 5,
+          "sample_interval_seconds": 1,
+          "settle_seconds": 5
+        },
+        "input_ready_ms": {
+          "recorded_count": 10,
+          "warm_up_count": 1
+        },
+        "protocol_round_trip_ms": {
+          "recorded_count": 30,
+          "warm_up_count": 5
+        },
+        "session_scaling_mib_per_session": {
+          "populations": [
+            1,
+            4,
+            8
+          ],
+          "recorded_count": 3,
+          "trials_per_population": 3
+        },
+        "tool_round_trip_ms": {
+          "recorded_count": 30,
+          "warm_up_count": 5
+        }
+      }
+    },
+    "platform": {
+      "architecture": "x86_64",
+      "kernel": "7.0.9-arch2-1",
+      "logical_cpu_count": 16,
+      "os": "linux"
+    },
+    "toolchain_profile": {
+      "cargo_profile": "selfdev",
+      "collectors": {
+        "runtime_budget": "1.0.0"
+      },
+      "python": "3.14.5",
+      "rust": "rustc 1.95.0 (59807616e 2026-04-14) (Arch Linux rust 1:1.95.0-1)"
+    }
+  },
+  "metrics": {
+    "daemon_ready_ms": {
+      "aggregates": {
+        "median": 108.77281101420522
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        117.60332609992474,
+        108.77281101420522,
+        103.30823098775,
+        97.7606950327754,
+        109.48099591769278
+      ]
+    },
+    "first_visible_ms": {
+      "aggregates": {
+        "median": 14.794781513046473,
+        "nearest_rank_p95": 18.57650396414101
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        11.616045027039945,
+        13.157830922864377,
+        13.612376991659403,
+        15.575387049466372,
+        18.57650396414101,
+        15.264061046764255,
+        16.75111404620111,
+        14.325501979328692,
+        16.23032195493579,
+        13.931458932347596
+      ]
+    },
+    "frame_update_work_count": {
+      "aggregates": {
+        "exact": 0.0
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        0.0
+      ]
+    },
+    "idle_cpu_percent": {
+      "aggregates": {
+        "median": 0.0
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "idle_rss_mib": {
+      "aggregates": {
+        "median": 89.07
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        89.07,
+        89.07,
+        89.07,
+        89.07,
+        89.07
+      ]
+    },
+    "input_ready_ms": {
+      "aggregates": {
+        "median": 84.49158997973427,
+        "nearest_rank_p95": 98.04046293720603
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        78.50435003638268,
+        98.04046293720603,
+        80.72000602260232,
+        87.48930506408215,
+        86.9006150169298,
+        84.2639859765768,
+        88.58415903523564,
+        84.21294006984681,
+        84.71919398289174,
+        81.52932196389884
+      ]
+    },
+    "protocol_round_trip_ms": {
+      "aggregates": {
+        "median": 0.08771504508331418,
+        "nearest_rank_p95": 0.3481160383671522
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        0.09069102816283703,
+        0.08891697507351637,
+        0.08926796726882458,
+        0.3481160383671522,
+        0.21382304839789867,
+        0.4777410067617893,
+        0.12203003279864788,
+        0.1327299978584051,
+        0.12967491056770086,
+        0.08819601498544216,
+        0.07543200626969337,
+        0.06668607238680124,
+        0.1554629998281598,
+        0.0828159973025322,
+        0.06999203469604254,
+        0.07106398697942495,
+        0.09423692245036364,
+        0.07861899212002754,
+        0.05926110316067934,
+        0.0975440489128232,
+        0.09798503015190363,
+        0.045936089009046555,
+        0.07048307452350855,
+        0.0975639559328556,
+        0.08068198803812265,
+        0.06219698116183281,
+        0.0828959746286273,
+        0.07393001578748226,
+        0.0872340751811862,
+        0.08013099431991577
+      ]
+    },
+    "session_scaling_mib_per_session": {
+      "aggregates": {
+        "median": 0.001
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        0.001,
+        0.001,
+        0.001
+      ]
+    },
+    "tool_round_trip_ms": {
+      "aggregates": {
+        "median": 3.5861939541064203,
+        "nearest_rank_p95": 4.35704190749675
+      },
+      "classification": "pass",
+      "diagnostics": [],
+      "samples": [
+        3.5513839684426785,
+        4.160973010584712,
+        3.74397705309093,
+        3.6186299985274673,
+        2.9136119410395622,
+        3.0439170077443123,
+        3.5770919639617205,
+        4.256292013451457,
+        3.7336170207709074,
+        3.349503967911005,
+        3.5243829479441047,
+        3.241199068725109,
+        3.2369809923693538,
+        3.6178790032863617,
+        3.1641339883208275,
+        3.8143190322443843,
+        3.59529594425112,
+        3.3537610433995724,
+        3.0964569887146354,
+        2.9604400042444468,
+        3.1294290674850345,
+        3.4800090361386538,
+        3.378549008630216,
+        3.9144980255514383,
+        4.168316023424268,
+        4.35704190749675,
+        3.743545967154205,
+        4.4740630546584725,
+        4.245982971042395,
+        4.027161048725247
+      ]
+    }
+  },
+  "reason": "Reviewed representative of three complete healthy reports collected sequentially on the designated AC-powered Linux host on 2026-08-21; run-2 has the median daemon-readiness aggregate and representative noisy metrics. This baseline does not waive the independent 80 ms daemon-readiness gate.",
+  "schema_version": "1.0.0"
+}

@@ -2,24 +2,36 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import platform
 import pty
 import re
 import select
 import shutil
 import signal
 import socket
+import statistics
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x1b\x07]*(?:\x07|\x1b\\))")
+ANSI_RE = re.compile(
+    r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x1b\x07]*(?:\x07|\x1b\\))"
+)
 PROBE = "jqx92"
 DEFAULT_TIMEOUT_S = 20.0
 DEFAULT_SETTLE_S = 1.0
+IDLE_SETTLE_S = 5.0
+ATTRIBUTION_SETTLE_S = 5.1
+IDLE_SAMPLE_INTERVAL_S = 1.0
+IDLE_SAMPLE_COUNT = 5
+SCALING_POPULATIONS = (1, 4, 8)
+SCALING_TRIALS = 3
 DEFAULT_TOOLS = [
     "jcode_memory_off",
     "jcode_memory_on",
@@ -66,9 +78,15 @@ class ToolRunResult:
 
 
 def shutil_which(name: str) -> str | None:
-    return subprocess.run(
-        ["bash", "-lc", f"command -v {name}"], capture_output=True, text=True, check=False
-    ).stdout.strip() or None
+    return (
+        subprocess.run(
+            ["bash", "-lc", f"command -v {name}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        or None
+    )
 
 
 def detect_pi_bin() -> str:
@@ -87,7 +105,9 @@ def build_specs() -> dict[str, ToolSpec]:
     codex = shutil.which("codex") or "/usr/bin/codex"
     opencode = shutil.which("opencode") or "/usr/bin/opencode"
     copilot = shutil.which("copilot") or str(Path.home() / ".local/bin/copilot")
-    cursor_agent = shutil.which("cursor-agent") or str(Path.home() / ".local/bin/cursor-agent")
+    cursor_agent = shutil.which("cursor-agent") or str(
+        Path.home() / ".local/bin/cursor-agent"
+    )
     claude = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
     agy = shutil.which("agy") or str(Path.home() / ".local/bin/agy")
     specs = {
@@ -204,7 +224,54 @@ def wait_for_socket(path: str, timeout_s: float) -> bool:
     return False
 
 
-def launch_interactive(argv: list[str], cwd: Path, env: dict[str, str], timeout_s: float, settle_s: float) -> SessionLaunch:
+def create_debug_session(*, socket_path: Path, cwd: Path, timeout_s: float) -> str:
+    request = {
+        "type": "debug_command",
+        "id": 1,
+        "command": f"create_session:{cwd}",
+    }
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(timeout_s)
+        connection.connect(str(socket_path))
+        connection.sendall(
+            (json.dumps(request, separators=(",", ":")) + "\n").encode()
+        )
+        received = b""
+        while True:
+            chunk = connection.recv(64 * 1024)
+            if not chunk:
+                raise RuntimeError("debug session creation ended without a response")
+            received += chunk
+            while b"\n" in received:
+                line, received = received.split(b"\n", 1)
+                if not line:
+                    continue
+                response = json.loads(line)
+                if response.get("id") != request["id"]:
+                    continue
+                if (
+                    response.get("type") != "debug_response"
+                    or response.get("ok") is not True
+                ):
+                    raise RuntimeError(
+                        str(
+                            response.get("output")
+                            or response.get("message")
+                            or "debug session creation failed"
+                        )
+                    )
+                metadata = json.loads(str(response.get("output") or ""))
+                session_id = (
+                    metadata.get("session_id") if isinstance(metadata, dict) else None
+                )
+                if not isinstance(session_id, str) or not session_id:
+                    raise RuntimeError("debug session creation omitted session_id")
+                return session_id
+
+
+def launch_interactive(
+    argv: list[str], cwd: Path, env: dict[str, str], timeout_s: float, settle_s: float
+) -> SessionLaunch:
     master_fd, slave_fd = pty.openpty()
     proc = subprocess.Popen(
         argv,
@@ -317,6 +384,96 @@ def read_pss_mb(pid: int) -> float | None:
     return None
 
 
+def _read_proc_cpu_ticks(pid: int) -> int:
+    stat = Path(f"/proc/{pid}/stat").read_text()
+    fields = stat[stat.rfind(")") + 2 :].split()
+    return int(fields[11]) + int(fields[12])
+
+
+def _read_proc_rss_mib(pid: int) -> float:
+    for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+        if line.startswith("VmRSS:"):
+            return int(line.split()[1]) / 1024.0
+    raise RuntimeError(f"/proc/{pid}/status does not contain VmRSS")
+
+
+def sample_process_resources(
+    pid: int, sample_window_s: float = 0.1
+) -> dict[str, float]:
+    """Sample one Linux process using the same procfs surface as profile_spawn.py."""
+    clock_ticks = os.sysconf("SC_CLK_TCK")
+    started = time.perf_counter()
+    initial_ticks = _read_proc_cpu_ticks(pid)
+    time.sleep(sample_window_s)
+    elapsed = time.perf_counter() - started
+    final_ticks = _read_proc_cpu_ticks(pid)
+    cpu_percent = ((final_ticks - initial_ticks) / clock_ticks) / elapsed * 100.0
+    return {
+        "cpu_percent": round(cpu_percent, 3),
+        "rss_mib": round(_read_proc_rss_mib(pid), 3),
+    }
+
+
+def collect_idle_resources(
+    daemon_pid: int,
+    *,
+    platform_name: str | None = None,
+) -> dict[str, object]:
+    platform_name = platform_name or platform.system()
+    sampling = {
+        "settle_seconds": IDLE_SETTLE_S,
+        "sample_interval_seconds": IDLE_SAMPLE_INTERVAL_S,
+        "recorded_count": IDLE_SAMPLE_COUNT,
+    }
+    if platform_name != "Linux":
+        return {
+            "status": "unsupported",
+            "platform": platform_name,
+            "sampling": sampling,
+            "samples": [],
+            "aggregates": {},
+            "diagnostic": "Linux procfs is required for idle CPU and RSS evidence",
+        }
+
+    samples: list[dict[str, float]] = []
+    try:
+        time.sleep(IDLE_SETTLE_S)
+        for index in range(IDLE_SAMPLE_COUNT):
+            if index:
+                time.sleep(IDLE_SAMPLE_INTERVAL_S)
+            sample = sample_process_resources(daemon_pid)
+            if not isinstance(sample.get("cpu_percent"), int | float) or not isinstance(
+                sample.get("rss_mib"), int | float
+            ):
+                raise RuntimeError("procfs sample omitted CPU or RSS")
+            samples.append(sample)
+    except (OSError, RuntimeError, ValueError) as error:
+        return {
+            "status": "invalid",
+            "platform": platform_name,
+            "sampling": sampling,
+            "samples": samples,
+            "aggregates": {},
+            "diagnostic": str(error),
+        }
+
+    return {
+        "status": "valid",
+        "platform": platform_name,
+        "sampling": sampling,
+        "samples": samples,
+        "aggregates": {
+            "median_cpu_percent": statistics.median(
+                sample["cpu_percent"] for sample in samples
+            ),
+            "median_rss_mib": statistics.median(
+                sample["rss_mib"] for sample in samples
+            ),
+        },
+        "diagnostic": None,
+    }
+
+
 def sum_tree_pss(root_pids: list[int], pgids: list[int]) -> tuple[float, int]:
     all_pids = collect_descendants(root_pids) | collect_process_group_pids(pgids)
     total = 0.0
@@ -340,12 +497,16 @@ def terminate_pgroup(pgid: int) -> None:
 
 
 def version_for(spec: ToolSpec) -> str:
-    proc = subprocess.run(spec.version_argv, capture_output=True, text=True, check=False)
+    proc = subprocess.run(
+        spec.version_argv, capture_output=True, text=True, check=False
+    )
     output = (proc.stdout + proc.stderr).strip().splitlines()
     return output[0] if output else f"exit {proc.returncode}"
 
 
-def run_tool(spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_s: float) -> ToolRunResult:
+def run_tool(
+    spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_s: float
+) -> ToolRunResult:
     notes: list[str] = []
     version = version_for(spec)
     launches: list[SessionLaunch] = []
@@ -381,7 +542,14 @@ def run_tool(spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_
                     bench_models.symlink_to(real_models)
             socket_path = os.path.join(env["JCODE_RUNTIME_DIR"], "bench.sock")
             server_proc = subprocess.Popen(
-                [spec.argv[0], "--no-update", "--no-selfdev", "serve", "--socket", socket_path],
+                [
+                    spec.argv[0],
+                    "--no-update",
+                    "--no-selfdev",
+                    "serve",
+                    "--socket",
+                    socket_path,
+                ],
                 cwd=str(cwd),
                 env=env,
                 stdin=subprocess.DEVNULL,
@@ -394,11 +562,19 @@ def run_tool(spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_
                 raise RuntimeError("jcode server did not become ready")
             if spec.name == "jcode_memory_on":
                 time.sleep(max(settle_s, 5.0))
-            per_session_settle = max(settle_s, 2.0) if spec.name == "jcode_memory_on" else settle_s
+            per_session_settle = (
+                max(settle_s, 2.0) if spec.name == "jcode_memory_on" else settle_s
+            )
             for _ in range(sessions):
                 launches.append(
                     launch_interactive(
-                        [spec.argv[0], "--no-update", "--no-selfdev", "--socket", socket_path],
+                        [
+                            spec.argv[0],
+                            "--no-update",
+                            "--no-selfdev",
+                            "--socket",
+                            socket_path,
+                        ],
                         cwd,
                         env,
                         timeout_s,
@@ -413,14 +589,18 @@ def run_tool(spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_
             if spec.env:
                 env.update(spec.env)
             for _ in range(sessions):
-                launches.append(launch_interactive(spec.argv, cwd, env, timeout_s, settle_s))
+                launches.append(
+                    launch_interactive(spec.argv, cwd, env, timeout_s, settle_s)
+                )
                 cleanup_pgids.append(launches[-1].pgid)
             root_pids = [launch.root_pid for launch in launches]
             sample_pgids = cleanup_pgids.copy()
 
         for idx, launch in enumerate(launches, start=1):
             if not launch.ready:
-                notes.append(f"session {idx}: no meaningful screen content before timeout")
+                notes.append(
+                    f"session {idx}: no meaningful screen content before timeout"
+                )
             elif launch.excerpt:
                 notes.append(f"session {idx}: {launch.excerpt}")
         pss_mb, process_count = sum_tree_pss(root_pids, sample_pgids)
@@ -444,8 +624,319 @@ def run_tool(spec: ToolSpec, sessions: int, cwd: Path, timeout_s: float, settle_
             shutil.rmtree(temp_root, ignore_errors=True)
 
 
+def _runtime_memory_attribution(
+    log_root: Path, *, expected_population: int
+) -> tuple[int, float]:
+    module_path = Path(__file__).with_name("analyze_runtime_memory_log.py")
+    spec = importlib.util.spec_from_file_location(
+        "jcode_runtime_memory_analyzer", module_path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("unable to load runtime memory attribution parser")
+    analyzer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = analyzer
+    spec.loader.exec_module(analyzer)
+
+    paths = sorted(log_root.rglob("*runtime-memory-*.jsonl"))
+    samples = [
+        sample for sample in analyzer.load_samples(paths) if sample.target == "server"
+    ]
+    if not samples:
+        raise RuntimeError(
+            "private daemon emitted no runtime memory attribution samples"
+        )
+    try:
+        evidence = analyzer.build_scaling_evidence(
+            samples, expected_population=expected_population
+        )
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
+    return evidence["observed_population"], round(
+        evidence["attributed_session_bytes"] / (1024 * 1024), 3
+    )
+
+
+def wait_for_population_attribution(
+    log_root: Path,
+    *,
+    expected_population: int,
+    timeout_s: float = 20.0,
+    poll_interval_s: float = 0.25,
+) -> tuple[int, float]:
+    deadline = time.monotonic() + timeout_s
+    last_observed: tuple[int, float] | None = None
+    last_error: RuntimeError | None = None
+    while time.monotonic() < deadline:
+        try:
+            last_observed = _runtime_memory_attribution(
+                log_root, expected_population=expected_population
+            )
+            if last_observed[0] == expected_population:
+                return last_observed
+        except RuntimeError as error:
+            last_error = error
+        time.sleep(poll_interval_s)
+    if last_observed is None and last_error is not None:
+        raise last_error
+    raise RuntimeError(
+        "runtime memory attribution population did not settle: "
+        f"expected {expected_population}, observed {last_observed}"
+    )
+
+
+def scaling_environment(temp_root: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "JCODE_HOME": os.path.join(temp_root, "home"),
+            "JCODE_RUNTIME_DIR": os.path.join(temp_root, "run"),
+            "JCODE_TEMP_SERVER": "1",
+            "JCODE_SERVER_OWNER_PID": str(os.getpid()),
+            "JCODE_NO_TELEMETRY": "1",
+            "JCODE_DEBUG_CONTROL": "1",
+            "JCODE_MEMORY_ENABLED": "1",
+            "JCODE_RUNTIME_MEMORY_LOG_PROCESS_INTERVAL_SECS": "15",
+            "JCODE_RUNTIME_MEMORY_LOG_ATTRIBUTION_INTERVAL_SECS": "60",
+            "JCODE_RUNTIME_MEMORY_LOG_ATTRIBUTION_MIN_SPACING_SECS": "5",
+            "JCODE_RUNTIME_MEMORY_LOG_EVENT_PROCESS_MIN_SPACING_SECS": "1",
+        }
+    )
+    return env
+
+
+def run_population_trial(
+    *,
+    binary: Path,
+    cwd: Path,
+    population: int,
+    trial: int,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> dict[str, object]:
+    temp_root = tempfile.mkdtemp(prefix="jcode-memory-scaling-")
+    env = scaling_environment(temp_root)
+    Path(env["JCODE_HOME"]).mkdir(parents=True)
+    Path(env["JCODE_RUNTIME_DIR"]).mkdir(parents=True)
+    socket_path = os.path.join(env["JCODE_RUNTIME_DIR"], "scaling.sock")
+    launches: list[SessionLaunch] = []
+    cleanup_pgids: list[int] = []
+    result: dict[str, object]
+    try:
+        server = subprocess.Popen(
+            [
+                str(binary),
+                "--no-update",
+                "--no-selfdev",
+                "serve",
+                "--socket",
+                socket_path,
+            ],
+            cwd=str(cwd),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=os.setsid,
+        )
+        cleanup_pgids.append(os.getpgid(server.pid))
+        if not wait_for_socket(socket_path, timeout_s):
+            raise RuntimeError("private daemon did not become ready")
+        debug_socket_path = Path(socket_path).with_name("scaling-debug.sock")
+        if not wait_for_socket(str(debug_socket_path), timeout_s):
+            raise RuntimeError("private debug socket did not become ready")
+        # The daemon writes an initial attribution sample at startup. Wait beyond
+        # the supported event spacing so the first session event is not coalesced.
+        time.sleep(ATTRIBUTION_SETTLE_S)
+        for _ in range(population):
+            session_id = create_debug_session(
+                socket_path=debug_socket_path,
+                cwd=cwd,
+                timeout_s=timeout_s,
+            )
+            launch = launch_interactive(
+                [
+                    str(binary),
+                    "--no-update",
+                    "--no-selfdev",
+                    "--socket",
+                    socket_path,
+                    "--resume",
+                    session_id,
+                ],
+                cwd,
+                env,
+                min(timeout_s, 2.0),
+                0.0,
+            )
+            launches.append(launch)
+            cleanup_pgids.append(launch.pgid)
+            if not launch.ready:
+                raise RuntimeError("private resumed client did not become ready")
+            time.sleep(ATTRIBUTION_SETTLE_S)
+        time.sleep(IDLE_SETTLE_S)
+        daemon_rss_mib = _read_proc_rss_mib(server.pid)
+        observed_population, attributed_session_mib = wait_for_population_attribution(
+            Path(env["JCODE_HOME"]),
+            expected_population=population,
+            timeout_s=timeout_s,
+        )
+        result = {
+            "status": "valid",
+            "population": population,
+            "observed_population": observed_population,
+            "trial": trial,
+            "daemon_rss_mib": round(daemon_rss_mib, 3),
+            "attributed_session_mib": attributed_session_mib,
+            "failure": None,
+        }
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        result = {
+            "status": "invalid",
+            "population": population,
+            "observed_population": None,
+            "trial": trial,
+            "daemon_rss_mib": None,
+            "attributed_session_mib": None,
+            "failure": {"kind": "collection_failed", "diagnostic": str(error)},
+        }
+    finally:
+        for launch in launches:
+            try:
+                os.close(launch.master_fd)
+            except OSError:
+                pass
+        for pgid in reversed(cleanup_pgids):
+            terminate_pgroup(pgid)
+        shutil.rmtree(temp_root, ignore_errors=True)
+    result["cleanup"] = {
+        "status": "complete",
+        "owned_processes_terminated": len(set(cleanup_pgids)),
+    }
+    return result
+
+
+def collect_session_scaling(
+    *,
+    binary: Path,
+    cwd: Path,
+    platform_name: str | None = None,
+) -> dict[str, object]:
+    platform_name = platform_name or platform.system()
+    sampling = {
+        "populations": list(SCALING_POPULATIONS),
+        "trials_per_population": SCALING_TRIALS,
+    }
+    if platform_name != "Linux":
+        return {
+            "status": "unsupported",
+            "platform": platform_name,
+            "sampling": sampling,
+            "trials": [],
+            "incremental_mib_per_session_samples": [],
+            "median_incremental_mib_per_session": None,
+            "failures": [
+                {"kind": "unsupported", "diagnostic": "Linux procfs is required"}
+            ],
+        }
+    binary = binary.resolve()
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        return {
+            "status": "invalid",
+            "platform": platform_name,
+            "sampling": sampling,
+            "trials": [],
+            "incremental_mib_per_session_samples": [],
+            "median_incremental_mib_per_session": None,
+            "failures": [
+                {"kind": "invalid_binary", "diagnostic": f"not executable: {binary}"}
+            ],
+        }
+
+    trials = [
+        run_population_trial(
+            binary=binary,
+            cwd=cwd,
+            population=population,
+            trial=trial,
+        )
+        for trial in range(1, SCALING_TRIALS + 1)
+        for population in SCALING_POPULATIONS
+    ]
+    failures: list[dict[str, object]] = []
+    for evidence in trials:
+        requested = evidence.get("population")
+        observed = evidence.get("observed_population")
+        if evidence.get("status") != "valid":
+            failures.append(
+                {
+                    "kind": "trial_invalid",
+                    "population": requested,
+                    "trial": evidence.get("trial"),
+                    "failure": evidence.get("failure"),
+                }
+            )
+        elif observed != requested:
+            failures.append(
+                {
+                    "kind": "population_mismatch",
+                    "requested_population": requested,
+                    "observed_population": observed,
+                    "trial": evidence.get("trial"),
+                }
+            )
+        elif not isinstance(
+            evidence.get("daemon_rss_mib"), int | float
+        ) or not isinstance(evidence.get("attributed_session_mib"), int | float):
+            failures.append(
+                {
+                    "kind": "incomplete_evidence",
+                    "population": requested,
+                    "trial": evidence.get("trial"),
+                }
+            )
+        elif (evidence.get("cleanup") or {}).get("status") != "complete":
+            failures.append(
+                {
+                    "kind": "cleanup_incomplete",
+                    "population": requested,
+                    "trial": evidence.get("trial"),
+                }
+            )
+
+    slopes: list[float] = []
+    if not failures:
+        for trial in range(1, SCALING_TRIALS + 1):
+            by_population = {
+                int(evidence["population"]): float(evidence["attributed_session_mib"])
+                for evidence in trials
+                if evidence["trial"] == trial
+            }
+            slopes.append(
+                round(
+                    (
+                        by_population[SCALING_POPULATIONS[-1]]
+                        - by_population[SCALING_POPULATIONS[0]]
+                    )
+                    / (SCALING_POPULATIONS[-1] - SCALING_POPULATIONS[0]),
+                    3,
+                )
+            )
+    return {
+        "status": "invalid" if failures else "valid",
+        "platform": platform_name,
+        "sampling": sampling,
+        "trials": trials,
+        "incremental_mib_per_session_samples": slopes,
+        "median_incremental_mib_per_session": statistics.median(slopes)
+        if slopes
+        else None,
+        "failures": failures,
+    }
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Benchmark interactive CLI memory using process-tree PSS")
+    parser = argparse.ArgumentParser(
+        description="Benchmark interactive CLI memory using process-tree PSS"
+    )
     parser.add_argument("--sessions", type=int, required=True)
     parser.add_argument("--tools", nargs="*", default=DEFAULT_TOOLS)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S)
@@ -459,7 +950,10 @@ def main() -> int:
     results = []
     for name in args.tools:
         spec = specs[name]
-        print(f"=== {name} ({args.sessions} session{'s' if args.sessions != 1 else ''}) ===", flush=True)
+        print(
+            f"=== {name} ({args.sessions} session{'s' if args.sessions != 1 else ''}) ===",
+            flush=True,
+        )
         result = run_tool(spec, args.sessions, cwd, args.timeout, args.settle)
         print(json.dumps(asdict(result), indent=2), flush=True)
         results.append(asdict(result))

@@ -12,6 +12,9 @@ vendor/
 .env*
 Cargo.lock
 __pycache__/
+*.pyc
+.venv/
+venv/
 ios_simulator_screenshot.png
 /.wrangler/
 /tmp/

@@ -42,8 +42,12 @@ except ImportError as exc:  # pragma: no cover
     )
 
 PROBE = "jqx92"
+PROBE_RETRY_INTERVAL_S = 0.1
 DEFAULT_RUNS = 10
 DEFAULT_TIMEOUT_S = 10.0
+STARTUP_WARM_UPS = 1
+STARTUP_RECORDED_RUNS = 10
+PRIVATE_ENVIRONMENT_KEYS = ("JCODE_HOME", "JCODE_RUNTIME_DIR", "JCODE_SOCKET")
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,7 @@ class ToolSpec:
     no_telem_env: dict[str, str] | None = None
     disable_selfdev: bool = False
     input_ready_log_marker: str | None = None
+    input_probe_delay_s: float = 0.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -167,7 +172,20 @@ def first_meaningful_line(screen: pyte.Screen) -> str | None:
     return None
 
 
-def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
+def probe_visibly_accepted(screen: pyte.Screen, probe: str) -> bool:
+    return probe in "\n".join(screen.display)
+
+
+def probe_send_due(*, last_sent_at: float | None, now: float) -> bool:
+    return last_sent_at is None or now - last_sent_at >= PROBE_RETRY_INTERVAL_S
+
+
+def run_once(
+    spec: ToolSpec,
+    cwd: Path,
+    timeout_s: float,
+    environment: dict[str, str] | None = None,
+) -> dict[str, object]:
     master_fd, slave_fd = pty.openpty()
     configure_pty(slave_fd)
     env = os.environ.copy()
@@ -175,6 +193,8 @@ def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
     env["COLORTERM"] = "truecolor"
     if spec.no_telem_env:
         env.update(spec.no_telem_env)
+    if environment:
+        env.update(environment)
     argv = spec.argv
     input_ready_log_path: Path | None = None
     if spec.input_ready_log_marker:
@@ -201,7 +221,7 @@ def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
     first_visible_ms: float | None = None
     first_visible_excerpt: str | None = None
     input_ready_ms: float | None = None
-    probe_sent = False
+    last_probe_sent_at: float | None = None
 
     try:
         while time.perf_counter() - start < timeout_s:
@@ -220,10 +240,17 @@ def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
                 if excerpt:
                     first_visible_ms = (time.perf_counter() - start) * 1000.0
                     first_visible_excerpt = excerpt
-                    os.write(master_fd, PROBE.encode())
-                    probe_sent = True
-            elif probe_sent and input_ready_ms is None:
-                if PROBE in "\n".join(screen.display):
+            now = time.perf_counter()
+            if (
+                first_visible_ms is not None
+                and now - start
+                >= first_visible_ms / 1000.0 + spec.input_probe_delay_s
+                and probe_send_due(last_sent_at=last_probe_sent_at, now=now)
+            ):
+                os.write(master_fd, PROBE.encode())
+                last_probe_sent_at = now
+            if last_probe_sent_at is not None and input_ready_ms is None:
+                if probe_visibly_accepted(screen, PROBE):
                     input_ready_ms = (time.perf_counter() - start) * 1000.0
                     break
             if (
@@ -243,6 +270,7 @@ def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
             "first_visible_excerpt": first_visible_excerpt,
             "input_ready_ms": input_ready_ms,
             "input_ready_source": "log_marker" if spec.input_ready_log_marker else "probe_echo",
+            "timed_out": input_ready_ms is None,
         }
     finally:
         for sig in (signal.SIGTERM, signal.SIGKILL):
@@ -261,6 +289,54 @@ def run_once(spec: ToolSpec, cwd: Path, timeout_s: float) -> dict[str, object]:
                 input_ready_log_path.unlink()
             except OSError:
                 pass
+
+
+def collect_startup_samples(
+    *,
+    binary: Path,
+    cwd: Path,
+    timeout_s: float,
+    environment: dict[str, str],
+) -> dict[str, object]:
+    missing_keys = [
+        key for key in PRIVATE_ENVIRONMENT_KEYS if not environment.get(key)
+    ]
+    if missing_keys:
+        raise ValueError(
+            "private environment requires " + ", ".join(missing_keys)
+        )
+
+    spec = ToolSpec(
+        name="jcode",
+        argv=[str(binary), "--no-update", "--no-selfdev"],
+        no_telem_env={"JCODE_NO_TELEMETRY": "1"},
+        disable_selfdev=True,
+        input_probe_delay_s=0.05,
+    )
+    runs = [
+        run_once(spec, cwd, timeout_s, environment)
+        for _ in range(STARTUP_WARM_UPS + STARTUP_RECORDED_RUNS)
+    ]
+    samples = runs[STARTUP_WARM_UPS:]
+    failures: list[dict[str, object]] = []
+    for recorded_run, sample in enumerate(samples, start=1):
+        if sample.get("timed_out"):
+            failures.append({"kind": "timeout", "recorded_run": recorded_run})
+        elif (
+            sample.get("first_visible_ms") is None
+            or sample.get("input_ready_ms") is None
+        ):
+            failures.append({"kind": "incomplete", "recorded_run": recorded_run})
+
+    return {
+        "status": "valid" if not failures else "invalid",
+        "sampling": {
+            "warm_up_count": STARTUP_WARM_UPS,
+            "recorded_count": STARTUP_RECORDED_RUNS,
+        },
+        "samples": samples,
+        "failures": failures,
+    }
 
 
 def summarize(samples: list[float | None]) -> dict[str, float | int] | None:
