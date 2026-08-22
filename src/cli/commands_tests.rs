@@ -1410,7 +1410,7 @@ async fn max_turns_bounds_all_one_shot_output_modes() {
 
         assert_eq!(
             turn_limit.stop_reason(),
-            Some(run_safety::RunStopReason::MaxTurnsExceeded),
+            Some(run_safety::RunStopReason::MaxTurnsReached),
             "{mode} did not report the configured safety bound"
         );
         let persisted = crate::session::Session::load(&session_id)

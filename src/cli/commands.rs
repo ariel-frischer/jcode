@@ -1991,6 +1991,24 @@ struct RunCommandReport {
     model: String,
     text: String,
     usage: crate::agent::TokenUsage,
+    #[serde(flatten)]
+    stop: run_safety::RunStopMetadata,
+}
+
+#[derive(Debug, Serialize)]
+struct NdjsonDoneReport {
+    r#type: &'static str,
+    session_id: String,
+    provider: String,
+    model: String,
+    text: String,
+    usage: crate::agent::TokenUsage,
+    upstream_provider: Option<String>,
+    connection_type: Option<String>,
+    connection_phase: Option<String>,
+    status_detail: Option<String>,
+    #[serde(flatten)]
+    stop: run_safety::RunStopMetadata,
 }
 
 #[derive(Debug, Default)]
@@ -2488,9 +2506,8 @@ async fn run_single_message_with_agent(
                 model: provider.model(),
                 text,
                 usage: agent.last_usage().clone(),
+                stop: run_safety::RunStopMetadata::from_reason(turn_limit.stop_reason()),
             };
-            let report =
-                run_safety::annotate_json(serde_json::to_value(report)?, turn_limit.stop_reason());
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else if emit_ndjson {
             run_single_message_command_ndjson(agent, provider, message, turn_limit).await?;
@@ -2777,7 +2794,7 @@ async fn run_single_message_command_plain_with_auto_poke(
     loop {
         agent.run_once(&next_message).await?;
         turns_completed += 1;
-        if turn_limit.complete_turn() {
+        if turn_limit.complete_turn_and_should_stop() {
             break;
         }
         if !run_command_auto_poke_enabled() {
@@ -2863,7 +2880,7 @@ async fn run_single_message_command_capture_with_auto_poke(
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
         turns_completed += 1;
-        if turn_limit.complete_turn() {
+        if turn_limit.complete_turn_and_should_stop() {
             break;
         }
         if !run_command_auto_poke_enabled() {
@@ -3003,7 +3020,7 @@ async fn run_single_message_command_ndjson(
             break;
         }
         turns_completed += 1;
-        if turn_limit.complete_turn() {
+        if turn_limit.complete_turn_and_should_stop() {
             break;
         }
         if !run_command_auto_poke_enabled() {
@@ -3098,21 +3115,19 @@ async fn run_single_message_command_ndjson(
 
     match result {
         Ok(()) => {
-            let done = run_safety::annotate_json(
-                serde_json::json!({
-                    "type": "done",
-                    "session_id": session_id,
-                    "provider": provider.name(),
-                    "model": provider.model(),
-                    "text": state.text,
-                    "usage": state.usage,
-                    "upstream_provider": state.upstream_provider,
-                    "connection_type": state.connection_type,
-                    "connection_phase": state.connection_phase,
-                    "status_detail": state.status_detail,
-                }),
-                turn_limit.stop_reason(),
-            );
+            let done = NdjsonDoneReport {
+                r#type: "done",
+                session_id,
+                provider: provider.name().to_string(),
+                model: provider.model(),
+                text: state.text,
+                usage: state.usage,
+                upstream_provider: state.upstream_provider,
+                connection_type: state.connection_type,
+                connection_phase: state.connection_phase,
+                status_detail: state.status_detail,
+                stop: run_safety::RunStopMetadata::from_reason(turn_limit.stop_reason()),
+            };
             write_json_line(&mut stdout, &done)?;
             Ok(())
         }

@@ -691,6 +691,20 @@ jcode dictate
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
+### Bound non-interactive runs
+
+Use `jcode run --max-turns N "..."` to stop after `N` completed agent turns. The
+value must be a positive decimal whole number and is validated before provider
+initialization. If `JCODE_RUN_AUTO_POKE_MAX_TURNS` is also set, the lower limit
+stops first; when both are equal, `--max-turns` wins before another auto-poke is
+scheduled.
+
+When this bound stops a run, plain output ends with `Run stopped: maximum turns
+reached (max_turns_reached)` on stdout. JSON and the final NDJSON `done` object
+add `stop_reason: "max_turns_reached"`, `outcome: "bounded_stop"`, and
+`safety_bound: {"bound":"max_turns","source":"invocation"}`. These fields are
+omitted when the invocation bound did not stop the run.
+
 <div align="center">
 
   <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/workflow.mp4">
