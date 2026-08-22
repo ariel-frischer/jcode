@@ -141,7 +141,7 @@ phases:
           - "Record exact commands, results, durations, and any proven unrelated baseline issue."
       - id: "T010"
         title: "Validate isolated multi-session behavior and close evidence"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"
