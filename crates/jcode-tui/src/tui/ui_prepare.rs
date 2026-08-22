@@ -3,10 +3,10 @@ use crate::tui::ui::{self, WrappedLineMap};
 
 #[path = "ui_prepare/header_cache.rs"]
 mod header_cache;
-pub(crate) use header_cache::invalidate_header_prep_cache;
-use header_cache::prepare_header_cached;
 #[cfg(test)]
 use header_cache::HEADER_PREP_CACHE_TTL;
+pub(crate) use header_cache::invalidate_header_prep_cache;
+use header_cache::prepare_header_cached;
 
 /// Auxiliary render data for an assistant message that is otherwise recomputed
 /// by re-parsing markdown on every body rebuild. Building the body misses its
