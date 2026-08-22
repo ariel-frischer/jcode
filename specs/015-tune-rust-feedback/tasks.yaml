@@ -195,7 +195,7 @@ phases:
           - "All T012 resolver tests pass deterministically."
       - id: "T014"
         title: "Write failing dev_cargo focused-scope integration tests in scripts/test_dev_cargo_scope.sh"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
