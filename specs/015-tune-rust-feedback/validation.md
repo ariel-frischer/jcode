@@ -1,8 +1,8 @@
 # Rust Feedback Tuning Validation
 
-Status: **T034 artifact and evidence validation passed; the incomplete benchmark matrix and pre-existing full-feature guardrail failures remain explicit delivery blockers**
-Feature: `specs/015-tune-rust-feedback`  
-Source specification: `specs/015-tune-rust-feedback/spec.yaml`  
+Status: **T035 final delivery review passed; the incomplete benchmark matrix and pre-existing full-feature guardrail failures remain explicit delivery blockers**
+Feature: `specs/015-tune-rust-feedback`
+Source specification: `specs/015-tune-rust-feedback/spec.yaml`
 Technical plan: `specs/015-tune-rust-feedback/plan.yaml`
 
 ## Result convention
@@ -226,6 +226,19 @@ Canonical command shape:
 | Decision coverage and evidence references | Parse `decisions.yaml`; compare candidate inventory with decisions; require rationale, safe fallback, reconsideration condition, and existing evidence files | PASS (exit 0) | Seven of seven candidates and all 14 decision evidence references resolved to retained files. Validation-document job-count and duplicate references now resolve directly to `evidence/job-counts.json`. |
 | Sensitive and machine-private content | Scan feature YAML, Markdown, and retained JSON for credential assignments, private keys, raw-source fields, usernames, and absolute home paths | PASS after redaction (exit 0) | Scratch paths use `$JCODE_SCRATCH_DIR`; repository and build paths use `$WORKTREE` or `$HOME`. No secret, raw source content, username, private key, or absolute home path remains. |
 
+## Final surgical delivery review
+
+| Review | Exact command or observation | Result | Evidence |
+|---|---|---|---|
+| Scope-to-diff audit | `BASE=$(git merge-base HEAD dev)`; `git diff --stat "$BASE"..HEAD`; `git diff --name-status "$BASE"..HEAD`; `git diff --dirstat=files,0 "$BASE"..HEAD` | PASS (exit 0) | Base `85f9f5e3b6a49ea741869860be6b7a54de9c509d`; 21 changed paths are limited to the selfdev preflight seam, canonical Cargo policy, benchmark/scope tools and tests, and feature specification, decisions, receipts, and validation evidence. No unrelated product, client, provider, SDK, deployment, or user-data path changed. The worktree was clean before T035 status tracking began. |
+| Patch integrity | `git diff --check "$BASE"..HEAD` after removing two Markdown hard-break spaces | PASS (exit 0) | No whitespace errors remain in the feature diff. |
+| Dependency and compiler-policy exclusions | Diff changed-path checks for `Cargo.toml`, `Cargo.lock`, `.cargo`, `rust-toolchain`, linker, Cranelift, runtime-budget, and frame-budget paths | PASS (exit 0) | No manifest, lockfile, dependency, linker, compiler-toolchain, Cranelift, maintained runtime-budget, or frame-budget file changed. No crate split or new dependency was introduced. |
+| Documentation-only guardrail rerun | `scripts/check_guardrails.sh --skip-slow` | FAIL (exit 1): five unchanged repository ratchets | Formatting, lockfile, dependency boundaries, wildcard re-exports, desktop frame budget, and onboarding invariants passed. Warning, oversized-file, oversized-test, panic-prone, and swallowed-error budgets reproduced failures in paths outside the 21-file feature diff; no ratchet baseline was changed or weakened. |
+| Compatibility and precedence | Review `scripts/dev_cargo.sh`, `scripts/test_dev_cargo_scope.sh`, `scripts/test_dev_cargo_jobs.sh`, and the focused validation ledger | PASS | Scope inference is opt-in through non-empty `JCODE_DEV_CARGO_AFFECTED_PATHS`; absent input preserves the established Cargo arguments. Explicit package, target, feature, no-default-feature, and all-feature arguments win; broad, workspace, all-feature, and release-sensitive requests remain broad. Existing `JCODE_BUILD_JOBS` then `CARGO_BUILD_JOBS` precedence, adaptive fallback, Cargo test executor, cache defaults, and release/full-feature paths remain unchanged. |
+| Queue, preflight, and concurrency ownership | Review `crates/jcode-app-core/src/tool/selfdev/build_queue.rs`, its exact tests, and the coordinated duplicate receipt | PASS | Test preflight activates only when `JCODE_RUST_VALIDATION_SCOPE_SCRIPT` is explicitly configured. Missing, timed-out, nonzero, malformed, stale, or non-proving evidence falls back to the existing request path. Only a current proven-empty result returns before leader/follower claim. All executable requests still use the server-owned coordinator and the unchanged host-wide Cargo gate; no uncontrolled Cargo concurrency path was added. |
+| Adoption and default authorization | Count `decisions.yaml` statuses and inspect `summary.default_changes_authorized` | PASS (exit 0) | `adopted: 0`, `rejected: 7`, and `default_changes_authorized: false`. Adaptive jobs, established broad scope without explicit affected paths, Cargo test, and disabled warm-incremental sccache remain the safe defaults. Every unproven candidate retains an evidence-backed rejection and reconsideration condition. |
+| Final delivery boundary | Compare the completed review with the final acceptance summary and retained guardrail/benchmark evidence | PASS for T035 review; FAIL for release readiness | The surgical and compatibility review found no additional blocker or unauthorized default change. It also does not waive the incomplete representative p50/p95 matrix or the seven recorded pre-existing full-feature guardrail failures. The branch remains not releasable from this evidence set. |
+
 ## Final acceptance summary
 
 | Gate | Result | Notes |
@@ -242,4 +255,4 @@ Canonical command shape:
 | Resolved binary identity confirmed | PASS (exit 0) | Candidate path, resolved path, revision, version, and SHA-256 were recorded; the shared-server symlink was resolved separately and was not inspected as if it were a binary. |
 | Isolated-socket built-binary smoke passed | PASS (exit 0) | Unique socket returned exact `T032_SMOKE_OK`; cleanup succeeded and shared socket inode/timestamps were unchanged. |
 
-Final delivery decision: **FAIL / not releasable from this evidence set.** T034 confirms the feature artifacts, retained references, aggregate reproduction, and privacy checks are valid, but it does not override the incomplete representative benchmark comparison or the unchanged failing full-feature guardrail gate.
+Final delivery decision: **FAIL / not releasable from this evidence set.** T035 confirms the final diff is surgical, compatibility and concurrency ownership are preserved, no forbidden dependency or compiler-policy work entered scope, and no candidate default was authorized. That review does not override the incomplete representative benchmark comparison or the unchanged failing full-feature guardrail gate.

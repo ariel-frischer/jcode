@@ -474,7 +474,7 @@ phases:
           - "The benchmark validator can reproduce reported aggregates and decisions from retained raw samples."
       - id: "T035"
         title: "Complete surgical diff, compatibility, and final delivery review in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: false
         story_id: null
