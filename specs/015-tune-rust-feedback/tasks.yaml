@@ -288,7 +288,7 @@ phases:
           - "Missing, stale, incomplete, malformed, or ambiguous discovery falls through to unchanged coordinator behavior."
       - id: "T021"
         title: "Add compatible persisted preflight metadata wiring in crates/jcode-app-core/src/tool/selfdev/mod.rs"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"

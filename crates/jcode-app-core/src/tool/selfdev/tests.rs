@@ -92,6 +92,7 @@ fn request_fixture(
         version: None,
         dedupe_key: None,
         requested_source: Some(source),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: None,
@@ -394,6 +395,10 @@ fn matching_preflight_result(target: &str, filter: &str) -> serde_json::Value {
     json!({
         "schema_version": "1.0",
         "decision": "matches",
+        "configured_inputs": {
+            "explicit": {"package": "jcode-app-core", "target": target},
+            "defaults": {"features": []},
+        },
         "effective_scope": {
             "package": "jcode-app-core",
             "target": target,
@@ -402,6 +407,20 @@ fn matching_preflight_result(target: &str, filter: &str) -> serde_json::Value {
         },
         "proof_provenance": "current complete test-discovery snapshot",
     })
+}
+
+#[test]
+fn persisted_build_request_without_preflight_metadata_still_deserializes() {
+    let request = request_fixture(
+        "legacy-request",
+        BuildRequestState::Queued,
+        Utc::now().to_rfc3339(),
+    );
+    let value = serde_json::to_value(&request).expect("serialize legacy request fixture");
+
+    assert!(value.get("test_preflight").is_none());
+    let loaded: BuildRequest = serde_json::from_value(value).expect("deserialize legacy request");
+    assert!(loaded.test_preflight.is_none());
 }
 
 fn uncertain_preflight_result(reason: &str) -> serde_json::Value {
@@ -1384,11 +1403,12 @@ async fn valid_exact_substring_ignored_library_and_integration_tests_still_queue
     ];
 
     for (label, command, target, filter) in cases {
+        let preflight = matching_preflight_result(target, filter);
         let output = execute_test_with_preflight_result(
             repo.path(),
             &format!("valid-{label}-session"),
             command,
-            matching_preflight_result(target, filter),
+            preflight.clone(),
         )
         .await;
         let metadata = output.metadata.as_ref().expect("queued metadata");
@@ -1400,6 +1420,9 @@ async fn valid_exact_substring_ignored_library_and_integration_tests_still_queue
         );
         assert!(metadata["request_id"].is_string());
         assert!(metadata["task_id"].is_string());
+        assert_eq!(metadata["test_preflight"], preflight);
+        let request = request_for_output(&output);
+        assert_eq!(request.test_preflight.as_ref(), Some(&preflight));
         assert!(output.output.contains("Self-dev test queued in background"));
     }
 }
@@ -2029,6 +2052,7 @@ fn status_output_prunes_stale_pending_requests() {
         version: Some("stale-build".to_string()),
         dedupe_key: Some("stale-dedupe".to_string()),
         requested_source: Some(source),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: Some("building".to_string()),
@@ -2094,6 +2118,7 @@ fn freshly_queued_request_survives_reconcile_before_task_metadata_exists() {
         version: Some("fresh-build".to_string()),
         dedupe_key: Some("fresh-dedupe".to_string()),
         requested_source: Some(source.clone()),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: Some("queued".to_string()),
@@ -2184,6 +2209,7 @@ async fn build_ignores_stale_pending_requests_when_computing_queue_position() {
         version: Some("test-build".to_string()),
         dedupe_key: Some("stale-dedupe".to_string()),
         requested_source: Some(source),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: Some("queued".to_string()),
@@ -2282,6 +2308,7 @@ fn reconcile_pending_state_maps_superseded_background_status() {
         version: Some("superseded-build".to_string()),
         dedupe_key: Some("superseded-dedupe".to_string()),
         requested_source: Some(source),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: Some("building".to_string()),
@@ -2373,6 +2400,7 @@ fn reconcile_keeps_running_request_not_yet_registered_in_live_task_map() {
         version: Some("racing-build".to_string()),
         dedupe_key: Some("racing-dedupe".to_string()),
         requested_source: Some(source.clone()),
+        test_preflight: None,
         built_source: None,
         published_version: None,
         last_progress: Some("queued".to_string()),

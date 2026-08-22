@@ -136,6 +136,8 @@ struct BuildRequest {
     dedupe_key: Option<String>,
     #[serde(default)]
     requested_source: Option<build::SourceState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    test_preflight: Option<Value>,
     #[serde(default)]
     built_source: Option<build::SourceState>,
     #[serde(default)]

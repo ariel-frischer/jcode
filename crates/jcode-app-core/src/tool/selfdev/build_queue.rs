@@ -829,6 +829,7 @@ export -f cargo
             version: Some(requested_source.version_label.clone()),
             dedupe_key: Some(dedupe_key),
             requested_source: Some(requested_source.clone()),
+            test_preflight: None,
             built_source: None,
             published_version: None,
             last_progress: Some("queued".to_string()),
@@ -1215,9 +1216,10 @@ export -f cargo
                 anyhow::anyhow!("Could not find the jcode repository directory for selfdev test")
             })?;
         let requested_source = SelfDevTool::requested_source_state(&repo_dir)?;
-        if let Some(preflight) =
-            SelfDevTool::test_preflight(&repo_dir, &command, &requested_source).await
-            && let Some(output) = SelfDevTool::proven_empty_test_output(preflight, &command)
+        let test_preflight =
+            SelfDevTool::test_preflight(&repo_dir, &command, &requested_source).await;
+        if let Some(preflight) = test_preflight.as_ref()
+            && let Some(output) = SelfDevTool::proven_empty_test_output(preflight.clone(), &command)
         {
             return Ok(output);
         }
@@ -1255,6 +1257,7 @@ export -f cargo
             version: Some(requested_source.version_label.clone()),
             dedupe_key,
             requested_source: Some(requested_source.clone()),
+            test_preflight: test_preflight.clone(),
             built_source: None,
             published_version: None,
             last_progress: Some("queued".to_string()),
@@ -1313,7 +1316,7 @@ export -f cargo
                     delivery
                 );
 
-                return Ok(ToolOutput::new(output).with_metadata(json!({
+                let mut metadata = json!({
                     "background": true,
                     "deduped": true,
                     "identity_version": COALESCING_IDENTITY_VERSION,
@@ -1337,7 +1340,11 @@ export -f cargo
                     "output_file": info.output_file.to_string_lossy(),
                     "status_file": info.status_file.to_string_lossy(),
                     "command": shell_command.display,
-                })));
+                });
+                if let Some(preflight) = test_preflight.as_ref() {
+                    metadata["test_preflight"] = preflight.clone();
+                }
+                return Ok(ToolOutput::new(output).with_metadata(metadata));
             }
             BuildRequestClaim::Leader(request) => request,
         };
@@ -1403,7 +1410,7 @@ export -f cargo
             info.task_id
         ));
 
-        Ok(ToolOutput::new(output).with_metadata(json!({
+        let mut metadata = json!({
             "background": true,
             "identity_version": COALESCING_IDENTITY_VERSION,
             "role": "leader",
@@ -1415,7 +1422,11 @@ export -f cargo
             "status_file": info.status_file.to_string_lossy(),
             "queue_position": queue_position,
             "command": shell_command.display,
-        })))
+        });
+        if let Some(preflight) = test_preflight {
+            metadata["test_preflight"] = preflight;
+        }
+        Ok(ToolOutput::new(output).with_metadata(metadata))
     }
 
     pub(super) async fn do_cancel_build(
