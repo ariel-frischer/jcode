@@ -409,7 +409,7 @@ phases:
           - "Cargo-heavy checks are serialized and unrelated pre-existing failures are isolated rather than attributed to this change."
       - id: "T030"
         title: "Run full-feature repository guardrails and record the result in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"
