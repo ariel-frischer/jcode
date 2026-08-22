@@ -445,7 +445,7 @@ phases:
           - "The exact build, readlink/identity, socket, smoke command, exit, and cleanup evidence are recorded."
       - id: "T033"
         title: "Record coordinated selfdev build/reload and close requirement traceability in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-005"

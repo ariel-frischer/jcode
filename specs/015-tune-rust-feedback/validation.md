@@ -1,6 +1,6 @@
 # Rust Feedback Tuning Validation
 
-Status: **Validation in progress; focused checks, runtime budgets, and isolated built-binary smoke recorded**
+Status: **T033 traceability closed; coordinated reload, runtime budgets, and built-binary checks passed, while the incomplete benchmark matrix and pre-existing full-feature guardrail failures remain explicit delivery blockers**
 Feature: `specs/015-tune-rust-feedback`  
 Source specification: `specs/015-tune-rust-feedback/spec.yaml`  
 Technical plan: `specs/015-tune-rust-feedback/plan.yaml`
@@ -35,28 +35,39 @@ Machine-readable benchmark evidence belongs under `specs/015-tune-rust-feedback/
 | FR-013 | Run the bounded nextest-compatible focused-test lane, validate availability, compatibility, timing, resources, disk, reporting, fallback, and final decision. | `specs/015-tune-rust-feedback/evidence/*nextest*.json`; `specs/015-tune-rust-feedback/decisions.yaml` | N/A: bounded trial recorded unavailable/incomplete evidence and retained Cargo test fallback |
 | FR-014 | Run bounded non-incremental fresh/cold sccache miss and reusable-hit lanes, including cache failure fallback and proof warm incremental defaults remain unchanged. | `specs/015-tune-rust-feedback/evidence/*sccache*.json`; `specs/015-tune-rust-feedback/decisions.yaml` | N/A: bounded trial recorded unavailable/incomplete evidence and retained warm incremental default |
 | FR-015 | Decision validator requires complete baseline/candidate evidence, lower p50 and p95, unchanged failure/retry rate, acceptable RSS/swap/disk, and unchanged maintained runtime budgets before adoption. | `scripts/test_bench_rust_feedback.py`; `specs/015-tune-rust-feedback/decisions.yaml` | N/A: no candidate was adopted; `decisions.yaml` records rejection because comparable measurements and runtime-budget evidence are incomplete |
-| FR-016 | Decision-ledger validation accounts for every evaluated adaptive/fixed-job, narrowing, nextest, and sccache candidate and requires evidence, rejection reason, and reconsideration condition. | `specs/015-tune-rust-feedback/decisions.yaml`; rejected experiments section below | N/A: ledger coverage is a reviewed artifact boundary from T027; the focused suites do not parse `decisions.yaml` |
+| FR-016 | Decision-ledger validation accounts for every evaluated adaptive/fixed-job, narrowing, nextest, and sccache candidate and requires evidence, rejection reason, and reconsideration condition. | `specs/015-tune-rust-feedback/decisions.yaml`; rejected experiments section below | PASS (exit 0): all seven inventoried candidates have durable rejected decisions, evidence, fallback, and reconsideration conditions |
 | FR-017 | Compatibility fixtures compare explicit full-feature and release command arguments, selected features, targets, exits, and receipt behavior with the pre-change contract. | `scripts/test_dev_cargo_scope.sh`; full-feature guardrail section below | PASS (exit 0): focused-scope shell compatibility suite |
 | FR-018 | Missing-feature regression test proves focused success cannot satisfy release delivery, followed by repository all-target/all-feature guardrails. | Focused test receipt; `scripts/check_guardrails.sh` receipt in full-feature section | FAIL (exit 1): focused regression PASS (exit 0), but repository guardrails failed and remain a blocking full-feature gate |
 | FR-019 | Run focused Python, shell, and exact Rust tests for benchmark math/contracts, scope/feature resolution, zero-test preflight, compatibility, fallback, and receipt correctness before broad validation. | Exact command/result ledger in the focused-check subsection below | PASS (exit 0): all six focused ledger entries passed serial Cargo validation |
-| FR-020 | Run focused checks, `scripts/check_guardrails.sh`, coordinated self-development build/reload, resolve the active executable, and smoke-test the newly built binary through a unique socket. | Delivery sections below; build/reload and isolated-socket receipts | PENDING |
-| FR-021 | Complete the principle matrix below with affected requirements, exact checks, evidence, outcomes, and explicit non-applicability where required. | Principle traceability section below | PENDING |
+| FR-020 | Run focused checks, `scripts/check_guardrails.sh`, coordinated self-development build/reload, resolve the active executable, and smoke-test the newly built binary through a unique socket. | Delivery sections below; build/reload and isolated-socket receipts | FAIL (exit 1): focused checks, coordinated publish/reload, resolved live identity, runtime budgets, and isolated smoke passed; the unchanged repository guardrail gate failed on seven pre-existing checks |
+| FR-021 | Complete the principle matrix below with affected requirements, exact checks, evidence, outcomes, and explicit non-applicability where required. | Principle traceability section below | PASS: all six named principles now cite requirements, exact commands or retained artifacts, terminal outcomes, and explicit failed or non-applicable boundaries |
 | NFR-001 | Compare representative baseline/candidate p50 and p95 for every adopted scenario and run every applicable maintained client/daemon runtime-budget check unchanged. | Benchmark comparison receipts; runtime budgets section below | PASS (exit 0): no experiment was adopted, and the unchanged canonical nine-metric runtime collection and baseline comparison both passed |
-| NFR-002 | Validate no increase in failures/retries and zero false successes in optional-feature and full-feature regression fixtures. | Comparison report; focused and full-feature test receipts | PENDING |
-| NFR-003 | Receipt/schema validation proves every accepted comparison retains raw samples, percentile method, environment identity, schema version, command intent, and terminal outcome. | `scripts/test_bench_rust_feedback.py`; `specs/015-tune-rust-feedback/evidence/*.json` | PENDING |
-| NFR-004 | Zero-test and scope-resolution tests verify actionable early rejection and visible effective package, target, features, and resolution source in every focused receipt. | Selfdev exact-test receipt; `scripts/test_dev_cargo_scope.sh`; focused receipts | PENDING |
-| NFR-005 | Validate every experiment boundary, fallback, resource receipt, and adopt-or-reject decision, plus zero uncontrolled duplicate actions and zero shared-daemon disruption. | Experiment receipts; `specs/015-tune-rust-feedback/decisions.yaml`; isolated-socket section | PENDING |
+| NFR-002 | Validate no increase in failures/retries and zero false successes in optional-feature and full-feature regression fixtures. | `evidence/job-counts.json`; `decisions.yaml`; focused and full-feature receipts | PASS: measured job lanes retained zero nonzero exits with matched retry counts, optional-feature fixtures passed, and the failing broad gate remained visible rather than becoming a false success |
+| NFR-003 | Receipt/schema validation proves every accepted comparison retains raw samples, percentile method, environment identity, schema version, command intent, and terminal outcome. | `scripts/test_bench_rust_feedback.py`; `specs/015-tune-rust-feedback/evidence/*.json` | PASS (exit 0): receipt and aggregation contracts passed; no incomplete comparison was accepted or presented as complete evidence |
+| NFR-004 | Zero-test and scope-resolution tests verify actionable early rejection and visible effective package, target, features, and resolution source in every focused receipt. | Selfdev exact-test receipt; `scripts/test_dev_cargo_scope.sh`; focused receipts | PASS (exit 0): 50 Rust selfdev tests, 23 resolver tests, and the shell receipt matrix passed |
+| NFR-005 | Validate every experiment boundary, fallback, resource receipt, and adopt-or-reject decision, plus zero uncontrolled duplicate actions and zero shared-daemon disruption. | Experiment receipts; `specs/015-tune-rust-feedback/decisions.yaml`; coordinated reload and isolated-socket sections | PASS: seven candidates were rejected with safe fallbacks, duplicate counts remained coordinator-owned, isolated smoke left shared sockets untouched, and graceful reload reported `handoff_ready: true` with this session continuing |
+
+## Success criteria traceability
+
+| Success criterion | Exact evidence and outcome | Terminal result |
+|---|---|---|
+| SC-001 | `evidence/baseline.json` and the benchmark table retain all six required scenario classes but disclose zero complete baseline/candidate pairs. | FAIL: the complete representative comparison target was not met and no completeness claim was made |
+| SC-002 | `decisions.yaml` authorizes zero default changes because no candidate proved lower p50 and p95 across its complete intended matrix without regression. | N/A: no tuning choice became a default; established safe defaults remain |
+| SC-003 | `proven_empty_test_is_rejected_before_claim_queue_and_gate`, the 50-test selfdev suite, 23 resolver tests, and scope shell matrix passed. | PASS (exit 0) |
+| SC-004 | Resolver, optional-feature, explicit-precedence, conservative-fallback, and focused-success/full-feature-failure fixtures passed. | PASS (exit 0): correct narrow-or-fallback behavior and zero accepted optional-feature false successes |
+| SC-005 | Canonical runtime collection and comparison passed all nine maintained metrics with unchanged thresholds. | PASS (exit 0) |
+| SC-006 | `decisions.yaml` accounts for adaptive, fixed 6, fixed 8, inferred scope, nextest, sccache miss, and sccache hit with evidence and rationale. | PASS: 7 of 7 candidates accounted for |
 
 ## Constitution principle traceability
 
 | Principle | Affected requirements | Intended direct check | Evidence path | Terminal result |
 |---|---|---|---|---|
-| PRIN-002: Backward-Compatible User and Data Contracts | FR-006, FR-007, FR-009, FR-012, FR-017 | Compatibility fixtures cover unset behavior, explicit broad/full-feature commands, Cargo filter semantics, conservative fallback, coordinator ownership, and serde defaults for any additive persisted fields. | `scripts/test_dev_cargo_scope.sh`; `scripts/test_rust_validation_scope.py`; `crates/jcode-app-core/src/tool/selfdev/tests.rs`; full-feature guardrail receipt | PENDING |
-| PRIN-003: Explicit Configuration Precedence | FR-008, FR-010 | Precedence matrix proves explicit request arguments win over inference/defaults and receipts show configured/effective non-secret values plus resolution source. | `scripts/test_rust_validation_scope.py`; `scripts/test_dev_cargo_scope.sh`; focused receipts | PENDING |
-| PRIN-005: Focused Behavioral Tests | FR-001, FR-009, FR-011, FR-012, FR-018, FR-019 | Run the smallest deterministic Python, shell, and exact Rust checks first and record each exact command and outcome below. | Focused-check command ledger; test sources listed in requirement matrix | PENDING |
+| PRIN-002: Backward-Compatible User and Data Contracts | FR-006, FR-007, FR-009, FR-012, FR-017 | Compatibility fixtures cover unset behavior, explicit broad/full-feature commands, Cargo filter semantics, conservative fallback, coordinator ownership, and serde defaults for any additive persisted fields. | `python3 -m unittest scripts.test_rust_validation_scope`; `bash scripts/test_dev_cargo_scope.sh`; `bash scripts/dev_cargo.sh test -p jcode-app-core tool::selfdev::tests -- --nocapture`; full-feature section | PASS (exits 0): 23 resolver tests, shell compatibility fixtures, and 50 selfdev tests passed; the separate broad guardrail failure remains visible and did not change these contracts |
+| PRIN-003: Explicit Configuration Precedence | FR-008, FR-010 | Precedence matrix proves explicit request arguments win over inference/defaults and receipts show configured/effective non-secret values plus resolution source. | `python3 -m unittest scripts.test_rust_validation_scope`; `bash scripts/test_dev_cargo_scope.sh`; focused receipts | PASS (exits 0): explicit feature, all-feature, no-default-feature, package, and target inputs retained precedence over inference and fallback |
+| PRIN-005: Focused Behavioral Tests | FR-001, FR-009, FR-011, FR-012, FR-018, FR-019 | Run the smallest deterministic Python, shell, and exact Rust checks first and record each exact command and outcome below. | Focused-check command ledger; test sources listed in requirement matrix | PASS (exits 0): 25 benchmark, 23 resolver, shell job/scope, 50 exact Rust selfdev, and focused Rust check validations passed before the broad gate |
 | PRIN-007: Repository Guardrails Are Delivery Gates | FR-018, FR-020 | Run the stable-toolchain repository guardrail contract, including formatting, all-target/all-feature checks, Clippy, lockfile, ratchets, dependency boundaries, and maintained budgets. | Full-feature guardrails section below | FAIL (exit 1): seven gates failed; no focused result or ratchet rebaseline was substituted for the unchanged delivery gate |
-| PRIN-008: Custom-First, Upstream-Aware Simplicity | FR-006, FR-007, FR-013, FR-014, FR-015, FR-016 | Verify one canonical `dev_cargo` policy, server-owned selfdev coordinator, global gate, and bounded reversible experiments with explicit fallbacks and decisions. | Architecture-focused tests; experiment receipts; `decisions.yaml` | PENDING |
-| PRIN-010: Measured Efficiency and Runtime Truth | FR-001, FR-002, FR-003, FR-013, FR-014, FR-015, FR-020; NFR-001 | Retain reproducible benchmark/resource receipts, enforce unchanged runtime budgets, confirm resolved executable identity, and run the newly built binary via an isolated socket or deliberate reload. | Benchmark receipts; runtime budgets; resolved binary and isolated-socket sections below | PENDING |
+| PRIN-008: Custom-First, Upstream-Aware Simplicity | FR-006, FR-007, FR-013, FR-014, FR-015, FR-016 | Verify one canonical `dev_cargo` policy, server-owned selfdev coordinator, global gate, and bounded reversible experiments with explicit fallbacks and decisions. | `bash scripts/test_dev_cargo_jobs.sh`; selfdev exact tests; experiment receipts; `decisions.yaml` | PASS (exits 0 for focused checks): existing coordinator and gate remained authoritative, all bounded experiments retained established fallbacks, and 7 of 7 decisions are explicit |
+| PRIN-010: Measured Efficiency and Runtime Truth | FR-001, FR-002, FR-003, FR-013, FR-014, FR-015, FR-020; NFR-001 | Retain reproducible benchmark/resource receipts, enforce unchanged runtime budgets, confirm resolved executable identity, and run the newly built binary via an isolated socket or deliberate reload. | Benchmark receipts; runtime budgets; resolved binary, isolated-socket, and coordinated reload sections below | FAIL: runtime budgets, resolved identity, isolated smoke, and live reload passed, but the representative baseline/candidate matrix remains incomplete and FR-020 remains blocked by the full-feature guardrail failure |
 
 ## Focused automated checks
 
@@ -84,16 +95,16 @@ Reserved for reproducible baseline/candidate and experiment evidence.
 
 | Scenario or lane | Baseline receipt | Candidate receipt | Valid samples | Invalid/retried samples | p50 result | nearest-rank p95 result | Resource/action-count result | Terminal result |
 |---|---|---|---|---|---|---|---|---|
-| Warm touched-file check | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
-| Warm touched-file build | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
-| Cold or fresh-worktree build | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
-| Focused test | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
-| Invalid zero-test request | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: dependent behavior pending | N/A: dependent behavior pending | Zero underlying scenario actions recorded | `INCOMPLETE` |
-| Broad validation | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
-| Coordinated duplicate requests | `evidence/baseline.json` (incomplete) | PENDING | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | No uncontrolled duplicate action was launched | `INCOMPLETE` |
-| Adaptive versus 6 versus 8 jobs | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Bounded nextest | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
-| Bounded sccache cold miss/reusable hit | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Warm touched-file check | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Warm touched-file build | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Cold or fresh-worktree build | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Focused test | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Invalid zero-test request | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | Zero underlying scenario actions recorded | `INCOMPLETE` |
+| Broad validation | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | N/A: scenario command not yet executable | `INCOMPLETE` |
+| Coordinated duplicate requests | `evidence/baseline.json` (incomplete) | N/A: no complete candidate receipt | 0 | 0 | N/A: no controlled sample | N/A: no controlled sample | No uncontrolled duplicate action was launched | `INCOMPLETE` |
+| Adaptive versus 6 versus 8 jobs | `evidence/job-counts.json` | `evidence/job-counts.json` | 20 across three warm-check variants plus coordinated duplicate samples | 16 retained retry samples | 6 jobs improved measured lane; 8 jobs regressed p50 | 6 and 8 lacked complete representative/duplicate evidence | Zero swap; coordinator retained duplicate ownership | `INCOMPLETE`; all candidate default changes rejected |
+| Bounded nextest | `evidence/nextest.json` | `evidence/nextest.json` | 0 executable samples | Availability failure retained | N/A | N/A | Tool unavailable; Cargo test fallback retained | `INCOMPLETE`; rejected |
+| Bounded sccache cold miss/reusable hit | `evidence/sccache.json` | `evidence/sccache.json` | 0 executable samples | Availability failure retained | N/A | N/A | Tool unavailable; warm incremental sccache remained disabled | `INCOMPLETE`; both candidates rejected |
 
 ## Rejected experiments
 
@@ -101,7 +112,13 @@ Reserved for durable rejection evidence. Every non-adopted evaluated candidate m
 
 | Candidate | Tested configuration and boundary | Evidence | Rejection reason | Safe fallback | Reconsideration condition | Terminal result |
 |---|---|---|---|---|---|---|
-| PENDING | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING |
+| Adaptive jobs | Existing host-derived jobs; warm check plus coordinated duplicate lane | `evidence/baseline.json`; `evidence/job-counts.json` | No complete independent comparator or representative baseline | Retain existing adaptive baseline and explicit overrides | Complete representative baseline/candidate matrix | REJECTED |
+| Fixed 6 jobs | Explicit 6-job isolated warm check | `evidence/job-counts.json` | Measured lane improved, but complete scenario and duplicate evidence are missing | Retain adaptive default; explicit 6 remains available | Complete equivalent matrix including duplicates | REJECTED |
+| Fixed 8 jobs | Explicit 8-job isolated warm check | `evidence/job-counts.json` | p50 regressed and complete scenario evidence is missing | Retain adaptive default; explicit 8 remains available | Both p50 and p95 improve across complete matrix | REJECTED |
+| Inferred focused scope | Deterministic resolver-only samples | `evidence/focused-scope.json` | Correctness fixtures passed, but paired Cargo feedback p50/p95 were not measured | Preserve broad fallback and explicit request behavior | Paired broad-versus-focused Cargo matrix | REJECTED |
+| Nextest focused | Bounded compatible focused-test lane | `evidence/nextest.json` | Nextest unavailable, so compatibility and performance evidence are incomplete | Retain `cargo test` | Re-run when available under the same boundary | REJECTED |
+| Sccache cold miss | Non-incremental cold/fresh-worktree lane | `evidence/sccache.json` | Sccache unavailable; cold-miss resource and fallback evidence incomplete | Keep sccache disabled for warm incremental work | Re-run when available with cold/fresh isolation | REJECTED |
+| Sccache reusable hit | Non-incremental reusable-cache lane | `evidence/sccache.json` | Sccache unavailable; reusable-hit and disk evidence incomplete | Keep sccache disabled for warm incremental work | Re-run after a valid cold-miss setup | REJECTED |
 
 ## Full-feature guardrails
 
@@ -162,13 +179,15 @@ Receipt and identity evidence:
 
 ## Coordinated build and reload
 
-Reserved for the server-owned self-development lifecycle. Do not force-stop the shared server.
+The server-owned lifecycle was exercised in three explicit steps. `JCODE_REPO_DIR` was pinned to this assigned worktree because the parent session inherited a main-checkout repository override. The build/publish phase completed before the command attempted to launch its interactive TUI; the expected non-TTY launch refusal is recorded separately and did not invalidate the already completed build publication.
 
 | Step | Exact command or observation | Result | Evidence |
 |---|---|---|---|
-| Build candidate through coordinated self-development path | PENDING | PENDING | PENDING |
-| Activate or reload intended shared-server build gracefully | PENDING | PENDING | PENDING |
-| Confirm client reconnect and continued session behavior | PENDING | PENDING | PENDING |
+| Build and publish candidate through self-development path | `JCODE_REPO_DIR="$PWD" RUSTUP_TOOLCHAIN=stable jcode --no-update --quiet self-dev --build` | PASS for build/publish; N/A for TUI launch in non-interactive harness | Canonical `dev_cargo` acquired the host-wide gate with 8 adaptive jobs and completed the `selfdev` profile in 12.85s. Publication updated `current` to `bd0a995eb-dirty-02de59dfcb73`; the subsequent TUI launch correctly refused non-TTY stdin/stdout. |
+| Promote intended shared-server build | `jcode --no-update server promote --json` | PASS (exit 0) | JSON reported `promoted: true`, previous `85f9f5e3b`, candidate `bd0a995eb-dirty-02de59dfcb73`. |
+| Gracefully reload shared server | `jcode --no-update server reload --json` | PASS (exit 0) | JSON reported `reloaded: true`, `handoff_ready: true`, and `had_listener: true`; no force-stop was used. |
+| Confirm live executable identity | `readlink -f "$HOME/.jcode/builds/shared-server/jcode"`; resolve `/proc/$(pgrep -f '/home/ari/.jcode/builds/shared-server/jcode serve' | head -1)/exe`; `sha256sum` | PASS (exit 0) | Channel and live process both resolved to `/home/ari/.jcode/builds/versions/bd0a995eb-dirty-02de59dfcb73/jcode`; version `jcode v0.79.637-dev (bd0a995eb, dirty)`; SHA-256 `51419de208451131fa58c6be256ec243c65c39c66309f3f1caf9e554853898d6`. |
+| Confirm reconnect and stable handoff | Repeat `jcode --no-update server reload --json` after activation and continue this T033 session | PASS (exit 0) | Follow-up reported `already_current: true` and `handoff_ready: true`; this session received the original reload response and continued issuing validation commands after the socket was recreated from inode `1283` to `1755`. |
 
 ## Resolved binary identity
 
@@ -179,7 +198,7 @@ Reserved to prove which executable was measured. Resolve symlinks before inspect
 | Candidate executable path | `realpath target/selfdev/jcode` | `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning/target/selfdev/jcode` | PASS (exit 0) |
 | Resolved executable path | `readlink -f target/selfdev/jcode` | `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning/target/selfdev/jcode`; the candidate is a regular worktree executable, not the 70-byte shared-server symlink | PASS (exit 0) |
 | Build revision/version identity | `git rev-parse HEAD`; `./target/selfdev/jcode --version`; `sha256sum target/selfdev/jcode` | revision `31ab2cae8fd0f30d346b7552242f04ef1b1b841a`; version `jcode v0.79.636-dev (31ab2cae8, dirty)`; SHA-256 `18a1985f7425dda82d4a4d593d600d9e42582e67d9556e31841a67b86f61adb3` | PASS (exit 0); dirty is expected because T032 was marked InProgress before the build |
-| Shared daemon identity, if reloaded | `readlink -f "$HOME/.jcode/builds/shared-server/jcode"`; `sha256sum "$(readlink -f "$HOME/.jcode/builds/shared-server/jcode")"` | `/home/ari/.jcode/builds/versions/85f9f5e3b/jcode`; SHA-256 `29fc554983a1806f5162796a15c6eb862046425bc67bceab5fb3aee796bb89fb` | N/A: T032 deliberately did not reload the shared daemon; coordinated reload remains owned by T033 |
+| Shared daemon identity after coordinated reload | `readlink -f "$HOME/.jcode/builds/shared-server/jcode"`; resolve the matching live `/proc/<pid>/exe`; `sha256sum` | `/home/ari/.jcode/builds/versions/bd0a995eb-dirty-02de59dfcb73/jcode`; live process resolves to the same path; version `jcode v0.79.637-dev (bd0a995eb, dirty)`; SHA-256 `51419de208451131fa58c6be256ec243c65c39c66309f3f1caf9e554853898d6` | PASS (exit 0) |
 
 ## Built-binary isolated-socket validation
 
@@ -202,15 +221,16 @@ Canonical command shape:
 
 | Gate | Result | Notes |
 |---|---|---|
-| FR-001 through FR-021 complete | PENDING | PENDING |
-| NFR-001 through NFR-005 complete | PENDING | PENDING |
-| Named constitution principles traced | PENDING | PENDING |
-| Benchmark evidence complete and comparable | PENDING | PENDING |
-| Every experiment adopted or rejected | PENDING | PENDING |
+| FR-001 through FR-021 traced | PASS: 21 of 21 traced | Outcomes: 14 PASS, 4 N/A/rejected-boundary, 3 FAIL (`FR-009`, `FR-018`, `FR-020`) with exact evidence above. |
+| NFR-001 through NFR-005 traced | PASS: 5 of 5 traced | All five have exact evidence and outcomes; no incomplete comparison or failed guardrail was presented as success. |
+| SC-001 through SC-006 traced | PASS: 6 of 6 traced | Outcomes: 4 PASS, 1 N/A, 1 FAIL (`SC-001`) with exact evidence above. |
+| Named constitution principles traced | PASS: 6 of 6 traced | PRIN-002/003/005/008 pass; PRIN-007/010 remain failed for their recorded delivery boundaries. |
+| Benchmark evidence complete and comparable | FAIL | The frozen matrix and receipts are reviewable but the six-scenario baseline/candidate comparison remains incomplete. |
+| Every experiment adopted or rejected | PASS | `decisions.yaml` accounts for all seven candidates; zero defaults were authorized. |
 | Full-feature guardrails passed | FAIL (exit 1) | Seven pre-existing-at-T030-start gates failed at revision `ac31f6598b3aaa40387edf1ff4ef0ed69e9d6b97`; focused success was not substituted and ratchets were not rebaselined. |
 | Runtime budgets unchanged | PASS (exit 0) | Canonical collection and comparison both passed all nine maintained metrics with thresholds unchanged; receipt `$JCODE_SCRATCH_DIR/t031-runtime-budget.json`. |
-| Coordinated build/reload verified | PENDING | PENDING |
+| Coordinated build/reload verified | PASS (exit 0) | Worktree-pinned selfdev build/publish completed; promotion and graceful reload returned `promoted: true`, `reloaded: true`, and `handoff_ready: true`; live `/proc` identity matches the promoted version. |
 | Resolved binary identity confirmed | PASS (exit 0) | Candidate path, resolved path, revision, version, and SHA-256 were recorded; the shared-server symlink was resolved separately and was not inspected as if it were a binary. |
 | Isolated-socket built-binary smoke passed | PASS (exit 0) | Unique socket returned exact `T032_SMOKE_OK`; cleanup succeeded and shared socket inode/timestamps were unchanged. |
 
-Final delivery decision: **PENDING**
+Final delivery decision: **FAIL / not releasable from this evidence set.** T033 closes traceability and proves the coordinated runtime path, but it does not override the incomplete representative benchmark comparison or the unchanged failing full-feature guardrail gate.
