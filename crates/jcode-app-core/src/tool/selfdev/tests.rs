@@ -347,6 +347,71 @@ fn request_for_output(output: &ToolOutput) -> BuildRequest {
         .expect("request exists")
 }
 
+fn write_test_preflight_fixture(directory: &std::path::Path) -> std::path::PathBuf {
+    let script = directory.join("rust_validation_scope_fixture.py");
+    std::fs::write(
+        &script,
+        r#"#!/usr/bin/env python3
+import os
+
+print(os.environ["JCODE_TEST_PREFLIGHT_RESULT"])
+"#,
+    )
+    .expect("write preflight fixture");
+    script
+}
+
+async fn execute_test_with_preflight_result(
+    repo_dir: &std::path::Path,
+    session_id: &str,
+    command: &str,
+    result: serde_json::Value,
+) -> ToolOutput {
+    let fixture_dir = tempfile::tempdir().expect("preflight fixture dir");
+    let fixture = write_test_preflight_fixture(fixture_dir.path());
+    let _script_guard = EnvVarGuard::set("JCODE_RUST_VALIDATION_SCOPE_SCRIPT", &fixture);
+    let _result_guard = EnvVarGuard::set(
+        "JCODE_TEST_PREFLIGHT_RESULT",
+        serde_json::to_string(&result).expect("serialize preflight result"),
+    );
+
+    SelfDevTool::new()
+        .execute(
+            json!({
+                "action": "test",
+                "command": command,
+                "reason": "zero-test preflight contract",
+                "notify": false,
+                "wake": false,
+            }),
+            create_test_context(session_id, Some(repo_dir.to_path_buf())),
+        )
+        .await
+        .expect("selfdev test request")
+}
+
+fn matching_preflight_result(target: &str, filter: &str) -> serde_json::Value {
+    json!({
+        "schema_version": "1.0",
+        "decision": "matches",
+        "effective_scope": {
+            "package": "jcode-app-core",
+            "target": target,
+            "features": [],
+            "filter": filter,
+        },
+        "proof_provenance": "current complete test-discovery snapshot",
+    })
+}
+
+fn uncertain_preflight_result(reason: &str) -> serde_json::Value {
+    json!({
+        "schema_version": "1.0",
+        "decision": "unknown",
+        "reason": reason,
+    })
+}
+
 fn assert_coalescing_metadata(
     output: &ToolOutput,
     request: &BuildRequest,
@@ -1219,6 +1284,157 @@ async fn atomic_claim_selects_exactly_one_leader() {
             .expect("task id metadata");
         let status = wait_for_task_completion(task_id).await;
         assert_eq!(status.status, BackgroundTaskStatus::Completed);
+    }
+}
+
+#[tokio::test]
+async fn proven_empty_test_is_rejected_before_claim_queue_and_gate() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::tempdir().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+    let requests_before = BuildRequest::load_all().expect("requests before preflight");
+
+    let output = execute_test_with_preflight_result(
+        repo.path(),
+        "proven-empty-session",
+        "cargo test -p jcode-app-core --lib definitely_missing_test -- --exact",
+        json!({
+            "schema_version": "1.0",
+            "decision": "proven_empty",
+            "effective_scope": {
+                "package": "jcode-app-core",
+                "target": "lib:jcode_app_core",
+                "features": [],
+                "filter": "definitely_missing_test",
+                "exact": true,
+                "ignored": false,
+            },
+            "proof_provenance": "current complete test-discovery snapshot",
+        }),
+    )
+    .await;
+
+    assert!(
+        output.output.contains("selects zero tests"),
+        "zero-test rejection should be actionable: {}",
+        output.output
+    );
+    assert!(output.output.contains("jcode-app-core"));
+    assert!(output.output.contains("definitely_missing_test"));
+    assert!(
+        output
+            .output
+            .contains("current complete test-discovery snapshot")
+    );
+    let metadata = output.metadata.expect("preflight metadata");
+    assert_eq!(metadata["preflight"]["decision"], "proven_empty");
+    assert_eq!(metadata["background"].as_bool(), Some(false));
+    assert!(metadata.get("request_id").is_none());
+    assert!(metadata.get("task_id").is_none());
+    assert_eq!(
+        BuildRequest::load_all()
+            .expect("requests after preflight")
+            .len(),
+        requests_before.len(),
+        "preflight must run before duplicate claim or producer persistence"
+    );
+}
+
+#[tokio::test]
+async fn valid_exact_substring_ignored_library_and_integration_tests_still_queue() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::tempdir().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+
+    let cases = [
+        (
+            "exact",
+            "cargo test -p jcode-app-core --lib exact_test -- --exact",
+            "lib:jcode_app_core",
+            "exact_test",
+        ),
+        (
+            "substring",
+            "cargo test -p jcode-app-core coordinator",
+            "lib:jcode_app_core",
+            "coordinator",
+        ),
+        (
+            "ignored",
+            "cargo test -p jcode-app-core --lib ignored_test -- --ignored",
+            "lib:jcode_app_core",
+            "ignored_test",
+        ),
+        (
+            "library",
+            "cargo test -p jcode-app-core --lib selfdev",
+            "lib:jcode_app_core",
+            "selfdev",
+        ),
+        (
+            "integration",
+            "cargo test -p jcode-app-core --test selfdev_contract preflight",
+            "test:selfdev_contract",
+            "preflight",
+        ),
+    ];
+
+    for (label, command, target, filter) in cases {
+        let output = execute_test_with_preflight_result(
+            repo.path(),
+            &format!("valid-{label}-session"),
+            command,
+            matching_preflight_result(target, filter),
+        )
+        .await;
+        let metadata = output.metadata.as_ref().expect("queued metadata");
+        assert_eq!(
+            metadata["background"].as_bool(),
+            Some(true),
+            "valid {label} request should retain queued execution: {}",
+            output.output
+        );
+        assert!(metadata["request_id"].is_string());
+        assert!(metadata["task_id"].is_string());
+        assert!(output.output.contains("Self-dev test queued in background"));
+    }
+}
+
+#[tokio::test]
+async fn stale_missing_incomplete_and_ambiguous_discovery_still_queue() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::tempdir().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+
+    for (label, reason) in [
+        ("stale", "source fingerprint does not match"),
+        ("missing", "discovery snapshot is absent"),
+        ("incomplete", "discovery snapshot is incomplete"),
+        ("ambiguous", "effective package or target is ambiguous"),
+    ] {
+        let output = execute_test_with_preflight_result(
+            repo.path(),
+            &format!("uncertain-{label}-session"),
+            &format!("cargo test -p jcode-app-core maybe_matching_{label}"),
+            uncertain_preflight_result(reason),
+        )
+        .await;
+        let metadata = output.metadata.as_ref().expect("queued metadata");
+        assert_eq!(
+            metadata["background"].as_bool(),
+            Some(true),
+            "{label} discovery must preserve queued execution: {}",
+            output.output
+        );
+        assert!(metadata["request_id"].is_string());
+        assert!(metadata["task_id"].is_string());
+        assert!(output.output.contains("Self-dev test queued in background"));
     }
 }
 

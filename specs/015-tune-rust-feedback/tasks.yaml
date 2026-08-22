@@ -239,7 +239,7 @@ phases:
     tasks:
       - id: "T017"
         title: "Write failing zero-test selfdev preflight tests in crates/jcode-app-core/src/tool/selfdev/tests.rs"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"
