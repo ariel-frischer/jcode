@@ -121,14 +121,24 @@ fn successful_initialization_is_cached() {
 
 #[test]
 fn successful_initialization_is_cached_across_concurrent_callers() {
-    const CALLERS: usize = 8;
     let slot = std::sync::Arc::new(OnceLock::new());
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    for value in call_initializer_concurrently(std::sync::Arc::clone(&slot), &attempts) {
+        assert_eq!(value, Some(7));
+    }
+    assert_eq!(attempts.load(Ordering::Relaxed), 1);
+}
+
+fn call_initializer_concurrently(
+    slot: std::sync::Arc<OnceLock<Option<u8>>>,
+    attempts: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) -> Vec<Option<u8>> {
+    const CALLERS: usize = 8;
     let start = std::sync::Arc::new(std::sync::Barrier::new(CALLERS));
-    let threads = (0..CALLERS)
+    (0..CALLERS)
         .map(|_| {
             let slot = std::sync::Arc::clone(&slot);
-            let attempts = std::sync::Arc::clone(&attempts);
+            let attempts = std::sync::Arc::clone(attempts);
             let start = std::sync::Arc::clone(&start);
             std::thread::spawn(move || {
                 start.wait();
@@ -144,13 +154,31 @@ fn successful_initialization_is_cached_across_concurrent_callers() {
                 .copied()
             })
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|thread| thread.join().expect("initializer caller must not panic"))
+        .collect()
+}
 
-    for thread in threads {
-        assert_eq!(
-            thread.join().expect("initializer caller must not panic"),
-            Some(7)
-        );
+#[test]
+fn transient_failure_retries_once_across_concurrent_callers() {
+    let slot = std::sync::Arc::new(OnceLock::new());
+    let reported = std::sync::atomic::AtomicUsize::new(0);
+    assert!(
+        cached_optional(
+            &slot,
+            || Err::<u8, _>("temporary"),
+            |_| {
+                reported.fetch_add(1, Ordering::Relaxed);
+            }
+        )
+        .is_none()
+    );
+    assert_eq!(reported.load(Ordering::Relaxed), 1);
+
+    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    for value in call_initializer_concurrently(slot, &attempts) {
+        assert_eq!(value, Some(7));
     }
     assert_eq!(attempts.load(Ordering::Relaxed), 1);
 }
