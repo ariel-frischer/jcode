@@ -324,6 +324,8 @@ mod tests {
     fn no_state_redoes_layout_on_an_unchanged_frame() {
         let costs = sweep();
         let wasteful = wasteful(&costs);
+        let work_count: usize = costs.iter().map(|cost| cost.warm_relayouts).sum();
+        println!("JCODE_FRAME_RELAYOUT_WORK_COUNT={work_count}");
         assert!(
             wasteful.is_empty(),
             "states re-laying the transcript every frame: {}",

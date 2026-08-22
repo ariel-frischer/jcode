@@ -72,6 +72,141 @@ def sample(
 
 
 class RuntimeMemoryAnalyzerTests(unittest.TestCase):
+    def build_scaling_evidence(
+        self, samples: list[analyzer.Sample], *, expected_population: int
+    ) -> dict[str, object]:
+        build_evidence = getattr(analyzer, "build_scaling_evidence", None)
+        if build_evidence is None:
+            self.fail("analyzer.build_scaling_evidence is not implemented")
+        return build_evidence(samples, expected_population=expected_population)
+
+    def test_scaling_evidence_preserves_attributable_session_bytes(self) -> None:
+        samples = [
+            sample(
+                timestamp_ms=17,
+                instance_id="server",
+                pss_mb=160,
+                allocated_mb=96,
+                live_sessions=4,
+                connected_clients=4,
+                total_json_mb=48,
+            )
+        ]
+
+        evidence = self.build_scaling_evidence(samples, expected_population=4)
+
+        self.assertEqual(
+            evidence,
+            {
+                "expected_population": 4,
+                "observed_population": 4,
+                "attributed_session_bytes": 48 * MB,
+                "attribution_timestamp_ms": 17,
+            },
+        )
+
+    def test_scaling_evidence_rejects_population_mismatch(self) -> None:
+        samples = [
+            sample(
+                timestamp_ms=21,
+                instance_id="server",
+                pss_mb=144,
+                allocated_mb=80,
+                live_sessions=3,
+                total_json_mb=36,
+            )
+        ]
+
+        with self.assertRaisesRegex(ValueError, "expected.*4.*observed.*3"):
+            self.build_scaling_evidence(samples, expected_population=4)
+
+    def test_scaling_evidence_uses_latest_matching_sample_before_teardown(self) -> None:
+        samples = [
+            sample(
+                timestamp_ms=21,
+                instance_id="server",
+                pss_mb=144,
+                allocated_mb=80,
+                live_sessions=1,
+                total_json_mb=12,
+            ),
+            sample(
+                timestamp_ms=22,
+                instance_id="server",
+                pss_mb=140,
+                allocated_mb=76,
+                live_sessions=0,
+                total_json_mb=0,
+            ),
+        ]
+
+        evidence = self.build_scaling_evidence(samples, expected_population=1)
+
+        self.assertEqual(evidence["observed_population"], 1)
+        self.assertEqual(evidence["attribution_timestamp_ms"], 21)
+        self.assertEqual(evidence["attributed_session_bytes"], 12 * MB)
+
+    def test_scaling_evidence_rejects_incomplete_attribution(self) -> None:
+        missing_population = sample(
+            timestamp_ms=31,
+            instance_id="server",
+            pss_mb=144,
+            allocated_mb=80,
+            live_sessions=4,
+            total_json_mb=36,
+        )
+        del missing_population.sessions["live_count"]
+        missing_bytes = sample(
+            timestamp_ms=32,
+            instance_id="server",
+            pss_mb=144,
+            allocated_mb=80,
+            live_sessions=4,
+            total_json_mb=36,
+        )
+        del missing_bytes.sessions["total_json_bytes"]
+        non_numeric_bytes = sample(
+            timestamp_ms=33,
+            instance_id="server",
+            pss_mb=144,
+            allocated_mb=80,
+            live_sessions=4,
+            total_json_mb=36,
+        )
+        non_numeric_bytes.sessions["total_json_bytes"] = "36 MiB"
+
+        for name, incomplete_sample, diagnostic in (
+            ("missing population", missing_population, "population"),
+            ("missing bytes", missing_bytes, "attribut"),
+            ("non-numeric bytes", non_numeric_bytes, "attribut"),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, diagnostic):
+                    self.build_scaling_evidence(
+                        [incomplete_sample], expected_population=4
+                    )
+
+    def test_scaling_evidence_keeps_legacy_summary_shape_compatible(self) -> None:
+        samples = [
+            sample(
+                timestamp_ms=41,
+                instance_id="server",
+                pss_mb=144,
+                allocated_mb=80,
+                live_sessions=4,
+                connected_clients=4,
+                total_json_mb=36,
+            )
+        ]
+
+        summary = analyzer.summarize_target(samples, top_n=1, min_spike_bytes=0)
+
+        self.assertEqual(summary["session_population"]["final_live_sessions"], 4)
+        self.assertEqual(
+            summary["last_attribution"]["sessions"]["total_json_bytes"],
+            36 * MB,
+        )
+
     def test_latest_instance_filter_prevents_cross_reload_spikes(self) -> None:
         samples = [
             sample(timestamp_ms=1, instance_id="old", pss_mb=1800, allocated_mb=1700),
