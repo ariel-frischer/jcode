@@ -18,9 +18,10 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
+mod auto_poke;
+
 /// Streaming reasoning region, split out to keep this file under the
 /// code-size budget. See the module docs for the byte-offset invariant.
-mod auto_poke;
 mod reasoning_region;
 
 const INPUT_SHELL_MAX_OUTPUT_LEN: usize = 30_000;
