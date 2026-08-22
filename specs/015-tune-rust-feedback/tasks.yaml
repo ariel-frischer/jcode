@@ -90,7 +90,7 @@ phases:
           - "Tests reject source, lockfile, toolchain, matrix-version, host-condition, or configuration incompatibility unless explicitly disclosed."
       - id: "T006"
         title: "Implement receipt provenance, raw-sample retention, aggregation, and comparison reporting in scripts/bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

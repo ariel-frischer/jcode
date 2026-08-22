@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -98,6 +99,14 @@ SENSITIVE_KEY_TOKENS = {
 }
 RAW_SOURCE_KEYS = {"file_contents", "raw_source", "source_contents"}
 REDACTED_VALUES = {"<redacted>", "[redacted]", "redacted"}
+AGGREGATED_METRICS = (
+    "wall_time_ms",
+    "execution_time_ms",
+    "queue_time_ms",
+    "gate_time_ms",
+    "peak_rss_bytes",
+    "swap_bytes",
+)
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -270,8 +279,66 @@ def _validate_action_counts(raw_counts: Any, path: str) -> None:
         _fail(path, "requested must equal executed + followers + reused + cancelled")
     if values["coalesced"] > values["followers"]:
         _fail(path, "coalesced cannot exceed followers")
-    if values["underlying_actions"] > values["executed"]:
-        _fail(path, "underlying_actions cannot exceed executed")
+    if values["underlying_actions"] != values["executed"]:
+        _fail(path, "underlying_actions must equal executed")
+
+
+def _percentile(values: Sequence[int | float], percentile: int) -> int | float:
+    """Return median p50 or a deterministic nearest-rank percentile."""
+    if not values:
+        raise ValueError("percentile requires at least one value")
+    ordered = sorted(values)
+    if percentile == 50:
+        midpoint = len(ordered) // 2
+        if len(ordered) % 2:
+            return ordered[midpoint]
+        return (ordered[midpoint - 1] + ordered[midpoint]) / 2
+    return ordered[max(1, math.ceil(percentile * len(ordered) / 100)) - 1]
+
+
+def aggregate_samples(samples: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Derive reproducible per-scenario aggregates from retained raw samples."""
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for raw_sample in samples:
+        sample = _mapping(raw_sample, "sample")
+        scenario_id = _nonempty_string(sample.get("scenario_id"), "sample.scenario_id")
+        grouped.setdefault(scenario_id, []).append(sample)
+
+    aggregates: dict[str, dict[str, Any]] = {}
+    for scenario_id, scenario_samples in grouped.items():
+        valid = [sample for sample in scenario_samples if sample.get("valid") is True]
+        invalid = [sample for sample in scenario_samples if sample.get("valid") is False]
+        retries = [sample for sample in scenario_samples if isinstance(sample.get("retry"), Mapping) and sample["retry"].get("is_retry") is True]
+        aggregate: dict[str, Any] = {
+            "valid_sample_count": len(valid),
+            "invalid_sample_count": len(invalid),
+            "retry_sample_count": len(retries),
+        }
+        for metric in AGGREGATED_METRICS:
+            values = [_nonnegative_number(sample["metrics"][metric], f"sample.metrics.{metric}") for sample in valid]
+            if values:
+                aggregate[f"p50_{metric}"] = _percentile(values, 50)
+                aggregate[f"p95_{metric}"] = _percentile(values, 95)
+        aggregate["exit_statuses"] = [sample["metrics"]["exit_status"] for sample in scenario_samples]
+        aggregate["cache_observations"] = [sample["metrics"]["cache"] for sample in scenario_samples]
+        aggregates[scenario_id] = aggregate
+    return aggregates
+
+
+def _validate_aggregates(raw_aggregates: Any, samples: Sequence[Mapping[str, Any]]) -> None:
+    aggregates = _mapping(raw_aggregates, "receipt.aggregates")
+    expected = aggregate_samples(samples)
+    if set(aggregates) != set(expected):
+        _fail("receipt.aggregates", "must contain exactly the scenarios present in retained samples")
+    for scenario_id, raw_aggregate in aggregates.items():
+        path = f"receipt.aggregates.{scenario_id}"
+        aggregate = _mapping(raw_aggregate, path)
+        _required(aggregate, {"valid_sample_count", "p50_wall_time_ms", "p95_wall_time_ms"}, path)
+        for field, value in aggregate.items():
+            if field not in expected[scenario_id]:
+                _fail(f"{path}.{field}", "unknown or non-reproducible aggregate field")
+            if value != expected[scenario_id][field]:
+                _fail(f"{path}.{field}", f"does not match retained raw samples; expected {expected[scenario_id][field]!r}")
 
 
 def validate_receipt(receipt: Mapping[str, Any]) -> None:
@@ -336,7 +403,7 @@ def validate_receipt(receipt: Mapping[str, Any]) -> None:
         elif not isinstance(cache, (str, Mapping)) or not cache:
             _fail(f"{path}.metrics.cache", "must be non-empty metadata or explicit not-applicable")
 
-    _mapping(root["aggregates"], "receipt.aggregates")
+    _validate_aggregates(root["aggregates"], samples)
     _validate_action_counts(root["action_counts"], "receipt.action_counts")
 
     fallback = _mapping(root["fallback"], "receipt.fallback")
@@ -362,7 +429,7 @@ def validate_receipts_compatible(baseline: Mapping[str, Any], candidate: Mapping
     validate_receipt(candidate)
     baseline_identity = _mapping(baseline["run_identity"], "baseline.run_identity")
     candidate_identity = _mapping(candidate["run_identity"], "candidate.run_identity")
-    compared_fields = ("source_revision", "dirty_fingerprint", "lockfile_fingerprint", "toolchain", "host_conditions", "matrix_version")
+    compared_fields = ("source_revision", "dirty_fingerprint", "lockfile_fingerprint", "toolchain", "host_conditions", "effective_configuration", "matrix_version")
     differences = [field for field in compared_fields if baseline_identity[field] != candidate_identity[field]]
     if not differences:
         return
@@ -373,6 +440,62 @@ def validate_receipts_compatible(baseline: Mapping[str, Any], candidate: Mapping
     if not isinstance(disclosed, list) or not set(differences).issubset(disclosed):
         _fail("candidate.environment_compatibility.differences", f"must disclose: {', '.join(differences)}")
     _nonempty_string(disclosure.get("reason"), "candidate.environment_compatibility.reason")
+
+
+def comparison_report(baseline: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a deterministic comparison with separated timing and resource observations."""
+    validate_receipts_compatible(baseline, candidate)
+    baseline_aggregates = _mapping(baseline["aggregates"], "baseline.aggregates")
+    candidate_aggregates = _mapping(candidate["aggregates"], "candidate.aggregates")
+    common_scenarios = sorted(set(baseline_aggregates) & set(candidate_aggregates))
+    reasons: list[str] = []
+    if set(baseline_aggregates) != set(candidate_aggregates):
+        reasons.append("baseline and candidate scenario sets differ")
+    disclosure = candidate.get("environment_compatibility")
+    if isinstance(disclosure, Mapping) and disclosure.get("status") == "incompatible":
+        reasons.append("environment or effective configuration is explicitly incompatible")
+
+    observations: dict[str, Any] = {}
+    for scenario_id in common_scenarios:
+        baseline_scenario = _mapping(baseline_aggregates[scenario_id], f"baseline.aggregates.{scenario_id}")
+        candidate_scenario = _mapping(candidate_aggregates[scenario_id], f"candidate.aggregates.{scenario_id}")
+        scenario_observations: dict[str, Any] = {}
+        for metric in AGGREGATED_METRICS:
+            p50_key = f"p50_{metric}"
+            p95_key = f"p95_{metric}"
+            if p50_key not in baseline_scenario or p95_key not in baseline_scenario:
+                reasons.append(f"baseline {scenario_id} lacks {metric} p50/p95")
+                continue
+            if p50_key not in candidate_scenario or p95_key not in candidate_scenario:
+                reasons.append(f"candidate {scenario_id} lacks {metric} p50/p95")
+                continue
+            baseline_values = {"p50": baseline_scenario[p50_key], "p95": baseline_scenario[p95_key]}
+            candidate_values = {"p50": candidate_scenario[p50_key], "p95": candidate_scenario[p95_key]}
+            scenario_observations[metric] = {
+                "baseline": baseline_values,
+                "candidate": candidate_values,
+                "delta": {"p50": candidate_values["p50"] - baseline_values["p50"], "p95": candidate_values["p95"] - baseline_values["p95"]},
+            }
+        scenario_observations["exit"] = {"baseline": baseline_scenario.get("exit_statuses", []), "candidate": candidate_scenario.get("exit_statuses", [])}
+        scenario_observations["retry"] = {"baseline": baseline_scenario.get("retry_sample_count", 0), "candidate": candidate_scenario.get("retry_sample_count", 0)}
+        scenario_observations["cache"] = {"baseline": baseline_scenario.get("cache_observations", []), "candidate": candidate_scenario.get("cache_observations", [])}
+        observations[scenario_id] = scenario_observations
+
+    for scenario_id, scenario in observations.items():
+        wall = scenario.get("wall_time_ms")
+        if not wall or wall["delta"]["p50"] >= 0 or wall["delta"]["p95"] >= 0:
+            reasons.append(f"candidate {scenario_id} does not improve both wall-time p50 and p95")
+        if scenario["retry"]["candidate"] > scenario["retry"]["baseline"]:
+            reasons.append(f"candidate {scenario_id} increases retry observations")
+
+    return {
+        "schema_version": baseline["schema_version"],
+        "baseline_label": baseline["run_identity"]["label"],
+        "candidate_label": candidate["run_identity"]["label"],
+        "observations": observations,
+        "action_counts": {"baseline": dict(baseline["action_counts"]), "candidate": dict(candidate["action_counts"])},
+        "adoption": {"complete": not reasons, "adoptable": not reasons, "reasons": reasons},
+    }
 
 
 def load_json(path: str | Path) -> Any:
@@ -397,6 +520,10 @@ def _parser() -> argparse.ArgumentParser:
     compare_parser = subparsers.add_parser("validate-comparison", help="validate two receipts and their environment compatibility")
     compare_parser.add_argument("baseline")
     compare_parser.add_argument("candidate")
+    report_parser = subparsers.add_parser("compare", help="emit a deterministic baseline/candidate comparison report")
+    report_parser.add_argument("baseline")
+    report_parser.add_argument("candidate")
+    report_parser.add_argument("--output")
     return parser
 
 
@@ -407,12 +534,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             validate_matrix(load_json(args.path))
         elif args.command == "validate-receipt":
             validate_receipt(load_json(args.path))
-        else:
+        elif args.command == "validate-comparison":
             validate_receipts_compatible(load_json(args.baseline), load_json(args.candidate))
+        else:
+            report = comparison_report(load_json(args.baseline), load_json(args.candidate))
+            rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
+            if args.output:
+                Path(args.output).write_text(rendered, encoding="utf-8")
+            else:
+                print(rendered, end="")
+            if not report["adoption"]["complete"]:
+                return 2
     except (TypeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    print("valid")
+    if args.command != "compare":
+        print("valid")
     return 0
 
 
