@@ -222,6 +222,7 @@ def run_once(
     first_visible_excerpt: str | None = None
     input_ready_ms: float | None = None
     last_probe_sent_at: float | None = None
+    probe_failure: str | None = None
 
     try:
         while time.perf_counter() - start < timeout_s:
@@ -247,7 +248,11 @@ def run_once(
                 >= first_visible_ms / 1000.0 + spec.input_probe_delay_s
                 and probe_send_due(last_sent_at=last_probe_sent_at, now=now)
             ):
-                os.write(master_fd, PROBE.encode())
+                try:
+                    os.write(master_fd, PROBE.encode())
+                except OSError as error:
+                    probe_failure = str(error)
+                    break
                 last_probe_sent_at = now
             if last_probe_sent_at is not None and input_ready_ms is None:
                 if probe_visibly_accepted(screen, PROBE):
@@ -271,6 +276,11 @@ def run_once(
             "input_ready_ms": input_ready_ms,
             "input_ready_source": "log_marker" if spec.input_ready_log_marker else "probe_echo",
             "timed_out": input_ready_ms is None,
+            "failure": (
+                {"kind": "probe_write", "diagnostic": probe_failure}
+                if probe_failure
+                else None
+            ),
         }
     finally:
         for sig in (signal.SIGTERM, signal.SIGKILL):
@@ -320,7 +330,11 @@ def collect_startup_samples(
     samples = runs[STARTUP_WARM_UPS:]
     failures: list[dict[str, object]] = []
     for recorded_run, sample in enumerate(samples, start=1):
-        if sample.get("timed_out"):
+        if sample.get("failure"):
+            failures.append(
+                {"recorded_run": recorded_run, **dict(sample["failure"])}
+            )
+        elif sample.get("timed_out"):
             failures.append({"kind": "timeout", "recorded_run": recorded_run})
         elif (
             sample.get("first_visible_ms") is None

@@ -20,6 +20,11 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+try:
+    import runtime_budget as budget
+except ModuleNotFoundError:  # Imported as scripts.bench_memory_cli.
+    from scripts import runtime_budget as budget
+
 ANSI_RE = re.compile(
     r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x1b\x07]*(?:\x07|\x1b\\))"
 )
@@ -398,7 +403,7 @@ def _read_proc_rss_mib(pid: int) -> float:
 
 
 def sample_process_resources(
-    pid: int, sample_window_s: float = 0.1
+    pid: int, sample_window_s: float = IDLE_SAMPLE_INTERVAL_S
 ) -> dict[str, float]:
     """Sample one Linux process using the same procfs surface as profile_spawn.py."""
     clock_ticks = os.sysconf("SC_CLK_TCK")
@@ -438,10 +443,10 @@ def collect_idle_resources(
     samples: list[dict[str, float]] = []
     try:
         time.sleep(IDLE_SETTLE_S)
-        for index in range(IDLE_SAMPLE_COUNT):
-            if index:
-                time.sleep(IDLE_SAMPLE_INTERVAL_S)
-            sample = sample_process_resources(daemon_pid)
+        for _ in range(IDLE_SAMPLE_COUNT):
+            sample = sample_process_resources(
+                daemon_pid, sample_window_s=IDLE_SAMPLE_INTERVAL_S
+            )
             if not isinstance(sample.get("cpu_percent"), int | float) or not isinstance(
                 sample.get("rss_mib"), int | float
             ):
@@ -712,14 +717,25 @@ def run_population_trial(
     trial: int,
     timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> dict[str, object]:
-    temp_root = tempfile.mkdtemp(prefix="jcode-memory-scaling-")
-    env = scaling_environment(temp_root)
+    temp_root = Path(tempfile.mkdtemp(prefix="jcode-memory-scaling-"))
+    env = scaling_environment(str(temp_root))
     Path(env["JCODE_HOME"]).mkdir(parents=True)
     Path(env["JCODE_RUNTIME_DIR"]).mkdir(parents=True)
     socket_path = os.path.join(env["JCODE_RUNTIME_DIR"], "scaling.sock")
     launches: list[SessionLaunch] = []
-    cleanup_pgids: list[int] = []
-    result: dict[str, object]
+    owned_processes: list[budget.OwnedProcess] = []
+    result: dict[str, object] = {
+        "status": "invalid",
+        "population": population,
+        "observed_population": None,
+        "trial": trial,
+        "daemon_rss_mib": None,
+        "attributed_session_mib": None,
+        "failure": {
+            "kind": "collection_failed",
+            "diagnostic": "population trial did not complete",
+        },
+    }
     try:
         server = subprocess.Popen(
             [
@@ -737,7 +753,7 @@ def run_population_trial(
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid,
         )
-        cleanup_pgids.append(os.getpgid(server.pid))
+        owned_processes.append(budget.OwnedProcess.capture(server.pid))
         if not wait_for_socket(socket_path, timeout_s):
             raise RuntimeError("private daemon did not become ready")
         debug_socket_path = Path(socket_path).with_name("scaling-debug.sock")
@@ -768,7 +784,7 @@ def run_population_trial(
                 0.0,
             )
             launches.append(launch)
-            cleanup_pgids.append(launch.pgid)
+            owned_processes.append(budget.OwnedProcess.capture(launch.root_pid))
             if not launch.ready:
                 raise RuntimeError("private resumed client did not become ready")
             time.sleep(ATTRIBUTION_SETTLE_S)
@@ -788,7 +804,7 @@ def run_population_trial(
             "attributed_session_mib": attributed_session_mib,
             "failure": None,
         }
-    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+    except Exception as error:
         result = {
             "status": "invalid",
             "population": population,
@@ -804,13 +820,36 @@ def run_population_trial(
                 os.close(launch.master_fd)
             except OSError:
                 pass
-        for pgid in reversed(cleanup_pgids):
-            terminate_pgroup(pgid)
-        shutil.rmtree(temp_root, ignore_errors=True)
+        cleanup_diagnostics: list[str] = []
+        try:
+            cleanup = budget.cleanup_owned_processes(owned_processes)
+            cleanup_diagnostics.extend(cleanup.diagnostics)
+            all_stopped = cleanup.all_stopped
+        except Exception as error:
+            all_stopped = False
+            cleanup_diagnostics.append(f"owned-process cleanup failed: {error}")
+        try:
+            shutil.rmtree(temp_root)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            cleanup_diagnostics.append(f"private-path cleanup failed: {error}")
+        private_paths_removed = not temp_root.exists()
     result["cleanup"] = {
-        "status": "complete",
-        "owned_processes_terminated": len(set(cleanup_pgids)),
+        "status": (
+            "complete" if all_stopped and private_paths_removed else "incomplete"
+        ),
+        "owned_processes_terminated": len(owned_processes),
+        "private_paths_removed": private_paths_removed,
+        "diagnostics": cleanup_diagnostics,
     }
+    if result["cleanup"]["status"] != "complete" and result["status"] == "valid":
+        result["status"] = "invalid"
+        result["failure"] = {
+            "kind": "cleanup_failed",
+            "diagnostic": "; ".join(cleanup_diagnostics)
+            or "private runtime cleanup was incomplete",
+        }
     return result
 
 

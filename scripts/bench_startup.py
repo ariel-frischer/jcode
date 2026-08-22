@@ -219,6 +219,7 @@ def measure_server_startup_attempt(
                     )
                     break
                 if wait_for_socket(str(runtime.socket_path), 0.01):
+                    ready_elapsed_ms = (time.perf_counter() - start) * 1000.0
                     try:
                         daemon_pid = resolve_socket_owner(
                             runtime.socket_path, deadline=deadline
@@ -233,7 +234,7 @@ def measure_server_startup_attempt(
                     else:
                         result = {
                             "status": "valid",
-                            "elapsed_ms": (time.perf_counter() - start) * 1000.0,
+                            "elapsed_ms": ready_elapsed_ms,
                             "daemon": {
                                 "pid": daemon_pid,
                                 "resolved_path": candidate.resolved_path,

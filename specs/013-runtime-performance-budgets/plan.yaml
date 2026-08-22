@@ -398,9 +398,11 @@ open_questions:
   - question: "Which stable Linux host and load/power conditions should own the first checked-in same-machine baseline values?"
     context: "The spec fixes tolerances but intentionally does not provide trustworthy raw baseline samples; collecting them on an unstable or undocumented host would make the first ratchet misleading."
     proposed_resolution: "During Phase 5, collect repeated healthy reports on Ariel's designated development host under documented idle/load and power conditions, review variance, then commit only the accepted report-derived baseline and its reason."
+    resolution: "Use Ariel's designated Linux development host on AC power with stable performance settings and no concurrent Cargo, rustc, build, or benchmark process at collection start. Review three sequential complete reports and retain the selected report plus all deterministic failures truthfully."
   - question: "Should the benchmark dependency runner use the active Python 3.14 interpreter or a separately pinned supported interpreter?"
     context: "pyte 0.8.2 declares Python >=3.8 but its published classifiers stop at Python 3.12, and pyte is absent from the current Python 3.14 environment."
     proposed_resolution: "Pin pyte 0.8.2, run its focused screen fixture under the active interpreter first, and add a repository-local Python toolchain pin only if that compatibility check fails; do not introduce a second interpreter contract speculatively."
+    resolution: "Use the active Python 3.14 interpreter. The pinned pyte 0.8.2 dependency and all 77 focused runtime-budget tests passed under that interpreter, so no second interpreter contract is required."
 
 _meta:
   version: "1.0.0"

@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -28,7 +29,10 @@ from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
-import runtime_budget as budget
+try:
+    import runtime_budget as budget
+except ModuleNotFoundError:  # Imported as scripts.bench_runtime_budgets.
+    from scripts import runtime_budget as budget
 
 
 ROUND_TRIP_WARM_UPS = 5
@@ -36,6 +40,7 @@ ROUND_TRIP_RECORDED_RUNS = 30
 ROUND_TRIP_TIMEOUT_S = 1.0
 PRIVATE_DAEMON_TIMEOUT_S = 5.0
 PROTOCOL_VERSION = 1
+FRAME_WORK_MARKER = "JCODE_FRAME_RELAYOUT_WORK_COUNT="
 
 
 def _load_collectors() -> tuple[Any, Any, Any]:
@@ -427,18 +432,24 @@ def write_report_atomic(*, output: Path, serialized: str) -> None:
 
 
 def _metric_result(
-    samples: Sequence[float], *, exact: bool = False
+    samples: Sequence[float],
+    *,
+    definition: budget.MetricDefinition,
+    exact: bool = False,
 ) -> budget.MetricResult:
     values = [float(value) for value in samples]
     aggregates = {"exact": values[0]} if exact else {"median": budget.median(values)}
     if not exact and len(values) in (10, 30):
         aggregates["nearest_rank_p95"] = budget.nearest_rank_percentile(values, 95)
-    return budget.MetricResult(
+    result = budget.MetricResult(
         samples=values,
         aggregates=aggregates,
         classification=budget.Classification.PASS,
         diagnostics=[],
     )
+    if definition.policy.get("kind") == "deterministic":
+        return _classify_metric(definition, result, result)
+    return result
 
 
 def _invalid_metric(
@@ -454,13 +465,25 @@ def _invalid_metric(
 
 
 def _collector_metric(
-    evidence: dict[str, object], samples: Sequence[float], *, exact: bool = False
+    evidence: dict[str, object],
+    samples: Sequence[float],
+    *,
+    definition: budget.MetricDefinition,
+    exact: bool = False,
 ) -> budget.MetricResult:
     if evidence.get("status") == "valid":
-        return _metric_result(samples, exact=exact)
+        return _metric_result(samples, definition=definition, exact=exact)
     diagnostics: list[object] = list(evidence.get("failures") or [])
     if evidence.get("diagnostic"):
         diagnostics.append(evidence["diagnostic"])
+    if evidence.get("status") == "unsupported":
+        return budget.MetricResult(
+            samples=[float(sample) for sample in samples],
+            aggregates={},
+            classification=budget.Classification.UNSUPPORTED,
+            diagnostics=[str(item) for item in diagnostics if str(item)]
+            or ["collector reported an unsupported platform"],
+        )
     return _invalid_metric(diagnostics, samples=samples)
 
 
@@ -503,12 +526,14 @@ def _frame_work_evidence(*, cwd: Path) -> dict[str, object]:
         "selfdev",
         "-p",
         "jcode-desktop2",
+        "--lib",
         "profile::",
         "--",
         "--test-threads=1",
+        "--nocapture",
     ]
     try:
-        subprocess.run(
+        completed = subprocess.run(
             command,
             cwd=cwd,
             check=True,
@@ -518,7 +543,14 @@ def _frame_work_evidence(*, cwd: Path) -> dict[str, object]:
         )
     except (OSError, subprocess.SubprocessError) as error:
         return {"status": "invalid", "failures": [str(error)], "command": command}
-    return {"status": "valid", "samples": [0.0], "command": command}
+    matches = re.findall(rf"{FRAME_WORK_MARKER}(\d+)", completed.stdout)
+    if len(matches) != 1:
+        return {
+            "status": "invalid",
+            "failures": ["frame profile did not emit exactly one work-count marker"],
+            "command": command,
+        }
+    return {"status": "valid", "samples": [float(matches[0])], "command": command}
 
 
 def _environment_provenance(
@@ -623,6 +655,7 @@ def collect_runtime_report(*, binary: Path, output: Path) -> budget.RuntimeRepor
                     for sample in startup_samples
                     if sample.get("first_visible_ms") is not None
                 ],
+                definition=definitions["first_visible_ms"],
             ),
             "input_ready_ms": _collector_metric(
                 startup,
@@ -631,6 +664,7 @@ def collect_runtime_report(*, binary: Path, output: Path) -> budget.RuntimeRepor
                     for sample in startup_samples
                     if sample.get("input_ready_ms") is not None
                 ],
+                definition=definitions["input_ready_ms"],
             ),
             "daemon_ready_ms": _collector_metric(
                 readiness,
@@ -639,6 +673,7 @@ def collect_runtime_report(*, binary: Path, output: Path) -> budget.RuntimeRepor
                     for sample in readiness_samples
                     if sample.get("elapsed_ms") is not None
                 ],
+                definition=definitions["daemon_ready_ms"],
             ),
             "idle_cpu_percent": _collector_metric(
                 idle,
@@ -647,6 +682,7 @@ def collect_runtime_report(*, binary: Path, output: Path) -> budget.RuntimeRepor
                     for sample in idle_samples
                     if sample.get("cpu_percent") is not None
                 ],
+                definition=definitions["idle_cpu_percent"],
             ),
             "idle_rss_mib": _collector_metric(
                 idle,
@@ -655,20 +691,28 @@ def collect_runtime_report(*, binary: Path, output: Path) -> budget.RuntimeRepor
                     for sample in idle_samples
                     if sample.get("rss_mib") is not None
                 ],
+                definition=definitions["idle_rss_mib"],
             ),
             "session_scaling_mib_per_session": _collector_metric(
-                scaling, list(scaling.get("incremental_mib_per_session_samples") or [])
+                scaling,
+                list(scaling.get("incremental_mib_per_session_samples") or []),
+                definition=definitions["session_scaling_mib_per_session"],
             ),
             "frame_update_work_count": _collector_metric(
-                frame, list(frame.get("samples") or []), exact=True
+                frame,
+                list(frame.get("samples") or []),
+                definition=definitions["frame_update_work_count"],
+                exact=True,
             ),
             "protocol_round_trip_ms": _collector_metric(
                 round_trips["protocol_round_trip_ms"],
                 list(round_trips["protocol_round_trip_ms"].get("samples") or []),
+                definition=definitions["protocol_round_trip_ms"],
             ),
             "tool_round_trip_ms": _collector_metric(
                 round_trips["tool_round_trip_ms"],
                 list(round_trips["tool_round_trip_ms"].get("samples") or []),
+                definition=definitions["tool_round_trip_ms"],
             ),
         }
     finally:
@@ -806,9 +850,15 @@ def compare_report(*, report_path: Path, baseline_path: Path) -> budget.RuntimeR
     for metric_id, definition in baseline.definitions.items():
         result = baseline.metrics[metric_id]
         budget.validate_metric_result(definition, result)
-        if result.classification is not budget.Classification.PASS:
+        if definition.policy.get("kind") == "deterministic":
+            expected = _classify_metric(definition, result, result).classification
+            if result.classification is not expected:
+                raise budget.ValidationError(
+                    f"baseline metric {metric_id} has an incorrect deterministic classification"
+                )
+        elif result.classification is not budget.Classification.PASS:
             raise budget.ValidationError(
-                f"baseline metric {metric_id} is not valid passing evidence"
+                f"baseline metric {metric_id} is not valid reference evidence"
             )
 
     classified_metrics = {
@@ -834,13 +884,21 @@ def create_baseline(
     *, report_path: Path, output: Path, reason: str, overwrite: bool
 ) -> budget.RuntimeBaseline:
     report = _load_report(report_path)
-    if any(
-        result.classification is not budget.Classification.PASS
-        for result in report.metrics.values()
-    ):
-        raise budget.ValidationError(
-            "baseline requires complete valid passing report evidence"
-        )
+    for metric_id, result in report.metrics.items():
+        definition = report.definitions[metric_id]
+        if definition.policy.get("kind") == "deterministic":
+            expected = _classify_metric(definition, result, result).classification
+            if (
+                expected is not budget.Classification.PASS
+                or result.classification is not budget.Classification.PASS
+            ):
+                raise budget.ValidationError(
+                    f"baseline metric {metric_id} fails its deterministic gate"
+                )
+        elif result.classification is not budget.Classification.PASS:
+            raise budget.ValidationError(
+                "baseline requires complete valid reference report evidence"
+            )
     if output.exists() and not overwrite:
         raise budget.ValidationError(
             f"baseline output already exists; pass --overwrite to replace it: {output}"

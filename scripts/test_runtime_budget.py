@@ -145,129 +145,23 @@ CANONICAL_GROUPS = {
 
 
 def canonical_definitions() -> dict[str, budget.MetricDefinition]:
-    noisy_latency_policy = {
-        "kind": "noisy_comparison",
-        "relative_tolerance": 0.15,
-        "absolute_tolerance": 20.0,
-        "review_action": "maintainer_review",
-    }
-    round_trip_policy = {
-        "kind": "noisy_comparison",
-        "relative_tolerance": 0.15,
-        "absolute_tolerance": 1.0,
-        "review_action": "maintainer_review",
-    }
-    definitions = [
-        budget.MetricDefinition(
-            id="first_visible_ms",
-            unit="milliseconds",
-            sampling={"warm_up_count": 1, "recorded_count": 10},
-            aggregation=["median", "nearest_rank_p95"],
-            policy=noisy_latency_policy,
-        ),
-        budget.MetricDefinition(
-            id="input_ready_ms",
-            unit="milliseconds",
-            sampling={"warm_up_count": 1, "recorded_count": 10},
-            aggregation=["median", "nearest_rank_p95"],
-            policy=noisy_latency_policy,
-        ),
-        budget.MetricDefinition(
-            id="daemon_ready_ms",
-            unit="milliseconds",
-            sampling={"recorded_count": 5, "timeout_seconds": 5},
-            aggregation=["median"],
-            policy={
-                "kind": "deterministic",
-                "ceiling": 80.0,
-                "review_action": "fail",
-            },
-        ),
-        budget.MetricDefinition(
-            id="idle_cpu_percent",
-            unit="percentage_points",
-            sampling={
-                "settle_seconds": 5,
-                "sample_interval_seconds": 1,
-                "recorded_count": 5,
-            },
-            aggregation=["median"],
-            policy={
-                "kind": "noisy_comparison",
-                "relative_tolerance": 0.0,
-                "absolute_tolerance": 0.5,
-                "review_action": "maintainer_review",
-            },
-        ),
-        budget.MetricDefinition(
-            id="idle_rss_mib",
-            unit="mib",
-            sampling={
-                "settle_seconds": 5,
-                "sample_interval_seconds": 1,
-                "recorded_count": 5,
-            },
-            aggregation=["median"],
-            policy={
-                "kind": "noisy_comparison",
-                "relative_tolerance": 0.10,
-                "absolute_tolerance": 8.0,
-                "review_action": "maintainer_review",
-            },
-        ),
-        budget.MetricDefinition(
-            id="session_scaling_mib_per_session",
-            unit="mib_per_session",
-            sampling={
-                "populations": [1, 4, 8],
-                "trials_per_population": 3,
-                "recorded_count": 3,
-            },
-            aggregation=["median"],
-            policy={
-                "kind": "noisy_comparison",
-                "relative_tolerance": 0.15,
-                "absolute_tolerance": 2.0,
-                "review_action": "maintainer_review",
-            },
-        ),
-        budget.MetricDefinition(
-            id="frame_update_work_count",
-            unit="work_count",
-            sampling={"recorded_count": 1},
-            aggregation=["exact"],
-            policy={
-                "kind": "deterministic",
-                "unchanged_transcript_layout_work": 0,
-                "review_action": "fail",
-            },
-        ),
-        budget.MetricDefinition(
-            id="protocol_round_trip_ms",
-            unit="milliseconds",
-            sampling={"warm_up_count": 5, "recorded_count": 30},
-            aggregation=["median", "nearest_rank_p95"],
-            policy=round_trip_policy,
-        ),
-        budget.MetricDefinition(
-            id="tool_round_trip_ms",
-            unit="milliseconds",
-            sampling={"warm_up_count": 5, "recorded_count": 30},
-            aggregation=["median", "nearest_rank_p95"],
-            policy=round_trip_policy,
-        ),
-    ]
-    return {definition.id: definition for definition in definitions}
+    return budget.canonical_metric_definitions()
 
 
 def canonical_report() -> budget.RuntimeReport:
     definitions = canonical_definitions()
     metrics = {}
     for metric_id, metric_definition in definitions.items():
-        samples = [
-            float(value)
-            for value in range(1, metric_definition.sampling["recorded_count"] + 1)
-        ]
+        samples = (
+            [0.0] * metric_definition.sampling["recorded_count"]
+            if "exact" in metric_definition.aggregation
+            else [
+                float(value)
+                for value in range(
+                    1, metric_definition.sampling["recorded_count"] + 1
+                )
+            ]
+        )
         aggregates = {}
         if "median" in metric_definition.aggregation:
             aggregates["median"] = budget.median(samples)

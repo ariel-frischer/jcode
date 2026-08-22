@@ -722,9 +722,13 @@ class PrivateRuntime:
     def cleanup(self) -> None:
         if self._cleaned:
             return
-        if self.root.exists():
-            shutil.rmtree(self.root)
-        self._cleaned = True
+        try:
+            if self.root.exists():
+                shutil.rmtree(self.root, ignore_errors=True)
+        except OSError:
+            pass
+        finally:
+            self._cleaned = True
 
 
 def _process_state(pid: int) -> tuple[str, int, int]:

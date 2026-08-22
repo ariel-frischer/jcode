@@ -25,6 +25,7 @@ def completed_run(sequence: int) -> dict[str, object]:
         "input_ready_ms": float(sequence) + 0.5,
         "input_ready_source": "probe_echo",
         "timed_out": False,
+        "failure": None,
     }
 
 
@@ -145,6 +146,22 @@ class StructuredCollectionTests(unittest.TestCase):
         self.assertEqual(result["status"], "invalid")
         self.assertEqual(result["failures"][0]["kind"], "timeout")
         self.assertEqual(result["failures"][0]["recorded_run"], 4)
+
+    def test_probe_write_failure_is_structured_invalid_evidence(self) -> None:
+        runs = [completed_run(index) for index in range(11)]
+        runs[3].update(
+            {
+                "input_ready_ms": None,
+                "timed_out": True,
+                "failure": {"kind": "probe_write", "diagnostic": "pty closed"},
+            }
+        )
+
+        result = self.collect(runs)
+
+        self.assertEqual(result["status"], "invalid")
+        self.assertEqual(result["failures"][0]["kind"], "probe_write")
+        self.assertEqual(result["failures"][0]["diagnostic"], "pty closed")
 
     def test_private_environment_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

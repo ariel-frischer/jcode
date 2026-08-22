@@ -2,7 +2,7 @@ feature:
     branch: "013-runtime-performance-budgets"
     created: "2026-08-21"
     status: "Completed"
-    completed_at: 2026-08-22T01:08:00Z
+    completed_at: "2026-08-22T01:08:00Z"
     input: "Establish maintained and reproducible client and shared-daemon runtime performance budgets for Bead jcode-l89.1. Reuse existing startup PTY benchmarks, runtime memory diagnostics, isolated socket/private daemon validation, frame/update guardrails, and actual built-binary identity checks. Define canonical metrics, commands, sample counts, aggregation, baseline thresholds or ratchets, and review action for first-visible and input-ready latency, daemon readiness, idle CPU/RSS, per-session memory scaling, representative frame/update work, and local protocol/tool round-trip overhead. Automate only deterministic low-variance gates; keep noisy machine-sensitive metrics reproducible with baseline comparison and tolerances. Add focused tests for parsing, missing or old binary rejection, timeouts/failures, and budget comparison. Validate scripts/check_guardrails.sh and a newly built isolated-runtime smoke path. Preserve the single-server multi-client architecture and backward compatibility. Explicitly state that developer-velocity changes cannot silently regress runtime budgets. Trace PRIN-002, PRIN-004, PRIN-005, PRIN-007, and PRIN-010. Use TDD for behavior changes. Keep edits surgical. Do not mutate Beads, merge, push, or remove the worktree. Commit the completed bounded implementation and report exact checks."
 user_stories:
     - id: "US-001"

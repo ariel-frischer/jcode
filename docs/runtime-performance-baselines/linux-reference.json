@@ -231,7 +231,7 @@
       "aggregates": {
         "median": 108.77281101420522
       },
-      "classification": "pass",
+      "classification": "deterministic_failure",
       "diagnostics": [],
       "samples": [
         117.60332609992474,
@@ -412,6 +412,6 @@
       ]
     }
   },
-  "reason": "Reviewed representative of three complete healthy reports collected sequentially on the designated AC-powered Linux host on 2026-08-21; run-2 has the median daemon-readiness aggregate and representative noisy metrics. This baseline does not waive the independent 80 ms daemon-readiness gate.",
+  "reason": "Reviewed representative of three complete reports collected sequentially on the designated AC-powered Linux host on 2026-08-22; run-2 has the median daemon-readiness aggregate and representative noisy metrics. This baseline records, but does not waive, the independent 80 ms daemon-readiness failure.",
   "schema_version": "1.0.0"
 }

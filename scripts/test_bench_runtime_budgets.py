@@ -357,6 +357,17 @@ class PrivateRuntimeTests(unittest.TestCase):
             self.assertEqual(environment["JCODE_DEBUG_CONTROL"], "1")
             self.assertEqual(environment["JCODE_SOCKET"], str(runtime.socket_path))
 
+    def test_private_runtime_cleanup_does_not_replace_an_original_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = budget.PrivateRuntime.create(parent_dir=Path(temp_dir))
+            with mock.patch.object(
+                budget.shutil, "rmtree", side_effect=OSError("cleanup denied")
+            ) as remove:
+                runtime.cleanup()
+                runtime.cleanup()
+
+            remove.assert_called_once_with(runtime.root, ignore_errors=True)
+
     def test_pre_existing_socket_is_rejected_and_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             socket_path = Path(temp_dir) / "existing.sock"
@@ -662,7 +673,14 @@ class CollectOrchestrationTests(unittest.TestCase):
             )
 
     def test_frame_evidence_uses_the_repository_cargo_gate(self) -> None:
-        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=(
+                "test profile::tests::no_state_redoes_layout_on_an_unchanged_frame ... "
+                "JCODE_FRAME_RELAYOUT_WORK_COUNT=0\nok\n"
+            ),
+        )
         with mock.patch.object(
             self.cli.subprocess,
             "run",
@@ -673,8 +691,62 @@ class CollectOrchestrationTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[0], str(Path.cwd() / "scripts/dev_cargo.sh"))
         self.assertEqual(command[1], "test")
+        self.assertIn("--nocapture", command)
         self.assertEqual(result["status"], "valid")
+        self.assertEqual(result["samples"], [0.0])
         self.assertEqual(result["command"], command)
+
+    def test_frame_evidence_rejects_missing_work_count(self) -> None:
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="")
+        with mock.patch.object(self.cli.subprocess, "run", return_value=completed):
+            result = self.cli._frame_work_evidence(cwd=Path.cwd())
+
+        self.assertEqual(result["status"], "invalid")
+        self.assertIn("work-count marker", result["failures"][0])
+
+    def test_collected_deterministic_metrics_are_classified_immediately(self) -> None:
+        definitions = budget.canonical_metric_definitions()
+
+        daemon = self.cli._metric_result(
+            [100.0] * 5,
+            definition=definitions["daemon_ready_ms"],
+        )
+        frame = self.cli._metric_result(
+            [1.0],
+            definition=definitions["frame_update_work_count"],
+            exact=True,
+        )
+
+        self.assertEqual(
+            daemon.classification, budget.Classification.DETERMINISTIC_FAILURE
+        )
+        self.assertEqual(
+            frame.classification, budget.Classification.DETERMINISTIC_FAILURE
+        )
+
+    def test_collector_preserves_unsupported_platform_evidence(self) -> None:
+        definition = budget.canonical_metric_definitions()["idle_rss_mib"]
+
+        result = self.cli._collector_metric(
+            {"status": "unsupported", "diagnostic": "procfs unavailable"},
+            [],
+            definition=definition,
+        )
+
+        self.assertEqual(result.classification, budget.Classification.UNSUPPORTED)
+        self.assertEqual(result.samples, [])
+        self.assertEqual(result.diagnostics, ["procfs unavailable"])
+
+    def test_cli_module_supports_scripts_package_import(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "-c", "import scripts.bench_runtime_budgets"],
+            cwd=Path(__file__).parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_collect_command_propagates_collector_failures_as_invalid(self) -> None:
         failures = (
@@ -945,6 +1017,38 @@ class ComparisonAndRatchetTests(unittest.TestCase):
 
             self.assertEqual(exit_code, self.cli.ExitCode.INVALID)
             self.assertIn("invalid", stderr)
+            self.assertFalse(output.exists())
+
+    def test_baseline_creation_rejects_deterministic_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            report = canonical_report()
+            report.metrics["daemon_ready_ms"] = metric_result_with_target_aggregate(
+                report.definitions["daemon_ready_ms"],
+                baseline_value=81.0,
+                aggregation="median",
+                target_value=81.0,
+            )
+            report.metrics["daemon_ready_ms"] = replace(
+                report.metrics["daemon_ready_ms"],
+                classification=budget.Classification.DETERMINISTIC_FAILURE,
+            )
+            report_path = root / "failed-report.json"
+            output = root / "baseline.json"
+            write_json(report_path, report)
+
+            exit_code, _stdout, stderr = self.invoke(
+                "baseline",
+                "--report",
+                str(report_path),
+                "--output",
+                str(output),
+                "--reason",
+                "failed deterministic evidence must be rejected",
+            )
+
+            self.assertEqual(exit_code, self.cli.ExitCode.INVALID)
+            self.assertIn("deterministic gate", stderr)
             self.assertFalse(output.exists())
 
     def test_baseline_creation_is_explicit_attributable_and_overwrite_safe(

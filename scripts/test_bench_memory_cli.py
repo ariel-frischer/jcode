@@ -70,7 +70,7 @@ class IdleResourceCollectionTests(unittest.TestCase):
             ),
             mock.patch.object(collector.time, "sleep", sleeper),
         ):
-            result = collect_idle_resources(daemon_pid=4242)
+            result = collect_idle_resources(daemon_pid=4242, platform_name="Linux")
         return result, sampler, sleeper
 
     def test_waits_five_seconds_then_collects_five_one_second_samples(self) -> None:
@@ -86,11 +86,10 @@ class IdleResourceCollectionTests(unittest.TestCase):
             },
         )
         self.assertEqual(sampler.call_count, 5)
-        sampler.assert_has_calls([mock.call(4242)] * 5)
-        self.assertEqual(
-            sleeper.call_args_list,
-            [mock.call(5.0)] + [mock.call(1.0)] * 4,
+        sampler.assert_has_calls(
+            [mock.call(4242, sample_window_s=1.0)] * 5
         )
+        self.assertEqual(sleeper.call_args_list, [mock.call(5.0)])
         self.assertEqual(len(result["samples"]), 5)
         self.assertEqual(result["aggregates"]["median_cpu_percent"], 0.3)
         self.assertEqual(result["aggregates"]["median_rss_mib"], 104.0)
@@ -128,33 +127,50 @@ class SessionScalingCollectionTests(unittest.TestCase):
         launch = collector.SessionLaunch(
             5001, 5001, 31, True, False, "connecting", 0.1, None, None
         )
-        with (
-            mock.patch.object(
-                collector.subprocess, "Popen", return_value=process
-            ) as popen,
-            mock.patch.object(collector.os, "getpgid", side_effect=lambda pid: pid),
-            mock.patch.object(collector, "wait_for_socket", return_value=True),
-            mock.patch.object(
-                collector, "create_debug_session", side_effect=[f"session-{n}" for n in range(4)]
-            ) as create_session,
-            mock.patch.object(
-                collector, "launch_interactive", return_value=launch
-            ) as attach_client,
-            mock.patch.object(collector, "_read_proc_rss_mib", return_value=100.0),
-            mock.patch.object(
-                collector, "_runtime_memory_attribution", return_value=(4, 40.0)
-            ),
-            mock.patch.object(collector, "terminate_pgroup"),
-            mock.patch.object(collector.os, "close"),
-            mock.patch.object(collector.shutil, "rmtree"),
-            mock.patch.object(collector.time, "sleep") as sleep,
-        ):
-            result = collector.run_population_trial(
-                binary=Path("/candidate/jcode"),
-                cwd=Path.cwd(),
-                population=4,
-                trial=1,
-            )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                mock.patch.object(
+                    collector.tempfile, "mkdtemp", return_value=temp_dir
+                ),
+                mock.patch.object(
+                    collector.subprocess, "Popen", return_value=process
+                ) as popen,
+                mock.patch.object(collector, "wait_for_socket", return_value=True),
+                mock.patch.object(
+                    collector,
+                    "create_debug_session",
+                    side_effect=[f"session-{n}" for n in range(4)],
+                ) as create_session,
+                mock.patch.object(
+                    collector, "launch_interactive", return_value=launch
+                ) as attach_client,
+                mock.patch.object(
+                    collector, "_read_proc_rss_mib", return_value=100.0
+                ),
+                mock.patch.object(
+                    collector, "_runtime_memory_attribution", return_value=(4, 40.0)
+                ),
+                mock.patch.object(
+                    collector.budget.OwnedProcess,
+                    "capture",
+                    side_effect=lambda pid: mock.Mock(pid=pid),
+                ) as capture,
+                mock.patch.object(
+                    collector.budget,
+                    "cleanup_owned_processes",
+                    return_value=collector.budget.CleanupResult(
+                        all_stopped=True, diagnostics=[]
+                    ),
+                ) as cleanup,
+                mock.patch.object(collector.os, "close"),
+                mock.patch.object(collector.time, "sleep") as sleep,
+            ):
+                result = collector.run_population_trial(
+                    binary=Path("/candidate/jcode"),
+                    cwd=Path.cwd(),
+                    population=4,
+                    trial=1,
+                )
 
         self.assertEqual(result["status"], "valid")
         server_env = popen.call_args.kwargs["env"]
@@ -164,10 +180,53 @@ class SessionScalingCollectionTests(unittest.TestCase):
         self.assertEqual(server_env["JCODE_DEBUG_CONTROL"], "1")
         self.assertEqual(create_session.call_count, 4)
         self.assertEqual(attach_client.call_count, 4)
+        self.assertEqual(capture.call_count, 5)
+        cleanup.assert_called_once()
+        self.assertEqual(result["cleanup"]["status"], "complete")
         self.assertEqual(
             sleep.call_args_list,
             [mock.call(collector.ATTRIBUTION_SETTLE_S)] * 5
             + [mock.call(collector.IDLE_SETTLE_S)],
+        )
+
+    def test_population_trial_reports_cleanup_failures_without_replacing_collection_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with (
+                mock.patch.object(
+                    collector.tempfile, "mkdtemp", return_value=temp_dir
+                ),
+                mock.patch.object(
+                    collector.subprocess,
+                    "Popen",
+                    side_effect=RuntimeError("launch failed"),
+                ),
+                mock.patch.object(
+                    collector.budget,
+                    "cleanup_owned_processes",
+                    side_effect=RuntimeError("cleanup failed"),
+                ),
+                mock.patch.object(
+                    collector.shutil, "rmtree", side_effect=OSError("remove failed")
+                ),
+            ):
+                result = collector.run_population_trial(
+                    binary=Path("/candidate/jcode"),
+                    cwd=Path.cwd(),
+                    population=1,
+                    trial=1,
+                )
+
+        self.assertEqual(result["status"], "invalid")
+        self.assertEqual(result["failure"]["diagnostic"], "launch failed")
+        self.assertEqual(result["cleanup"]["status"], "incomplete")
+        self.assertEqual(
+            result["cleanup"]["diagnostics"],
+            [
+                "owned-process cleanup failed: cleanup failed",
+                "private-path cleanup failed: remove failed",
+            ],
         )
 
     def collect(
