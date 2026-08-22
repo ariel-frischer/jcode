@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use std::num::NonZeroU64;
 
@@ -64,7 +64,11 @@ impl RunTurnLimit {
     pub(super) fn parse(raw: Option<&str>) -> Result<Self> {
         let max_turns = match raw {
             Some(raw) => {
-                let value = raw.trim().parse::<u64>().ok().and_then(NonZeroU64::new);
+                let parsed = raw
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|_| anyhow!("--max-turns must be a positive decimal whole number"))?;
+                let value = NonZeroU64::new(parsed);
                 let Some(value) = value else {
                     bail!("--max-turns must be a positive decimal whole number");
                 };
@@ -111,6 +115,60 @@ pub(super) fn print_plain_stop(reason: Option<RunStopReason>) {
     if let Some(message) = plain_stop_message(reason) {
         println!("{message}");
     }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct NdjsonDoneReport {
+    pub r#type: &'static str,
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub text: String,
+    pub usage: crate::agent::TokenUsage,
+    pub upstream_provider: Option<String>,
+    pub connection_type: Option<String>,
+    pub connection_phase: Option<String>,
+    pub status_detail: Option<String>,
+    #[serde(flatten)]
+    pub stop: RunStopMetadata,
+}
+
+pub(super) async fn run_single_message_with_agent(
+    agent: &mut crate::agent::Agent,
+    provider: std::sync::Arc<dyn crate::provider::Provider>,
+    message: &str,
+    emit_json: bool,
+    emit_ndjson: bool,
+    turn_limit: &mut RunTurnLimit,
+) -> Result<()> {
+    let result: Result<()> = async {
+        if emit_json {
+            let text = super::run_single_message_command_capture_with_auto_poke(
+                agent, message, turn_limit,
+            )
+            .await?;
+            let report = super::RunCommandReport {
+                session_id: agent.session_id().to_string(),
+                provider: provider.name().to_string(),
+                model: provider.model(),
+                text,
+                usage: agent.last_usage().clone(),
+                stop: RunStopMetadata::from_reason(turn_limit.stop_reason()),
+            };
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else if emit_ndjson {
+            super::run_single_message_command_ndjson(agent, provider, message, turn_limit).await?;
+        } else {
+            super::run_single_message_command_plain_with_auto_poke(agent, message, turn_limit)
+                .await?;
+            print_plain_stop(turn_limit.stop_reason());
+        }
+        Ok(())
+    }
+    .await;
+
+    agent.mark_closed();
+    result
 }
 
 fn plain_stop_message(reason: Option<RunStopReason>) -> Option<String> {
