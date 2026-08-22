@@ -366,7 +366,7 @@ phases:
           - "The lane stays within declared sample, disk, and time bounds and retains all invalid/retried evidence."
       - id: "T027"
         title: "Create the complete adopt-or-reject ledger in specs/015-tune-rust-feedback/decisions.yaml"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"

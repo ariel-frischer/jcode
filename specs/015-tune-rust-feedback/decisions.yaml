@@ -1,0 +1,244 @@
+schema_version: "1.0.0"
+feature: "015-tune-rust-feedback"
+generated_at: "2026-08-22"
+
+policy:
+  allowed_statuses:
+    - adopted
+    - rejected
+  adoption_requirements:
+    - "Complete, comparable baseline and candidate receipts cover representative intended scenarios."
+    - "Candidate p50 and nearest-rank p95 are both lower than baseline."
+    - "Failures and retries do not increase."
+    - "RSS, swap, and disk impact remain acceptable."
+    - "Coordinated duplicate requests do not create uncontrolled underlying Cargo execution."
+    - "Applicable maintained client and daemon runtime budgets do not regress."
+  incomplete_gate_behavior: "Reject the candidate and retain the established safe default until the missing evidence is collected."
+
+candidate_inventory:
+  expected_count: 7
+  candidates:
+    - adaptive_jobs
+    - fixed_jobs_6
+    - fixed_jobs_8
+    - inferred_focused_scope
+    - nextest_focused
+    - sccache_cold_miss
+    - sccache_reusable_hit
+
+summary:
+  adopted: 0
+  rejected: 7
+  default_changes_authorized: false
+  safe_defaults_retained:
+    cargo_jobs: "Existing adaptive policy with explicit JCODE_BUILD_JOBS or CARGO_BUILD_JOBS precedence."
+    validation_scope: "Established broad scope unless an explicit request selects otherwise."
+    test_executor: "cargo test"
+    warm_incremental_cache: "sccache disabled"
+  rationale: >-
+    No evaluated option satisfies every adoption gate. The frozen baseline is incomplete,
+    maintained runtime-budget evidence is still pending, nextest and sccache are unavailable,
+    and the fixed-job comparison is limited to one warm-check scenario. This ledger therefore
+    rejects every bounded candidate as a default change while preserving the established
+    correctness-first fallbacks.
+
+decisions:
+  - candidate: adaptive_jobs
+    category: job_count
+    status: rejected
+    tested_configuration:
+      jobs: "adaptive host-derived policy"
+      scenario: "warm cargo check -p jcode-build-support"
+      coordinated_duplicate: "24 requests per sample, one leader and 23 followers"
+      incremental: true
+      sccache: false
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The frozen six-scenario baseline is explicitly incomplete and contains only a validator preflight sample."
+      - path: "specs/015-tune-rust-feedback/evidence/job-counts.json"
+        role: candidate
+        finding: "Warm-check p50/p95 were 123/136 ms; coordinated-duplicate p50/p95 were 2933/3020 ms with 20 underlying actions for 135 requests and no uncontrolled execution."
+    gate_evaluation:
+      lower_p50_and_p95: "not established because adaptive is the comparator and the representative baseline is incomplete"
+      failures_and_retries: "all exits were zero; retained retry_sample_count was 4 in each sampled scenario"
+      resources: "zero swap; warm-check p95 RSS 125038592 bytes; coordinated-duplicate p95 RSS 226746368 bytes"
+      duplicate_execution: "pass: 135 requests produced 20 authorized underlying actions, including one action per duplicate sample"
+      runtime_budgets: "not evaluated yet"
+    rationale: >-
+      Reject adaptive jobs as a newly adopted experiment because it has no independent complete
+      comparator, cannot demonstrate lower p50 and p95 than baseline, and lacks maintained
+      runtime-budget evidence. This does not remove the pre-existing adaptive policy.
+    safe_default_or_fallback: "Retain the existing adaptive policy as the unchanged baseline and preserve explicit numeric job overrides."
+    reconsideration_condition: >-
+      Reconsider an affirmative adoption claim after a complete representative baseline and
+      candidate matrix plus maintained client and daemon runtime-budget checks are available.
+
+  - candidate: fixed_jobs_6
+    category: job_count
+    status: rejected
+    tested_configuration:
+      jobs: 6
+      scenario: "warm cargo check -p jcode-build-support"
+      incremental: true
+      sccache: false
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The representative six-scenario baseline is incomplete."
+      - path: "specs/015-tune-rust-feedback/evidence/job-counts.json"
+        role: baseline_and_candidate
+        finding: "Adaptive p50/p95 were 123/136 ms; 6-job p50/p95 were 115/118 ms in the isolated warm-check lane."
+    gate_evaluation:
+      lower_p50_and_p95: "pass for the measured warm-check lane only"
+      failures_and_retries: "all exits were zero and retry_sample_count matched adaptive at 4"
+      resources: "zero swap; 6-job p95 RSS 124420096 bytes versus adaptive 125038592 bytes"
+      duplicate_execution: "not measured for the 6-job candidate; only adaptive used the coordinated-duplicate lane"
+      runtime_budgets: "not evaluated yet"
+    rationale: >-
+      The measured warm-check p50 and p95 improved, but one package check is not the complete
+      representative matrix, coordinated-duplicate behavior was not measured under six jobs,
+      and maintained runtime budgets remain pending. The full adoption gate is therefore unmet.
+    safe_default_or_fallback: "Keep adaptive jobs as the default; users may retain the existing explicit 6-job override."
+    reconsideration_condition: >-
+      Re-run six jobs across the complete representative matrix, including coordinated duplicate
+      ownership, and adopt only if both percentiles improve without reliability, resource, or
+      maintained runtime-budget regression.
+
+  - candidate: fixed_jobs_8
+    category: job_count
+    status: rejected
+    tested_configuration:
+      jobs: 8
+      scenario: "warm cargo check -p jcode-build-support"
+      incremental: true
+      sccache: false
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The representative six-scenario baseline is incomplete."
+      - path: "specs/015-tune-rust-feedback/evidence/job-counts.json"
+        role: baseline_and_candidate
+        finding: "Adaptive p50/p95 were 123/136 ms; 8-job p50/p95 were 128/131 ms in the isolated warm-check lane."
+    gate_evaluation:
+      lower_p50_and_p95: "fail: p50 regressed by 5 ms although p95 improved by 5 ms"
+      failures_and_retries: "all exits were zero and retry_sample_count matched adaptive at 4"
+      resources: "zero swap; 8-job p95 RSS 124567552 bytes versus adaptive 125038592 bytes"
+      duplicate_execution: "not measured for the 8-job candidate"
+      runtime_budgets: "not evaluated yet"
+    rationale: "The candidate fails the mandatory both-percentiles gate and also lacks complete representative, duplicate, and runtime-budget evidence."
+    safe_default_or_fallback: "Keep adaptive jobs as the default; users may retain the existing explicit 8-job override."
+    reconsideration_condition: >-
+      Reconsider only after a complete equivalent matrix shows repeatable improvements in both
+      p50 and p95, including coordinated duplicate and maintained runtime-budget evidence.
+
+  - candidate: inferred_focused_scope
+    category: narrowing
+    status: rejected
+    tested_configuration:
+      resolver: "scripts/rust_validation_scope.py schema 1.0"
+      eligible_cases: "single-package library, binary, integration-test, and proven optional-feature paths"
+      fallback_cases: "ambiguous target, broad workspace, cross-package, unproven optional feature, release-sensitive, and unknown paths"
+      cargo_execution: false
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "No complete broad Cargo feedback baseline is available for a paired narrowing comparison."
+      - path: "specs/015-tune-rust-feedback/evidence/focused-scope.json"
+        role: candidate
+        finding: "Fifty resolver samples preserved expected scope and provenance with zero invalid samples, but measured resolver latency rather than Cargo feedback latency."
+    gate_evaluation:
+      lower_p50_and_p95: "not established for paired broad-versus-focused Cargo execution"
+      failures_and_retries: "resolver contract samples had zero nonzero exits and zero retries"
+      resources: "resolver p95 RSS remained below 40 MB with zero swap; Cargo resource impact was not measured"
+      duplicate_execution: "not applicable to resolver-only samples"
+      runtime_budgets: "not evaluated yet"
+    rationale: >-
+      Correctness and conservative fallback behavior are demonstrated, but the receipt explicitly
+      cannot prove an edit-to-feedback p50/p95 win and the maintained runtime gates remain open.
+      Performance adoption is therefore rejected from the available evidence.
+    safe_default_or_fallback: "Use the established broad validation scope whenever the caller does not explicitly select a narrower scope."
+    reconsideration_condition: >-
+      Collect paired broad-versus-focused Cargo samples for representative eligible paths, pass
+      optional-feature and full-feature correctness checks, and confirm maintained runtime budgets.
+
+  - candidate: nextest_focused
+    category: test_executor
+    status: rejected
+    tested_configuration:
+      boundary: "compatible focused tests only"
+      selected_test: "jcode-build-support lib test tests::test_build_manifest_default --exact"
+      availability_probe: "cargo nextest --version"
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The complete representative baseline is unavailable."
+      - path: "specs/015-tune-rust-feedback/evidence/nextest.json"
+        role: candidate_and_fallback
+        finding: "cargo-nextest was unavailable; five cargo test fallback samples passed at p50/p95 124/124 ms with zero swap and zero disk delta."
+    gate_evaluation:
+      lower_p50_and_p95: "not measurable because nextest did not execute"
+      failures_and_retries: "fallback exits were all zero; candidate reliability was not measurable"
+      resources: "fallback p95 RSS 118386688 bytes, zero swap, and zero target disk delta"
+      duplicate_execution: "not applicable to the bounded focused lane"
+      runtime_budgets: "not evaluated for an unavailable candidate"
+    rationale: "The candidate is unavailable, so compatibility, execution performance, and adoption gates cannot be demonstrated."
+    safe_default_or_fallback: "cargo test with unchanged package, target, filter, exact-match, ignored, and harness semantics."
+    reconsideration_condition: >-
+      Re-run the same bounded lane after cargo-nextest is installed and prove equivalent package,
+      target, feature, exact-filter, ignored, and harness semantics before comparing performance.
+
+  - candidate: sccache_cold_miss
+    category: cache_mode
+    status: rejected
+    tested_configuration:
+      boundary: "fresh cold target, CARGO_INCREMENTAL=0"
+      availability_probe: "cargo sccache --version"
+      intended_state: "isolated empty cache cold miss"
+      jobs: 6
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The complete cold-build baseline is unavailable."
+      - path: "specs/015-tune-rust-feedback/evidence/sccache.json"
+        role: candidate_and_fallback
+        finding: "sccache was unavailable; the fallback non-incremental Cargo build completed three fresh-target samples at p50/p95 4874/4882 ms."
+    gate_evaluation:
+      lower_p50_and_p95: "not measurable because sccache did not execute"
+      failures_and_retries: "fallback exits were all zero; candidate reliability was not measurable"
+      resources: "fallback p95 RSS 1568215040 bytes, zero swap, and 105237534 target bytes per sample"
+      duplicate_execution: "not applicable to the serialized cold lane"
+      runtime_budgets: "not evaluated for an unavailable candidate"
+    rationale: "The unavailable candidate produced no cache miss, effectiveness, timing, or failure-behavior measurements that could satisfy adoption."
+    safe_default_or_fallback: "Use the established non-incremental Cargo build for bounded cold checks and keep sccache disabled for warm incremental development."
+    reconsideration_condition: >-
+      Install sccache and re-run the bounded lane with an isolated empty cache, complete cold
+      baseline, resource and disk receipts, safe failure fallback, and maintained runtime budgets.
+
+  - candidate: sccache_reusable_hit
+    category: cache_mode
+    status: rejected
+    tested_configuration:
+      boundary: "fresh cold target, CARGO_INCREMENTAL=0"
+      availability_probe: "cargo sccache --version"
+      intended_state: "identity-matched cache reused after a valid cold miss"
+      jobs: 6
+    evidence:
+      - path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        role: baseline
+        finding: "The complete cold-build baseline is unavailable."
+      - path: "specs/015-tune-rust-feedback/evidence/sccache.json"
+        role: candidate_and_fallback
+        finding: "sccache was unavailable, so no valid matching miss existed and the reusable-hit candidate could not run; the established fallback passed."
+    gate_evaluation:
+      lower_p50_and_p95: "not measurable because neither candidate miss nor reusable hit executed"
+      failures_and_retries: "fallback exits were all zero; candidate reliability was not measurable"
+      resources: "fallback resource and disk observations were retained; candidate cache growth was not measurable"
+      duplicate_execution: "not applicable to the serialized cold lane"
+      runtime_budgets: "not evaluated for an unavailable candidate"
+    rationale: "A reusable-hit claim requires an identity-matched valid miss sample, which cannot exist while sccache is unavailable."
+    safe_default_or_fallback: "Use the established non-incremental Cargo build and leave warm incremental sccache disabled."
+    reconsideration_condition: >-
+      After sccache is installed, first collect a valid isolated cold miss, then reuse the exact
+      matching cache identity and adopt only if both percentiles and every reliability, resource,
+      disk, fallback, and maintained runtime gate pass.
