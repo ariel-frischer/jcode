@@ -834,6 +834,7 @@ pub(super) fn handoff_payload(
     }
 }
 
+#[cfg(test)]
 pub(super) fn process_manifest_id_for_lifecycle(
     status: &crate::background::TaskStatusFile,
     session_id: &str,

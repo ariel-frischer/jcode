@@ -779,7 +779,7 @@ phases:
       tasks:
         - id: "T064"
           title: "Complete lifecycle observability documentation"
-          status: "Pending"
+          status: "Completed"
           type: "documentation"
           parallel: true
           story_id: null
@@ -791,7 +791,7 @@ phases:
             - "Document unchanged remote telemetry consent and all explicit non-goals."
         - id: "T065"
           title: "Verify generated configuration template and public documentation links"
-          status: "Pending"
+          status: "Completed"
           type: "documentation"
           parallel: true
           story_id: null
@@ -802,7 +802,7 @@ phases:
             - "Confirm documentation references use stable built-in interfaces and never require direct sidecar access."
         - id: "T066"
           title: "Run focused affected-crate tests, checks, and build"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -814,7 +814,7 @@ phases:
             - "Record any proven pre-existing unrelated failure without weakening or rebaselining guardrails."
         - id: "T067"
           title: "Run repository guardrails and isolated-socket selfdev acceptance"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -826,7 +826,7 @@ phases:
             - "Verify the runtime query completes within two seconds for the bounded acceptance fixture and does not inspect the shared daemon."
         - id: "T068"
           title: "Perform final scope, privacy, compatibility, and artifact review"
-          status: "Pending"
+          status: "Completed"
           type: "refactor"
           parallel: false
           story_id: null

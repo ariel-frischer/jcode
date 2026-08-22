@@ -281,6 +281,7 @@ pub(crate) fn sanitize_event(mut event: LifecycleEvent) -> LifecycleEvent {
 ///
 /// The status file is the trust boundary. Its process identity, command,
 /// output, environment, and error fields are intentionally not projected.
+#[cfg(test)]
 pub(crate) fn opaque_process_manifest_id(
     status: &crate::background::TaskStatusFile,
     session_id: &str,
