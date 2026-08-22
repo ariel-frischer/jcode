@@ -1,0 +1,598 @@
+tasks:
+  branch: "agent/jcode-l89.2-selfdev-coalesce"
+  created: "2026-08-22"
+  spec_path: "specs/014-coalesce-selfdev-cargo/spec.yaml"
+  plan_path: "specs/014-coalesce-selfdev-cargo/plan.yaml"
+
+summary:
+  total_tasks: 38
+  total_phases: 8
+  parallel_opportunities: 9
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Establish requirement traceability, focused fixtures, and baseline evidence before behavioral changes"
+    tasks:
+      - id: "T001"
+        title: "Create the requirement and principle acceptance matrix"
+        status: "Pending"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Map FR-001 through FR-021 and SC-001 through SC-006 to one direct automated or built-binary check, including PRIN-002, PRIN-004, PRIN-005, PRIN-006, PRIN-007, PRIN-009, and PRIN-010."
+          - "Record the exact focused command, expected observation, evidence location, and responsible task for every row."
+          - "Mark live or costly validation as excluded unless explicitly approved, while retaining isolated local private-socket validation."
+      - id: "T002"
+        title: "Add deterministic selfdev queue concurrency test helpers"
+        status: "Pending"
+        type: "setup"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "Provide isolated JCODE_HOME request storage, controllable queue and Cargo-gate barriers, synthetic session IDs, process-launch counters, deterministic progress events, and timeout-bounded Tokio helpers."
+          - "Allow tests to pause before queue head, before gate acquisition, after process start, and before terminal persistence without using the shared daemon."
+          - "Keep all fixtures synthetic and free of real paths, source content, credentials, or environment values."
+      - id: "T003"
+        title: "Capture duplicate-count, latency, and runtime-budget baseline procedure"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Define the controlled pre-change workload for overlapping exact build, test, and check requests, including session count, timing boundaries, execution-count source, and subscriber-observed latency measurement."
+          - "Reference the maintained jcode-l89.1 thresholds and scripts/bench_runtime_budgets.py without weakening any budget."
+          - "Require the changed binary path, resolved executable, private socket, machine context, tolerance, raw evidence paths, and comparison method in final results."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Define and implement the shared versioned identity, eligibility, persistence, and receipt contracts required by every story"
+    tasks:
+      - id: "T004"
+        title: "Add failing identity and receipt serialization contract tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-selfdev-types/src/lib.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "Cover schema version visibility, deterministic equality, identity-version inequality, component summaries, lifecycle states, timings, roles, reuse, reasons, process exit, and artifact/source validation."
+          - "Deserialize legacy persisted request and receipt shapes through serde defaults without changing existing field names or enum representations."
+          - "Assert serialized identities and receipts contain no sentinel path, source, diff, argument value, secret, or sensitive environment value."
+      - id: "T005"
+        title: "Add failing source, lockfile, toolchain, environment, and normalization tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-build-support/src/tests.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "Cover deterministic redacted repository, worktree, source, Cargo.lock present-or-absent, rust-toolchain, rustc/cargo, and allowlisted environment fingerprints."
+          - "Cover generated builds and understood single Cargo build, test, and check eligibility, plus ineligibility for opaque shell, compound shell, and unsupported Cargo actions."
+          - "Prove only allowlisted order-insensitive features and package selections normalize, while unknown, positional, target, profile, and behavior-changing argument distinctions remain lossless."
+      - id: "T006"
+        title: "Add failing persisted execution and subscriber compatibility tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T002", "T004"]
+        acceptance_criteria:
+          - "Deserialize existing BuildRequest JSON with no shared-execution fields and preserve current single-request behavior."
+          - "Round-trip shared execution IDs, immutable identities, subscriber roles and states, timing boundaries, process exits, terminal reasons, result references, and background delivery with additive defaults."
+          - "Reject or reconcile malformed active ownership visibly without treating incomplete, cancelled, superseded, or abandoned state as reusable success."
+      - id: "T007"
+        title: "Implement versioned identity and lifecycle receipt value types"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-selfdev-types/src/lib.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Define dependency-light CargoRequestIdentity, identity summary, Cargo selection, subscriber role and state, execution state, timing, process exit, terminal reason, reuse, and lifecycle receipt contracts."
+          - "Use a visible schema version, deterministic canonical digest input, bounded typed labels, and serde-compatible additive defaults."
+          - "Keep the crate free of app-core, process, filesystem, protocol runtime, and other upward dependencies."
+      - id: "T008"
+        title: "Implement redacted identity component collection"
+        status: "Pending"
+        type: "implementation"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-build-support/src/source_state.rs"
+        dependencies: ["T005", "T007"]
+        acceptance_criteria:
+          - "Collect canonical repository and worktree scopes, source state, Cargo.lock state, toolchain identity, and reviewed behavior-relevant environment names into bounded fingerprints."
+          - "Return actionable collection errors rather than silently omitting a required dimension or exposing raw input."
+          - "Recompute every mutable component through a reusable helper suitable for pre-gate validation."
+      - id: "T009"
+        title: "Implement conservative Cargo eligibility and argument normalization"
+        status: "Pending"
+        type: "implementation"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-build-support/src/paths.rs"
+        dependencies: ["T005", "T007"]
+        acceptance_criteria:
+          - "Classify generated builds and syntactically understood single Cargo build, test, and check invocations as eligible."
+          - "Canonicalize action, profile, features, packages, workspace/exclude, targets, target triple, and argv only where equivalence is proven."
+          - "Preserve existing arbitrary selfdev test execution while marking opaque, compound, unsupported, or ambiguous commands ineligible for coalescing and reuse."
+      - id: "T010"
+        title: "Implement additive shared execution and subscriber persistence"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T006", "T007", "T008", "T009"]
+        acceptance_criteria:
+          - "Represent one immutable identity per SharedCargoExecution and one request ID per CargoSubscriber under the existing request storage boundary."
+          - "Index at most one active or reusable canonical execution per exact identity while retaining bounded terminal history and legacy request readability."
+          - "Keep the existing server-owned queue as the sole authority with no daemon, client scheduler, or parallel execution path."
+      - id: "T011"
+        title: "Wire generated build and test requests into canonical identity collection"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T008", "T009", "T010"]
+        acceptance_criteria:
+          - "Build complete identities from effective generated-build inputs and eligible selfdev test commands, including current source, lockfile, toolchain, selection, environment, and normalized arguments."
+          - "Return explicit eligibility and collection diagnostics without changing execution behavior for ineligible commands."
+          - "Use identity version plus complete canonical components for equality, with the digest only as a bounded lookup aid."
+
+  - number: 3
+    title: "User Story 1 - Share exact duplicate validation"
+    purpose: "Serve concurrent exact build, test, and check requests through one execution with truthful follower progress and safe reuse"
+    story_reference: "US-001"
+    independent_test: "Submit identical eligible build, test, and check requests from isolated sessions and verify one process, leader/follower roles, late progress attachment, equivalent terminal outcomes, and validated successful reuse."
+    tasks:
+      - id: "T012"
+        title: "Add failing exact coalescing and late-follower concurrency tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T002", "T011"]
+        acceptance_criteria:
+          - "For eligible build, test, and check requests, prove two or more concurrent exact identities launch exactly one process and assign one leader plus followers."
+          - "Attach followers while queued, during gate wait, and after process start; assert monotonic current-and-future progress and one matching terminal execution outcome per active subscriber."
+          - "Disconnect the leader session while followers remain and prove server ownership continues execution and delivery."
+      - id: "T013"
+        title: "Add failing successful-result reuse and invalid-reuse tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T002", "T011"]
+        acceptance_criteria:
+          - "Reuse an exact completed success only when the terminal record and rust-action receipt are complete and any required artifact exists and matches the recorded source identity."
+          - "Refuse reuse for failure, cancellation, supersession, abandonment, missing receipt, archived record, missing artifact, or artifact/source mismatch."
+          - "Report reused role and provenance without launching Cargo or mutating the original execution outcome."
+      - id: "T014"
+        title: "Implement leader and follower attachment for queued and running executions"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Atomically create one leader execution or attach a follower to an exact active identity before any process launch."
+          - "Fan out existing and future progress plus the actual process result to every active subscriber without duplicate terminal completion."
+          - "Preserve current queue ordering, background task delivery, notify/wake behavior, follow-existing-build behavior, and the global Cargo gate."
+      - id: "T015"
+        title: "Implement exact successful execution reuse"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T013", "T014"]
+        acceptance_criteria:
+          - "Select only exact same-version successful terminal executions in active bounded history."
+          - "Validate receipt completeness and required artifact/source identity before creating a reused subscriber outcome."
+          - "Fall back to a new execution when reuse evidence is absent, stale, incomplete, or mismatched."
+      - id: "T016"
+        title: "Add server-owned multi-session delivery regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/queue_tests.rs"
+        dependencies: ["T014", "T015"]
+        acceptance_criteria:
+          - "Exercise concurrent sessions attaching to one execution, leader-session departure, late follower delivery, wake/notify combinations, and exactly one terminal result per subscriber."
+          - "Verify no client-owned execution path or second runtime authority is introduced."
+          - "Preserve existing single-session background delivery behavior."
+
+  - number: 4
+    title: "User Story 2 - Keep near misses isolated"
+    purpose: "Guarantee that any behavior-relevant identity difference produces independent execution and provenance"
+    story_reference: "US-002"
+    independent_test: "Vary one identity dimension or version at a time and verify no attachment or reuse, while documented equivalent normalization cases still share."
+    tasks:
+      - id: "T017"
+        title: "Add the complete one-dimension near-miss identity matrix"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-build-support/src/tests.rs"
+        dependencies: ["T008", "T009"]
+        acceptance_criteria:
+          - "Vary repository, worktree, source or dirty state, Cargo.lock, toolchain, action, profile, features, package/workspace/exclude selection, target, target triple, relevant environment, normalized arguments, and identity version individually."
+          - "Assert every behavior-changing variation changes the canonical identity and digest while approved equivalent feature/package ordering remains equal."
+          - "Assert diagnostic summaries reveal only approved component labels and fingerprints."
+      - id: "T018"
+        title: "Add queue-level near-miss execution and reuse isolation tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T016", "T017"]
+        acceptance_criteria:
+          - "Queue representative pairs from every identity category and prove each near miss creates its own execution and terminal receipt."
+          - "Prove a historical success cannot satisfy a different identity or schema version."
+          - "Prove ineligible opaque commands retain independent existing execution behavior rather than entering the identity index."
+      - id: "T019"
+        title: "Harden exact identity lookup against digest-only matching"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "Require matching schema version and complete canonical identity components after digest lookup before attachment or reuse."
+          - "Treat collisions, malformed persisted summaries, and missing required identity components as non-matches with visible diagnostics."
+          - "Pass the full near-miss and legacy compatibility matrix without changing opaque-command behavior."
+
+  - number: 5
+    title: "User Story 3 - Supersede obsolete queued work"
+    purpose: "Revalidate queued identity before Cargo competition and visibly stop obsolete work without disturbing unrelated execution"
+    story_reference: "US-003"
+    independent_test: "Hold a request behind unrelated Cargo work, mutate its identity, and verify superseded completion with no process launch and no signal or outcome change for the active request."
+    tasks:
+      - id: "T020"
+        title: "Add failing pre-gate supersession and unrelated-work safety tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "Mutate source, Cargo.lock, toolchain, eligibility, and representative selection/environment dimensions after enqueue but before gate acquisition."
+          - "Assert obsolete work launches no Cargo process, acquires no execution ownership, and completes every active subscriber as superseded with the original redacted identity and bounded reason."
+          - "Assert unrelated active gate work receives no cancellation, signal, progress disruption, or altered terminal result."
+      - id: "T021"
+        title: "Implement queue-head identity and eligibility revalidation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Recompute complete identity and eligibility after reaching queue head and before acquiring the selfdev build lock or invoking scripts/dev_cargo.sh."
+          - "Transition drifted or newly ineligible executions once to superseded, persist a redacted reason, and deliver one terminal outcome per active subscriber."
+          - "Never terminate, signal, or otherwise mutate unrelated active work while superseding queued work."
+
+  - number: 6
+    title: "User Story 4 - Cancel subscribers safely"
+    purpose: "Allow independent subscriber cancellation while preserving the established final-subscriber cancellation and recovery contracts"
+    story_reference: "US-004"
+    independent_test: "Cancel proper subsets and then the final subscriber across queued, gate-wait, running, completion-race, failure, and abandoned-owner states."
+    tasks:
+      - id: "T022"
+        title: "Add failing subscriber cancellation and completion-race tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Cancel followers and the originating leader in different orders and prove a proper subset only terminates those subscriptions."
+          - "Cover queued, gate-wait, running, and near-simultaneous final cancellation versus process completion with exactly one truthful terminal outcome per subscriber."
+          - "Reproduce the existing queued and active final-subscriber safety decisions, including cases where underlying cancellation cannot or must not occur."
+      - id: "T023"
+        title: "Add failing abandoned execution recovery tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Simulate crashed or abandoned execution ownership, incomplete persistence, failed process launch, and missing terminal receipt."
+          - "Verify reconciliation releases identity ownership, preserves truthful prior subscriber outcomes, and permits a later exact request to execute."
+          - "Never expose a false in-progress or reusable success after recovery."
+      - id: "T024"
+        title: "Implement independent subscriber cancellation"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T022"]
+        acceptance_criteria:
+          - "Detach and terminally complete only the selected subscriber while any other active subscriber remains."
+          - "When the active count reaches zero, delegate to the existing queued or active safe underlying cancellation path and report its decision."
+          - "Preserve cancel-build identifiers, progress delivery, follow-existing-build behavior, and exactly-once completion under cancellation races."
+      - id: "T025"
+        title: "Implement shared execution reconciliation and recovery"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T023", "T024"]
+        acceptance_criteria:
+          - "Detect abandoned or inconsistent execution ownership during existing queue reconciliation."
+          - "Mark incomplete attempts non-reusable, release the identity index, and preserve bounded actionable failure or abandonment reasons."
+          - "Allow a later exact subscriber to lead a fresh execution without manual cleanup."
+
+  - number: 7
+    title: "User Story 5 - Inspect truthful lifecycle receipts"
+    purpose: "Expose consistent redacted lifecycle, timing, provenance, cancellation, exit, and activation evidence across all public selfdev surfaces"
+    story_reference: "US-005"
+    independent_test: "Exercise queued, gate-wait, running, follower, reused, successful, failed, cancelled, superseded, recovered, and activation paths and compare status, action, progress, and rust-action receipts."
+    tasks:
+      - id: "T026"
+        title: "Add failing status and terminal receipt lifecycle matrix"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T021", "T025"]
+        acceptance_criteria:
+          - "Cover queue, gate, execution, and total timing applicability for queued, running, successful, failed, cancelled, superseded, abandoned, follower, late follower, and reused outcomes."
+          - "Assert status and terminal metadata agree on identity version/digest, role, execution and request references, subscriber count, reuse, reason, process exit, and artifact/source validation."
+          - "Assert unavailable fields are absent or explicitly unavailable rather than fabricated."
+      - id: "T027"
+        title: "Add failing rust-actions selfdev context and redaction fixtures"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-005"
+        file_path: "scripts/test_dev_cargo.py"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Verify bounded JCODE_SELFDEV_* context produces additive execution ID, identity version/digest, action, subscriber count, queue/gate/execution/total timing, reason, exit, and success fields."
+          - "Verify malformed or oversized context is rejected or safely omitted without changing Cargo exit semantics or leaking sentinel values."
+          - "Preserve existing local/remote execution policy, cross-process global gate behavior, legacy record readers, and one record per actual Cargo execution."
+      - id: "T028"
+        title: "Add failing build-reload identity and reconnection tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T015", "T025"]
+        acceptance_criteria:
+          - "Activate and reload only a successful artifact whose recorded source identity matches the subscriber execution."
+          - "Reject reload for failure, cancellation, supersession, abandonment, missing artifact, missing receipt, and identity mismatch."
+          - "Preserve established reconnect and continued-session behavior after valid activation."
+      - id: "T029"
+        title: "Implement consistent lifecycle receipt construction"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T026"]
+        acceptance_criteria:
+          - "Build one subscriber-specific LifecycleReceipt from canonical execution and subscriber state for status, progress, and terminal metadata."
+          - "Compute queue, gate, execution, and total durations from persisted boundaries with monotonic applicability rules."
+          - "Expose only approved enums, counts, bounded labels, process exit, and redacted fingerprints."
+      - id: "T030"
+        title: "Render shared execution and subscriber truth in selfdev status"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/status.rs"
+        dependencies: ["T029"]
+        acceptance_criteria:
+          - "Retain existing build, channel, and reload status while adding execution identity, roles, subscriber counts, reuse, lifecycle state, timings, reason, exit, and artifact/source validation."
+          - "Render legacy persisted records through compatibility defaults and show reconciliation failures explicitly."
+          - "Keep human and structured metadata consistent and free of raw paths, source, diffs, unsafe argv, or environment values."
+      - id: "T031"
+        title: "Pass bounded execution context into the Cargo wrapper"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T027", "T029"]
+        acceptance_criteria:
+          - "Set only reviewed bounded JCODE_SELFDEV_* fields for the one leader process and never for followers or pure reuse."
+          - "Capture wrapper receipt presence and process exit into the shared execution before subscriber completion."
+          - "Treat receipt-write failure visibly and prevent reuse when required evidence is incomplete without altering actual Cargo exit truth."
+      - id: "T032"
+        title: "Extend rust-actions records with additive selfdev lifecycle context"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "scripts/dev_cargo.sh"
+        dependencies: ["T027", "T031"]
+        acceptance_criteria:
+          - "Validate bounded server context and append additive queue, gate, execution, total, identity, role, subscriber-count, terminal reason, and exit fields."
+          - "Keep existing Cargo command, locking, remote/local policy, output, and exit behavior unchanged."
+          - "Never write raw repository paths, source, dirty diffs, unsafe arguments, secrets, or sensitive environment values."
+      - id: "T033"
+        title: "Bind build-reload activation to matching successful identity"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/reload.rs"
+        dependencies: ["T028", "T029", "T031"]
+        acceptance_criteria:
+          - "Resolve the produced executable and compare its recorded artifact/source provenance with the successful shared execution identity before activation."
+          - "Skip reload with an explicit truthful outcome for any failed, cancelled, superseded, abandoned, incomplete, missing, or mismatched execution."
+          - "Preserve valid reload, reconnect, and continued-session behavior."
+
+  - number: 8
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Complete compatibility, documentation, built-binary, performance, guardrail, and traceability evidence"
+    tasks:
+      - id: "T034"
+        title: "Run focused stable-toolchain tests and relevant crate builds"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T019", "T021", "T025", "T030", "T032", "T033"]
+        acceptance_criteria:
+          - "Run exact or narrow tests for identity, eligibility, serde compatibility, coalescing, near misses, late followers, reuse, supersession, cancellation, recovery, progress, receipts, redaction, activation, reconnect, and legacy workflows."
+          - "Run serialized stable-toolchain builds or checks for jcode-selfdev-types, jcode-build-support, and jcode-app-core after their focused tests pass."
+          - "Record exact commands, resolved toolchain, results, durations, and any proven unrelated baseline failure."
+      - id: "T035"
+        title: "Run Cargo-wrapper tests and canonical repository guardrails"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T034"]
+        acceptance_criteria:
+          - "Run scripts/test_dev_cargo.py or its repository-canonical focused invocation and record passing gate, context, timing, exit, compatibility, and redaction evidence."
+          - "Run scripts/check_guardrails.sh once after focused checks, with Cargo-heavy validation serialized."
+          - "Record changed-surface failures separately from pre-existing baseline failures and do not hide or repeatedly rerun an undiagnosed failure."
+      - id: "T036"
+        title: "Validate the newly built binary with isolated multi-session scenarios"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T035"]
+        acceptance_criteria:
+          - "Build with the selfdev profile, resolve and record target/selfdev/jcode, and run it on a unique private socket rather than the shared daemon."
+          - "Exercise exact build/test/check sharing, near misses, late followers, follower and final-subscriber cancellation, queued supersession behind unrelated work, failure recovery, valid and invalid reload, reconnection, and continued sessions."
+          - "Record session count, socket, executable identity, structured receipts, actual Cargo execution count, terminal outcomes, and zero sentinel leakage for every scenario."
+      - id: "T037"
+        title: "Compare duplicate execution, latency, and maintained runtime budgets"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T003", "T036"]
+        acceptance_criteria:
+          - "Compare the controlled baseline and changed workloads for actual Cargo execution count and subscriber-observed latency using the same machine and scenario."
+          - "Show exactly one execution per overlapping exact eligible identity group and duplicate-group latency no worse than baseline single-execution latency plus the documented tolerance."
+          - "Run scripts/bench_runtime_budgets.py as applicable and prove every maintained jcode-l89.1 budget remains within its threshold or same-environment tolerance."
+      - id: "T038"
+        title: "Update self-development documentation and close the evidence matrix"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "docs/SELF_DEVELOPMENT.md"
+        dependencies: ["T001", "T037"]
+        acceptance_criteria:
+          - "Document eligible exact coalescing, conservative non-coalescing, leader/follower/reused roles, independent subscriber cancellation, queued supersession, lifecycle status fields, and activation safeguards."
+          - "Update specs/014-coalesce-selfdev-cargo/validation.md with final receipts for every FR, SC, NFR, and named principle, including no second daemon, no incorrect near-miss reuse, no obsolete launch, no unrelated interruption, no secret leakage, and one terminal result per active subscriber."
+          - "Add a release-note or changelog entry only if required by repository governance, without loosening runtime budgets or documenting internal raw identity inputs."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-003", "US-004", "US-005"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-001", "US-002"]
+      blocks: ["US-005"]
+    - story_id: "US-004"
+      depends_on: ["US-001"]
+      blocks: ["US-005"]
+    - story_id: "US-005"
+      depends_on: ["US-001", "US-003", "US-004"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4, 5, 6]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [7]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: [8]
+    - phase: 8
+      blocks: []
+
+parallel_execution:
+  - phase: 1
+    parallel_groups:
+      - tasks: ["T001", "T002"]
+        rationale: "The acceptance matrix and Rust test helpers modify separate files and can be prepared independently."
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T004", "T005"]
+        rationale: "Dependency-light serde contracts and build-support identity collection tests are in separate crates."
+      - tasks: ["T006", "T008", "T009"]
+        rationale: "After shared contracts exist, persistence tests, identity component collection, and command normalization modify separate modules."
+  - phase: 7
+    parallel_groups:
+      - tasks: ["T026", "T027"]
+        rationale: "Lifecycle metadata tests and wrapper fixtures target separate Rust and Python surfaces."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4]
+    description: "Setup, complete identity foundation, exact duplicate sharing/reuse, and near-miss isolation. This is the minimum trustworthy coalescing outcome."
+    validation: "Run identity and eligibility matrices plus isolated concurrent build/test/check queue tests proving one process for exact matches, independent processes for near misses, truthful subscriber results, and no sensitive output."
+  incremental_delivery:
+    - milestone: "Contracts Frozen"
+      phases: [1, 2]
+      deliverable: "Versioned redacted identity, eligibility, persistence, receipt, fixtures, and traceability contracts exist with focused tests."
+    - milestone: "Trustworthy Coalescing MVP"
+      phases: [1, 2, 3, 4]
+      deliverable: "Exact eligible requests share or safely reuse one execution while every near miss remains isolated."
+    - milestone: "Lifecycle Safety Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Queued drift is superseded, subscribers cancel independently, and abandoned ownership recovers safely."
+    - milestone: "Observable Runtime Outcome"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Status, action, progress, rust-actions, and reload surfaces provide consistent redacted provenance."
+    - milestone: "Delivery Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7, 8]
+      deliverable: "Focused checks, guardrails, isolated built-binary multi-session behavior, duplicate and latency evidence, runtime budgets, documentation, and principle traceability pass."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T09:10:28Z"
+  artifact_type: "tasks"
