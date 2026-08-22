@@ -22,9 +22,18 @@ impl Agent {
             Err(_) => return None,
         };
 
-        if event.is_some() {
+        if let Some(compaction_event) = event.as_ref() {
             self.note_compaction_applied();
             self.persist_session_best_effort("compaction completion");
+            self.record_compaction_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+                Self::compaction_semantic_reason(&compaction_event.trigger),
+                None,
+                Self::compaction_context_usage(
+                    compaction_event.post_tokens.or(compaction_event.pre_tokens),
+                    self.provider.context_window() as u64,
+                ),
+            );
         }
 
         event
@@ -32,6 +41,12 @@ impl Agent {
 
     pub fn request_manual_compaction(&mut self) -> (String, bool) {
         if !self.provider.supports_compaction() {
+            self.record_compaction_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                crate::session::lifecycle_types::LifecycleSemanticReason::Manual,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::Unsupported),
+                None,
+            );
             return (
                 "Manual compaction is not available for this provider.".to_string(),
                 false,
@@ -66,24 +81,54 @@ impl Agent {
                 );
 
                 match manager.force_compact_with(&messages, provider) {
-                    Ok(()) => (
-                        format!(
-                            "{}\n\n📦 **Compacting context** (manual) — summarizing older messages in the background to stay within the context window.\n\
-                            The summary will be applied automatically when ready.",
-                            status_msg
-                        ),
-                        true,
-                    ),
-                    Err(reason) => (
-                        format!("{status_msg}\n\n⚠ **Cannot compact:** {reason}"),
-                        false,
-                    ),
+                    Ok(()) => {
+                        self.record_compaction_lifecycle(
+                            crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+                            crate::session::lifecycle_types::LifecycleSemanticReason::Manual,
+                            None,
+                            Self::compaction_context_usage(
+                                Some(stats.effective_tokens as u64),
+                                manager.token_budget() as u64,
+                            ),
+                        );
+                        (
+                            format!(
+                                "{}\n\n📦 **Compacting context** (manual) — summarizing older messages in the background to stay within the context window.\n\
+                                The summary will be applied automatically when ready.",
+                                status_msg
+                            ),
+                            true,
+                        )
+                    }
+                    Err(reason) => {
+                        self.record_compaction_lifecycle(
+                            crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                            crate::session::lifecycle_types::LifecycleSemanticReason::Manual,
+                            None,
+                            Self::compaction_context_usage(
+                                Some(stats.effective_tokens as u64),
+                                manager.token_budget() as u64,
+                            ),
+                        );
+                        (
+                            format!("{status_msg}\n\n⚠ **Cannot compact:** {reason}"),
+                            false,
+                        )
+                    }
                 }
             }
-            Err(_) => (
-                "⚠ Cannot access compaction manager (lock held)".to_string(),
-                false,
-            ),
+            Err(_) => {
+                self.record_compaction_lifecycle(
+                    crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                    crate::session::lifecycle_types::LifecycleSemanticReason::Manual,
+                    Some(crate::session::lifecycle_types::LifecycleSuppressionReason::QueueFull),
+                    None,
+                );
+                (
+                    "⚠ Cannot access compaction manager (lock held)".to_string(),
+                    false,
+                )
+            }
         }
     }
 
@@ -111,6 +156,12 @@ impl Agent {
         if crate::provider::openai_request::is_openai_encrypted_content_too_large_error(error)
             && self.try_recover_oversized_openai_native_compaction()
         {
+            self.record_compaction_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+                crate::session::lifecycle_types::LifecycleSemanticReason::NativeFallback,
+                None,
+                None,
+            );
             return true;
         }
         // A provider HTTP 413 ("request too large") is a *byte-size* failure
@@ -119,6 +170,12 @@ impl Agent {
         // would not shrink the payload and the retry would 413 again. Strip
         // oversized images first.
         if self.try_recover_after_payload_too_large(error) {
+            self.record_compaction_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+                crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                None,
+                None,
+            );
             return true;
         }
         if !Self::is_context_limit_error(error) {
@@ -177,6 +234,16 @@ impl Agent {
                 "dropped_messages={dropped},usage_pct={usage_pct:.1}"
             ))
             .force_attribution(),
+        );
+
+        self.record_compaction_lifecycle(
+            crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+            crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+            None,
+            Self::compaction_context_usage(
+                Some((usage_pct / 100.0 * context_limit as f32) as u64),
+                context_limit,
+            ),
         );
 
         true
@@ -238,7 +305,42 @@ impl Agent {
             .force_attribution(),
         );
 
+        self.record_compaction_lifecycle(
+            crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+            crate::session::lifecycle_types::LifecycleSemanticReason::NativeFallback,
+            None,
+            None,
+        );
+
         true
+    }
+
+    fn compaction_semantic_reason(
+        trigger: &str,
+    ) -> crate::session::lifecycle_types::LifecycleSemanticReason {
+        match trigger.to_ascii_lowercase().as_str() {
+            "manual" => crate::session::lifecycle_types::LifecycleSemanticReason::Manual,
+            "native" | "native_fallback" => {
+                crate::session::lifecycle_types::LifecycleSemanticReason::NativeFallback
+            }
+            "context_limit" | "auto_recovery" => {
+                crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit
+            }
+            _ => crate::session::lifecycle_types::LifecycleSemanticReason::Automatic,
+        }
+    }
+
+    fn compaction_context_usage(
+        used_tokens: Option<u64>,
+        context_window_tokens: u64,
+    ) -> Option<crate::session::lifecycle_types::ContextUsage> {
+        let used_tokens = used_tokens?;
+        let context_window_tokens = context_window_tokens.max(1);
+        Some(crate::session::lifecycle_types::ContextUsage {
+            used_tokens,
+            context_window_tokens,
+            ratio: (used_tokens as f32 / context_window_tokens as f32).min(1.0),
+        })
     }
 
     fn try_recover_oversized_openai_native_compaction(&mut self) -> bool {

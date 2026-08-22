@@ -455,6 +455,13 @@ impl crate::agent::Agent {
 
     pub(super) fn run_safety_skip_tool_calls(&mut self, tool_calls: &[ToolCall]) -> bool {
         self.record_run_safety_skipped_tool_results(tool_calls);
+        if !tool_calls.is_empty() {
+            self.record_block_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied),
+            );
+        }
         !tool_calls.is_empty()
     }
 
@@ -476,6 +483,13 @@ impl crate::agent::Agent {
                 ));
             }
             self.record_run_safety_skipped_tool_result(tool_call);
+        }
+        if !tool_calls.is_empty() {
+            self.record_block_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied),
+            );
         }
         !tool_calls.is_empty()
     }

@@ -77,6 +77,41 @@ type ChannelSubscriptions = Arc<RwLock<HashMap<String, HashMap<String, HashSet<S
 const RELOAD_STARTING_GUARD_MAX_AGE: Duration = Duration::from_secs(30);
 const REQUEST_HANDLER_STALL_THRESHOLDS_MS: [u64; 3] = [2_000, 10_000, 60_000];
 
+async fn read_lifecycle_query_stream(
+    lifecycle_recorder: &crate::lifecycle_observability::LifecycleRecorder,
+    resolved_session_id: &str,
+    base: &Path,
+) -> Result<crate::session::lifecycle_types::SessionLifecycleStream> {
+    let diagnostics = lifecycle_recorder.flush().await;
+    let mut stream = crate::session::read_lifecycle_stream_in_dir(
+        base,
+        resolved_session_id,
+        lifecycle_recorder.status(),
+    )?;
+    if diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            crate::lifecycle_observability::LifecycleRecorderDiagnostic::QueueFull
+                | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
+        )
+    }) {
+        stream
+            .warnings
+            .push(crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent);
+    }
+    if diagnostics.iter().any(|diagnostic| {
+        matches!(
+            diagnostic,
+            crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
+        )
+    }) {
+        stream.warnings.push(
+            crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
+        );
+    }
+    Ok(stream)
+}
+
 fn required_subscribe_working_dir(working_dir: Option<&str>) -> std::result::Result<&str, String> {
     let working_dir = working_dir
         .map(str::trim)
@@ -1715,35 +1750,8 @@ pub(super) async fn handle_client(
             Request::GetLifecycleEvents { id, session_id } => {
                 let result = async {
                     let resolved_id = crate::session::find_session_by_name_or_id(&session_id)?;
-                    let diagnostics = lifecycle_recorder.flush().await;
                     let base = crate::storage::jcode_dir()?;
-                    let mut stream = crate::session::read_lifecycle_stream_in_dir(
-                        &base,
-                        &resolved_id,
-                        lifecycle_recorder.status(),
-                    )?;
-                    if diagnostics.iter().any(|diagnostic| {
-                        matches!(
-                            diagnostic,
-                            crate::lifecycle_observability::LifecycleRecorderDiagnostic::QueueFull
-                                | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
-                        )
-                    }) {
-                        stream.warnings.push(
-                            crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent,
-                        );
-                    }
-                    if diagnostics.iter().any(|diagnostic| {
-                        matches!(
-                            diagnostic,
-                            crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
-                        )
-                    }) {
-                        stream.warnings.push(
-                            crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
-                        );
-                    }
-                    Ok::<_, anyhow::Error>(stream)
+                    read_lifecycle_query_stream(&lifecycle_recorder, &resolved_id, &base).await
                 }
                 .await;
                 match result {
@@ -3179,6 +3187,18 @@ async fn start_processing_message(
         if result.is_ok()
             && let Some(pending) = crate::tool::session_transition::take_pending(&source_session_id)
         {
+            let generated_prompt_bytes = pending.prompt.as_ref().map_or(0, String::len);
+            let todo_carryover_count = if pending.copy_todos {
+                crate::todo::load_todos(&source_session_id)
+                    .unwrap_or_default()
+                    .len()
+            } else {
+                0
+            };
+            let chain_depth = crate::session::Session::load(&source_session_id)
+                .map(|session| super::client_actions::handoff_chain_depth(&session))
+                .unwrap_or_default();
+            let pending_auto_start = pending.auto_start;
             match super::client_actions::create_handoff_child_session(
                 &source_session_id,
                 pending.prompt,
@@ -3187,6 +3207,20 @@ async fn start_processing_message(
                 pending.copy_todos,
             ) {
                 Ok((new_session_id, new_session_name)) => {
+                    report_agent.lock().await.record_handoff_lifecycle(
+                        crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+                        crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+                        None,
+                        super::client_actions::handoff_payload(
+                            &source_session_id,
+                            Some(new_session_id.clone()),
+                            chain_depth,
+                            generated_prompt_bytes,
+                            todo_carryover_count,
+                            Some(pending_auto_start),
+                            crate::session::lifecycle_types::HandoffStartupOutcome::Started,
+                        ),
+                    );
                     let _ = tx.send(ServerEvent::SessionHandoffReady {
                         id,
                         source_session_id: source_session_id.clone(),
@@ -3196,6 +3230,27 @@ async fn start_processing_message(
                     });
                 }
                 Err(error) => {
+                    let suppression_reason = if error.to_string().contains("chain limit") {
+                        Some(
+                            crate::session::lifecycle_types::LifecycleSuppressionReason::ChainLimit,
+                        )
+                    } else {
+                        None
+                    };
+                    report_agent.lock().await.record_handoff_lifecycle(
+                        crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                        crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+                        suppression_reason,
+                        super::client_actions::handoff_payload(
+                            &source_session_id,
+                            None,
+                            chain_depth,
+                            generated_prompt_bytes,
+                            todo_carryover_count,
+                            Some(false),
+                            crate::session::lifecycle_types::HandoffStartupOutcome::Failed,
+                        ),
+                    );
                     let _ = tx.send(ServerEvent::Error {
                         id,
                         message: format!("Failed to complete staged handoff: {error}"),

@@ -492,6 +492,98 @@ impl Agent {
         self.lifecycle_recorder.clone()
     }
 
+    /// Submit one privacy-safe lifecycle event through the server-owned
+    /// recorder. Decision paths intentionally call these small typed helpers
+    /// instead of knowing about persistence, logging, ordering, or enablement.
+    pub(crate) fn record_lifecycle_event(
+        &self,
+        event: crate::session::lifecycle_types::LifecycleEvent,
+    ) {
+        if let Some(recorder) = self.lifecycle_recorder.as_ref() {
+            let _ = recorder.submit(&self.session.id, event);
+        }
+    }
+
+    pub(crate) fn record_compaction_lifecycle(
+        &self,
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+        suppression_reason: Option<crate::session::lifecycle_types::LifecycleSuppressionReason>,
+        context_usage: Option<crate::session::lifecycle_types::ContextUsage>,
+    ) {
+        self.record_lifecycle_event(
+            crate::session::lifecycle_types::LifecycleEvent::Compaction {
+                decision_type,
+                semantic_reason,
+                suppression_reason,
+                context_usage,
+                process_manifest_id: None,
+            },
+        );
+    }
+
+    pub(crate) fn record_handoff_lifecycle(
+        &self,
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+        suppression_reason: Option<crate::session::lifecycle_types::LifecycleSuppressionReason>,
+        payload: crate::session::lifecycle_types::HandoffLifecyclePayload,
+    ) {
+        self.record_lifecycle_event(crate::session::lifecycle_types::LifecycleEvent::Handoff {
+            decision_type,
+            semantic_reason,
+            suppression_reason,
+            payload,
+            process_manifest_id: None,
+        });
+    }
+
+    pub(crate) fn record_retry_lifecycle(
+        &self,
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+        suppression_reason: Option<crate::session::lifecycle_types::LifecycleSuppressionReason>,
+        attempt: u32,
+        max_attempts: u32,
+    ) {
+        self.record_lifecycle_event(crate::session::lifecycle_types::LifecycleEvent::Retry {
+            decision_type,
+            semantic_reason,
+            suppression_reason,
+            attempt,
+            max_attempts,
+            process_manifest_id: None,
+        });
+    }
+
+    pub(crate) fn record_strategy_switch_lifecycle(
+        &self,
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+    ) {
+        self.record_lifecycle_event(
+            crate::session::lifecycle_types::LifecycleEvent::StrategySwitch {
+                decision_type,
+                semantic_reason,
+                suppression_reason: None,
+            },
+        );
+    }
+
+    pub(crate) fn record_block_lifecycle(
+        &self,
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+        suppression_reason: Option<crate::session::lifecycle_types::LifecycleSuppressionReason>,
+    ) {
+        self.record_lifecycle_event(crate::session::lifecycle_types::LifecycleEvent::Block {
+            decision_type,
+            semantic_reason,
+            suppression_reason,
+            process_manifest_id: None,
+        });
+    }
+
     pub fn emit_effective_lifecycle_policy_snapshot(&self) {
         use crate::session::lifecycle_types::{
             CompactionPolicyMode, CompactionPolicySnapshot, EffectivePolicySnapshot,

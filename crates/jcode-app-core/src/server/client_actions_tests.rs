@@ -3,6 +3,7 @@
 use super::{
     NotifySessionContext, clone_split_session, create_handoff_child_session, handle_handoff,
     handle_notify_session, handle_rename_session, handle_resume_all_sessions, handle_set_feature,
+    handoff_payload,
 };
 use crate::agent::Agent;
 use crate::message::{ContentBlock, Message, Role, StreamEvent, ToolDefinition};
@@ -360,6 +361,41 @@ fn handoff_child_persists_prompt_for_destination_startup() {
     } else {
         crate::env::remove_var("JCODE_HOME");
     }
+}
+
+#[test]
+fn handoff_lifecycle_metadata_records_shape_without_prompt_or_todo_content() {
+    let payload = handoff_payload(
+        "session-parent-safe",
+        Some("session-child-safe".to_string()),
+        3,
+        "super-secret handoff prompt".len(),
+        4,
+        Some(true),
+        crate::session::lifecycle_types::HandoffStartupOutcome::Started,
+    );
+    let event = crate::session::lifecycle_types::LifecycleEvent::Handoff {
+        decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+        semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::ChildStartup,
+        suppression_reason: None,
+        payload: payload.clone(),
+        process_manifest_id: None,
+    };
+    let json = serde_json::to_string(&event).expect("serialize lifecycle event");
+
+    assert_eq!(payload.chain_depth, 3);
+    assert_eq!(
+        payload.generated_prompt_bytes,
+        "super-secret handoff prompt".len()
+    );
+    assert_eq!(payload.todo_carryover_count, 4);
+    assert_eq!(payload.startup_acknowledged, Some(true));
+    assert_eq!(
+        payload.startup_outcome,
+        crate::session::lifecycle_types::HandoffStartupOutcome::Started
+    );
+    assert!(!json.contains("super-secret handoff prompt"));
+    assert!(!json.contains("sensitive-todo-text"));
 }
 
 #[tokio::test]

@@ -802,6 +802,53 @@ const MAX_RECENT_HANDOFF_MESSAGES_CHARS: usize = 8 * 1024;
 const MAX_RECENT_HANDOFF_MESSAGES: usize = 4;
 const HANDOFF_SUMMARY_TIMEOUT: Duration = Duration::from_secs(120);
 
+pub(super) fn handoff_chain_depth(parent: &Session) -> usize {
+    let mut depth = 0;
+    let mut cursor = parent.parent_id.clone();
+    while let Some(parent_id) = cursor {
+        depth += 1;
+        cursor = Session::load(&parent_id)
+            .ok()
+            .and_then(|session| session.parent_id);
+    }
+    depth
+}
+
+pub(super) fn handoff_payload(
+    parent_session_id: &str,
+    child_session_id: Option<String>,
+    chain_depth: usize,
+    generated_prompt_bytes: usize,
+    todo_carryover_count: usize,
+    startup_acknowledged: Option<bool>,
+    startup_outcome: crate::session::lifecycle_types::HandoffStartupOutcome,
+) -> crate::session::lifecycle_types::HandoffLifecyclePayload {
+    crate::session::lifecycle_types::HandoffLifecyclePayload {
+        chain_depth,
+        generated_prompt_bytes,
+        todo_carryover_count,
+        parent_session_id: parent_session_id.to_string(),
+        child_session_id,
+        startup_acknowledged,
+        startup_outcome,
+    }
+}
+
+async fn record_handoff_event(
+    agent: &Arc<Mutex<Agent>>,
+    decision_type: crate::session::lifecycle_types::LifecycleDecisionType,
+    semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason,
+    suppression_reason: Option<crate::session::lifecycle_types::LifecycleSuppressionReason>,
+    payload: crate::session::lifecycle_types::HandoffLifecyclePayload,
+) {
+    agent.lock().await.record_handoff_lifecycle(
+        decision_type,
+        semantic_reason,
+        suppression_reason,
+        payload,
+    );
+}
+
 fn recent_handoff_messages(session: &Session) -> String {
     let mut messages = Vec::new();
     let mut remaining = MAX_RECENT_HANDOFF_MESSAGES_CHARS;
@@ -904,6 +951,11 @@ pub(super) async fn handle_handoff(
     auto_start: Option<bool>,
     client_event_tx: mpsc::UnboundedSender<ServerEvent>,
 ) {
+    let requested_reason = if prompt.is_some() {
+        crate::session::lifecycle_types::LifecycleSemanticReason::Manual
+    } else {
+        crate::session::lifecycle_types::LifecycleSemanticReason::Automatic
+    };
     let parent = match Session::load(&client_session_id) {
         Ok(parent) => parent,
         Err(error) => {
@@ -916,12 +968,48 @@ pub(super) async fn handle_handoff(
             return;
         }
     };
+    let chain_depth = handoff_chain_depth(&parent);
+    let todo_carryover_count = crate::todo::load_todos(&client_session_id)
+        .unwrap_or_default()
+        .len();
+    record_handoff_event(
+        &agent,
+        crate::session::lifecycle_types::LifecycleDecisionType::Attempted,
+        requested_reason,
+        None,
+        handoff_payload(
+            &client_session_id,
+            None,
+            chain_depth,
+            prompt.as_ref().map_or(0, String::len),
+            todo_carryover_count,
+            None,
+            crate::session::lifecycle_types::HandoffStartupOutcome::Pending,
+        ),
+    )
+    .await;
     let config_dir = crate::storage::jcode_dir().ok();
     let policy = match crate::config::config()
         .resolve_handoff_policy(parent.profile_name.as_deref(), config_dir.as_deref())
     {
         Ok(policy) if policy.enabled => policy,
         Ok(_) => {
+            record_handoff_event(
+                &agent,
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                requested_reason,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::Disabled),
+                handoff_payload(
+                    &client_session_id,
+                    None,
+                    chain_depth,
+                    prompt.as_ref().map_or(0, String::len),
+                    0,
+                    None,
+                    crate::session::lifecycle_types::HandoffStartupOutcome::Incomplete,
+                ),
+            )
+            .await;
             let _ = client_event_tx.send(ServerEvent::Error {
                 id,
                 message: "Fresh-session handoff is disabled".to_string(),
@@ -931,6 +1019,22 @@ pub(super) async fn handle_handoff(
             return;
         }
         Err(error) => {
+            record_handoff_event(
+                &agent,
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                requested_reason,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied),
+                handoff_payload(
+                    &client_session_id,
+                    None,
+                    chain_depth,
+                    prompt.as_ref().map_or(0, String::len),
+                    0,
+                    None,
+                    crate::session::lifecycle_types::HandoffStartupOutcome::Incomplete,
+                ),
+            )
+            .await;
             let _ = client_event_tx.send(ServerEvent::Error {
                 id,
                 message: error.to_string(),
@@ -960,6 +1064,22 @@ pub(super) async fn handle_handoff(
         {
             Ok(Ok(compaction)) => compaction,
             Ok(Err(error)) => {
+                record_handoff_event(
+                    &agent,
+                    crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                    requested_reason,
+                    None,
+                    handoff_payload(
+                        &client_session_id,
+                        None,
+                        chain_depth,
+                        0,
+                        todo_carryover_count,
+                        None,
+                        crate::session::lifecycle_types::HandoffStartupOutcome::Failed,
+                    ),
+                )
+                .await;
                 let _ = client_event_tx.send(ServerEvent::Error {
                     id,
                     message: format!("Failed to generate handoff summary: {error}"),
@@ -969,6 +1089,22 @@ pub(super) async fn handle_handoff(
                 return;
             }
             Err(_) => {
+                record_handoff_event(
+                    &agent,
+                    crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                    requested_reason,
+                    None,
+                    handoff_payload(
+                        &client_session_id,
+                        None,
+                        chain_depth,
+                        0,
+                        todo_carryover_count,
+                        None,
+                        crate::session::lifecycle_types::HandoffStartupOutcome::Failed,
+                    ),
+                )
+                .await;
                 let _ = client_event_tx.send(ServerEvent::Error {
                     id,
                     message: format!(
@@ -985,6 +1121,12 @@ pub(super) async fn handle_handoff(
         (Some(prompt), compaction, policy.copy_todos)
     };
     let auto_start = auto_start.unwrap_or(policy.auto_start) && prompt.is_some();
+    let generated_prompt_bytes = prompt.as_ref().map_or(0, String::len);
+    let startup_outcome = if auto_start {
+        crate::session::lifecycle_types::HandoffStartupOutcome::Pending
+    } else {
+        crate::session::lifecycle_types::HandoffStartupOutcome::Incomplete
+    };
     match create_handoff_child_session_with_compaction(
         &client_session_id,
         prompt,
@@ -994,6 +1136,22 @@ pub(super) async fn handle_handoff(
         copy_todos,
     ) {
         Ok((new_session_id, new_session_name)) => {
+            record_handoff_event(
+                &agent,
+                crate::session::lifecycle_types::LifecycleDecisionType::Accepted,
+                requested_reason,
+                None,
+                handoff_payload(
+                    &client_session_id,
+                    Some(new_session_id.clone()),
+                    chain_depth,
+                    generated_prompt_bytes,
+                    if copy_todos { todo_carryover_count } else { 0 },
+                    None,
+                    startup_outcome,
+                ),
+            )
+            .await;
             let _ = client_event_tx.send(ServerEvent::SessionHandoffReady {
                 id,
                 source_session_id: client_session_id,
@@ -1003,6 +1161,27 @@ pub(super) async fn handle_handoff(
             });
         }
         Err(error) => {
+            let suppression_reason = if error.to_string().contains("chain limit") {
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::ChainLimit)
+            } else {
+                None
+            };
+            record_handoff_event(
+                &agent,
+                crate::session::lifecycle_types::LifecycleDecisionType::Failed,
+                requested_reason,
+                suppression_reason,
+                handoff_payload(
+                    &client_session_id,
+                    None,
+                    chain_depth,
+                    generated_prompt_bytes,
+                    if copy_todos { todo_carryover_count } else { 0 },
+                    None,
+                    crate::session::lifecycle_types::HandoffStartupOutcome::Failed,
+                ),
+            )
+            .await;
             let _ = client_event_tx.send(ServerEvent::Error {
                 id,
                 message: format!("Failed to create handoff session: {error}"),

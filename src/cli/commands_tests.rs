@@ -1607,14 +1607,14 @@ fn lifecycle_renderer_uses_typed_stream_for_human_and_json_output() {
         warnings: vec![LifecycleCompatibilityWarning::PersistenceUnavailable],
     };
 
-    let human = super::commands::render_session_lifecycle(&stream, false)
-        .expect("render human lifecycle stream");
+    let human =
+        commands::render_session_lifecycle(&stream, false).expect("render human lifecycle stream");
     assert!(human.contains("synthetic-session-001"));
     assert!(human.contains("block"));
     assert!(human.contains("persistence is unavailable"));
 
-    let json = super::commands::render_session_lifecycle(&stream, true)
-        .expect("render JSON lifecycle stream");
+    let json =
+        commands::render_session_lifecycle(&stream, true).expect("render JSON lifecycle stream");
     let decoded: SessionLifecycleStream =
         serde_json::from_str(&json).expect("decode rendered lifecycle JSON");
     assert_eq!(decoded, stream);

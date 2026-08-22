@@ -304,6 +304,119 @@ async fn agent_retains_injected_recorder_and_emits_one_policy_snapshot() {
 }
 
 #[tokio::test]
+async fn agent_decision_helpers_emit_typed_events_without_sensitive_details() {
+    use crate::agent::Agent;
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::lifecycle_observability::LifecycleRecorder;
+    use crate::provider::Provider;
+    use crate::session::lifecycle_types::{
+        ContextUsage, LifecycleDecisionType, LifecycleSemanticReason, LifecycleSuppressionReason,
+    };
+    use crate::tool::Registry;
+
+    let harness = LifecycleTestHarness::new();
+    let recorder = LifecycleRecorder::new_with_clock(
+        LifecycleObservabilityConfig::default(),
+        harness.temp_root.path().to_path_buf(),
+        16,
+        Arc::new({
+            let timestamp = harness.timestamp(0);
+            move || timestamp
+        }),
+    );
+    let provider: Arc<dyn Provider> = Arc::new(LifecycleTestProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+    let session_id = agent.session_id().to_string();
+    agent.attach_lifecycle_recorder(recorder.clone());
+
+    agent.record_compaction_lifecycle(
+        LifecycleDecisionType::Accepted,
+        LifecycleSemanticReason::Manual,
+        None,
+        Some(ContextUsage {
+            used_tokens: 12_000,
+            context_window_tokens: 16_000,
+            ratio: 0.75,
+        }),
+    );
+    agent.record_retry_lifecycle(
+        LifecycleDecisionType::Exhausted,
+        LifecycleSemanticReason::RetryableFailure,
+        None,
+        3,
+        3,
+    );
+    agent.record_strategy_switch_lifecycle(
+        LifecycleDecisionType::Completed,
+        LifecycleSemanticReason::ProviderFallback,
+    );
+    agent.record_block_lifecycle(
+        LifecycleDecisionType::Suppressed,
+        LifecycleSemanticReason::Policy,
+        Some(LifecycleSuppressionReason::PolicyDenied),
+    );
+
+    assert!(recorder.flush().await.is_empty());
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        harness.temp_root.path(),
+        &session_id,
+        recorder.status(),
+    )
+    .expect("read decision events");
+    assert_eq!(
+        stream.events.len(),
+        5,
+        "policy snapshot plus four decisions"
+    );
+    assert!(matches!(
+        stream.events[1].event,
+        LifecycleEvent::Compaction {
+            decision_type: LifecycleDecisionType::Accepted,
+            context_usage: Some(_),
+            ..
+        }
+    ));
+    assert!(matches!(
+        stream.events[2].event,
+        LifecycleEvent::Retry {
+            decision_type: LifecycleDecisionType::Exhausted,
+            attempt: 3,
+            max_attempts: 3,
+            ..
+        }
+    ));
+    assert!(matches!(
+        stream.events[3].event,
+        LifecycleEvent::StrategySwitch {
+            decision_type: LifecycleDecisionType::Completed,
+            ..
+        }
+    ));
+    assert!(matches!(
+        stream.events[4].event,
+        LifecycleEvent::Block {
+            suppression_reason: Some(LifecycleSuppressionReason::PolicyDenied),
+            ..
+        }
+    ));
+
+    let serialized = serde_json::to_string(&stream).expect("serialize decision stream");
+    for sensitive in [
+        "super-secret-value",
+        "raw prompt value",
+        "rm -rf",
+        "captured output",
+        "unnecessary todo text",
+    ] {
+        assert!(
+            !serialized.contains(sensitive),
+            "sensitive value leaked: {sensitive}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn server_owns_one_shared_lifecycle_recorder() {
     use crate::provider::Provider;
     use crate::server::Server;

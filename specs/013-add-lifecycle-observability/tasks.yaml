@@ -268,7 +268,7 @@ phases:
       tasks:
         - id: "T022"
           title: "Add focused decision-event tests for compaction, retry, strategy, and block paths"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"
@@ -280,7 +280,7 @@ phases:
             - "Compare recorder-enabled and recorder-disabled outcomes and assert decisions remain identical."
         - id: "T023"
           title: "Add focused handoff lifecycle metadata tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-001"
@@ -292,7 +292,7 @@ phases:
             - "Assert prompts, todo text, command text, output, environment, and raw errors are absent."
         - id: "T024"
           title: "Add server query flush and typed stream handling tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-001"
@@ -304,7 +304,8 @@ phases:
             - "Assert no direct sidecar reads occur in client-facing protocol code."
         - id: "T025"
           title: "Add end-to-end lifecycle command behavior tests"
-          status: "Pending"
+          status: "Blocked"
+          blocked_reason: 'Root jcode CLI test compilation is blocked by pre-existing unrelated errors: missing run_single_message_with_agent and SessionProfileConfig.file_mentions_ignore initializers.'
           type: "test"
           parallel: true
           story_id: "US-001"
@@ -316,7 +317,7 @@ phases:
             - "Cover command errors and unavailable persistence without exposing internal paths or raw parse lines."
         - id: "T026"
           title: "Instrument compaction and context-limit recovery decisions"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -328,7 +329,7 @@ phases:
             - "Keep compaction control flow and returned outcomes unchanged when recording fails or is disabled."
         - id: "T027"
           title: "Instrument blocking-mode and compaction retries"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -340,7 +341,7 @@ phases:
             - "Preserve retry count, backoff, stop conditions, and terminal behavior."
         - id: "T028"
           title: "Instrument streaming retries and model strategy switches"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -351,7 +352,7 @@ phases:
             - "Keep provider selection and streaming behavior unchanged when recording is disabled or fails."
         - id: "T029"
           title: "Instrument canonical tool-policy and run-safety block decisions"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -363,7 +364,7 @@ phases:
             - "Preserve the original denial and continuation behavior."
         - id: "T030"
           title: "Instrument handoff policy suppression and staging metadata"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -375,7 +376,7 @@ phases:
             - "Never pass handoff prompt or todo text into the event API."
         - id: "T031"
           title: "Instrument child allocation, acknowledgment, and terminal handoff outcomes"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -387,7 +388,7 @@ phases:
             - "Preserve child startup and handoff control flow when recording or persistence fails."
         - id: "T032"
           title: "Handle lifecycle queries through the server flush and storage path"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -399,7 +400,7 @@ phases:
             - "Map invalid and missing sessions to the specified protocol errors without affecting active session execution."
         - id: "T033"
           title: "Add the correlated typed lifecycle client helper"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -410,7 +411,7 @@ phases:
             - "Handle protocol errors, unexpected responses, and connection failures using existing client API conventions."
         - id: "T034"
           title: "Add lifecycle subcommand arguments to the session CLI"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -421,7 +422,7 @@ phases:
             - "Preserve help text, argument validation, and command-family compatibility."
         - id: "T035"
           title: "Dispatch lifecycle queries through the configured daemon socket"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-001"
@@ -432,7 +433,8 @@ phases:
             - "Do not discover, open, or parse lifecycle sidecars in the CLI process."
         - id: "T036"
           title: "Resolve session names and render typed lifecycle results"
-          status: "Pending"
+          status: "Blocked"
+          blocked_reason: Root jcode CLI test compilation is blocked by the same pre-existing unrelated test/profile errors; renderer source and existing test coverage are present.
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -443,7 +445,7 @@ phases:
             - "Include effective status, ordered events, and bounded warnings while omitting internal storage layout."
         - id: "T037"
           title: "Add the representative ordered lifecycle query smoke path"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"
