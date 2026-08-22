@@ -91,7 +91,7 @@ phases:
           - "Do not remove existing assertions or reduce accepted behavior coverage to satisfy file-size limits."
       - id: "T006"
         title: "Add focused telemetry success and explicit-failure regression coverage in crates/jcode-telemetry-core/src/lib.rs"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"

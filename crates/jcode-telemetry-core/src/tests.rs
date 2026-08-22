@@ -97,6 +97,76 @@ fn background_delivery_queue_is_bounded() {
 }
 
 #[test]
+fn successful_initialization_is_cached() {
+    let slot = OnceLock::new();
+    let attempts = std::sync::atomic::AtomicUsize::new(0);
+
+    assert_eq!(
+        cached_optional(
+            &slot,
+            || {
+                attempts.fetch_add(1, Ordering::Relaxed);
+                Ok::<_, std::io::Error>(7)
+            },
+            |_| unreachable!("successful initialization must not report an error"),
+        ),
+        Some(&7)
+    );
+    assert_eq!(
+        cached_optional(&slot, || Ok::<_, std::io::Error>(9), |_| {}),
+        Some(&7)
+    );
+    assert_eq!(attempts.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn transient_http_client_initialization_failure_can_recover() {
+    let slot = OnceLock::new();
+    let reported = std::sync::atomic::AtomicUsize::new(0);
+
+    assert!(
+        cached_optional(
+            &slot,
+            || Err::<u8, _>("temporary"),
+            |_| {
+                reported.fetch_add(1, Ordering::Relaxed);
+            }
+        )
+        .is_none()
+    );
+    assert_eq!(reported.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        cached_optional(&slot, || Ok::<_, &str>(7), |_| {}),
+        Some(&7)
+    );
+}
+
+#[test]
+fn transient_background_worker_failure_is_observable_and_can_recover() {
+    let slot = OnceLock::new();
+    let reported = std::sync::atomic::AtomicUsize::new(0);
+
+    let first_attempt = std::panic::catch_unwind(|| {
+        cached_optional(
+            &slot,
+            || Err::<SyncSender<Value>, _>(std::io::Error::other("temporary spawn failure")),
+            |_| {
+                reported.fetch_add(1, Ordering::Relaxed);
+            },
+        )
+    });
+    assert!(
+        first_attempt
+            .expect("spawn failure must not panic")
+            .is_none()
+    );
+    assert_eq!(reported.load(Ordering::Relaxed), 1);
+
+    let (sender, _receiver) = sync_channel(1);
+    assert!(cached_optional(&slot, || Ok::<_, std::io::Error>(sender), |_| {}).is_some());
+}
+
+#[test]
 fn telemetry_endpoint_uses_production_custom_domain() {
     assert_eq!(TELEMETRY_ENDPOINT, "https://telemetry.jcode.sh/v1/event");
     assert_eq!(

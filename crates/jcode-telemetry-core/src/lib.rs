@@ -40,6 +40,21 @@ static TELEMETRY_HTTP_CLIENT: OnceLock<Option<reqwest::blocking::Client>> = Once
 #[cfg(test)]
 static TEST_EMITTED_PAYLOADS: Mutex<Vec<Value>> = Mutex::new(Vec::new());
 
+fn cached_optional<T, E>(
+    slot: &OnceLock<Option<T>>,
+    initialize: impl FnOnce() -> Result<T, E>,
+    report: impl FnOnce(E),
+) -> Option<&T> {
+    slot.get_or_init(|| match initialize() {
+        Ok(value) => Some(value),
+        Err(err) => {
+            report(err);
+            None
+        }
+    })
+    .as_ref()
+}
+
 #[derive(Debug, Clone)]
 pub struct DiscoveryTelemetry<'a> {
     pub request_id: &'a str,
@@ -1253,22 +1268,19 @@ pub fn record_command_family(command: &str) {
 }
 
 fn telemetry_http_client() -> Option<&'static reqwest::blocking::Client> {
-    TELEMETRY_HTTP_CLIENT
-        .get_or_init(|| {
-            match reqwest::blocking::Client::builder()
+    cached_optional(
+        &TELEMETRY_HTTP_CLIENT,
+        || {
+            reqwest::blocking::Client::builder()
                 .user_agent(jcode_provider_core::JCODE_USER_AGENT)
                 .build()
-            {
-                Ok(client) => Some(client),
-                Err(err) => {
-                    logging::warn(&format!(
-                        "telemetry HTTP client initialization failed: {err}"
-                    ));
-                    None
-                }
-            }
-        })
-        .as_ref()
+        },
+        |err| {
+            logging::warn(&format!(
+                "telemetry HTTP client initialization failed: {err}"
+            ))
+        },
+    )
 }
 
 fn post_payload(payload: serde_json::Value, timeout: Duration) -> bool {
@@ -1352,21 +1364,19 @@ where
 }
 
 fn background_sender() -> Option<&'static SyncSender<Value>> {
-    TELEMETRY_BACKGROUND_SENDER
-        .get_or_init(|| {
-            match spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
+    cached_optional(
+        &TELEMETRY_BACKGROUND_SENDER,
+        || {
+            spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
                 let _delivered = post_payload(payload, ASYNC_SEND_TIMEOUT);
-            }) {
-                Ok(sender) => Some(sender),
-                Err(err) => {
-                    logging::warn(&format!(
-                        "telemetry background worker failed to start: {err}"
-                    ));
-                    None
-                }
-            }
-        })
-        .as_ref()
+            })
+        },
+        |err| {
+            logging::warn(&format!(
+                "telemetry background worker failed to start: {err}"
+            ))
+        },
+    )
 }
 
 #[cfg(not(test))]
