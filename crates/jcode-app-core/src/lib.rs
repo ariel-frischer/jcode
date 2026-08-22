@@ -51,6 +51,10 @@ pub mod tool;
 pub mod turn_cancel_registry;
 pub mod update;
 
+#[cfg(test)]
+#[path = "lifecycle_observability_tests.rs"]
+pub(crate) mod lifecycle_observability_tests;
+
 use std::sync::Mutex;
 
 static CURRENT_SESSION_ID: Mutex<Option<String>> = Mutex::new(None);
