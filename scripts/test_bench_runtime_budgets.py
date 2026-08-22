@@ -49,6 +49,7 @@ def load_cli_module():
     spec = importlib.util.spec_from_file_location("bench_runtime_budgets", CLI_PATH)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load runtime budget CLI from {CLI_PATH}")
+    sys.modules["runtime_budget"] = budget
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
