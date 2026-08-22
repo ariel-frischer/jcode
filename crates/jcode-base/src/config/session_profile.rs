@@ -304,12 +304,12 @@ mod tests {
         let diagnostic = safe_profile_diagnostic(
             "review",
             "instructions",
-            Some("SECRET api_key=abc Review everything"),
+            Some("SECRET_CREDENTIAL_MARKER Review everything"),
         );
         assert!(diagnostic.contains("review"));
         assert!(diagnostic.contains("instructions"));
         assert!(!diagnostic.contains("SECRET"));
-        assert!(!diagnostic.contains("abc"));
+        assert!(!diagnostic.contains("CREDENTIAL_MARKER"));
         assert!(!diagnostic.contains("Review everything"));
     }
 
