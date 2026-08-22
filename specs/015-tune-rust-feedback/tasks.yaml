@@ -34,7 +34,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Write failing benchmark matrix and receipt contract tests in scripts/test_bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
