@@ -194,6 +194,73 @@ async fn lifecycle_recorder_respects_enablement_fanout_ordering_and_policy_dedup
 }
 
 #[tokio::test]
+async fn lifecycle_recorder_output_matrix_only_persists_when_that_sink_is_enabled() {
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::lifecycle_observability::{LifecycleRecorder, LifecycleSubmitOutcome};
+
+    for (enabled, persist_session_events, emit_structured_logs) in [
+        (false, false, false),
+        (false, true, true),
+        (true, false, false),
+        (true, false, true),
+        (true, true, false),
+        (true, true, true),
+    ] {
+        let harness = LifecycleTestHarness::new();
+        let config = LifecycleObservabilityConfig {
+            enabled,
+            persist_session_events,
+            emit_structured_logs,
+        };
+        let expected_status = config.effective_status();
+        let recorder = LifecycleRecorder::new_with_clock(
+            config,
+            harness.temp_root.path().to_path_buf(),
+            8,
+            Arc::new({
+                let timestamp = harness.timestamp(2);
+                move || timestamp
+            }),
+        );
+
+        let expected_outcome = if enabled {
+            LifecycleSubmitOutcome::Accepted
+        } else {
+            LifecycleSubmitOutcome::Disabled
+        };
+        assert_eq!(
+            recorder.submit(TEST_SESSION_ID, compaction_event()),
+            expected_outcome,
+            "unexpected recorder result for enabled={enabled}, persistence={persist_session_events}, logs={emit_structured_logs}"
+        );
+        assert!(recorder.flush().await.is_empty());
+
+        let stream = crate::session::read_lifecycle_stream_in_dir(
+            harness.temp_root.path(),
+            TEST_SESSION_ID,
+            recorder.status(),
+        )
+        .expect("read output matrix stream");
+        assert_eq!(
+            stream.status, expected_status,
+            "effective status mismatch for enabled={enabled}, persistence={persist_session_events}, logs={emit_structured_logs}"
+        );
+        assert_eq!(
+            stream.events.len(),
+            usize::from(enabled && persist_session_events),
+            "persistence sink mismatch for enabled={enabled}, persistence={persist_session_events}, logs={emit_structured_logs}"
+        );
+        assert_eq!(
+            crate::session::lifecycle_path_in_dir(harness.temp_root.path(), TEST_SESSION_ID)
+                .expect("valid lifecycle path")
+                .exists(),
+            enabled && persist_session_events,
+            "sidecar presence mismatch for enabled={enabled}, persistence={persist_session_events}, logs={emit_structured_logs}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn lifecycle_recorder_isolates_sink_and_queue_failures_and_filters_opaque_ids() {
     use crate::config::LifecycleObservabilityConfig;
     use crate::lifecycle_observability::{

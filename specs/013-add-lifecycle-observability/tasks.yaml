@@ -537,7 +537,7 @@ phases:
       tasks:
         - id: "T044"
           title: "Add the complete lifecycle configuration combination matrix"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-002"
@@ -549,7 +549,7 @@ phases:
             - "Assert lifecycle settings never alter remote telemetry consent."
         - id: "T045"
           title: "Add disabled and partial-output recorder behavior tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-002"
@@ -561,7 +561,7 @@ phases:
             - "Assert all runtime outcomes match a recorder-free execution."
         - id: "T046"
           title: "Add effective status and CLI automation output tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"
@@ -572,7 +572,7 @@ phases:
             - "Assert output-specific values are visibly suppressed by the master switch and that no secret config content is rendered."
         - id: "T047"
           title: "Integrate lifecycle status into the existing config/status experience"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -583,7 +583,7 @@ phases:
             - "Keep status additive and stable for users who do not configure lifecycle observability."
         - id: "T048"
           title: "Enforce master-switch and independent sink selection in the recorder"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -595,7 +595,7 @@ phases:
             - "Keep sink failures best-effort and preserve runtime decisions."
         - id: "T049"
           title: "Verify local lifecycle settings remain telemetry-independent"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"

@@ -128,6 +128,104 @@ fn lifecycle_observability_status_and_template_are_discoverable() {
 }
 
 #[test]
+fn lifecycle_observability_unset_values_use_documented_defaults() {
+    let config: Config = toml::from_str("[lifecycle_observability]\n")
+        .expect("an empty lifecycle observability table should parse");
+
+    assert_eq!(
+        config.lifecycle_observability,
+        LifecycleObservabilityConfig::default()
+    );
+}
+
+#[test]
+fn lifecycle_observability_does_not_change_other_config_state() {
+    let baseline = serde_json::to_value(Config::default()).expect("serialize baseline config");
+    let mut baseline_without_lifecycle = baseline.clone();
+    baseline_without_lifecycle
+        .as_object_mut()
+        .expect("config serializes as an object")
+        .remove("lifecycle_observability");
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let mut config = Config::default();
+                config.lifecycle_observability = LifecycleObservabilityConfig {
+                    enabled,
+                    persist_session_events,
+                    emit_structured_logs,
+                };
+                let mut value = serde_json::to_value(config).expect("serialize lifecycle config");
+                value
+                    .as_object_mut()
+                    .expect("config serializes as an object")
+                    .remove("lifecycle_observability");
+                assert_eq!(value, baseline_without_lifecycle);
+            }
+        }
+    }
+}
+
+#[test]
+fn lifecycle_observability_effective_status_covers_all_output_combinations() {
+    let default_config = Config::default();
+    let provider_before = default_config.provider.default_provider.clone();
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let config: Config = toml::from_str(&format!(
+                    "[lifecycle_observability]\nenabled = {enabled}\npersist_session_events = {persist_session_events}\nemit_structured_logs = {emit_structured_logs}\n"
+                ))
+                .expect("every lifecycle observability combination should parse");
+                let status = config.lifecycle_observability.effective_status();
+
+                assert_eq!(status.enabled, enabled);
+                assert_eq!(
+                    status.persist_session_events,
+                    enabled && persist_session_events
+                );
+                assert_eq!(status.emit_structured_logs, enabled && emit_structured_logs);
+                assert_eq!(config.provider.default_provider, provider_before);
+            }
+        }
+    }
+
+    let unset: Config = toml::from_str("").expect("unset lifecycle config should use defaults");
+    assert_eq!(
+        unset.lifecycle_observability,
+        default_config.lifecycle_observability
+    );
+}
+
+#[test]
+fn lifecycle_observability_configuration_never_changes_telemetry_consent() {
+    let consent_before = (
+        crate::telemetry::is_enabled(),
+        crate::telemetry::content_sharing_enabled(),
+    );
+
+    for enabled in [false, true] {
+        for persist_session_events in [false, true] {
+            for emit_structured_logs in [false, true] {
+                let config: Config = toml::from_str(&format!(
+                    "[lifecycle_observability]\nenabled = {enabled}\npersist_session_events = {persist_session_events}\nemit_structured_logs = {emit_structured_logs}\n"
+                ))
+                .expect("lifecycle observability combination should parse");
+                let _ = config.lifecycle_observability.effective_status();
+            }
+        }
+    }
+
+    let consent_after = (
+        crate::telemetry::is_enabled(),
+        crate::telemetry::content_sharing_enabled(),
+    );
+    assert_eq!(consent_after, consent_before);
+}
+
+#[test]
 fn test_openai_reasoning_effort_defaults_to_low() {
     assert_eq!(
         ProviderConfig::default().openai_reasoning_effort.as_deref(),

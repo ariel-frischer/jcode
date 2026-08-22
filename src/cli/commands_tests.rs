@@ -1610,12 +1610,38 @@ fn lifecycle_renderer_uses_typed_stream_for_human_and_json_output() {
     let human =
         commands::render_session_lifecycle(&stream, false).expect("render human lifecycle stream");
     assert!(human.contains("synthetic-session-001"));
+    assert!(human.contains("enabled=true, persistence=true, structured_logs=false"));
     assert!(human.contains("block"));
     assert!(human.contains("persistence is unavailable"));
 
     let json =
         commands::render_session_lifecycle(&stream, true).expect("render JSON lifecycle stream");
+    assert!(json.contains("\"status\""));
     let decoded: SessionLifecycleStream =
         serde_json::from_str(&json).expect("decode rendered lifecycle JSON");
     assert_eq!(decoded, stream);
+    assert!(decoded.status.enabled);
+    assert!(decoded.status.persist_session_events);
+    assert!(!decoded.status.emit_structured_logs);
+
+    let disabled_stream = SessionLifecycleStream {
+        status: LifecycleObservabilityStatus::DISABLED,
+        events: Vec::new(),
+        warnings: Vec::new(),
+        ..stream
+    };
+    let disabled_human = commands::render_session_lifecycle(&disabled_stream, false)
+        .expect("render disabled lifecycle status");
+    assert!(disabled_human.contains("enabled=false, persistence=false, structured_logs=false"));
+    let disabled_json = commands::render_session_lifecycle(&disabled_stream, true)
+        .expect("render disabled lifecycle JSON");
+    assert!(disabled_human.contains("No lifecycle events."));
+    assert!(!disabled_human.contains("secret"));
+    let decoded_disabled: SessionLifecycleStream =
+        serde_json::from_str(&disabled_json).expect("decode disabled lifecycle JSON");
+    assert_eq!(
+        decoded_disabled.status,
+        LifecycleObservabilityStatus::DISABLED
+    );
+    assert!(!disabled_json.contains("secret"));
 }
