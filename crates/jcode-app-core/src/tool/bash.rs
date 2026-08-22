@@ -528,7 +528,10 @@ struct PromotedCommandProgress {
 impl PromotedCommandProgress {
     async fn record(&self, update: ProgressLineUpdate) {
         let direct = {
-            let mut pending = self.pending.lock().expect("progress mutex poisoned");
+            let mut pending = self
+                .pending
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if self.task_id.get().is_none() {
                 *pending = Some(update);
                 None
@@ -545,7 +548,11 @@ impl PromotedCommandProgress {
 
     async fn attach_task(&self, task_id: &str) {
         let _ = self.task_id.set(task_id.to_string());
-        let pending = self.pending.lock().expect("progress mutex poisoned").take();
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         if let Some(update) = pending {
             apply_progress_update(task_id, update).await;
         }

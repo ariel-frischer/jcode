@@ -33,9 +33,10 @@ const TELEMETRY_SCHEMA_VERSION: u32 = 6;
 const DEFAULT_DISCOVERY_ENDPOINT: &str = "https://api.jcode.sh/v1/discovery";
 static TELEMETRY_PERMANENTLY_REJECTED: AtomicBool = AtomicBool::new(false);
 static TELEMETRY_QUEUE_OVERFLOW_WARNED: AtomicBool = AtomicBool::new(false);
-static TELEMETRY_BACKGROUND_SENDER: OnceLock<SyncSender<Value>> = OnceLock::new();
-static TRANSCRIPT_BACKGROUND_SENDER: OnceLock<SyncSender<Value>> = OnceLock::new();
-static TELEMETRY_HTTP_CLIENT: OnceLock<reqwest::blocking::Client> = OnceLock::new();
+static TELEMETRY_BACKGROUND_SENDER: OnceLock<Option<SyncSender<Value>>> = OnceLock::new();
+#[cfg(not(test))]
+static TRANSCRIPT_BACKGROUND_SENDER: OnceLock<Option<SyncSender<Value>>> = OnceLock::new();
+static TELEMETRY_HTTP_CLIENT: OnceLock<Option<reqwest::blocking::Client>> = OnceLock::new();
 #[cfg(test)]
 static TEST_EMITTED_PAYLOADS: Mutex<Vec<Value>> = Mutex::new(Vec::new());
 
@@ -1251,16 +1252,30 @@ pub fn record_command_family(command: &str) {
     maybe_emit_session_start();
 }
 
+fn telemetry_http_client() -> Option<&'static reqwest::blocking::Client> {
+    TELEMETRY_HTTP_CLIENT
+        .get_or_init(|| {
+            reqwest::blocking::Client::builder()
+                .user_agent(jcode_provider_core::JCODE_USER_AGENT)
+                .build()
+                .map_err(|err| {
+                    logging::warn(&format!(
+                        "telemetry HTTP client initialization failed: {err}"
+                    ));
+                    err
+                })
+                .ok()
+        })
+        .as_ref()
+}
+
 fn post_payload(payload: serde_json::Value, timeout: Duration) -> bool {
     if TELEMETRY_PERMANENTLY_REJECTED.load(Ordering::Relaxed) {
         return false;
     }
-    let client = TELEMETRY_HTTP_CLIENT.get_or_init(|| {
-        reqwest::blocking::Client::builder()
-            .user_agent(jcode_provider_core::JCODE_USER_AGENT)
-            .build()
-            .expect("telemetry HTTP client should build")
-    });
+    let Some(client) = telemetry_http_client() else {
+        return false;
+    };
     match client
         .post(TELEMETRY_ENDPOINT)
         .timeout(timeout)
@@ -1289,13 +1304,11 @@ fn post_payload(payload: serde_json::Value, timeout: Duration) -> bool {
     }
 }
 
+#[cfg(not(test))]
 fn post_transcript_payload(payload: serde_json::Value, timeout: Duration) -> bool {
-    let client = TELEMETRY_HTTP_CLIENT.get_or_init(|| {
-        reqwest::blocking::Client::builder()
-            .user_agent(jcode_provider_core::JCODE_USER_AGENT)
-            .build()
-            .expect("telemetry HTTP client should build")
-    });
+    let Some(client) = telemetry_http_client() else {
+        return false;
+    };
     match client
         .post(TRANSCRIPT_ENDPOINT)
         .timeout(timeout)
@@ -1336,22 +1349,37 @@ where
     Ok(sender)
 }
 
-fn background_sender() -> &'static SyncSender<Value> {
-    TELEMETRY_BACKGROUND_SENDER.get_or_init(|| {
-        spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
-            let _ = post_payload(payload, ASYNC_SEND_TIMEOUT);
+fn background_sender() -> Option<&'static SyncSender<Value>> {
+    TELEMETRY_BACKGROUND_SENDER
+        .get_or_init(|| {
+            spawn_background_worker(BACKGROUND_QUEUE_CAPACITY, |payload| {
+                let _ = post_payload(payload, ASYNC_SEND_TIMEOUT);
+            })
+            .map_err(|err| {
+                logging::warn(&format!(
+                    "telemetry background worker failed to start: {err}"
+                ))
+            })
+            .ok()
         })
-        .expect("telemetry background worker should start")
-    })
+        .as_ref()
 }
 
-fn transcript_background_sender() -> &'static SyncSender<Value> {
-    TRANSCRIPT_BACKGROUND_SENDER.get_or_init(|| {
-        spawn_background_worker(64, |payload| {
-            let _ = post_transcript_payload(payload, ASYNC_SEND_TIMEOUT);
+#[cfg(not(test))]
+fn transcript_background_sender() -> Option<&'static SyncSender<Value>> {
+    TRANSCRIPT_BACKGROUND_SENDER
+        .get_or_init(|| {
+            spawn_background_worker(64, |payload| {
+                let _ = post_transcript_payload(payload, ASYNC_SEND_TIMEOUT);
+            })
+            .map_err(|err| {
+                logging::warn(&format!(
+                    "transcript telemetry background worker failed to start: {err}"
+                ))
+            })
+            .ok()
         })
-        .expect("transcript telemetry background worker should start")
-    })
+        .as_ref()
 }
 
 fn send_transcript_payload(payload: Value) -> bool {
@@ -1363,15 +1391,20 @@ fn send_transcript_payload(payload: Value) -> bool {
         return true;
     }
     #[cfg(not(test))]
-    match transcript_background_sender().try_send(payload) {
-        Ok(()) => true,
-        Err(TrySendError::Full(_)) => {
-            logging::warn("transcript upload queue is full; dropping transcript");
-            false
-        }
-        Err(TrySendError::Disconnected(_)) => {
-            logging::warn("transcript upload worker stopped; dropping transcript");
-            false
+    {
+        let Some(sender) = transcript_background_sender() else {
+            return false;
+        };
+        match sender.try_send(payload) {
+            Ok(()) => true,
+            Err(TrySendError::Full(_)) => {
+                logging::warn("transcript upload queue is full; dropping transcript");
+                false
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                logging::warn("transcript upload worker stopped; dropping transcript");
+                false
+            }
         }
     }
 }
@@ -1387,7 +1420,10 @@ fn send_payload(payload: serde_json::Value, mode: DeliveryMode) -> bool {
                 return false;
             }
             logging::debug("queueing telemetry payload for background delivery");
-            match background_sender().try_send(payload) {
+            let Some(sender) = background_sender() else {
+                return false;
+            };
+            match sender.try_send(payload) {
                 Ok(()) => {
                     TELEMETRY_QUEUE_OVERFLOW_WARNED.store(false, Ordering::Relaxed);
                     true
