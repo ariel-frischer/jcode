@@ -397,7 +397,7 @@ phases:
           - "Explicit broad, guardrail, and release commands never receive inferred narrowing."
       - id: "T029"
         title: "Run and record all focused Python, shell, and Rust regression suites in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"
