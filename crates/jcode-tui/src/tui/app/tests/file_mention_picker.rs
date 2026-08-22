@@ -288,32 +288,3 @@ fn wait_for_file_mention_suggestions(app: &mut App) -> Vec<(String, &'static str
         std::thread::sleep(Duration::from_millis(1));
     }
 }
-
-#[test]
-fn at_file_suggestions_include_profile_specific_ignore_patterns() {
-    with_temp_jcode_home(|| {
-        write_test_config(
-            "[profiles.review]\nfile_mentions_ignore = [\"private-notes/\"]\n",
-        );
-        crate::config::invalidate_config_cache();
-
-        let temp = tempfile::tempdir().expect("tempdir");
-        std::fs::create_dir_all(temp.path().join("private-notes"))
-            .expect("private directory");
-        std::fs::write(temp.path().join("private-notes/todo.md"), "")
-            .expect("private file");
-        std::fs::write(temp.path().join("README.md"), "").expect("readme");
-
-        let mut app = create_test_app();
-        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
-        app.session.profile_name = Some("review".to_owned());
-        app.input = "@".to_owned();
-        app.cursor_pos = 1;
-
-        let suggestions = wait_for_file_mention_suggestions(&mut app);
-        assert!(suggestions.iter().any(|(value, _)| value == "@README.md"));
-        assert!(!suggestions
-            .iter()
-            .any(|(value, _)| value.contains("private-notes")));
-    });
-}

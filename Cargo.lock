@@ -4452,6 +4452,7 @@ dependencies = [
  "tempfile",
  "terminal-colorsaurus",
  "tokio",
+ "toml",
  "unicode-width",
  "url",
  "urlencoding",

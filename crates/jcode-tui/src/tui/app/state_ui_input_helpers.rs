@@ -39,6 +39,7 @@ pub(crate) struct FileMentionDiscovery {
     pub candidates: Vec<FileMentionCandidate>,
 }
 
+#[cfg(test)]
 fn discover_file_mentions(
     root: &Path,
     query: &str,
@@ -138,6 +139,7 @@ fn process_file_mention_entry(
 }
 
 /// Test-only entry point for deterministic batch and responsiveness checks.
+#[cfg(test)]
 pub(super) fn start_file_mention_discovery_for_test(
     root: PathBuf,
     query: String,
@@ -350,15 +352,8 @@ impl App {
     }
 }
 
-fn effective_file_mention_ignores(app: &App) -> Vec<String> {
-    let config = crate::config::config();
-    let mut ignores = config.file_mentions.ignore.clone();
-    if let Some(profile_name) = app.session.profile_name.as_deref()
-        && let Some(profile) = config.profiles.get(profile_name)
-    {
-        ignores.extend(profile.file_mentions_ignore.iter().cloned());
-    }
-    ignores
+fn effective_file_mention_ignores() -> Vec<String> {
+    crate::config::config().file_mentions.ignore.clone()
 }
 
 #[derive(Clone, Copy)]
@@ -1546,7 +1541,7 @@ impl App {
         let request = FileMentionRequest {
             root: root.to_path_buf(),
             query: query.to_owned(),
-            ignore_patterns: effective_file_mention_ignores(self),
+            ignore_patterns: effective_file_mention_ignores(),
         };
         self.ensure_file_mention_discovery(request.clone());
         let pending = self.file_mention_discovery.borrow();
