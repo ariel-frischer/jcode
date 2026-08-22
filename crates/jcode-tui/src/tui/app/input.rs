@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 /// Streaming reasoning region, split out to keep this file under the
 /// code-size budget. See the module docs for the byte-offset invariant.
+mod auto_poke;
 mod reasoning_region;
 
 const INPUT_SHELL_MAX_OUTPUT_LEN: usize = 30_000;
@@ -1719,27 +1720,7 @@ impl App {
                 self.pending_queued_dispatch = false;
                 return false;
             }
-            // Cycle finished cleanly. When auto-poke is the configured default
-            // it stays armed so the next batch of work is covered too; only an
-            // explicit /poke off (or a circuit breaker above) disarms it.
-            self.auto_poke_incomplete_todos = self.auto_poke_default_on;
-            // A finished cycle re-arms the review for whatever work comes next;
-            // without this a session could only ever deliver one digest.
-            self.todo_gate_digest_delivered = false;
-            self.todo_completion_gate_attempts = 0;
-            if !self.todo_final_response_requested {
-                self.todo_final_response_requested = true;
-                self.push_display_message(DisplayMessage::system(format!(
-                    "✅ All todos done. Completion confidence: {}.",
-                    confidence_label
-                )));
-                self.queued_messages
-                    .push(crate::todo::TODO_FINAL_RESPONSE_CONTINUATION_MESSAGE.to_string());
-                self.pending_queued_dispatch = true;
-                return true;
-            }
-            self.pending_queued_dispatch = false;
-            return false;
+            return self.finish_completed_auto_poke_cycle(&confidence_label);
         }
 
         let poke_message = super::commands::build_poke_message(&incomplete);
