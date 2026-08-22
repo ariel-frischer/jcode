@@ -304,6 +304,7 @@ fn remote_ownership_gate_reads_the_remote_goal_assessment() {
         )
         .expect("save remote goal assessment");
 
+        app.auto_poke_default_on = false;
         assert!(!app.schedule_auto_poke_followup_if_needed());
         assert!(app.queued_messages.is_empty());
     });
@@ -534,6 +535,7 @@ fn test_gate_digest_is_delivered_at_turn_end_and_rearms_next_cycle() {
         // Simulate the turn running, then the cycle completing.
         app.queued_messages.clear();
         app.pending_queued_dispatch = false;
+        app.auto_poke_default_on = false;
         assert!(
             !app.schedule_auto_poke_followup_if_needed(),
             "with nothing left outstanding the cycle should finish"
@@ -668,10 +670,14 @@ fn completed_cycle_rearms_auto_poke_only_when_default_on() {
             }],
         )
         .expect("save passing goal");
-        assert!(!app.schedule_auto_poke_followup_if_needed());
+        assert!(app.schedule_auto_poke_followup_if_needed());
         assert!(
             app.auto_poke_incomplete_todos,
             "default-on auto-poke should cover the next batch of work too"
+        );
+        assert_eq!(
+            app.queued_messages,
+            vec![crate::todo::TODO_FINAL_RESPONSE_CONTINUATION_MESSAGE.to_string()]
         );
 
         // An explicit /poke off must stick.
