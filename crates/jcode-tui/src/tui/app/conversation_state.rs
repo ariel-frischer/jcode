@@ -3,11 +3,20 @@ use super::*;
 impl App {
     fn expand_persisted_file_mentions(&self, mut messages: Vec<Message>) -> Vec<Message> {
         let enabled = crate::config::config().file_mentions.enabled;
-        let remote_root = self
-            .is_remote
-            .then(|| std::env::current_dir().ok())
-            .flatten()
-            .and_then(|path| path.to_str().map(str::to_owned));
+        let remote_root = if self.is_remote {
+            match std::env::current_dir() {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    crate::logging::warn(&format!(
+                        "Failed to resolve remote client working directory: {error}"
+                    ));
+                    None
+                }
+            }
+        } else {
+            None
+        }
+        .and_then(|path| path.to_str().map(str::to_owned));
         let working_dir = remote_root
             .as_deref()
             .or(self.session.working_dir.as_deref());

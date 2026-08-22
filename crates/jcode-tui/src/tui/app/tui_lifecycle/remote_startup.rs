@@ -12,7 +12,15 @@ impl App {
         let registry = Registry::empty();
         let session = resume_session
             .as_ref()
-            .and_then(|session_id| Session::load_startup_stub(session_id).ok())
+            .and_then(|session_id| match Session::load_startup_stub(session_id) {
+                Ok(session) => Some(session),
+                Err(error) => {
+                    crate::logging::warn(&format!(
+                        "Failed to load remote startup stub for {session_id}: {error}"
+                    ));
+                    None
+                }
+            })
             .unwrap_or_else(|| Session::create(None, None));
         let mut app = Self::new_minimal_with_session(provider, registry, session);
         app.is_remote = true;

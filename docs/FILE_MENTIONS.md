@@ -16,6 +16,19 @@ Queueing, retrieving, or persisting a pending prompt keeps the compact token.
 Expansion happens only at the final local or remote dispatch boundary, so editing a
 queued prompt does not expose an expanded payload.
 
+## Validate this feature
+
+```bash
+mkdir -p /tmp/jcode-file-mention-demo
+printf 'FILE_MENTION_DEMO=works\n' > /tmp/jcode-file-mention-demo/demo.txt
+cd /tmp/jcode-file-mention-demo
+jcode
+```
+
+In the TUI, type `Explain @demo.txt`, select `demo.txt`, press `Tab`, and send.
+The visible prompt should keep the compact `@demo.txt` token, while the response
+should identify `FILE_MENTION_DEMO=works` from the expanded provider context.
+
 ## Configuration
 
 File mentions are enabled by default. Disable filesystem-backed suggestions and

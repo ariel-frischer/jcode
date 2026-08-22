@@ -74,7 +74,7 @@ pub(in crate::tui::app) async fn process_remote_followups(
         return;
     }
 
-    let _ = recover_stranded_soft_interrupts(app, remote).await;
+    recover_stranded_soft_interrupts(app, remote).await;
 
     if app.pending_queued_dispatch {
         note_startup_submit_deferred(app, "pending_queued_dispatch in progress");
@@ -534,7 +534,9 @@ pub(super) async fn detect_and_cancel_stall(app: &mut App, remote: &mut RemoteCo
                     .map(|t| t.elapsed())
                     .or(app.processing_started.map(|t| t.elapsed()))
             ));
-            let _ = remote.cancel_with_reason("stall_guard").await;
+            if let Err(error) = remote.cancel_with_reason("stall_guard").await {
+                crate::logging::warn(&format!("Failed to cancel stalled remote stream: {error}"));
+            }
             app.is_processing = false;
             app.clear_visible_turn_started();
             app.status = ProcessingStatus::Idle;

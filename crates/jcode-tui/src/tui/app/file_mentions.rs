@@ -198,11 +198,18 @@ fn discover_file_mentions_batched(
             crate::logging::warn(&format!(
                 "Failed to build file mention exclusion matcher: {error}"
             ));
-            let _ = sender.send(FileMentionBatch {
-                generation,
-                candidates: Vec::new(),
-                done: true,
-            });
+            if sender
+                .send(FileMentionBatch {
+                    generation,
+                    candidates: Vec::new(),
+                    done: true,
+                })
+                .is_err()
+            {
+                crate::logging::info(
+                    "File mention discovery receiver disconnected after matcher failure",
+                );
+            }
             return;
         }
     };
@@ -277,11 +284,16 @@ fn discover_file_mentions_batched(
     if !batch.is_empty() || match_count == 0 {
         send_file_mention_batch(sender, generation, &mut batch, true);
     } else {
-        let _ = sender.send(FileMentionBatch {
-            generation,
-            candidates: Vec::new(),
-            done: true,
-        });
+        if sender
+            .send(FileMentionBatch {
+                generation,
+                candidates: Vec::new(),
+                done: true,
+            })
+            .is_err()
+        {
+            crate::logging::info("File mention discovery receiver disconnected at completion");
+        }
     }
 }
 
@@ -492,7 +504,16 @@ pub(super) fn expand_file_mentions(
                 if metadata.is_file()
                     && metadata.len() <= super::input::MAX_SUBMITTED_TEXT_BYTES as u64 =>
             {
-                std::fs::read_to_string(&resolved).ok()
+                match std::fs::read_to_string(&resolved) {
+                    Ok(contents) => Some(contents),
+                    Err(error) => {
+                        crate::logging::warn(&format!(
+                            "Failed to read file mention {}: {error}",
+                            resolved.display()
+                        ));
+                        None
+                    }
+                }
             }
             Ok(_) | Err(_) => None,
         }
