@@ -47,7 +47,7 @@ phases:
     tasks:
       - id: "T003"
         title: "Inventory all historical ratchet deltas and ownership evidence in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: null
