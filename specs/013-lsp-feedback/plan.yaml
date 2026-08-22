@@ -1,0 +1,63 @@
+plan:
+  branch: agent/jcode-5v7-lsp
+  created: 2026-08-21
+  spec_path: specs/013-lsp-feedback/spec.yaml
+summary: >-
+  Add a standalone jcode-lsp crate with JSON-RPC framing, server registry,
+  declarative catalog, document synchronization, bounded diagnostics, and
+  capability-aware requests. Integrate one app-core lsp tool and a narrow
+  edit feedback hook that is fail-open when LSP is disabled or unavailable.
+  Reuse Tool, ToolContext.working_dir, ToolOutput metadata, profile policy,
+  server-owned lifecycle, and DAP process safety conventions. Keep LSP and DAP
+  independent. Use a fake stdio server and deterministic protocol recordings.
+architecture:
+  modules:
+    - name: protocol
+      responsibility: JSON-RPC and LSP data types, normalized diagnostics, ranges, capabilities
+    - name: transport
+      responsibility: Content-Length framing, correlated requests, notifications, timeout and cancellation
+    - name: config
+      responsibility: built-in catalog, user/project TOML loading, deep merge, root and file matching
+    - name: session
+      responsibility: server startup, initialize, document versions, diagnostics cache, lifecycle cleanup
+    - name: tool
+      responsibility: app-core action schema and bounded structured rendering
+    - name: writethrough
+      responsibility: optional post-edit document sync, formatting, inline/deferred diagnostics
+  ownership:
+    lsp_crate: protocol transport config session and normalized feedback
+    app_core: tool registration, profile policy composition, edit integration boundary
+    existing_edit: file mutation and existing output remain authoritative when LSP is unavailable
+    dap: independent debugger capability and lifecycle
+  security:
+    - never interpolate adapter values through a shell
+    - never start a server solely because an unrelated file changed unless explicitly configured for writethrough
+    - apply project/user enablement and profile policy before process startup
+    - bound frame, output, request, startup, and idle lifetimes
+  non_goals:
+    - replacing DAP or existing DebugJob
+    - requiring Tree-sitter
+    - mid-stream advisor/watchdog intervention
+    - automatic installation of language servers
+    - changing existing edit failure semantics
+validation_matrix:
+  - requirement: FR-001
+    check: cargo test -p jcode-lsp --all-targets
+  - requirement: FR-002
+    check: config precedence, catalog, root-marker, missing-binary fixtures
+  - requirement: FR-003
+    check: transport framing, malformed, timeout, cancellation tests
+  - requirement: FR-004
+    check: document version, stale diagnostic, batching, deferred tests
+  - requirement: FR-005
+    check: app-core lsp tool schema and fake-server action tests
+  - requirement: FR-006
+    check: edit no-server and active-server integration tests
+  - requirement: FR-007
+    check: catalog fixture count and activation tests
+  - requirement: FR-008
+    check: Cargo dependency inspection plus docs assertion
+  - requirement: FR-009
+    check: docs/LSP.md review and link checks
+  - requirement: FR-010
+    check: offline benchmark command and parser test

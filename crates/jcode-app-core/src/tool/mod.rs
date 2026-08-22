@@ -22,6 +22,7 @@ pub mod inflight;
 mod invalid;
 mod jcode_docs;
 mod ls;
+mod lsp;
 pub mod mcp;
 mod memory;
 mod multiedit;
@@ -328,6 +329,12 @@ impl Registry {
             &mut tools_map,
             "debugger",
             debugger::DebuggerTool::new(Arc::new(jcode_dap::DapSessionManager::new())),
+        );
+
+        Self::insert_tool(
+            &mut tools_map,
+            "lsp",
+            lsp::LspTool::new(jcode_lsp::LspSessionManager::shared()),
         );
 
         // Per-session tools that need provider/registry references
@@ -1297,5 +1304,7 @@ mod mcp_allow_list_tests {
 
 #[cfg(test)]
 mod debugger_tests;
+#[cfg(test)]
+mod lsp_tests;
 #[cfg(test)]
 mod tests;
