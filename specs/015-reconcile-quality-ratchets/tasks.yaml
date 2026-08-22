@@ -1,0 +1,555 @@
+tasks:
+  branch: "agent/jcode-l89.5-restore-guardrails"
+  created: "2026-08-22"
+  spec_path: "specs/015-reconcile-quality-ratchets/spec.yaml"
+  plan_path: "specs/015-reconcile-quality-ratchets/plan.yaml"
+
+summary:
+  total_tasks: 35
+  total_phases: 7
+  parallel_opportunities: 15
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Freeze the reconciliation boundaries, acceptance contract, and durable evidence format before implementation."
+    tasks:
+      - id: "T001"
+        title: "Create the requirement-to-check acceptance matrix in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Map FR-001 through FR-014 and SC-001 through SC-005 to one direct focused, broad, behavior, or built-product check."
+          - "Record branch base 85f9f5e3b, the private-socket runtime rule, serialized Cargo-heavy validation, and the prohibition on automatic ratchet updates as evidence."
+          - "Define pass receipts for provenance completeness, changed oversized-file deltas, focused behavior and error paths, canonical guardrails, and the built selfdev binary."
+      - id: "T002"
+        title: "Record independent PR review concerns and stable disposition identifiers in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Inventory every applicable independent review comment using a stable PR, review, or Bead-comment identifier."
+          - "For each concern, record the bounded issue, affected paths or baseline scopes, and an initial disposition of implemented, rejected_with_evidence, or out_of_scope."
+          - "Leave no applicable review concern without an owner, evidence requirement, and final-resolution condition."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Establish complete historical and changed-surface inventories that block source repair and baseline reconciliation."
+    tasks:
+      - id: "T003"
+        title: "Inventory all historical ratchet deltas and ownership evidence in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Enumerate the reported 74 production-size, 31 test-size, and 36 swallowed-error path deltas with category, scope, baseline commit, previous value, current measured value, and candidate reconciled value."
+          - "Map each intentional portion to existing owning commit ancestors, owning Beads, merged-state evidence, and one or more review-disposition identifiers."
+          - "Split mixed or aggregate mismatches so intentional and unexplained portions are independently measurable, and mark untraced, reverted, superseded, or disputed portions as rejected."
+      - id: "T004"
+        title: "Audit the blocker branch changed oversized-file surface against 85f9f5e3b in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "List every modified already-oversized production and test file and its exact branch-base size delta."
+          - "Identify positive deltas in crates/jcode-app-core/src/tool/bash.rs, crates/jcode-telemetry-core/src/lib.rs, and crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs as mandatory repairs."
+          - "Record focused compile, behavior, warning, panic, and explicit-error checks for every changed source area before any baseline mutation."
+
+  - number: 3
+    title: "User Story 2 - Keep blocker changes non-growing"
+    purpose: "Make every blocker-branch modification to an already-oversized file flat or smaller than branch base without changing accepted behavior."
+    story_reference: "US-002"
+    independent_test: "Compare every modified oversized file with 85f9f5e3b and confirm that no measured size delta is positive after focused tests pass."
+    tasks:
+      - id: "T005"
+        title: "Add or adjust focused app-core lifecycle and bash regression tests in crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Cover the blocker-owned lifecycle success and failure behavior that must remain unchanged while client_lifecycle.rs is kept flat or smaller."
+          - "Document the exact focused Cargo test command and confirm it fails for a regression in lifecycle cleanup or error propagation."
+          - "Do not remove existing assertions or reduce accepted behavior coverage to satisfy file-size limits."
+      - id: "T006"
+        title: "Add focused telemetry success and explicit-failure regression coverage in crates/jcode-telemetry-core/src/lib.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-telemetry-core/src/lib.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Exercise the blocker-owned telemetry success path and the exceptional path identified by independent review."
+          - "Assert that telemetry failures remain explicit or deliberately observable rather than silently discarded."
+          - "Keep the complete lib.rs branch delta flat or smaller after adding or consolidating tests, with equivalent or stronger coverage documented."
+      - id: "T007"
+        title: "Add focused harness translation compatibility tests in crates/jcode-harness-api-server/src/translate_tests.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Cover accepted translation output and missing-field or invalid-input behavior affected by the blocker branch."
+          - "Assert public translation shapes and explicit failures remain backward-compatible."
+          - "Record the exact focused package and test-name command used for verification."
+      - id: "T008"
+        title: "Add focused remote TUI regression coverage in crates/jcode-tui/src/tui/app/remote_tests.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/remote_tests.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Cover the blocker-owned remote interaction and input-state outcomes affected by remote.rs and state_ui_input_helpers.rs."
+          - "Exercise the reviewed warning or failure path without introducing swallowed errors."
+          - "Preserve existing assertions and record the narrow focused test command."
+      - id: "T009"
+        title: "Remove the positive blocker-branch growth from crates/jcode-app-core/src/tool/bash.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/bash.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "The file is flat or smaller than 85f9f5e3b by the repository's production LOC measurement."
+          - "Bash command behavior and actionable error propagation remain unchanged under the existing bash-focused tests."
+          - "No new allow, exemption, panic-prone path, or silently ignored Result is introduced."
+      - id: "T010"
+        title: "Keep lifecycle repairs flat or smaller in crates/jcode-app-core/src/server/client_lifecycle.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "The file has no positive branch-base size delta."
+          - "Client lifecycle behavior, cleanup ordering, and explicit errors continue to satisfy focused tests."
+          - "Changes remain surgical and do not move growth into another already-oversized file."
+      - id: "T011"
+        title: "Remove the positive blocker-branch growth from crates/jcode-telemetry-core/src/lib.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-telemetry-core/src/lib.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "The complete file, including colocated tests, is flat or smaller than 85f9f5e3b."
+          - "Telemetry success and exceptional behavior remains covered and explicit."
+          - "Any test consolidation documents equivalent or stronger coverage and does not delete behavior solely to meet the ratchet."
+      - id: "T012"
+        title: "Keep translation repairs flat or smaller in crates/jcode-harness-api-server/src/translate.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api-server/src/translate.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "The file has no positive branch-base size delta."
+          - "Translation compatibility and missing-field behavior remain unchanged under focused tests."
+          - "No public schema, fallback, or error contract is weakened."
+      - id: "T013"
+        title: "Keep remote TUI repairs flat or smaller in crates/jcode-tui/src/tui/app/remote.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/remote.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "The file has no positive branch-base size delta."
+          - "Remote TUI behavior remains unchanged under the focused regression tests."
+          - "No warning suppression, hidden failure, or unrelated cleanup is introduced."
+      - id: "T014"
+        title: "Remove positive growth from crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "The file is flat or smaller than 85f9f5e3b."
+          - "Input-state behavior and reviewed warning fixes remain intact."
+          - "The repair does not restore compiler warnings or convert explicit failures into ignored results."
+      - id: "T015"
+        title: "Keep ACP error-path repair flat or smaller in src/cli/acp.rs"
+        status: "Pending"
+        type: "refactor"
+        parallel: true
+        story_id: "US-002"
+        file_path: "src/cli/acp.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "The file has no positive branch-base size delta."
+          - "The reviewed ACP error remains explicit and the public command behavior remains compatible."
+          - "No unrelated CLI behavior or contract changes are included."
+      - id: "T016"
+        title: "Verify every changed oversized file is flat or smaller and record the audit in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T009", "T010", "T011", "T012", "T013", "T014", "T015"]
+        acceptance_criteria:
+          - "A file-by-file comparison against 85f9f5e3b reports zero positive deltas for all modified already-oversized files."
+          - "Focused tests, compile checks, warnings, and changed-surface ratchets pass before historical baselines are changed."
+          - "The audit detects and rejects growth moved into any other modified already-oversized production or test file."
+
+  - number: 4
+    title: "User Story 1 - Reconcile intentional quality baselines"
+    purpose: "Make complete ownership and review provenance enforceable, then reconcile only traced intentional merged state."
+    story_reference: "US-001"
+    independent_test: "Validate every adjusted baseline against the provenance ledger and Git ancestry, and confirm that untraced, mismatched, duplicate, or unresolved records fail."
+    tasks:
+      - id: "T017"
+        title: "Create provenance validator tests in scripts/tests/test_quality_ratchet_provenance.py"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/tests/test_quality_ratchet_provenance.py"
+        dependencies: ["T003", "T016"]
+        acceptance_criteria:
+          - "Add passing fixtures for complete code_size, test_size, and swallowed_error records and their review dispositions."
+          - "Add failing fixtures for missing required fields, duplicate category and scope records, mismatched previous or reconciled values, missing budget membership, invalid or non-ancestor commits, invalid Bead identifiers, and unresolved review dispositions."
+          - "Tests use only Python's standard library and deterministic temporary Git or fixture state."
+      - id: "T018"
+        title: "Add controlled future-growth rejection tests in scripts/tests/test_quality_ratchets.py"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "scripts/tests/test_quality_ratchets.py"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Fixture tests prove a positive production LOC delta and a positive test LOC delta are rejected after reconciliation."
+          - "Fixture tests separately prove per-pattern, per-file, and aggregate swallowed-error growth is rejected."
+          - "Passing fixtures prove current accepted values remain allowed without exemptions or weakened unrelated thresholds."
+      - id: "T019"
+        title: "Create the canonical ownership and review ledger in scripts/quality_ratchet_provenance.json"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/quality_ratchet_provenance.json"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "Represent every approved code-size, test-size, and swallowed-error transition with a unique id, category, scope, previous_value, reconciled_value, baseline_commit, owning_commits, owning_beads, review_disposition_ids, and merged_state_evidence."
+          - "Include every applicable review concern with stable source, concern, disposition, and evidence fields."
+          - "Exclude untraced, reverted, superseded, disputed, or unexplained growth from approved reconciled values."
+      - id: "T020"
+        title: "Implement the standard-library provenance gate in scripts/check_quality_ratchet_provenance.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/check_quality_ratchet_provenance.py"
+        dependencies: ["T017", "T019"]
+        acceptance_criteria:
+          - "Validate ledger schema, category and scope uniqueness, review-disposition references, and required ownership fields with actionable per-record errors."
+          - "Cross-check previous and reconciled values against historical and current budget entries, including swallowed-error pattern, file, and aggregate dimensions."
+          - "Use Git to require existing baseline and owning commits and require every owning commit to be an ancestor of the accepted merged state."
+          - "Exit zero only when the complete ledger and all adjusted budget scopes are consistent."
+      - id: "T021"
+        title: "Register provenance validation before ratchet acceptance in scripts/check_guardrails.sh"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Run python3 scripts/check_quality_ratchet_provenance.py before the code-size, test-size, and swallowed-error ratchets."
+          - "Preserve the existing canonical guardrail ordering, failure visibility, stable-toolchain behavior, and non-zero exit propagation."
+          - "Do not add an update, bypass, exemption, or optional path that permits incomplete provenance."
+      - id: "T022"
+        title: "Reconcile traced production-size scopes in scripts/code_size_budget.json"
+        status: "Pending"
+        type: "implementation"
+        parallel: true
+        story_id: "US-001"
+        file_path: "scripts/code_size_budget.json"
+        dependencies: ["T019", "T020"]
+        acceptance_criteria:
+          - "Change only production-size entries backed by approved code_size provenance records."
+          - "Each changed previous and reconciled value matches the ledger and current intentional merged measurement."
+          - "Unrelated entries remain byte-for-byte unchanged where practical and no future-growth exemption is added."
+      - id: "T023"
+        title: "Reconcile traced test-size scopes in scripts/test_size_budget.json"
+        status: "Pending"
+        type: "implementation"
+        parallel: true
+        story_id: "US-001"
+        file_path: "scripts/test_size_budget.json"
+        dependencies: ["T019", "T020"]
+        acceptance_criteria:
+          - "Change only test-size entries backed by approved test_size provenance records."
+          - "Each changed previous and reconciled value matches the ledger and current intentional merged measurement."
+          - "No tests or accepted coverage are removed merely to satisfy the budget, and unrelated entries remain unchanged."
+      - id: "T024"
+        title: "Reconcile traced swallowed-error scopes in scripts/swallowed_error_budget.json"
+        status: "Pending"
+        type: "implementation"
+        parallel: true
+        story_id: "US-001"
+        file_path: "scripts/swallowed_error_budget.json"
+        dependencies: ["T019", "T020"]
+        acceptance_criteria:
+          - "Change only per-pattern, per-file, or aggregate values backed by approved swallowed_error provenance records."
+          - "Ledger and budget values agree exactly for every adjusted dimension."
+          - "Existing explicit-error enforcement and all unrelated swallowed-error thresholds remain active and unchanged."
+      - id: "T025"
+        title: "Run focused provenance and ratchet checks and record reconciliation evidence in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T018", "T021", "T022", "T023", "T024"]
+        acceptance_criteria:
+          - "The provenance validator and all three existing focused ratchets pass against the reconciled repository state."
+          - "Controlled violating fixtures are rejected for production LOC, test LOC, and each swallowed-error enforcement dimension."
+          - "The recorded diff confirms that all changed baseline values have complete provenance and unrelated budget values are unchanged."
+
+  - number: 5
+    title: "User Story 3 - Preserve behavior and explicit failures"
+    purpose: "Demonstrate that source-size repair and ratchet reconciliation preserve observable behavior, coverage, and explicit error paths."
+    story_reference: "US-003"
+    independent_test: "Run the focused affected-workflow and error-path test matrix and verify accepted outcomes and coverage boundaries remain unchanged."
+    tasks:
+      - id: "T026"
+        title: "Run focused app-core and harness behavior tests and record receipts in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T016", "T025"]
+        acceptance_criteria:
+          - "Exact-name or narrow-module tests for client lifecycle, bash behavior, and harness translation pass."
+          - "Failure-path assertions prove errors remain actionable and observable."
+          - "The evidence identifies any consolidated or moved tests and demonstrates equivalent or stronger coverage."
+      - id: "T027"
+        title: "Run focused telemetry, TUI, and ACP error-path tests and record receipts in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T016", "T025"]
+        acceptance_criteria:
+          - "Narrow telemetry and remote TUI tests pass without warnings or hidden failures."
+          - "The ACP public error-path scenario retains its accepted observable behavior."
+          - "The swallowed-error checker reports no newly introduced occurrence in the changed source surface."
+      - id: "T028"
+        title: "Run affected public provider regressions in tests/e2e/provider_behavior.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "tests/e2e/provider_behavior.rs"
+        dependencies: ["T025"]
+        acceptance_criteria:
+          - "The focused provider behavior scenarios affected by the blocker branch pass with the previously accepted outcomes."
+          - "Tests exercise the public contract rather than parsing incidental terminal formatting."
+          - "Any failure is diagnosed and repaired before broad validation rather than accepted as a baseline change."
+      - id: "T029"
+        title: "Complete behavior, coverage, and explicit-error traceability in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T026", "T027", "T028"]
+        acceptance_criteria:
+          - "FR-007, FR-008, FR-009, FR-013, SC-003, and affected review concerns point to passing direct evidence."
+          - "No accepted coverage boundary regresses and no test removal is justified solely by file-size pressure."
+          - "Every handled failure touched by the branch remains explicit, tested, and free of newly swallowed errors."
+
+  - number: 6
+    title: "User Story 4 - Validate durable guardrails"
+    purpose: "Produce one consistent acceptance run across focused, all-feature, and built-distributable-product boundaries."
+    story_reference: "US-004"
+    independent_test: "Execute each required validation category independently and retain a passing receipt for focused ratchets, canonical guardrails, and isolated built-binary public and integration scenarios."
+    tasks:
+      - id: "T030"
+        title: "Run the serialized stable all-feature delivery gate with scripts/check_guardrails.sh"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T029"]
+        acceptance_criteria:
+          - "The canonical stable-toolchain guardrail command passes formatting, all-target and all-feature checks, Clippy with warnings denied, ratchets, dependency boundaries, and all other existing gates."
+          - "Cargo-heavy checks run serially and unrelated thresholds remain unchanged."
+          - "The provenance gate runs before the three reconciled ratchets and any failure remains visible and non-zero."
+      - id: "T031"
+        title: "Build the distributable selfdev binary from the reconciled worktree"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "target/selfdev/jcode"
+        dependencies: ["T030"]
+        acceptance_criteria:
+          - "cargo build --profile selfdev succeeds for the current worktree after the canonical guardrail run."
+          - "The resolved binary under target/selfdev is the artifact used by subsequent runtime checks, not ~/.jcode/builds/shared-server/jcode."
+          - "The build does not restart or repoint the shared daemon."
+      - id: "T032"
+        title: "Validate built-binary public and integration scenarios on a private socket using target/selfdev/jcode"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "target/selfdev/jcode"
+        dependencies: ["T031"]
+        acceptance_criteria:
+          - "Run target/selfdev/jcode run --no-update --socket with a unique private socket and deterministic public prompts or provider-mock scenarios."
+          - "Public command, server, provider-mock, tool, and explicit error-path outcomes match the accepted behavior."
+          - "Evidence resolves the tested binary path and confirms the shared long-lived daemon was not measured or disturbed."
+      - id: "T033"
+        title: "Record the final internally consistent acceptance run in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T032"]
+        acceptance_criteria:
+          - "Retain exact commands and passing results for focused ratchets, negative enforcement tests, focused behavior tests, stable all-feature guardrails, and built-binary public and integration checks."
+          - "Every FR and success criterion in the acceptance matrix has non-contradictory direct evidence from the final repository state."
+          - "Any prior failed receipt is superseded explicitly so the final result cannot be confused with stale evidence."
+
+  - number: 7
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Complete scope review, provenance consistency, review dispositions, and delivery documentation without weakening enforcement."
+    tasks:
+      - id: "T034"
+        title: "Perform the final branch-base size, scope-to-diff, and provenance consistency review in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T033"]
+        acceptance_criteria:
+          - "The final diff contains only blocker-owned no-growth repairs, the provenance gate and ledger, traced budget reconciliations, focused tests, and required documentation."
+          - "Every modified already-oversized file remains flat or smaller against 85f9f5e3b and no growth was shifted into another oversized file."
+          - "Every changed baseline scope matches one complete ledger record, and every applicable independent review concern has a final evidence-backed disposition."
+      - id: "T035"
+        title: "Finalize implementation and validation notes in specs/015-reconcile-quality-ratchets/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T034"]
+        acceptance_criteria:
+          - "Summarize the reconciled categories and scopes, rejected untraced deltas, blocker-source repairs, final review dispositions, and exact validation receipts."
+          - "Document that no user-facing contract, runtime storage, dependency, unrelated threshold, or future no-growth enforcement was changed."
+          - "Record the final Bead handoff evidence required for landing without duplicating transient logs or secrets."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-002"
+      depends_on: []
+      blocks: ["US-001"]
+    - story_id: "US-001"
+      depends_on: ["US-002"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-001"]
+      blocks: ["US-004"]
+    - story_id: "US-004"
+      depends_on: ["US-003"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+
+parallel_execution:
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T006", "T007", "T008"]
+        rationale: "Telemetry, harness translation, and TUI focused tests are in separate owning crates and can be authored without shared-file edits."
+      - tasks: ["T009", "T010"]
+        rationale: "Bash and lifecycle repairs touch separate app-core source files after their shared focused test coverage is established."
+      - tasks: ["T012", "T013", "T014", "T015"]
+        rationale: "Harness, remote TUI, input helper, and ACP repairs touch independent source files after their focused tests exist."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T017", "T018"]
+        rationale: "Provenance-contract tests and generic negative ratchet fixtures are separate Python test files with independent fixtures."
+      - tasks: ["T022", "T023", "T024"]
+        rationale: "The three budget files can be reconciled independently after the ledger and validator contract are fixed."
+  - phase: 5
+    parallel_groups:
+      - tasks: ["T026", "T027", "T028"]
+        rationale: "Focused behavior checks cover distinct crate and E2E surfaces once the reconciled state is stable, though validation.md receipts must be integrated serially to avoid file conflicts."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4]
+    description: "Freeze evidence, restore blocker-branch no-growth, and complete provenance-gated reconciliation for US-002 and US-001."
+    validation: "All changed oversized files are flat or smaller, every adjusted baseline has complete validated provenance, all focused ratchets pass, and controlled future growth is rejected."
+  incremental_delivery:
+    - milestone: "Evidence Frozen"
+      phases: [1, 2]
+      deliverable: "A complete acceptance matrix, independent-review inventory, historical delta ownership inventory, and blocker changed-surface audit."
+    - milestone: "Blocker No-Growth Restored"
+      phases: [1, 2, 3]
+      deliverable: "Every blocker-modified oversized file is flat or smaller with focused behavior and explicit-error coverage retained."
+    - milestone: "MVP Reconciliation Complete"
+      phases: [1, 2, 3, 4]
+      deliverable: "Provenance and review gates enforce ownership, and only traced intentional code-size, test-size, and swallowed-error state is reconciled."
+    - milestone: "Behavior Preserved"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Affected workflows, coverage expectations, and explicit failure paths have direct passing evidence."
+    - milestone: "Landing Ready"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Canonical all-feature guardrails and isolated built-binary public and integration validation pass with final review and delivery evidence."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T20:32:57Z"
+  artifact_type: "tasks"
