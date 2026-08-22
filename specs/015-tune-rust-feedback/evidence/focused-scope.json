@@ -1,0 +1,3659 @@
+{
+  "action_counts": {
+    "cancelled": 0,
+    "coalesced": 0,
+    "executed": 50,
+    "followers": 0,
+    "requested": 50,
+    "reused": 0,
+    "underlying_actions": 50
+  },
+  "adoption_gate": {
+    "correctness_requirement": "Optional-feature focused checks and full-feature validation must both pass.",
+    "default_changed": false,
+    "observed_correctness": "All retained samples preserved expected scope and provenance, and no fallback produced false focused success.",
+    "p50_requirement": "A paired broad-versus-focused Cargo feedback comparison must improve p50 in representative intended scenarios.",
+    "p95_requirement": "The same paired comparison must improve nearest-rank p95.",
+    "reason": "This bounded receipt proves scope-selection correctness and records candidate overhead, but the frozen baseline is explicitly incomplete and does not provide comparable Cargo feedback p50/p95. No narrowing rule is adopted from these measurements alone.",
+    "status": "not_adoptable_from_this_receipt_alone"
+  },
+  "aggregates": {
+    "eligible_binary": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 62,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38600704,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 62,
+      "p95_execution_time_ms": 65,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39272448,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 65,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "eligible_integration_test": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 58,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38273024,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 58,
+      "p95_execution_time_ms": 76,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39325696,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 76,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "eligible_library": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 57,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 39190528,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 57,
+      "p95_execution_time_ms": 63,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39329792,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 63,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "eligible_optional_feature": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 66,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38875136,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 66,
+      "p95_execution_time_ms": 73,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39350272,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 73,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_ambiguous_target": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 58,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38678528,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 58,
+      "p95_execution_time_ms": 63,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 38957056,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 63,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_broad_workspace": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 56,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38260736,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 56,
+      "p95_execution_time_ms": 61,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39145472,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 61,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_cross_package": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 63,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38543360,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 63,
+      "p95_execution_time_ms": 68,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39100416,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 68,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_optional_feature_unproven": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 53,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38346752,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 53,
+      "p95_execution_time_ms": 74,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39079936,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 74,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_release_sensitive": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 54,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 39010304,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 54,
+      "p95_execution_time_ms": 57,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 39337984,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 57,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    },
+    "fallback_unknown": {
+      "cache_observations": [
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 55,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 38543360,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 55,
+      "p95_execution_time_ms": 59,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 38969344,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 59,
+      "retry_sample_count": 0,
+      "valid_sample_count": 5
+    }
+  },
+  "collection": {
+    "case_summaries": {
+      "eligible_binary": {
+        "class": "eligible_narrow",
+        "configured_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "expected_fallback_reason_fragment": {
+          "reason": "eligible narrow case",
+          "status": "not_applicable"
+        },
+        "expected_mode": "focused",
+        "expected_provenance": "inferred",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "eligible_integration_test": {
+        "class": "eligible_narrow",
+        "configured_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "expected_fallback_reason_fragment": {
+          "reason": "eligible narrow case",
+          "status": "not_applicable"
+        },
+        "expected_mode": "focused",
+        "expected_provenance": "inferred",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "eligible_library": {
+        "class": "eligible_narrow",
+        "configured_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "expected_fallback_reason_fragment": {
+          "reason": "eligible narrow case",
+          "status": "not_applicable"
+        },
+        "expected_mode": "focused",
+        "expected_provenance": "inferred",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "eligible_optional_feature": {
+        "class": "eligible_narrow",
+        "configured_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "expected_fallback_reason_fragment": {
+          "reason": "eligible narrow case",
+          "status": "not_applicable"
+        },
+        "expected_mode": "focused",
+        "expected_provenance": "inferred",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_ambiguous_target": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "expected_fallback_reason_fragment": "target ownership",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_broad_workspace": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "Cargo.lock"
+        ],
+        "expected_fallback_reason_fragment": "workspace path",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_cross_package": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "expected_fallback_reason_fragment": "cross-package",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_optional_feature_unproven": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "expected_fallback_reason_fragment": "optional feature",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_release_sensitive": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "scripts/install_release.sh"
+        ],
+        "expected_fallback_reason_fragment": "release-sensitive",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      },
+      "fallback_unknown": {
+        "class": "correctness_fallback",
+        "configured_paths": [
+          "docs/unowned.md"
+        ],
+        "expected_fallback_reason_fragment": "unknown",
+        "expected_mode": "broad",
+        "expected_provenance": "conservative_fallback",
+        "retained_samples": 5,
+        "warmup_samples_excluded": 1
+      }
+    },
+    "correctness_commands": [
+      "python3 scripts/test_rust_validation_scope.py",
+      "bash scripts/test_dev_cargo_scope.sh"
+    ],
+    "measurement_boundary": "Subprocess measurements cover resolver decision latency and peak process resources, not Cargo compile or test execution latency.",
+    "sample_commands": {
+      "eligible_binary": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/src/bin/alpha-cli.rs"
+      ],
+      "eligible_integration_test": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/tests/api_contract.rs"
+      ],
+      "eligible_library": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/src/lib.rs"
+      ],
+      "eligible_optional_feature": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/src/telemetry/export.rs"
+      ],
+      "fallback_ambiguous_target": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/tests/helper.rs"
+      ],
+      "fallback_broad_workspace": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "Cargo.lock"
+      ],
+      "fallback_cross_package": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "crates/alpha/src/lib.rs",
+        "crates/beta/src/lib.rs"
+      ],
+      "fallback_optional_feature_unproven": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules-without-optional-proof.json",
+        "crates/alpha/src/telemetry/export.rs"
+      ],
+      "fallback_release_sensitive": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "scripts/install_release.sh"
+      ],
+      "fallback_unknown": [
+        "python3",
+        "scripts/rust_validation_scope.py",
+        "--metadata",
+        "/home/ari/.jcode/scratch/t016-focused-scope/metadata.json",
+        "--path-rules",
+        "/home/ari/.jcode/scratch/t016-focused-scope/rules.json",
+        "docs/unowned.md"
+      ]
+    },
+    "status": "complete_for_scope_resolution_contract_only"
+  },
+  "experiment_boundary": {
+    "bounded": true,
+    "default_changed": false,
+    "variant": "focused_scope_resolution_contract"
+  },
+  "fallback": {
+    "reason": "Six conservative fallback classes retained broad validation; eligible cases were narrowed only when fixture metadata and repository rules proved package, target, and optional features.",
+    "used": true
+  },
+  "run_identity": {
+    "dirty_fingerprint": "sha256:9093556a19f8e3732ea4d966d1f2a8a98730dd2486e86cedd1e2f8dfeb071e29",
+    "effective_configuration": {
+      "cargo_execution": false,
+      "matrix_path": "scripts/rust_feedback_matrix.json",
+      "resolver": "scripts/rust_validation_scope.py",
+      "resolver_schema_version": "1.0",
+      "samples_per_case": 5,
+      "warmups_per_case": 1
+    },
+    "host_conditions": {
+      "architecture": "x86_64",
+      "kernel": "7.0.9-arch2-1",
+      "logical_cpu_count": 16,
+      "memory_bytes": 29039259648,
+      "os": "linux"
+    },
+    "label": "focused-scope-candidate-contract-evidence",
+    "lockfile_fingerprint": "sha256:bd794cdf676cd24257ba3b5b2515c83f003383175836417ca11d661020c69bd4",
+    "matrix_version": "1.0.0",
+    "source_revision": "8c7aa0429aede6c9d16f6e28324501d1ddf0bb47",
+    "timestamp": "2026-08-22T15:38:27Z",
+    "toolchain": "rustc 1.95.0 (59807616e 2026-04-14) (Arch Linux rust 1:1.95.0-1); binary: rustc; commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860; commit-date: 2026-04-14; host: x86_64-unknown-linux-gnu; release: 1.95.0; LLVM version: 22.1.3"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39329792,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_library",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 57,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38801408,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 57
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_library",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 50,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38293504,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 50
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_library",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 54,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39321600,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 54
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_library",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 63,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39190528,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 63
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_library",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "bin:alpha-cli"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 64,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39272448,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 64
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_binary",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "bin:alpha-cli"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 55,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38572032,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 55
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_binary",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "bin:alpha-cli"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 56,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38191104,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 56
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_binary",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "bin:alpha-cli"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 62,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39223296,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 62
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_binary",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/bin/alpha-cli.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "bin:alpha-cli"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 65,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38600704,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 65
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_binary",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "test:api_contract"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 76,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 37879808,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 76
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_integration_test",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "test:api_contract"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 67,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39325696,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 67
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_integration_test",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "test:api_contract"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 56,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38273024,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 56
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_integration_test",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "test:api_contract"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38567936,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_integration_test",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/api_contract.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "test:api_contract"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 57,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38260736,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 57
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_integration_test",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [
+          "telemetry"
+        ],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [
+          "telemetry"
+        ],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38875136,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_optional_feature",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [
+          "telemetry"
+        ],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [
+          "telemetry"
+        ],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 68,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39100416,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 68
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_optional_feature",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [
+          "telemetry"
+        ],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [
+          "telemetry"
+        ],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 73,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39350272,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 73
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_optional_feature",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [
+          "telemetry"
+        ],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [
+          "telemetry"
+        ],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 66,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38539264,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 66
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_optional_feature",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [
+          "telemetry"
+        ],
+        "mode": "focused",
+        "no_default_features": false,
+        "packages": [
+          "alpha"
+        ],
+        "targets": [
+          "lib:alpha"
+        ]
+      },
+      "false_success_checks": {
+        "expected_mode": "focused",
+        "expected_mode_observed": true,
+        "expected_provenance": "inferred",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [
+          "telemetry"
+        ],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 55,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38559744,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 55
+      },
+      "provenance": {
+        "fallback_reason": {
+          "reason": "eligible scope resolved without fallback",
+          "status": "not_applicable"
+        },
+        "resolution_source": "inferred"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "eligible_optional_feature",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "docs/unowned.md"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 54,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 37691392,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 54
+      },
+      "provenance": {
+        "fallback_reason": "unknown path ownership: docs/unowned.md",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_unknown",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "docs/unowned.md"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 59,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38711296,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 59
+      },
+      "provenance": {
+        "fallback_reason": "unknown path ownership: docs/unowned.md",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_unknown",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "docs/unowned.md"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 55,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38969344,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 55
+      },
+      "provenance": {
+        "fallback_reason": "unknown path ownership: docs/unowned.md",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_unknown",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "docs/unowned.md"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38543360,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": "unknown path ownership: docs/unowned.md",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_unknown",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "docs/unowned.md"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 53,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38424576,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 53
+      },
+      "provenance": {
+        "fallback_reason": "unknown path ownership: docs/unowned.md",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_unknown",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 63,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38232064,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 63
+      },
+      "provenance": {
+        "fallback_reason": "ambiguous target ownership: crates/alpha/tests/helper.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_ambiguous_target",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38678528,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": "ambiguous target ownership: crates/alpha/tests/helper.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_ambiguous_target",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 62,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38559744,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 62
+      },
+      "provenance": {
+        "fallback_reason": "ambiguous target ownership: crates/alpha/tests/helper.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_ambiguous_target",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 58,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38916096,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 58
+      },
+      "provenance": {
+        "fallback_reason": "ambiguous target ownership: crates/alpha/tests/helper.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_ambiguous_target",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/tests/helper.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 57,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38957056,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 57
+      },
+      "provenance": {
+        "fallback_reason": "ambiguous target ownership: crates/alpha/tests/helper.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_ambiguous_target",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 63,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39100416,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 63
+      },
+      "provenance": {
+        "fallback_reason": "cross-package affected paths require broad validation",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_cross_package",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 55,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38105088,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 55
+      },
+      "provenance": {
+        "fallback_reason": "cross-package affected paths require broad validation",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_cross_package",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 68,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 37863424,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 68
+      },
+      "provenance": {
+        "fallback_reason": "cross-package affected paths require broad validation",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_cross_package",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 63,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38641664,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 63
+      },
+      "provenance": {
+        "fallback_reason": "cross-package affected paths require broad validation",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_cross_package",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/lib.rs",
+          "crates/beta/src/lib.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 59,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38543360,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 59
+      },
+      "provenance": {
+        "fallback_reason": "cross-package affected paths require broad validation",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_cross_package",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 74,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38346752,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 74
+      },
+      "provenance": {
+        "fallback_reason": "optional feature requirement is unprovable for crates/alpha/src/telemetry/export.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_optional_feature_unproven",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 56,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38674432,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 56
+      },
+      "provenance": {
+        "fallback_reason": "optional feature requirement is unprovable for crates/alpha/src/telemetry/export.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_optional_feature_unproven",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 53,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39079936,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 53
+      },
+      "provenance": {
+        "fallback_reason": "optional feature requirement is unprovable for crates/alpha/src/telemetry/export.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_optional_feature_unproven",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 52,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 37920768,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 52
+      },
+      "provenance": {
+        "fallback_reason": "optional feature requirement is unprovable for crates/alpha/src/telemetry/export.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_optional_feature_unproven",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "crates/alpha/src/telemetry/export.rs"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 52,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 37568512,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 52
+      },
+      "provenance": {
+        "fallback_reason": "optional feature requirement is unprovable for crates/alpha/src/telemetry/export.rs",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_optional_feature_unproven",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "Cargo.lock"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 57,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39145472,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 57
+      },
+      "provenance": {
+        "fallback_reason": "workspace path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_broad_workspace",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "Cargo.lock"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 61,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38260736,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 61
+      },
+      "provenance": {
+        "fallback_reason": "workspace path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_broad_workspace",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "Cargo.lock"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 56,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38105088,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 56
+      },
+      "provenance": {
+        "fallback_reason": "workspace path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_broad_workspace",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "Cargo.lock"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 52,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39002112,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 52
+      },
+      "provenance": {
+        "fallback_reason": "workspace path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_broad_workspace",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "Cargo.lock"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 51,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38260736,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 51
+      },
+      "provenance": {
+        "fallback_reason": "workspace path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_broad_workspace",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "configured_scope": {
+        "affected_paths": [
+          "scripts/install_release.sh"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 52,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39043072,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 52
+      },
+      "provenance": {
+        "fallback_reason": "release-sensitive path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_release_sensitive",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "configured_scope": {
+        "affected_paths": [
+          "scripts/install_release.sh"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 52,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39337984,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 52
+      },
+      "provenance": {
+        "fallback_reason": "release-sensitive path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_release_sensitive",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "configured_scope": {
+        "affected_paths": [
+          "scripts/install_release.sh"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 55,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38993920,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 55
+      },
+      "provenance": {
+        "fallback_reason": "release-sensitive path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_release_sensitive",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "configured_scope": {
+        "affected_paths": [
+          "scripts/install_release.sh"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 54,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 38477824,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 54
+      },
+      "provenance": {
+        "fallback_reason": "release-sensitive path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_release_sensitive",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "configured_scope": {
+        "affected_paths": [
+          "scripts/install_release.sh"
+        ],
+        "defaults": {},
+        "explicit_inputs": {}
+      },
+      "effective_scope": {
+        "all_features": false,
+        "features": [],
+        "mode": "broad",
+        "no_default_features": false,
+        "packages": [],
+        "targets": []
+      },
+      "false_success_checks": {
+        "expected_mode": "broad",
+        "expected_mode_observed": true,
+        "expected_provenance": "conservative_fallback",
+        "expected_provenance_observed": true,
+        "false_focused_success_observed": false,
+        "required_optional_features": [],
+        "required_optional_features_preserved": true
+      },
+      "metrics": {
+        "cache": {
+          "reason": "scope resolution performs no compilation or cache access",
+          "status": "not_applicable"
+        },
+        "execution_time_ms": 57,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 39010304,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 57
+      },
+      "provenance": {
+        "fallback_reason": "release-sensitive path",
+        "resolution_source": "conservative_fallback"
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "independent retained sample",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "fallback_release_sensitive",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    }
+  ],
+  "schema_version": "1.0.0"
+}

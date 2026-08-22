@@ -220,7 +220,7 @@ phases:
           - "scripts/test_dev_cargo_scope.sh and scripts/test_rust_validation_scope.py pass."
       - id: "T016"
         title: "Record focused-scope candidate benchmark evidence in specs/015-tune-rust-feedback/evidence/focused-scope.json"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
