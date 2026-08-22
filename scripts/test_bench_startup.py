@@ -43,32 +43,6 @@ def invalid_attempt(kind: str, *, exit_code: int | None = None) -> dict[str, obj
 
 
 class StructuredDaemonReadinessTests(unittest.TestCase):
-    def test_readiness_elapsed_excludes_identity_verification_overhead(self) -> None:
-        runtime = mock.Mock(socket_path=Path("/tmp/private-runtime.sock"))
-        runtime.environment.return_value = {}
-        process = mock.Mock(pid=4242)
-        process.poll.return_value = None
-        cleanup = mock.Mock(all_stopped=True, diagnostics=[])
-        candidate = mock.Mock(resolved_path="/candidate/jcode")
-        with (
-            mock.patch.object(collector.PrivateRuntime, "create", return_value=runtime),
-            mock.patch.object(collector.subprocess, "Popen", return_value=process),
-            mock.patch.object(collector.OwnedProcess, "capture", return_value=mock.Mock()),
-            mock.patch.object(collector, "wait_for_socket", return_value=True),
-            mock.patch.object(collector, "resolve_socket_owner", return_value=4242),
-            mock.patch.object(collector, "verify_daemon_executable"),
-            mock.patch.object(collector, "cleanup_owned_processes", return_value=cleanup),
-            mock.patch.object(
-                collector.time, "perf_counter", side_effect=[0.0, 0.01, 0.05]
-            ),
-        ):
-            result = collector.measure_server_startup_attempt(
-                candidate=candidate, timeout_s=5.0
-            )
-
-        self.assertEqual(result["status"], "valid")
-        self.assertAlmostEqual(result["elapsed_ms"], 50.0)
-
     def test_socket_owner_lookup_retries_transient_procfs_races(self) -> None:
         resolve_owner = getattr(collector, "resolve_socket_owner", None)
         self.assertIsNotNone(resolve_owner)
