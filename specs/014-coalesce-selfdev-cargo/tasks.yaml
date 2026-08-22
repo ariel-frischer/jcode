@@ -83,7 +83,7 @@ phases:
           - "Legacy missing keys and ineligible requests always create independent leaders; persisted reconciliation remains restart recovery."
       - id: "T006"
         title: "Reuse Attached follower delivery for builds and eligible tests"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
