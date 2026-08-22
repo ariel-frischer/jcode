@@ -1320,6 +1320,20 @@ async fn eligible_cargo_near_misses_remain_independent() {
             .map(|request| (&request.command, &request.attached_to_request_id))
             .collect::<Vec<_>>()
     );
+    for request in &requests {
+        let source = request
+            .requested_source
+            .as_ref()
+            .expect("request source identity");
+        let key = request
+            .dedupe_key
+            .as_deref()
+            .expect("eligible request should persist a dedupe key");
+        assert!(key.starts_with("selfdev-cargo-v1:"));
+        assert!(key.contains(&source.worktree_scope));
+        assert!(key.contains(&source.fingerprint));
+        assert!(key.ends_with(&request.command));
+    }
 
     drop(lock);
     for output in &outputs {
@@ -1444,6 +1458,10 @@ async fn opaque_shell_commands_remain_independent_and_keep_exact_semantics() {
     for (request, expected_command) in requests.iter().zip(commands) {
         assert!(request.attached_to_request_id.is_none());
         assert_eq!(request.command, expected_command);
+        assert!(
+            request.dedupe_key.is_none(),
+            "opaque commands must persist no reusable identity"
+        );
     }
 
     drop(lock);
