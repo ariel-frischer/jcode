@@ -1,8 +1,7 @@
-//! Local composition of a selected session profile for one headless `jcode run`.
+//! Local composition of a selected profile for one Jcode agent session.
 //!
-//! Profile selection is intentionally limited to the local plain, JSON, and
-//! NDJSON one-shot paths. It does not alter daemon protocol, ACP, SDK, interactive,
-//! persistence, child-session, or swarm behavior.
+//! Profiles apply to interactive TUI launches and local plain, JSON, and NDJSON
+//! one-shot runs. Administrative commands remain outside this session-scoped policy.
 
 use anyhow::{Context, Result};
 use clap::ValueEnum;
@@ -35,14 +34,22 @@ pub struct ResolvedRunProfile {
     apply_reasoning_effort: bool,
 }
 
-fn non_empty_env(name: &str) -> Option<String> {
+pub struct ResolvedRunInvocation {
+    pub provider: ProviderChoice,
+    pub model: Option<String>,
+    pub profile: Option<ResolvedRunProfile>,
+}
+
+fn non_empty_env(name: &str) -> Result<Option<String>> {
     let value = match std::env::var(name) {
         Ok(value) => value,
-        Err(std::env::VarError::NotPresent) => return None,
-        Err(std::env::VarError::NotUnicode(_)) => return None,
+        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            anyhow::bail!("environment variable {name} is not valid UTF-8")
+        }
     };
     let value = value.trim().to_string();
-    (!value.is_empty()).then_some(value)
+    Ok((!value.is_empty()).then_some(value))
 }
 
 fn parse_provider(value: &str, profile_name: &str) -> Result<ProviderChoice> {
@@ -62,6 +69,13 @@ fn parse_list(value: &str) -> Vec<String> {
         .collect()
 }
 
+fn reasoning_effort_env() -> Result<Option<String>> {
+    match non_empty_env("JCODE_OPENAI_REASONING_EFFORT")? {
+        some @ Some(_) => Ok(some),
+        None => non_empty_env("JCODE_ANTHROPIC_REASONING_EFFORT"),
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 struct RunProfileEnvironment {
     provider: Option<String>,
@@ -74,17 +88,16 @@ struct RunProfileEnvironment {
 }
 
 impl RunProfileEnvironment {
-    fn current() -> Self {
-        Self {
-            provider: non_empty_env("JCODE_PROVIDER"),
-            model: non_empty_env("JCODE_MODEL"),
-            reasoning_effort: non_empty_env("JCODE_OPENAI_REASONING_EFFORT")
-                .or_else(|| non_empty_env("JCODE_ANTHROPIC_REASONING_EFFORT")),
-            provider_profile: non_empty_env("JCODE_PROVIDER_PROFILE_NAME"),
-            tool_profile: non_empty_env("JCODE_TOOL_PROFILE"),
-            tools: non_empty_env("JCODE_TOOLS").map(|value| parse_list(&value)),
-            disabled_tools: non_empty_env("JCODE_DISABLED_TOOLS").map(|value| parse_list(&value)),
-        }
+    fn current() -> Result<Self> {
+        Ok(Self {
+            provider: non_empty_env("JCODE_PROVIDER")?,
+            model: non_empty_env("JCODE_MODEL")?,
+            reasoning_effort: reasoning_effort_env()?,
+            provider_profile: non_empty_env("JCODE_PROVIDER_PROFILE_NAME")?,
+            tool_profile: non_empty_env("JCODE_TOOL_PROFILE")?,
+            tools: non_empty_env("JCODE_TOOLS")?.map(|value| parse_list(&value)),
+            disabled_tools: non_empty_env("JCODE_DISABLED_TOOLS")?.map(|value| parse_list(&value)),
+        })
     }
 }
 
@@ -252,15 +265,203 @@ pub fn resolve_run_profile(
         name,
         &config,
         profile,
-        RunProfileEnvironment::current(),
+        RunProfileEnvironment::current()?,
         overrides,
     )
     .map(Some)
 }
 
+pub(crate) fn resolve_run_invocation(
+    selected_name: Option<&str>,
+    args: &super::args::Args,
+) -> Result<ResolvedRunInvocation> {
+    let split_list = |value: &str| {
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    let profile = resolve_run_profile(
+        selected_name,
+        RunProfileOverrides {
+            provider: args.provider_was_explicit.then_some(args.provider),
+            model: args.model.clone(),
+            reasoning_effort: args.reasoning_effort.clone(),
+            provider_profile: args.provider_profile.clone(),
+            tool_profile: args.tool_profile.clone(),
+            tools: args.tools.as_deref().map(split_list),
+            disabled_tools: args.disabled_tools.as_deref().map(split_list),
+        },
+    )?;
+    if let Some(provider_profile) = profile
+        .as_ref()
+        .and_then(|profile| profile.provider_profile.as_deref())
+    {
+        crate::provider_catalog::apply_named_provider_profile_env(provider_profile)?;
+        crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", provider_profile);
+        crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
+    }
+    let provider = profile
+        .as_ref()
+        .map(|profile| profile.provider)
+        .unwrap_or(args.provider);
+    let model = profile
+        .as_ref()
+        .and_then(|profile| profile.model.clone())
+        .or(args.model.clone());
+
+    Ok(ResolvedRunInvocation {
+        provider,
+        model,
+        profile,
+    })
+}
+
+pub(crate) fn apply_selected_profile_to_args(
+    args: &mut super::args::Args,
+) -> Result<Option<ResolvedRunProfile>> {
+    let selected_name = args.profile.clone();
+    let resolved = resolve_run_invocation(selected_name.as_deref(), args)?;
+    let Some(profile) = resolved.profile else {
+        return Ok(None);
+    };
+
+    args.provider = resolved.provider;
+    args.provider_was_explicit = true;
+    args.model = resolved.model;
+    args.reasoning_effort = selected_reasoning_effort(&profile).map(str::to_string);
+    args.provider_profile = profile.provider_profile.clone();
+    args.tool_profile = Some(profile.tools.profile.clone());
+    args.tools = Some(profile.tools.enabled.join(","));
+    args.disabled_tools = Some(profile.tools.disabled.join(","));
+    args.disable_base_tools = profile.tools.disable_base_tools;
+
+    let overlay = serde_json::to_string(&profile.prompt_overlay)
+        .context("failed to serialize selected session profile prompt overlay")?;
+    crate::env::set_var(crate::prompt::SESSION_PROMPT_OVERLAY_ENV, overlay);
+    Ok(Some(profile))
+}
+
+pub(crate) fn apply_agent_session_options(args: &mut super::args::Args) -> Result<()> {
+    if let Some(profile_name) = args
+        .provider_profile
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        crate::provider_catalog::apply_named_provider_profile_env(profile_name)?;
+        crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", profile_name);
+        crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
+        args.provider = ProviderChoice::OpenaiCompatible;
+    }
+
+    if let Some(reasoning_effort) = args.reasoning_effort.as_deref() {
+        crate::env::set_var("JCODE_OPENAI_REASONING_EFFORT", reasoning_effort);
+        crate::env::set_var("JCODE_ANTHROPIC_REASONING_EFFORT", reasoning_effort);
+    }
+    if let Some(tool_profile) = args.tool_profile.as_deref() {
+        crate::env::set_var("JCODE_TOOL_PROFILE", tool_profile);
+    }
+    if let Some(tools) = args.tools.as_deref() {
+        crate::env::set_var("JCODE_TOOLS", tools);
+    }
+    if let Some(disabled_tools) = args.disabled_tools.as_deref() {
+        crate::env::set_var("JCODE_DISABLED_TOOLS", disabled_tools);
+    }
+    if args.disable_base_tools {
+        crate::env::set_var("JCODE_DISABLE_BASE_TOOLS", "1");
+    }
+    if let Some(mcp_tools) = args.mcp_tools.as_deref() {
+        crate::env::set_var("JCODE_MCP_TOOLS", mcp_tools);
+    }
+    if let Some(threshold) = args.mcp_tools_token_threshold {
+        crate::env::set_var("JCODE_MCP_TOOLS_TOKEN_THRESHOLD", threshold.to_string());
+    }
+    if args.tool_profile.is_some()
+        || args.tools.is_some()
+        || args.disabled_tools.is_some()
+        || args.disable_base_tools
+        || args.mcp_tools.is_some()
+        || args.mcp_tools_token_threshold.is_some()
+    {
+        crate::config::invalidate_config_cache();
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn run_profiled_single_message(
+    args: &super::args::Args,
+    message: &str,
+    json: bool,
+    ndjson: bool,
+    profile: Option<ResolvedRunProfile>,
+) -> Result<()> {
+    super::commands::run_single_message_command(
+        args.provider,
+        args.model.clone(),
+        args.resume.as_deref(),
+        message,
+        json,
+        ndjson,
+        profile,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_profile_environment_value_is_rejected() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _guard = crate::storage::lock_test_env();
+        const NAME: &str = "JCODE_TEST_NON_UTF8_PROFILE_ENV";
+        crate::env::set_var(NAME, std::ffi::OsString::from_vec(vec![0xff]));
+        let result = non_empty_env(NAME);
+        crate::env::remove_var(NAME);
+
+        let error = result.expect_err("non-UTF-8 environment value must fail");
+        assert!(error.to_string().contains(NAME));
+        assert!(error.to_string().contains("not valid UTF-8"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn openai_reasoning_environment_precedes_invalid_anthropic_fallback() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _guard = crate::storage::lock_test_env();
+        let openai = std::env::var_os("JCODE_OPENAI_REASONING_EFFORT");
+        let anthropic = std::env::var_os("JCODE_ANTHROPIC_REASONING_EFFORT");
+        crate::env::set_var("JCODE_OPENAI_REASONING_EFFORT", "high");
+        crate::env::set_var(
+            "JCODE_ANTHROPIC_REASONING_EFFORT",
+            std::ffi::OsString::from_vec(vec![0xff]),
+        );
+
+        let resolved = reasoning_effort_env();
+        match openai {
+            Some(value) => crate::env::set_var("JCODE_OPENAI_REASONING_EFFORT", value),
+            None => crate::env::remove_var("JCODE_OPENAI_REASONING_EFFORT"),
+        }
+        match anthropic {
+            Some(value) => crate::env::set_var("JCODE_ANTHROPIC_REASONING_EFFORT", value),
+            None => crate::env::remove_var("JCODE_ANTHROPIC_REASONING_EFFORT"),
+        }
+
+        assert_eq!(
+            resolved
+                .expect("higher-precedence value should win")
+                .as_deref(),
+            Some("high")
+        );
+    }
 
     fn complete_profile() -> crate::config::SessionProfileConfig {
         crate::config::SessionProfileConfig {

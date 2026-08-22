@@ -2,25 +2,25 @@ use super::*;
 use crate::cli::provider_init::ProviderChoice;
 
 #[test]
-fn session_profile_is_run_scoped_and_reasoning_effort_remains_global() {
+fn session_profile_and_reasoning_effort_are_global_session_options() {
     let args = Args::try_parse_from_with_provenance([
         "jcode",
         "--reasoning-effort",
         "high",
-        "run",
         "--profile",
         "review",
+        "run",
         "inspect",
     ])
     .expect("run profile and global reasoning override should parse");
     assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
-    assert!(matches!(
-        args.command,
-        Some(Command::Run {
-            profile: Some(ref profile),
-            ..
-        }) if profile == "review"
-    ));
+    assert_eq!(args.profile.as_deref(), Some("review"));
+    assert!(matches!(args.command, Some(Command::Run { .. })));
+
+    let interactive = Args::try_parse_from_with_provenance(["jcode", "--profile", "review"])
+        .expect("interactive profile should parse");
+    assert_eq!(interactive.profile.as_deref(), Some("review"));
+    assert!(interactive.command.is_none());
 }
 
 #[test]
@@ -655,12 +655,10 @@ fn run_json_subcommand_parses() {
             json,
             ndjson,
             message,
-            profile,
         }) => {
             assert!(json);
             assert!(!ndjson);
             assert_eq!(message, "hello");
-            assert_eq!(profile, None);
         }
         other => panic!("unexpected command: {:?}", other),
     }
@@ -674,12 +672,10 @@ fn run_ndjson_subcommand_parses() {
             json,
             ndjson,
             message,
-            profile,
         }) => {
             assert!(!json);
             assert!(ndjson);
             assert_eq!(message, "hello");
-            assert_eq!(profile, None);
         }
         other => panic!("unexpected command: {:?}", other),
     }

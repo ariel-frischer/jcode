@@ -12,6 +12,7 @@ use crate::{browser, gateway, memory, session, storage, tui};
 
 use super::{output::terminal_title, terminal::init_tui_runtime};
 
+mod cloud_sessions;
 mod menubar;
 mod provider_setup;
 mod report_info;
@@ -26,6 +27,7 @@ pub(crate) use super::auth_test::{
 pub use super::auth_test::{
     run_auth_test_command, run_auth_test_context_audit_command, run_auth_test_coverage_command,
 };
+use cloud_sessions::{append_common_jade_args, cloud_sessions_helper_override};
 pub use menubar::{ensure_menubar_helper_running, run_menubar_command};
 pub(crate) use provider_setup::{ProviderAddOptions, run_provider_add_command};
 pub use restart::{
@@ -1192,35 +1194,6 @@ fn cloud_sessions_helper_env(config: &CloudSessionsConfig) -> Vec<(&'static str,
         env.push(("JADE_API_TOKEN_ID", api_token_id));
     }
     env
-}
-
-fn cloud_sessions_helper_override(action: &CloudSessionsSubcommand) -> Option<String> {
-    match action {
-        CloudSessionsSubcommand::Configure { .. }
-        | CloudSessionsSubcommand::Status { .. }
-        | CloudSessionsSubcommand::Sync { .. } => None,
-        CloudSessionsSubcommand::Upload { helper, .. }
-        | CloudSessionsSubcommand::UploadLatest { helper, .. }
-        | CloudSessionsSubcommand::List { helper, .. }
-        | CloudSessionsSubcommand::Verify { helper, .. }
-        | CloudSessionsSubcommand::Dashboard { helper, .. }
-        | CloudSessionsSubcommand::View { helper, .. } => helper.clone(),
-    }
-}
-
-fn append_common_jade_args(
-    args: &mut Vec<String>,
-    user_id: String,
-    profile: Option<String>,
-    region: Option<String>,
-) {
-    args.extend(["--user-id".to_string(), user_id]);
-    if let Some(profile) = profile {
-        args.extend(["--profile".to_string(), profile]);
-    }
-    if let Some(region) = region {
-        args.extend(["--region".to_string(), region]);
-    }
 }
 
 #[cfg(test)]

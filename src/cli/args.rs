@@ -112,6 +112,11 @@ pub(crate) struct Args {
     #[arg(long, global = true)]
     pub(crate) provider_profile: Option<String>,
 
+    /// Named session profile from [profiles.<name>] in config.toml.
+    /// Applies to interactive TUI sessions and one-shot runs.
+    #[arg(long)]
+    pub(crate) profile: Option<String>,
+
     /// Tool profile to expose to the model: full, minimal/lite, or none.
     #[arg(long, global = true)]
     pub(crate) tool_profile: Option<String>,
@@ -198,10 +203,6 @@ pub(crate) enum Command {
 
     /// Run a single message and exit
     Run {
-        /// Named session profile from [profiles.<name>] in config.toml.
-        #[arg(long)]
-        profile: Option<String>,
-
         /// Emit a machine-readable JSON result instead of streaming text
         #[arg(long, conflicts_with = "ndjson")]
         json: bool,

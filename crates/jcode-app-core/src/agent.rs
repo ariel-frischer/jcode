@@ -69,6 +69,30 @@ static WORKING_GIT_STATE_CACHE: LazyLock<StdMutex<HashMap<PathBuf, Option<GitSta
     LazyLock::new(|| StdMutex::new(HashMap::new()));
 const STREAM_KEEPALIVE_PONG_ID: u64 = 0;
 
+fn session_prompt_overlay_from_env() -> crate::prompt::SessionPromptOverlay {
+    let encoded = match std::env::var(crate::prompt::SESSION_PROMPT_OVERLAY_ENV) {
+        Ok(encoded) => encoded,
+        Err(std::env::VarError::NotPresent) => {
+            return crate::prompt::SessionPromptOverlay::default();
+        }
+        Err(error) => {
+            logging::warn(&format!(
+                "Ignoring invalid session profile prompt overlay environment: {error}"
+            ));
+            return crate::prompt::SessionPromptOverlay::default();
+        }
+    };
+    match serde_json::from_str(&encoded) {
+        Ok(overlay) => overlay,
+        Err(error) => {
+            logging::warn(&format!(
+                "Ignoring malformed session profile prompt overlay: {error}"
+            ));
+            crate::prompt::SessionPromptOverlay::default()
+        }
+    }
+}
+
 fn stable_hash_str(value: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     value.hash(&mut hasher);
@@ -322,7 +346,7 @@ impl Agent {
             locked_tools: None,
             mcp_late_register_resolved: false,
             system_prompt_override: None,
-            session_prompt_overlay: crate::prompt::SessionPromptOverlay::default(),
+            session_prompt_overlay: session_prompt_overlay_from_env(),
             agents_md_snapshot,
             memory_enabled: crate::config::config().features.memory,
             rewind_undo_snapshot: None,

@@ -45,11 +45,13 @@ pub struct PromptCapabilities {
 /// The overlay is appended after global and project guidance. Profile
 /// instructions precede profile-selected skill content, while the user message
 /// remains outside the system prompt and is therefore still last.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SessionPromptOverlay {
     pub instructions: Option<String>,
     pub selected_skills: Vec<(String, String)>,
 }
+
+pub const SESSION_PROMPT_OVERLAY_ENV: &str = "JCODE_SESSION_PROMPT_OVERLAY";
 
 impl SessionPromptOverlay {
     pub fn append_to_split(&self, split: &mut SplitSystemPrompt) {

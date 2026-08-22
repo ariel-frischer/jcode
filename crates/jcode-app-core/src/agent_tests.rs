@@ -8,6 +8,11 @@ use async_trait::async_trait;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+#[path = "agent_tests/interrupt_signal.rs"]
+mod interrupt_signal;
+#[path = "agent_tests/session_profile.rs"]
+mod session_profile;
+
 struct DelayedProvider {
     open_delay: Duration,
     first_event_delay: Duration,
@@ -87,38 +92,6 @@ fn content_text(content: &[ContentBlock]) -> &str {
 
 fn message_text(message: &Message) -> &str {
     content_text(&message.content)
-}
-
-#[tokio::test]
-async fn session_profile_prompt_overlays_are_agent_local() {
-    let provider: Arc<dyn Provider> = Arc::new(DelayedProvider {
-        open_delay: Duration::ZERO,
-        first_event_delay: Duration::ZERO,
-    });
-    let registry_a = Registry::new(provider.clone()).await;
-    let registry_b = Registry::new(provider.clone()).await;
-    let mut agent_a = Agent::new(provider.clone(), registry_a);
-    let mut agent_b = Agent::new(provider, registry_b);
-
-    agent_a.set_session_prompt_overlay(crate::prompt::SessionPromptOverlay {
-        instructions: Some("profile alpha instructions".to_string()),
-        selected_skills: vec![("alpha".to_string(), "alpha skill prompt".to_string())],
-    });
-    agent_b.set_session_prompt_overlay(crate::prompt::SessionPromptOverlay {
-        instructions: Some("profile beta instructions".to_string()),
-        selected_skills: vec![("beta".to_string(), "beta skill prompt".to_string())],
-    });
-
-    let split_a = agent_a.build_system_prompt_split(None);
-    let split_b = agent_b.build_system_prompt_split(None);
-    let prompt_a = format!("{}\n\n{}", split_a.static_part, split_a.dynamic_part);
-    let prompt_b = format!("{}\n\n{}", split_b.static_part, split_b.dynamic_part);
-    assert!(prompt_a.contains("profile alpha instructions"));
-    assert!(prompt_a.contains("alpha skill prompt"));
-    assert!(!prompt_a.contains("profile beta instructions"));
-    assert!(prompt_b.contains("profile beta instructions"));
-    assert!(prompt_b.contains("beta skill prompt"));
-    assert!(!prompt_b.contains("profile alpha instructions"));
 }
 
 #[async_trait]
@@ -673,81 +646,6 @@ async fn messages_for_provider_applies_manual_compaction_in_native_auto_mode() {
         }
         other => panic!("expected text summary block, got {other:?}"),
     }
-}
-
-// ── InterruptSignal tests ────────────────────────────────────────────────
-
-#[tokio::test]
-async fn interrupt_signal_fire_before_notified_does_not_hang() {
-    // Regression test: fire() called BEFORE notified().await must not hang.
-    // The old code called notify_waiters() which drops the notification if
-    // nobody is waiting yet. The flag is still set so the fast path catches it,
-    // but only if the future is created before the flag check.
-    let sig = InterruptSignal::new();
-    sig.fire(); // fire before anyone is waiting
-    tokio::time::timeout(std::time::Duration::from_millis(100), sig.notified())
-        .await
-        .expect("notified() hung when signal was already set before call");
-}
-
-#[tokio::test]
-async fn interrupt_signal_fire_concurrent_with_notified() {
-    // Regression test for the race window: fire() is called concurrently while
-    // notified() is being set up. The fix (create future before flag check) ensures
-    // the notify_waiters() in fire() wakes the registered future.
-    let sig = Arc::new(InterruptSignal::new());
-    let sig2 = Arc::clone(&sig);
-
-    // Spawn a task that fires after a tiny delay, giving the main task time to
-    // enter notified() but before it reaches notified().await.
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        sig2.fire();
-    });
-
-    tokio::time::timeout(std::time::Duration::from_millis(500), sig.notified())
-        .await
-        .expect("notified() hung during concurrent fire()");
-}
-
-#[tokio::test]
-async fn interrupt_signal_is_set_false_initially() {
-    let sig = InterruptSignal::new();
-    assert!(!sig.is_set());
-}
-
-#[tokio::test]
-async fn interrupt_signal_is_set_true_after_fire() {
-    let sig = InterruptSignal::new();
-    sig.fire();
-    assert!(sig.is_set());
-}
-
-#[tokio::test]
-async fn interrupt_signal_reset_clears_flag() {
-    let sig = InterruptSignal::new();
-    sig.fire();
-    assert!(sig.is_set());
-    sig.reset();
-    assert!(!sig.is_set());
-}
-
-#[tokio::test]
-async fn interrupt_signal_notified_completes_after_fire() {
-    let sig = Arc::new(InterruptSignal::new());
-    let sig2 = Arc::clone(&sig);
-
-    let handle = tokio::spawn(async move {
-        sig2.notified().await;
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    sig.fire();
-
-    tokio::time::timeout(std::time::Duration::from_millis(200), handle)
-        .await
-        .expect("notified() task timed out after fire()")
-        .expect("task panicked");
 }
 
 #[tokio::test]

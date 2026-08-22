@@ -384,33 +384,10 @@ Useful environment overrides for these endpoints:
 
 For details on self-hosting, local runtimes, and the exact config file shape, see below.
 
-#### Named session profiles for `jcode run`
+#### Named session profiles
 
-Persist recurring one-shot settings in `~/.jcode/config.toml`:
-
-```toml
-[profiles.review]
-provider = "openrouter"
-model = "openai/gpt-5.6"
-reasoning_effort = "high"
-tool_profile = "minimal"
-tools = ["read", "agentgrep"]
-disabled_tools = ["bash"]
-skills = ["pr-reviewer"]
-instructions = "Review correctness and regression risk."
-```
-
-Select the profile with either global-argument placement:
-
-```bash
-jcode --profile review run "Review this change"
-jcode run --profile review "Review this change"
-```
-
-Profiles apply only to headless `jcode run`, including plain, JSON, and NDJSON
-output. Effective values resolve field by field in this order: explicit invocation,
-environment, selected profile, unprofiled persisted configuration, then built-in
-default. Invalid or unknown selected profiles fail before the provider request.
+Reuse provider, model, tool, skill, and instruction settings in the TUI or a
+one-shot run with `jcode --profile NAME`. See [Named session profiles](docs/SESSION_PROFILES.md).
 
 #### Self-hosted OpenAI-compatible endpoints, including vLLM
 

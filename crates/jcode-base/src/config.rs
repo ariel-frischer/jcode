@@ -495,7 +495,7 @@ pub struct Config {
     /// Provider configuration
     pub provider: ProviderConfig,
 
-    /// Named session profiles selectable by headless `jcode run`.
+    /// Named profiles selectable for interactive and one-shot agent sessions.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub profiles: BTreeMap<String, SessionProfileConfig>,
 
