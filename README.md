@@ -705,7 +705,9 @@ enabled = true
 ignore = ["private/", "*.generated.*"]
 ```
 
-Custom patterns are additive to the built-in ignore list.
+Custom patterns are additive to the built-in ignore list. In remote sessions, discovery and
+expansion use the connecting client's current working directory, then send the expanded contents
+to the remote agent. The persisted transcript keeps the compact `@path` form.
 
 <div align="center">
 

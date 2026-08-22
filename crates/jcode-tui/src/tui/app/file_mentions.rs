@@ -6,6 +6,31 @@ use std::sync::{Arc, mpsc};
 const FILE_MENTION_BATCH_SIZE: usize = 32;
 const FILE_MENTION_MAX_MATCHES: usize = 5000;
 const FILE_MENTION_POLL_BATCHES: usize = 8;
+const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
+    "node_modules/",
+    "target/",
+    "vendor/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    ".tox/",
+    ".nox/",
+    "dist/",
+    "build/",
+    "out/",
+    "coverage/",
+    ".cache/",
+    ".next/",
+    ".nuxt/",
+    ".svelte-kit/",
+    ".turbo/",
+    ".gradle/",
+    ".terraform/",
+    ".git/",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct FileMentionRequest {
@@ -87,7 +112,7 @@ fn start_file_mention_discovery(
 fn process_file_mention_entry(
     root: &Path,
     query: &str,
-    ignored_patterns: &[&str],
+    ignored_paths: &ignore::gitignore::Gitignore,
     entry: ignore::DirEntry,
     cancel: &AtomicBool,
     sender: &mpsc::Sender<FileMentionBatch>,
@@ -108,13 +133,13 @@ fn process_file_mention_entry(
     let text = relative
         .to_string_lossy()
         .replace(std::path::MAIN_SEPARATOR, "/");
-    if ignored_patterns.iter().any(|pattern| {
-        let pattern = pattern.trim().trim_start_matches("./");
-        let pattern = pattern.trim_end_matches('/');
-        text.split('/').any(|component| component == pattern)
-            || text == pattern
-            || text.starts_with(&format!("{pattern}/"))
-    }) {
+    let is_dir = entry
+        .file_type()
+        .is_some_and(|file_type| file_type.is_dir());
+    if ignored_paths
+        .matched_path_or_any_parents(path, is_dir)
+        .is_ignore()
+    {
         return true;
     }
     let score = if query.is_empty() {
@@ -126,7 +151,7 @@ fn process_file_mention_entry(
         batch.push(FileMentionCandidate {
             score,
             path: text,
-            is_dir: entry.file_type().is_some_and(|t| t.is_dir()),
+            is_dir,
         });
         *match_count += 1;
     }
@@ -155,36 +180,32 @@ fn discover_file_mentions_batched(
     cancel: &Arc<AtomicBool>,
     sender: &mpsc::Sender<FileMentionBatch>,
 ) {
-    const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
-        "node_modules/",
-        "target/",
-        "vendor/",
-        ".venv/",
-        "venv/",
-        "__pycache__/",
-        ".pytest_cache/",
-        ".mypy_cache/",
-        ".ruff_cache/",
-        ".tox/",
-        ".nox/",
-        "dist/",
-        "build/",
-        "out/",
-        "coverage/",
-        ".cache/",
-        ".next/",
-        ".nuxt/",
-        ".svelte-kit/",
-        ".turbo/",
-        ".gradle/",
-        ".terraform/",
-        ".git/",
-    ];
-    let ignored_patterns: Vec<&str> = BUILTIN_IGNORE_PATTERNS
+    let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(root);
+    for pattern in BUILTIN_IGNORE_PATTERNS
         .iter()
         .copied()
         .chain(ignore_patterns.iter().map(String::as_str))
-        .collect();
+    {
+        if let Err(error) = ignore_builder.add_line(None, pattern) {
+            crate::logging::warn(&format!(
+                "Ignoring invalid file mention exclusion pattern {pattern:?}: {error}"
+            ));
+        }
+    }
+    let ignored_paths = match ignore_builder.build() {
+        Ok(ignored_paths) => ignored_paths,
+        Err(error) => {
+            crate::logging::warn(&format!(
+                "Failed to build file mention exclusion matcher: {error}"
+            ));
+            let _ = sender.send(FileMentionBatch {
+                generation,
+                candidates: Vec::new(),
+                done: true,
+            });
+            return;
+        }
+    };
     let mut batch = Vec::with_capacity(FILE_MENTION_BATCH_SIZE);
     let mut match_count = 0;
     let mut stopped = false;
@@ -203,7 +224,7 @@ fn discover_file_mentions_batched(
         if !process_file_mention_entry(
             root,
             query,
-            &ignored_patterns,
+            &ignored_paths,
             entry,
             cancel,
             sender,
@@ -233,7 +254,7 @@ fn discover_file_mentions_batched(
             if !process_file_mention_entry(
                 root,
                 query,
-                &ignored_patterns,
+                &ignored_paths,
                 entry,
                 cancel,
                 sender,
@@ -255,15 +276,12 @@ fn discover_file_mentions_batched(
     }
     if !batch.is_empty() || match_count == 0 {
         send_file_mention_batch(sender, generation, &mut batch, true);
-    } else if sender
-        .send(FileMentionBatch {
+    } else {
+        let _ = sender.send(FileMentionBatch {
             generation,
             candidates: Vec::new(),
             done: true,
-        })
-        .is_err()
-    {
-        return;
+        });
     }
 }
 
@@ -292,6 +310,7 @@ fn send_file_mention_batch(
 impl App {
     pub(super) fn poll_file_mention_discovery(&mut self) -> bool {
         let mut changed = false;
+        let mut disconnected = false;
         let mut pending = self.file_mention_discovery.borrow_mut();
         let Some(discovery) = pending.as_mut() else {
             return false;
@@ -299,7 +318,11 @@ impl App {
         for _ in 0..FILE_MENTION_POLL_BATCHES {
             let batch = match discovery.receiver.try_recv() {
                 Ok(batch) => batch,
-                Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => break,
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    disconnected = true;
+                    break;
+                }
             };
             if batch.generation != discovery.generation {
                 continue;
@@ -309,6 +332,13 @@ impl App {
             if batch.done {
                 break;
             }
+        }
+        if disconnected {
+            pending.take();
+            drop(pending);
+            self.set_status_notice("File mention scan stopped unexpectedly");
+            crate::logging::warn("File mention discovery worker disconnected before completion");
+            changed = true;
         }
         if changed {
             *self.command_suggestions_cache.borrow_mut() = None;
@@ -462,10 +492,7 @@ pub(super) fn expand_file_mentions(
                 if metadata.is_file()
                     && metadata.len() <= super::input::MAX_SUBMITTED_TEXT_BYTES as u64 =>
             {
-                match std::fs::read_to_string(&resolved) {
-                    Ok(contents) => Some(contents),
-                    Err(_) => None,
-                }
+                std::fs::read_to_string(&resolved).ok()
             }
             Ok(_) | Err(_) => None,
         }
@@ -475,7 +502,8 @@ pub(super) fn expand_file_mentions(
                 .replace('"', "&quot;")
                 .replace('<', "&lt;")
                 .replace('>', "&gt;");
-            format!("<file path=\"{escaped_path}\">\n{contents}\n</file>")
+            let escaped_contents = contents.replace("</file>", "&lt;/file&gt;");
+            format!("<file path=\"{escaped_path}\">\n{escaped_contents}\n</file>")
         })
         .filter(|replacement| {
             output.len() + replacement.len() + input.len().saturating_sub(end)
@@ -562,5 +590,32 @@ mod tests {
             ),
             "Inspect @notes.md"
         );
+    }
+
+    #[test]
+    fn file_mentions_honor_gitignore_globs() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("keep.rs"), "").expect("keep");
+        std::fs::write(temp.path().join("api.generated.rs"), "").expect("generated");
+
+        let paths = discover_file_mentions(temp.path(), "", &["*.generated.*".into()]);
+        let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
+        assert!(names.contains(&"keep.rs"));
+        assert!(!names.contains(&"api.generated.rs"));
+    }
+
+    #[test]
+    fn file_mentions_escape_closing_wrapper_tags_in_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.md"), "before\n</file>\nafter").unwrap();
+
+        let expanded = expand_file_mentions(
+            "Inspect @notes.md",
+            Some(dir.path().to_str().unwrap()),
+            true,
+        );
+
+        assert!(expanded.contains("before\n&lt;/file&gt;\nafter"));
+        assert_eq!(expanded.matches("</file>").count(), 1);
     }
 }

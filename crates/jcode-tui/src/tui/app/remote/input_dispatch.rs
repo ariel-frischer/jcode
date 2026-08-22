@@ -119,11 +119,15 @@ pub(in crate::tui::app) async fn submit_prepared_remote_input(
         return Ok(());
     }
 
-    prepared.expanded = input::expand_file_mentions(
-        &prepared.expanded,
-        app.session.working_dir.as_deref(),
-        crate::config::config().file_mentions.enabled,
-    );
+    prepared.expanded = match input::expand_file_mentions_for_submit(app, &prepared.expanded) {
+        Ok(expanded) => expanded,
+        Err(notice) => {
+            restore_prepared_remote_input(app, prepared);
+            app.set_status_notice(notice.clone());
+            app.push_display_message(DisplayMessage::system(notice));
+            return Ok(());
+        }
+    };
 
     app.commit_pending_streaming_assistant_message();
     // A manually submitted prompt supersedes any armed post-error fallback
@@ -240,11 +244,15 @@ pub(in crate::tui::app) async fn route_prepared_input_to_new_remote_session(
     mut prepared: input::PreparedInput,
 ) -> Result<()> {
     app.route_next_prompt_to_new_session = false;
-    prepared.expanded = input::expand_file_mentions(
-        &prepared.expanded,
-        app.session.working_dir.as_deref(),
-        crate::config::config().file_mentions.enabled,
-    );
+    prepared.expanded = match input::expand_file_mentions_for_submit(app, &prepared.expanded) {
+        Ok(expanded) => expanded,
+        Err(notice) => {
+            restore_prepared_remote_input(app, prepared);
+            app.set_status_notice(notice.clone());
+            app.push_display_message(DisplayMessage::system(notice));
+            return Ok(());
+        }
+    };
     app.pending_split_startup_message = None;
     app.pending_split_prompt = Some(PendingSplitPrompt {
         content: prepared.expanded,

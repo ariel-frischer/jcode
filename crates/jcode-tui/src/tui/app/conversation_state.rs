@@ -1,12 +1,36 @@
 use super::*;
 
 impl App {
+    fn expand_persisted_file_mentions(&self, mut messages: Vec<Message>) -> Vec<Message> {
+        let enabled = crate::config::config().file_mentions.enabled;
+        let remote_root = self
+            .is_remote
+            .then(|| std::env::current_dir().ok())
+            .flatten()
+            .and_then(|path| path.to_str().map(str::to_owned));
+        let working_dir = remote_root
+            .as_deref()
+            .or(self.session.working_dir.as_deref());
+        for message in &mut messages {
+            if !matches!(&message.role, Role::User) {
+                continue;
+            }
+            for block in &mut message.content {
+                if let ContentBlock::Text { text, .. } = block {
+                    *text = super::file_mentions::expand_file_mentions(text, working_dir, enabled);
+                }
+            }
+        }
+        messages
+    }
+
     pub(super) fn ensure_provider_messages_hydrated(&mut self) {
         if !self.is_remote || !self.messages.is_empty() || self.session.messages.is_empty() {
             return;
         }
 
-        let provider_messages = self.session.messages_for_provider_uncached();
+        let provider_messages =
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached());
         self.replace_provider_messages(provider_messages);
     }
 
@@ -14,7 +38,7 @@ impl App {
         if self.is_remote || !self.messages.is_empty() {
             self.messages.clone()
         } else {
-            self.session.messages_for_provider_uncached()
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
         }
     }
 

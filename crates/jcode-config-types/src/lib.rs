@@ -24,31 +24,7 @@ impl Default for FileMentionsConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            ignore: vec![
-                "node_modules/".into(),
-                "target/".into(),
-                "vendor/".into(),
-                ".venv/".into(),
-                "venv/".into(),
-                "__pycache__/".into(),
-                ".pytest_cache/".into(),
-                ".mypy_cache/".into(),
-                ".ruff_cache/".into(),
-                ".tox/".into(),
-                ".nox/".into(),
-                "dist/".into(),
-                "build/".into(),
-                "out/".into(),
-                "coverage/".into(),
-                ".cache/".into(),
-                ".next/".into(),
-                ".nuxt/".into(),
-                ".svelte-kit/".into(),
-                ".turbo/".into(),
-                ".gradle/".into(),
-                ".terraform/".into(),
-                ".git/".into(),
-            ],
+            ignore: Vec::new(),
         }
     }
 }

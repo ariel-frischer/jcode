@@ -196,6 +196,13 @@ fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
         assert!(matches!(
             submitted.content.as_slice(),
             [ContentBlock::Text { text, .. }]
+                if text == "Explain @docs/context.md"
+        ));
+        let provider_messages = app.materialized_provider_messages();
+        let submitted = provider_messages.last().expect("provider user message");
+        assert!(matches!(
+            submitted.content.as_slice(),
+            [ContentBlock::Text { text, .. }]
                 if text == "Explain <file path=\"docs/context.md\">\nfull context\n\n</file>"
         ));
     });
