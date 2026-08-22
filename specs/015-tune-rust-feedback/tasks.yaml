@@ -1,0 +1,561 @@
+tasks:
+  branch: "agent/jcode-l89.4-feedback-tuning"
+  created: "2026-08-22"
+  spec_path: "specs/015-tune-rust-feedback/spec.yaml"
+  plan_path: "specs/015-tune-rust-feedback/plan.yaml"
+
+summary:
+  total_tasks: 35
+  total_phases: 8
+  parallel_opportunities: 4
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Freeze delivery evidence structure and requirement-to-check ownership before implementation"
+    tasks:
+      - id: "T001"
+        title: "Create the acceptance and principle traceability scaffold in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "The document maps FR-001 through FR-021 and NFR-001 through NFR-005 to an intended direct check, evidence path, and terminal result placeholder."
+          - "The document includes explicit rows for PRIN-002, PRIN-003, PRIN-005, PRIN-007, PRIN-008, and PRIN-010."
+          - "The document reserves sections for benchmark receipts, rejected experiments, full-feature guardrails, runtime budgets, coordinated build/reload, resolved binary identity, and isolated-socket validation."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Establish the versioned benchmark contract and deterministic standard-library tooling required by every story"
+    tasks:
+      - id: "T002"
+        title: "Write failing benchmark matrix and receipt contract tests in scripts/test_bench_rust_feedback.py"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/test_bench_rust_feedback.py"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Fixtures require warm touched-file check/build, cold or fresh-worktree build, focused test, invalid zero-test, broad validation, and coordinated duplicate scenario classes."
+          - "Fixtures reject missing provenance, metric, validity, retry, action-count, fallback, experiment-boundary, and explicit not-applicable fields."
+          - "The focused unittest command fails for the intended missing implementation rather than because of fixture or import errors."
+      - id: "T003"
+        title: "Define the versioned benchmark and experiment matrix in scripts/rust_feedback_matrix.json"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "scripts/rust_feedback_matrix.json"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "The JSON defines all six required scenario classes with source preparation, warm/cold classification, command intent, sample policy, validity rules, timeouts, required metrics, and expected evidence."
+          - "Adaptive, explicit 6-job, explicit 8-job, bounded nextest, sccache cold-miss, and sccache reusable-hit variants declare eligibility, fallback, and resource constraints."
+          - "Removing any required scenario or experiment contract makes the T002 matrix tests fail."
+      - id: "T004"
+        title: "Implement strict matrix and receipt validation primitives in scripts/bench_rust_feedback.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "scripts/bench_rust_feedback.py"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "The Python 3.11+ standard-library CLI loads and validates versioned matrix and receipt JSON without a new dependency."
+          - "Validation produces actionable nonzero failures for incomplete schemas, inconsistent action counts, invalid not-applicable encoding, and incompatible undisclosed environments."
+          - "Sensitive environment values and raw source contents are excluded or redacted at the trust boundary."
+          - "The focused contract tests from T002 pass."
+
+  - number: 3
+    title: "User Story 1 - Compare development feedback reproducibly"
+    purpose: "Produce repeatable raw benchmark receipts and deterministic p50/p95 comparisons for representative Rust feedback workflows"
+    story_reference: "US-001"
+    independent_test: "Run the frozen matrix for fixture baseline and candidate receipts, reproduce all aggregates from retained raw samples, and verify incomplete or incompatible runs cannot be reported as complete evidence."
+    tasks:
+      - id: "T005"
+        title: "Add failing percentile, invalidation, retry, comparability, and action-count fixture tests in scripts/test_bench_rust_feedback.py"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/test_bench_rust_feedback.py"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Deterministic fixtures cover odd/even sample counts, nearest-rank p95, invalid-sample exclusion, retained invalid reasons, and retry accounting."
+          - "Tests cover requested, executed, follower, coalesced, reused, cancelled, and underlying action-count consistency."
+          - "Tests reject source, lockfile, toolchain, matrix-version, host-condition, or configuration incompatibility unless explicitly disclosed."
+      - id: "T006"
+        title: "Implement receipt provenance, raw-sample retention, aggregation, and comparison reporting in scripts/bench_rust_feedback.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/bench_rust_feedback.py"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Receipts identify baseline/candidate, revision, dirty fingerprint, lockfile, toolchain, host/resources, effective configuration, timestamp, and matrix version."
+          - "All valid, invalid, and retried samples are retained and p50 plus nearest-rank p95 are reproducible from valid samples only."
+          - "Comparison output separates wall, execution, queue, gate, RSS, swap, cache, exit, retry, and action-count observations and refuses incomplete adoption evidence."
+          - "All T005 fixture tests pass."
+      - id: "T007"
+        title: "Add failing benchmark runner and resource-observation tests in scripts/test_bench_rust_feedback.py"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/test_bench_rust_feedback.py"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Subprocess fixtures cover success, nonzero exit, timeout, retry, invalid environmental interference, and unsupported Linux metric fallback."
+          - "Tests verify wall time, underlying execution time, queue/gate timing, peak RSS, swap, cache metadata, exit status, and retry count serialization."
+          - "Tests prove a missing or invalid scenario sample prevents a complete-run result."
+      - id: "T008"
+        title: "Implement bounded scenario execution and Linux resource sampling in scripts/bench_rust_feedback.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/bench_rust_feedback.py"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "The runner executes only matrix-declared commands with explicit time and sample bounds and serializes Cargo-heavy scenarios."
+          - "Linux /proc observations record peak resident memory and swap while unsupported platform metrics remain explicit not-applicable values."
+          - "Interrupted, timed-out, externally contended, or otherwise invalid samples retain terminal evidence and cannot silently enter aggregates."
+          - "All T007 runner tests pass."
+      - id: "T009"
+        title: "Add failing coordinated duplicate-request receipt tests in scripts/test_bench_rust_feedback.py"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/test_bench_rust_feedback.py"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Fixtures represent producer, follower, late reuse, and cancellation outcomes without spawning uncontrolled Cargo work."
+          - "Tests require exactly the coordinator-authorized underlying execution count and internally consistent requested/executed/coalesced/reused/cancelled totals."
+      - id: "T010"
+        title: "Implement server-owned coordinated duplicate benchmark collection in scripts/bench_rust_feedback.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "scripts/bench_rust_feedback.py"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Duplicate scenarios submit requests through the existing selfdev coordinator and global Cargo gate rather than direct concurrent Cargo subprocesses."
+          - "Receipts distinguish producer, follower, reused, coalesced, cancelled, requested, executed, and underlying execution counts."
+          - "The T009 duplicate-request fixtures pass and demonstrate no gate bypass."
+      - id: "T011"
+        title: "Collect and validate the frozen baseline receipt in specs/015-tune-rust-feedback/evidence/baseline.json"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/015-tune-rust-feedback/evidence/baseline.json"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "The receipt contains complete controlled samples for all six required scenario classes or visibly records why the baseline is incomplete."
+          - "Source state, toolchain, host conditions, relevant configuration, action counts, raw samples, validity, and aggregates pass the benchmark artifact validator."
+          - "The exact invocation and terminal result are indexed in validation.md without secrets or raw source content."
+
+  - number: 4
+    title: "User Story 2 - Receive faster focused feedback safely"
+    purpose: "Resolve the narrowest demonstrably correct package, target, and features while preserving explicit precedence and conservative fallback"
+    story_reference: "US-002"
+    independent_test: "Exercise the changed-path and explicit-option matrix and verify eligible requests narrow correctly, optional-feature paths are fully compiled, and ambiguous or release-sensitive requests retain the established broad behavior."
+    tasks:
+      - id: "T012"
+        title: "Write failing package, target, feature, and fallback resolver tests in scripts/test_rust_validation_scope.py"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "scripts/test_rust_validation_scope.py"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "Fixtures cover known single-package paths, target ownership, cross-package paths, generated files, build scripts, workspace files, unknown paths, guardrails, and release-sensitive paths."
+          - "The precedence matrix covers explicit package/target/features/no-default-features/all-features, inferred requirements, defaults, empty/unset values, conflicts, unsupported values, and conservative fallback."
+          - "Optional-feature fixtures fail under insufficient features and pass only with required features or a correctness-preserving broad scope."
+      - id: "T013"
+        title: "Implement Cargo-metadata-backed validation scope resolution in scripts/rust_validation_scope.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "scripts/rust_validation_scope.py"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "The resolver combines Cargo metadata with a conservative repository-owned path rule table and emits configured inputs, effective scope, resolution source, and fallback reason."
+          - "Explicit package, target, feature, no-default-feature, and all-feature arguments retain canonical precedence."
+          - "Ambiguous, cross-package, generated, build-script, broad, guardrail, release-sensitive, and unprovable optional-feature cases return the established broader scope or an actionable conflict."
+          - "All T012 resolver tests pass deterministically."
+      - id: "T014"
+        title: "Write failing dev_cargo focused-scope integration tests in scripts/test_dev_cargo_scope.sh"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "scripts/test_dev_cargo_scope.sh"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "Tests cover inferred package/target insertion, argv preservation, explicit option precedence, optional-feature inclusion, broad fallback, conflict failure, and unchanged broad/full-feature commands."
+          - "Tests require rust-actions metadata for configured and effective package, target, features, mode, and explicit/inferred/default/fallback provenance."
+          - "The test harness does not acquire the real global Cargo gate or perform broad compilation."
+      - id: "T015"
+        title: "Integrate conservative focused scope and receipt metadata in scripts/dev_cargo.sh"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "scripts/dev_cargo.sh"
+        dependencies: ["T013", "T014"]
+        acceptance_criteria:
+          - "Eligible inner-loop commands consume the canonical resolver before Cargo launch and add only demonstrably sufficient package, target, and feature arguments."
+          - "Existing explicit Cargo arguments, JCODE_DEV_FEATURE_PROFILE behavior, JCODE_BUILD_JOBS/CARGO_BUILD_JOBS precedence, global-gate ownership, and broad/full-feature/release behavior remain unchanged."
+          - "Rust-actions receipts expose non-secret configured/effective scope and resolution source for every eligible decision."
+          - "scripts/test_dev_cargo_scope.sh and scripts/test_rust_validation_scope.py pass."
+      - id: "T016"
+        title: "Record focused-scope candidate benchmark evidence in specs/015-tune-rust-feedback/evidence/focused-scope.json"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "specs/015-tune-rust-feedback/evidence/focused-scope.json"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "The receipt covers representative eligible narrow paths plus unknown, ambiguous, cross-package, optional-feature, broad, and release-sensitive fallbacks."
+          - "Each sample records configured and effective scope, provenance, timing, resources, exit, retry, and false-success checks."
+          - "No narrowing rule is eligible for adoption unless both p50 and p95 improve and optional-feature/full-feature correctness remains intact."
+
+  - number: 5
+    title: "User Story 3 - Reject empty test requests early"
+    purpose: "Reject only provably empty test scopes before selfdev claim, queue, and Cargo-gate waiting while preserving Cargo-compatible behavior when certainty is unavailable"
+    story_reference: "US-003"
+    independent_test: "Submit valid, invalid, stale, missing, incomplete, exact, substring, ignored, library, and integration test scopes and prove only current complete zero-match evidence causes an early response with no producer or Cargo-gate acquisition."
+    tasks:
+      - id: "T017"
+        title: "Write failing zero-test selfdev preflight tests in crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Tokio tests cover proven zero matches, valid exact and substring matches, ignored tests, library and integration targets, stale source state, missing/incomplete discovery, and ambiguous scopes."
+          - "The proven-empty case asserts an actionable result before duplicate claim, producer creation, queue wait, and Cargo-gate acquisition."
+          - "All uncertain or valid cases assert the established queued execution path remains available."
+      - id: "T018"
+        title: "Write failing source-state-keyed discovery snapshot tests in scripts/test_rust_validation_scope.py"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "scripts/test_rust_validation_scope.py"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "Fixtures cover exact source fingerprint, package, target, features, harness, schema version, completeness, bounded test names, and filter semantics."
+          - "Stale, partial, malformed, mismatched, or ambiguous snapshots cannot prove emptiness."
+          - "Exact-name and Cargo-compatible substring filtering produce deterministic positive and zero-match results."
+      - id: "T019"
+        title: "Implement bounded discovery snapshot validation and matching in scripts/rust_validation_scope.py"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "scripts/rust_validation_scope.py"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "Snapshots are versioned and keyed by redacted SourceState plus effective package, target, features, harness, and discovery identity."
+          - "Only a current complete snapshot with exact scope identity can return a proven-empty result."
+          - "Snapshot size is bounded and no raw source content or secret value is persisted."
+          - "All T018 snapshot tests pass."
+      - id: "T020"
+        title: "Implement pre-claim zero-test rejection in crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T017", "T019"]
+        acceptance_criteria:
+          - "The preflight runs before duplicate claim and queue/gate waiting and returns an actionable effective-scope and proof-provenance message only for proven-empty requests."
+          - "No producer, follower registration, underlying test execution, or Cargo-gate acquisition occurs for an early rejection."
+          - "Missing, stale, incomplete, malformed, or ambiguous discovery falls through to unchanged coordinator behavior."
+      - id: "T021"
+        title: "Add compatible persisted preflight metadata wiring in crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Any added request or result metadata is additive, uses serde defaults/skips where required, and preserves previously persisted request deserialization."
+          - "Configured/effective scope and proof provenance are available to preflight without duplicating the shell resolver's precedence logic."
+          - "Focused selfdev tests from T017 pass, including duplicate coordinator regression cases."
+
+  - number: 6
+    title: "User Story 4 - Evaluate bounded acceleration options"
+    purpose: "Measure adaptive jobs, fixed jobs, nextest, and non-incremental sccache under bounded reversible lanes and account for every result"
+    story_reference: "US-004"
+    independent_test: "Run equivalent adaptive, 6-job, and 8-job samples plus bounded nextest and sccache lanes, verify safe fallbacks and resource evidence, and confirm every evaluated option receives one adopt-or-reject ledger entry."
+    tasks:
+      - id: "T022"
+        title: "Extend effective Cargo job receipt tests in scripts/test_dev_cargo_jobs.sh"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "scripts/test_dev_cargo_jobs.sh"
+        dependencies: ["T021"]
+        acceptance_criteria:
+          - "Tests cover current adaptive behavior plus explicit JCODE_BUILD_JOBS and CARGO_BUILD_JOBS values 6 and 8 with existing precedence unchanged."
+          - "Tests assert configured and effective job policy is emitted in rust-actions receipts without launching concurrent Cargo work."
+      - id: "T023"
+        title: "Add effective job and cache experiment metadata in scripts/dev_cargo.sh"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "scripts/dev_cargo.sh"
+        dependencies: ["T022"]
+        acceptance_criteria:
+          - "Receipts distinguish adaptive, explicit 6-job, and explicit 8-job policies while preserving all existing override precedence."
+          - "Sccache and incremental state are reported explicitly, warm incremental development remains sccache-off by default, and the global Cargo gate remains authoritative."
+          - "scripts/test_dev_cargo_jobs.sh and scripts/test_dev_cargo_scope.sh pass."
+      - id: "T024"
+        title: "Run serialized adaptive-versus-6-versus-8 and coordinated-duplicate benchmarks into specs/015-tune-rust-feedback/evidence/job-counts.json"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/015-tune-rust-feedback/evidence/job-counts.json"
+        dependencies: ["T023"]
+        acceptance_criteria:
+          - "Equivalent isolated one-action samples record wall/execution/queue/gate time, peak RSS, swap, exit, retry, and effective job policy for adaptive, 6, and 8."
+          - "Coordinated duplicate samples use the server-owned coordinator with the authorized underlying execution count and no uncontrolled Cargo concurrency."
+          - "The receipt passes schema/comparability validation and retains invalid or retried samples with reasons."
+      - id: "T025"
+        title: "Run the bounded nextest compatibility and fallback lane into specs/015-tune-rust-feedback/evidence/nextest.json"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/015-tune-rust-feedback/evidence/nextest.json"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "The predefined focused-test lane records availability, discovery/filter compatibility, execution/reporting differences, timing, RSS, swap, disk, exit, retry, and fallback behavior."
+          - "Unavailable, incompatible, slower, unstable, or operationally costly nextest leaves Cargo test as the default and produces complete rejection evidence."
+          - "The lane stays within its declared scenario and time bounds."
+      - id: "T026"
+        title: "Run the bounded non-incremental cold sccache lane into specs/015-tune-rust-feedback/evidence/sccache.json"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/015-tune-rust-feedback/evidence/sccache.json"
+        dependencies: ["T025"]
+        acceptance_criteria:
+          - "Cold/fresh-worktree incremental-disabled miss and reusable-hit samples record cache effectiveness, timing, RSS, swap, disk, worktree behavior, exit, retry, and failure fallback."
+          - "Cache failure safely falls back and warm incremental development remains unchanged."
+          - "The lane stays within declared sample, disk, and time bounds and retains all invalid/retried evidence."
+      - id: "T027"
+        title: "Create the complete adopt-or-reject ledger in specs/015-tune-rust-feedback/decisions.yaml"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/015-tune-rust-feedback/decisions.yaml"
+        dependencies: ["T016", "T024", "T025", "T026"]
+        acceptance_criteria:
+          - "Every evaluated job-count, narrowing, nextest, and sccache candidate appears exactly once as adopted or rejected with cited baseline/candidate receipts."
+          - "Adoption requires lower representative p50 and p95, no increased failures/retries, acceptable RSS/swap/disk, no uncontrolled duplicate execution, and no maintained runtime-budget regression."
+          - "Every rejection records tested configuration, evidence, rationale, safe default/fallback, and a concrete reconsideration condition."
+
+  - number: 7
+    title: "User Story 5 - Preserve release and runtime confidence"
+    purpose: "Prove every adopted optimization preserves explicit full-feature behavior, guardrails, runtime budgets, and actual built-binary behavior"
+    story_reference: "US-005"
+    independent_test: "Run focused suites, explicit full-feature compatibility checks, repository guardrails, maintained runtime benchmarks, coordinated selfdev build/reload, and a resolved candidate binary on an isolated socket, then trace every result to the specification and constitution."
+    tasks:
+      - id: "T028"
+        title: "Add explicit full-feature and release compatibility regressions in scripts/test_dev_cargo_scope.sh"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "scripts/test_dev_cargo_scope.sh"
+        dependencies: ["T027"]
+        acceptance_criteria:
+          - "Tests compare explicit all-feature check, test, build, and release argv, targets, effective features, exits, and receipt fields with the established contract."
+          - "A missing-optional-feature fixture proves focused success cannot satisfy the full-feature release gate."
+          - "Explicit broad, guardrail, and release commands never receive inferred narrowing."
+      - id: "T029"
+        title: "Run and record all focused Python, shell, and Rust regression suites in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T028"]
+        acceptance_criteria:
+          - "Exact commands and terminal results are recorded for benchmark fixtures, scope/discovery fixtures, dev_cargo job/scope contracts, and exact selfdev preflight/coordinator tests."
+          - "Each FR-001 through FR-019 behavioral criterion maps to focused passing evidence or a documented automation boundary."
+          - "Cargo-heavy checks are serialized and unrelated pre-existing failures are isolated rather than attributed to this change."
+      - id: "T030"
+        title: "Run full-feature repository guardrails and record the result in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T029"]
+        acceptance_criteria:
+          - "scripts/check_guardrails.sh completes with required all-target and all-feature validation, or any pre-existing failure is reproduced and isolated with evidence."
+          - "Focused success is not accepted as a substitute for a failed full-feature gate."
+          - "The exact command, revision, duration, and terminal result are recorded."
+      - id: "T031"
+        title: "Run maintained client and daemon runtime budgets and record comparison evidence in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T030"]
+        acceptance_criteria:
+          - "All applicable maintained runtime metrics are compared with unchanged budgets and accepted baseline tolerances."
+          - "Any candidate that regresses a maintained runtime budget is rejected in decisions.yaml regardless of development-feedback gains."
+          - "Exact commands, receipts, and results are recorded without lowering or redefining budgets."
+      - id: "T032"
+        title: "Build and validate the resolved candidate binary on an isolated socket in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T031"]
+        acceptance_criteria:
+          - "A selfdev-profile candidate is built and the resolved executable identity is confirmed rather than inspecting a symlink."
+          - "The candidate runs through a unique isolated socket and passes the maintained smoke behavior without using or disrupting the shared daemon."
+          - "The exact build, readlink/identity, socket, smoke command, exit, and cleanup evidence are recorded."
+      - id: "T033"
+        title: "Record coordinated selfdev build/reload and close requirement traceability in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T032"]
+        acceptance_criteria:
+          - "The approved coordinated build/reload path succeeds with minimal shared-server disruption and its terminal evidence is recorded."
+          - "FR-001 through FR-021, NFR-001 through NFR-005, and SC-001 through SC-006 each point to exact evidence and outcomes."
+          - "PRIN-002, PRIN-003, PRIN-005, PRIN-007, PRIN-008, and PRIN-010 have complete requirement, command, result, and non-applicability traceability."
+
+  - number: 8
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Validate artifacts, review scope, and leave complete reviewable delivery receipts"
+    tasks:
+      - id: "T034"
+        title: "Validate feature artifacts and evidence references in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T033"]
+        acceptance_criteria:
+          - "autospec artifact passes for spec.yaml, plan.yaml, tasks.yaml, and every schema-governed feature artifact."
+          - "Every evidence and decision reference resolves to an existing retained artifact and no secret, raw source content, or machine-private value is present."
+          - "The benchmark validator can reproduce reported aggregates and decisions from retained raw samples."
+      - id: "T035"
+        title: "Complete surgical diff, compatibility, and final delivery review in specs/015-tune-rust-feedback/validation.md"
+        status: "Pending"
+        type: "refactor"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-tune-rust-feedback/validation.md"
+        dependencies: ["T034"]
+        acceptance_criteria:
+          - "The final diff contains only approved benchmark, scope, preflight, experiment, tests, and evidence changes with unrelated dirty work preserved."
+          - "No new dependency, linker change, Cranelift work, speculative crate split, weakened gate, changed runtime budget, or uncontrolled Cargo concurrency was introduced."
+          - "All adopted defaults are backed by complete p50/p95, reliability, resource, runtime, guardrail, and built-binary evidence; all other candidates remain safely rejected."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-004", "US-005"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003", "US-004", "US-005"]
+    - story_id: "US-003"
+      depends_on: ["US-002"]
+      blocks: ["US-004", "US-005"]
+    - story_id: "US-004"
+      depends_on: ["US-001", "US-002", "US-003"]
+      blocks: ["US-005"]
+    - story_id: "US-005"
+      depends_on: ["US-001", "US-002", "US-003", "US-004"]
+      blocks: []
+
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: [8]
+    - phase: 8
+      blocks: []
+
+parallel_execution:
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T012", "T014"]
+        rationale: "The Python resolver unit tests and shell integration contract are separate files and both depend only on the completed benchmark baseline."
+  - phase: 5
+    parallel_groups:
+      - tasks: ["T017", "T018"]
+        rationale: "Rust queue-preflight tests and Python discovery-snapshot tests are independent test-first work in separate subsystems."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4, 5]
+    description: "Freeze benchmark evidence, establish a reproducible baseline, safely narrow focused validation, and reject provably empty tests before queue/gate waiting."
+    validation: "Run the deterministic Python and shell suites plus exact Rust selfdev preflight tests, then execute the required benchmark scenarios for baseline, focused scope, and zero-test behavior with full-feature compatibility fixtures."
+  incremental_delivery:
+    - milestone: "Evidence Contract Ready"
+      phases: [1, 2]
+      deliverable: "Versioned matrix and strict receipt validator with requirement traceability scaffold."
+    - milestone: "Reproducible Baseline Ready"
+      phases: [1, 2, 3]
+      deliverable: "Complete raw benchmark receipts and deterministic p50/p95 comparison behavior."
+    - milestone: "Focused Feedback MVP Complete"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Conservative package/target/feature narrowing and visible early zero-test rejection with compatibility fallbacks."
+    - milestone: "Experiments Accounted For"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Serialized job-count evidence, bounded nextest/sccache trials, and a complete adopt-or-reject ledger."
+    - milestone: "Delivery Proven"
+      phases: [1, 2, 3, 4, 5, 6, 7, 8]
+      deliverable: "Focused and full-feature validation, unchanged runtime budgets, built-binary isolated-socket evidence, coordinated reload, and final principle traceability."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T13:50:12Z"
+  artifact_type: "tasks"
