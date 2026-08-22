@@ -146,7 +146,26 @@ Focused checks passed on an isolated branch based on upstream commit `f28f02f8d3
   - no-profile compatibility passed
 - profile resolution and startup efficiency budgets passed; candidate startup median was lower than the recorded baseline in the implementation run
 
-The repository-wide guardrail script was also run. Formatting, all-target checks, dependency boundaries, and other unaffected gates passed during the implementation lane. Repository-wide ratchets remained red from existing upstream baseline drift, including oversized files/tests, swallowed-error budgets, and an unrelated `jcode-render-core` Clippy failure. No guardrail failure was attributed to the named-profile diff.
+### Final whole-result acceptance matrix
+
+The complete matrix was rerun over final branch commit `414da3a2bb0ec72c2eea2dd5d6895248ee6fd6d6`, not only over individual repair commits:
+
+- all Autospec artifacts remained schema-valid; analysis remained PASS with 0 findings, 23/23 requirements, and all 38 tasks complete
+- profile serde, strict loading, validation, canonical aliases, prompt ordering, CLI placement, explicit precedence, environment precedence, Agent-local isolation, and invalid-reference suites passed
+- affected-package `cargo check` and the selfdev binary build passed
+- public help exposed both global options after clearing ambient profile/reasoning variables
+- the corrected built-runtime matrix passed with five captured provider requests across plain, JSON, and NDJSON runs, global-option placement before and after `run`, canonical aliases, selected instructions and skills, immutable config, no-profile compatibility, and negative cases that made no provider request
+- documentation, changelog, forbidden-surface, and credential-shaped-diff checks passed
+
+Requirement-to-check traceability covered every frozen requirement:
+
+- FR-001–FR-005: serde/base resolver suites plus captured runtime model, tools, instructions, and skill prompt
+- FR-006–FR-009: global parser, exact-profile lookup, invocation precedence, environment precedence, and negative no-request checks
+- FR-010–FR-013: prompt ordering, per-Agent isolation, immutable config hash, alias acceptance, and actionable invalid tool/skill/reasoning/profile diagnostics
+- FR-014–FR-017: no-profile runtime, unchanged empty-overlay prompt path, docs/changelog checks, all three output modes, and forbidden-surface scan
+- NFR-001–NFR-006 and SC-001–SC-005: omitted-profile budgets, redacted diagnostics, strict per-run loading on a private socket, existing ownership seams, complete-profile reproduction, CLI authority, pre-request rejection, and cross-run/config isolation
+
+The repository guardrail helper was also executed. Its process resolved the main custom checkout (`/home/ari/repos/jcode`) rather than this isolated upstream worktree, so its seven failures are recorded as non-branch evidence: existing custom-`dev` all-target test initializers, Clippy/warning drift, and oversized-file/test, panic, and swallowed-error ratchets. Formatting and static packaging checks for this contribution passed, and the focused branch-owned compilation, build, and runtime matrix passed. The guardrail result is not represented as a clean branch-wide guardrail pass.
 
 ## Compatibility
 
