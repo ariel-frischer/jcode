@@ -8,6 +8,64 @@ pub(crate) fn session_path_in_dir(base: &std::path::Path, session_id: &str) -> P
     base.join("sessions").join(format!("{}.json", session_id))
 }
 
+pub const LIFECYCLE_MAX_ROTATIONS: usize = 3;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LifecycleArtifactPaths {
+    pub active: PathBuf,
+    pub rotations: Vec<PathBuf>,
+}
+
+fn validate_lifecycle_session_id(session_id: &str) -> Result<()> {
+    if session_id.is_empty()
+        || session_id == "."
+        || session_id == ".."
+        || !session_id
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+    {
+        anyhow::bail!("invalid lifecycle session identifier")
+    }
+    Ok(())
+}
+
+pub fn lifecycle_path_in_dir(base: &Path, session_id: &str) -> Result<PathBuf> {
+    validate_lifecycle_session_id(session_id)?;
+    Ok(base
+        .join("sessions")
+        .join(format!("{session_id}.lifecycle.jsonl")))
+}
+
+pub fn lifecycle_rotation_path_in_dir(
+    base: &Path,
+    session_id: &str,
+    rotation: usize,
+) -> Result<PathBuf> {
+    validate_lifecycle_session_id(session_id)?;
+    if !(1..=LIFECYCLE_MAX_ROTATIONS).contains(&rotation) {
+        anyhow::bail!("lifecycle rotation index must be between 1 and {LIFECYCLE_MAX_ROTATIONS}")
+    }
+    Ok(base
+        .join("sessions")
+        .join(format!("{session_id}.lifecycle.{rotation}.jsonl")))
+}
+
+pub fn lifecycle_path(session_id: &str) -> Result<PathBuf> {
+    let base = storage::jcode_dir()?;
+    lifecycle_path_in_dir(&base, session_id)
+}
+
+pub fn lifecycle_artifact_paths_in_dir(
+    base: &Path,
+    session_id: &str,
+) -> Result<LifecycleArtifactPaths> {
+    let active = lifecycle_path_in_dir(base, session_id)?;
+    let rotations = (1..=LIFECYCLE_MAX_ROTATIONS)
+        .map(|rotation| lifecycle_rotation_path_in_dir(base, session_id, rotation))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(LifecycleArtifactPaths { active, rotations })
+}
+
 pub(super) use crate::process_memory::estimate_json_bytes;
 
 pub(super) fn file_len_or_zero(path: &Path) -> u64 {

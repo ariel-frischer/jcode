@@ -544,6 +544,20 @@ swarm_max_concurrent_agents = 32
 # memory_embedding_base_url = "https://api.openai.com/v1"
 # memory_embedding_dim = 1536
 
+[lifecycle_observability]
+# Local, privacy-safe lifecycle decision history. This does not enable or
+# modify remote usage telemetry.
+enabled = true
+# Persist the bounded per-session lifecycle JSONL sidecar used by the built-in
+# `jcode session lifecycle` query.
+persist_session_events = true
+# Also emit filtered lifecycle records through the local structured logger.
+emit_structured_logs = false
+# Environment overrides:
+# JCODE_LIFECYCLE_OBSERVABILITY_ENABLED
+# JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS
+# JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS
+
 [terminal]
 # Without a hook, clients inside tmux automatically use a right-side pane.
 # Set JCODE_TERMINAL to force a supported terminal emulator instead.

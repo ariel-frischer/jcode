@@ -52,7 +52,7 @@ phases:
       tasks:
         - id: "T004"
           title: "Add lifecycle schema and serialization contract tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -64,7 +64,7 @@ phases:
             - "Add fixtures showing unsupported newer schema versions are reported rather than decoded as known events."
         - id: "T005"
           title: "Add configuration precedence and effective-status tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -76,7 +76,7 @@ phases:
             - "Assert lifecycle settings do not read, enable, or mutate remote telemetry consent."
         - id: "T006"
           title: "Add sidecar path, persistence, retention, and cleanup tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: null
@@ -133,7 +133,7 @@ phases:
             - "Assert rendering uses SessionLifecycleStream and never reads sidecar files directly."
         - id: "T011"
           title: "Implement versioned lifecycle contracts and safe category enums"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -145,7 +145,7 @@ phases:
             - "Pass all schema and serialization tests without changing transcript, replay, or existing session contracts."
         - id: "T012"
           title: "Implement lifecycle configuration defaults and effective status"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -157,7 +157,7 @@ phases:
             - "Keep lifecycle configuration independent from jcode-telemetry-core and remote consent."
         - id: "T013"
           title: "Implement lifecycle environment override resolution"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -168,7 +168,7 @@ phases:
             - "Apply established invalid-value fallback and diagnostic behavior without logging secret values."
         - id: "T014"
           title: "Expose lifecycle status in config summaries and generated defaults"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -180,7 +180,7 @@ phases:
             - "Do not expose credentials, prompts, profile instructions, or remote telemetry state."
         - id: "T015"
           title: "Implement validated lifecycle sidecar path helpers"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -192,7 +192,7 @@ phases:
             - "Keep lifecycle files internal so existing session scanners do not treat them as snapshots, journals, transcripts, or sessions."
         - id: "T016"
           title: "Implement bounded lifecycle JSONL persistence and resilient reads"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null
@@ -204,7 +204,7 @@ phases:
             - "Return persistence errors and warnings without panicking, blocking lifecycle decision callers, or rewriting files during read-only queries."
         - id: "T017"
           title: "Implement canonical session artifact enumeration and removal"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: null

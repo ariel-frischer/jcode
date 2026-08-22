@@ -113,6 +113,9 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_JADE_RELAY_TOKEN_ID",
     "JCODE_JADE_RELAY_USER_ID",
     "JCODE_KV_CACHE_MISS_NOTICES",
+    "JCODE_LIFECYCLE_OBSERVABILITY_ENABLED",
+    "JCODE_LIFECYCLE_OBSERVABILITY_PERSIST_SESSION_EVENTS",
+    "JCODE_LIFECYCLE_OBSERVABILITY_EMIT_STRUCTURED_LOGS",
     "JCODE_LATEX_RENDERING",
     "JCODE_MARKDOWN_SPACING",
     "JCODE_MEMORY_EMBEDDING_BACKEND",
@@ -551,6 +554,9 @@ pub struct Config {
     /// Compaction configuration
     pub compaction: CompactionConfig,
 
+    /// Local, privacy-safe lifecycle observability outputs.
+    pub lifecycle_observability: LifecycleObservabilityConfig,
+
     /// Power-management configuration (prevent sleep while streaming)
     pub power: PowerConfig,
 
@@ -568,6 +574,43 @@ pub struct Config {
 
     /// Global "launch a new jcode" hotkeys (macOS). Baked once by auto-import.
     pub launch_hotkeys: LaunchHotkeysConfig,
+}
+
+/// Local lifecycle observability controls. This configuration is intentionally
+/// independent of remote usage telemetry and its consent state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LifecycleObservabilityConfig {
+    /// Master switch for all local lifecycle outputs.
+    pub enabled: bool,
+    /// Persist the bounded per-session JSONL lifecycle stream.
+    pub persist_session_events: bool,
+    /// Emit the filtered lifecycle envelope through the local structured logger.
+    pub emit_structured_logs: bool,
+}
+
+impl Default for LifecycleObservabilityConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        }
+    }
+}
+
+impl LifecycleObservabilityConfig {
+    pub fn effective_status(&self) -> jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+        if !self.enabled {
+            jcode_session_types::lifecycle::LifecycleObservabilityStatus::DISABLED
+        } else {
+            jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+                enabled: true,
+                persist_session_events: self.persist_session_events,
+                emit_structured_logs: self.emit_structured_logs,
+            }
+        }
+    }
 }
 
 /// Agent Client Protocol adapter configuration.
