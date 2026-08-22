@@ -342,7 +342,7 @@ phases:
           - "The receipt passes schema/comparability validation and retains invalid or retried samples with reasons."
       - id: "T025"
         title: "Run the bounded nextest compatibility and fallback lane into specs/015-tune-rust-feedback/evidence/nextest.json"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
