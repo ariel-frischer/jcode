@@ -1,0 +1,209 @@
+tasks:
+  branch: "agent/jcode-l89.2-selfdev-coalesce"
+  created: "2026-08-22"
+  spec_path: "specs/014-coalesce-selfdev-cargo/spec.yaml"
+  plan_path: "specs/014-coalesce-selfdev-cargo/plan.yaml"
+
+summary:
+  total_tasks: 10
+  total_phases: 4
+  parallel_opportunities: 0
+  estimated_complexity: "medium"
+
+phases:
+  - number: 1
+    title: "TDD characterization"
+    purpose: "Freeze the missing atomic and eligible-test behavior before implementation"
+    tasks:
+      - id: "T001"
+        title: "Create the minimal acceptance and evidence matrix"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Map all 10 Bead acceptance criteria and PRIN-002/004/005/006/007/009/010 to the minimal implementation or an existing reused contract plus one direct check."
+          - "Record that scripts/dev_cargo.sh, the global Cargo gate, public selfdev actions, and arbitrary shell execution are unchanged."
+          - "Define before/after duplicate-action count, summed gate wait, edit-to-feedback p50/p95, and runtime-budget evidence locations."
+      - id: "T002"
+        title: "Add failing atomic claim and eligible validation tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "A real multi-threaded concurrent claim test proves the current find-then-save race can create more than one leader before the fix and exactly one leader after it."
+          - "Exact eligible cargo build, cargo test, and cargo check requests from different sessions attach to one producer and propagate its terminal result."
+          - "The tests identify leader/follower role and visible identity version without exposing raw source, diffs, paths, or secret values."
+      - id: "T003"
+        title: "Add failing near-miss and lifecycle safety tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Different source fingerprints and exact command dimensions such as action, profile, features, package, target, or arguments do not coalesce."
+          - "Opaque, compound, redirected, piped, environment-prefixed, quoted-ambiguous, clippy, and bench shell commands remain independent and execute with existing semantics."
+          - "Dirty-source drift before eligible test launch is superseded without command execution or interruption of unrelated active work."
+          - "Cancelling an Attached follower does not cancel the producer, producer failure propagates, stale persisted ownership reconciles, and build-reload remains compatible."
+
+  - number: 2
+    title: "Minimal queue implementation"
+    purpose: "Close the race and reuse the existing Attached watcher path"
+    tasks:
+      - id: "T004"
+        title: "Implement versioned conservative request identity helpers"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Prefix new build and eligible-test dedupe keys with one visible schema version while retaining worktree scope, SourceState fingerprint, and exact rendered command."
+          - "Classify only a single unambiguous cargo or scripts/dev_cargo.sh build/test/check command as eligible; return no key for every opaque or potentially side-effecting shell shape."
+          - "No dependency, public type, config, raw input receipt, or change to scripts/dev_cargo.sh is introduced."
+      - id: "T005"
+        title: "Implement atomic leader-or-follower persistence"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "One short process-wide mutex protects duplicate lookup and initial leader or Attached follower save."
+          - "The mutex is never held across await, process spawn, queue wait, source inspection, or Cargo execution."
+          - "Legacy missing keys and ineligible requests always create independent leaders; persisted reconciliation remains restart recovery."
+      - id: "T006"
+        title: "Reuse Attached follower delivery for builds and eligible tests"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Both do_build and eligible do_test atomically claim before producer spawn and use the existing Attached watcher background delivery for followers."
+          - "Existing build wording, metadata, queue ordering, progress polling, notify/wake behavior, status watcher attribution, failure propagation, and build-reload behavior remain compatible."
+          - "Additive metadata reports identity_version, role, coalesced, and duplicate_of using bounded redacted values."
+      - id: "T007"
+        title: "Supersede stale eligible tests before command launch"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Eligible test producers revalidate their persisted requested SourceState after reaching the queue head and before stream_build_command."
+          - "Source drift returns and persists an explicit Superseded result without launching the command or signalling unrelated work."
+          - "Ineligible arbitrary tests preserve current behavior and are not silently rejected or coalesced."
+
+  - number: 3
+    title: "Focused compatibility proof"
+    purpose: "Pass the new tests and the existing public selfdev regressions"
+    tasks:
+      - id: "T008"
+        title: "Run focused selfdev tests and repair once if needed"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Pass exact tests for atomic claim, eligible build/test/check attachment, near misses, dirty drift, follower cancellation, producer failure, restart reconciliation, status, and build-reload."
+          - "Pass the existing selfdev module test set without changing scripts/dev_cargo.sh or the global Cargo gate."
+          - "If a check fails, diagnose it and make at most one bounded repair before rerunning the minimal acceptance."
+
+  - number: 4
+    title: "Delivery evidence"
+    purpose: "Validate the built binary, repository contracts, and measured outcome"
+    tasks:
+      - id: "T009"
+        title: "Run serialized repository validation and one-pass review"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Run focused tests first, CodeGraph affected-test inspection, relevant stable-toolchain check/build, format, canonical guardrails, and one CodeRabbit pass with Cargo-heavy work serialized."
+          - "Review the complete diff inline for atomicity, cancellation, persistence compatibility, source drift, secret redaction, and unchanged public behavior."
+          - "Record exact commands, results, durations, and any proven unrelated baseline issue."
+      - id: "T010"
+        title: "Validate isolated multi-session behavior and close evidence"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/014-coalesce-selfdev-cargo/validation.md"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Use the newly built resolved executable and a unique private socket to demonstrate two sessions receive truthful results from one underlying eligible action and continue after build-reload."
+          - "Demonstrate a near miss remains independent, follower cancellation leaves the producer alive, stale work is superseded safely, and restart recovery permits a later request."
+          - "Record before/after duplicate-action count, summed gate wait, edit-to-feedback p50/p95, and jcode-l89.1 runtime-budget comparison with no secret or raw-source leakage."
+          - "Complete all 10 Bead acceptance rows and named constitution principle traces."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-003", "US-004", "US-005"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-001", "US-002"]
+      blocks: ["US-005"]
+    - story_id: "US-004"
+      depends_on: ["US-001"]
+      blocks: ["US-005"]
+    - story_id: "US-005"
+      depends_on: ["US-001", "US-003", "US-004"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: []
+
+parallel_execution: []
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Atomic exact active-request sharing for generated builds and conservative eligible tests, with near-miss, stale-source, cancellation, recovery, and public compatibility tests."
+    validation: "Focused selfdev tests show one leader, truthful followers, independent unsafe commands, safe supersession, and unchanged existing workflows."
+  incremental_delivery:
+    - milestone: "Contracts Frozen"
+      phases: [1]
+      deliverable: "The minimal missing behavior and reused existing contracts have direct failing checks."
+    - milestone: "Queue Seam Complete"
+      phases: [1, 2]
+      deliverable: "Atomic claim and eligible test attachment are implemented without a second subsystem."
+    - milestone: "Compatibility Proven"
+      phases: [1, 2, 3]
+      deliverable: "Focused new and existing selfdev tests pass."
+    - milestone: "Outcome Delivered"
+      phases: [1, 2, 3, 4]
+      deliverable: "Built-binary, measured performance, review, guardrail, and acceptance evidence pass."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T09:19:30Z"
+  artifact_type: "tasks"

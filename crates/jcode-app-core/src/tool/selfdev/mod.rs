@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 mod build_queue;
@@ -149,6 +150,11 @@ struct BuildRequest {
     attached_to_request_id: Option<String>,
 }
 
+enum BuildRequestClaim {
+    Leader(BuildRequest),
+    Follower { leader: BuildRequest },
+}
+
 impl BuildRequest {
     const DEFAULT_TERMINAL_HISTORY_LIMIT: usize = 256;
 
@@ -173,6 +179,20 @@ impl BuildRequest {
             let _ = Self::archive_old_terminal_requests();
         }
         Ok(())
+    }
+
+    fn save_delivery_metadata(
+        request_id: &str,
+        task_id: &str,
+        output_file: &str,
+        status_file: &str,
+    ) -> Result<()> {
+        let mut request = Self::load(request_id)?
+            .ok_or_else(|| anyhow::anyhow!("Self-dev request {} disappeared", request_id))?;
+        request.background_task_id = Some(task_id.to_string());
+        request.output_file = Some(output_file.to_string());
+        request.status_file = Some(status_file.to_string());
+        request.save()
     }
 
     fn is_terminal(&self) -> bool {
@@ -310,6 +330,27 @@ impl BuildRequest {
         Ok(Self::pending_requests_for_scope(worktree_scope)?
             .into_iter()
             .find(|request| request.dedupe_key.as_deref() == Some(dedupe_key)))
+    }
+
+    fn claim_leader_or_follower(mut request: Self) -> Result<BuildRequestClaim> {
+        static CLAIM_MUTEX: Mutex<()> = Mutex::new(());
+
+        let _claim_guard = CLAIM_MUTEX
+            .lock()
+            .map_err(|_| anyhow::anyhow!("self-dev request claim mutex was poisoned"))?;
+
+        if let Some(dedupe_key) = request.dedupe_key.as_deref()
+            && let Some(leader) = Self::find_duplicate_pending(&request.worktree_scope, dedupe_key)?
+        {
+            request.state = BuildRequestState::Attached;
+            request.last_progress = Some("attached to existing build".to_string());
+            request.attached_to_request_id = Some(leader.request_id.clone());
+            request.save()?;
+            return Ok(BuildRequestClaim::Follower { leader });
+        }
+
+        request.save()?;
+        Ok(BuildRequestClaim::Leader(request))
     }
 
     fn find_by_request_or_task(
@@ -464,6 +505,8 @@ struct BuildLockGuard {
 }
 
 type SelfDevBuildCommand = build::SelfDevBuildCommand;
+
+const COALESCING_IDENTITY_VERSION: &str = "selfdev-cargo-v1";
 
 impl Drop for BuildLockGuard {
     fn drop(&mut self) {
@@ -823,9 +866,73 @@ impl SelfDevTool {
     }
 
     fn build_dedupe_key(source: &build::SourceState, command: &SelfDevBuildCommand) -> String {
+        Self::versioned_dedupe_key("build", source, &command.display)
+    }
+
+    fn eligible_test_dedupe_key(
+        source: &build::SourceState,
+        rendered_command: &str,
+    ) -> Option<String> {
+        let rendered_command = rendered_command.trim();
+        if rendered_command.is_empty()
+            || rendered_command.chars().any(|character| {
+                matches!(
+                    character,
+                    '\'' | '"'
+                        | '`'
+                        | '\\'
+                        | ';'
+                        | '|'
+                        | '&'
+                        | '<'
+                        | '>'
+                        | '$'
+                        | '('
+                        | ')'
+                        | '{'
+                        | '}'
+                        | '['
+                        | ']'
+                        | '*'
+                        | '?'
+                        | '~'
+                        | '!'
+                        | '#'
+                        | '\n'
+                        | '\r'
+                )
+            })
+        {
+            return None;
+        }
+
+        let mut words = rendered_command.split_ascii_whitespace();
+        let program = words.next()?;
+        if !matches!(
+            program,
+            "cargo" | "scripts/dev_cargo.sh" | "./scripts/dev_cargo.sh"
+        ) {
+            return None;
+        }
+        if !matches!(words.next()?, "build" | "test" | "check") {
+            return None;
+        }
+
+        Some(Self::versioned_dedupe_key("test", source, rendered_command))
+    }
+
+    fn versioned_dedupe_key(
+        request_kind: &str,
+        source: &build::SourceState,
+        rendered_command: &str,
+    ) -> String {
         format!(
-            "{}:{}:{}",
-            source.worktree_scope, source.fingerprint, command.display
+            "{}:{}:{}:{}:{}",
+            COALESCING_IDENTITY_VERSION,
+            request_kind,
+            source.worktree_scope,
+            source.fingerprint,
+            rendered_command
         )
     }
 
