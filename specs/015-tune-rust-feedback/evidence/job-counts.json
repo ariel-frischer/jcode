@@ -1,0 +1,2123 @@
+{
+  "action_counts": {
+    "cancelled": 0,
+    "coalesced": 115,
+    "executed": 20,
+    "followers": 115,
+    "requested": 135,
+    "reused": 0,
+    "underlying_actions": 20
+  },
+  "aggregates": {
+    "coordinated_duplicate_adaptive_jobs": {
+      "cache_observations": [
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 2933,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 226537472,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 2933,
+      "p95_execution_time_ms": 3020,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 226746368,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 3020,
+      "retry_sample_count": 4,
+      "valid_sample_count": 5
+    },
+    "warm_check_adaptive_jobs": {
+      "cache_observations": [
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 123,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 124870656,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 123,
+      "p95_execution_time_ms": 136,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 125038592,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 136,
+      "retry_sample_count": 4,
+      "valid_sample_count": 5
+    },
+    "warm_check_jobs_6": {
+      "cache_observations": [
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 115,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 124137472,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 115,
+      "p95_execution_time_ms": 118,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 124420096,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 118,
+      "retry_sample_count": 4,
+      "valid_sample_count": 5
+    },
+    "warm_check_jobs_8": {
+      "cache_observations": [
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        }
+      ],
+      "exit_statuses": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "invalid_sample_count": 0,
+      "p50_execution_time_ms": 128,
+      "p50_gate_time_ms": 0,
+      "p50_peak_rss_bytes": 124223488,
+      "p50_queue_time_ms": 0,
+      "p50_swap_bytes": 0,
+      "p50_wall_time_ms": 128,
+      "p95_execution_time_ms": 131,
+      "p95_gate_time_ms": 0,
+      "p95_peak_rss_bytes": 124567552,
+      "p95_queue_time_ms": 0,
+      "p95_swap_bytes": 0,
+      "p95_wall_time_ms": 131,
+      "retry_sample_count": 4,
+      "valid_sample_count": 5
+    }
+  },
+  "collection": {
+    "coordinator_contract": "24 duplicate requests per sample, exactly one leader and 23 attached followers",
+    "invalid_samples_retained": true,
+    "retry_evidence_retained": true,
+    "scenario_ids": [
+      "warm_check_adaptive_jobs",
+      "warm_check_jobs_6",
+      "warm_check_jobs_8",
+      "coordinated_duplicate_adaptive_jobs"
+    ],
+    "status": "complete",
+    "valid_samples_required_per_scenario": 5
+  },
+  "experiment_boundary": {
+    "bounded": true,
+    "default_changed": false,
+    "variant": "adaptive_jobs_vs_jobs_6_vs_jobs_8_with_coordinated_duplicate"
+  },
+  "fallback": {
+    "reason": {
+      "reason": "all bounded T024 lanes completed",
+      "status": "not_applicable"
+    },
+    "used": false
+  },
+  "run_identity": {
+    "dirty_fingerprint": "sha256:f2c6a29c14bb6e98e57b971118f22140a685d0a83df4565c844f64cba353613a",
+    "effective_configuration": {
+      "coordinated_duplicate_variant": "adaptive",
+      "incremental_enabled": true,
+      "job_variants": [
+        "adaptive",
+        6,
+        8
+      ],
+      "matrix_path": "scripts/rust_feedback_matrix.json",
+      "remote_build_enabled": false,
+      "sccache_enabled": false,
+      "scenario": "warm cargo check -p jcode-build-support"
+    },
+    "host_conditions": {
+      "architecture": "x86_64",
+      "cargo_heavy_scenarios_serialized": true,
+      "kernel": "7.0.9-arch2-1",
+      "logical_cpu_count": 16,
+      "memory_bytes": 29039259648,
+      "os": "linux",
+      "shared_daemon_touched": false
+    },
+    "label": "job-counts-candidate",
+    "lockfile_fingerprint": "sha256:bd794cdf676cd24257ba3b5b2515c83f003383175836417ca11d661020c69bd4",
+    "matrix_version": "1.0.0",
+    "source_revision": "aaa6c28e76bb2cd35490346e954aabc4bbddb5ef",
+    "timestamp": "2026-08-22T16:49:16.866829Z",
+    "toolchain": "rustc 1.95.0 (59807616e 2026-04-14) (Arch Linux rust 1:1.95.0-1); binary: rustc; commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860; commit-date: 2026-04-14; host: x86_64-unknown-linux-gnu; release: 1.95.0; LLVM version: 22.1.3"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 136,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124223488,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 136
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "warm_check_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 123,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124870656,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 123
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 1
+      },
+      "scenario_id": "warm_check_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 121,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 125038592,
+        "queue_time_ms": 0,
+        "retry_count": 2,
+        "swap_bytes": 0,
+        "wall_time_ms": 121
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 2
+      },
+      "scenario_id": "warm_check_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 121,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 123924480,
+        "queue_time_ms": 0,
+        "retry_count": 3,
+        "swap_bytes": 0,
+        "wall_time_ms": 121
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 3
+      },
+      "scenario_id": "warm_check_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 130,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124899328,
+        "queue_time_ms": 0,
+        "retry_count": 4,
+        "swap_bytes": 0,
+        "wall_time_ms": 130
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 4
+      },
+      "scenario_id": "warm_check_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 6
+        },
+        "effective": {
+          "jobs": 6,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 118,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124137472,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 118
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "warm_check_jobs_6",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 6
+        },
+        "effective": {
+          "jobs": 6,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 117,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 123781120,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 117
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 1
+      },
+      "scenario_id": "warm_check_jobs_6",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 6
+        },
+        "effective": {
+          "jobs": 6,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 114,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124420096,
+        "queue_time_ms": 0,
+        "retry_count": 2,
+        "swap_bytes": 0,
+        "wall_time_ms": 114
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 2
+      },
+      "scenario_id": "warm_check_jobs_6",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 6
+        },
+        "effective": {
+          "jobs": 6,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 115,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 123760640,
+        "queue_time_ms": 0,
+        "retry_count": 3,
+        "swap_bytes": 0,
+        "wall_time_ms": 115
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 3
+      },
+      "scenario_id": "warm_check_jobs_6",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 6
+        },
+        "effective": {
+          "jobs": 6,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 115,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124239872,
+        "queue_time_ms": 0,
+        "retry_count": 4,
+        "swap_bytes": 0,
+        "wall_time_ms": 115
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 4
+      },
+      "scenario_id": "warm_check_jobs_6",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 8
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 116,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124084224,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 116
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "warm_check_jobs_8",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 8
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 127,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 123842560,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 127
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 1
+      },
+      "scenario_id": "warm_check_jobs_8",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 8
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 131,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124223488,
+        "queue_time_ms": 0,
+        "retry_count": 2,
+        "swap_bytes": 0,
+        "wall_time_ms": 131
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 2
+      },
+      "scenario_id": "warm_check_jobs_8",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 8
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 131,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124567552,
+        "queue_time_ms": 0,
+        "retry_count": 3,
+        "swap_bytes": 0,
+        "wall_time_ms": 131
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 3
+      },
+      "scenario_id": "warm_check_jobs_8",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "check",
+        "-p",
+        "jcode-build-support"
+      ],
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": 8
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "jcode-build-jobs"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 128,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 124289024,
+        "queue_time_ms": 0,
+        "retry_count": 4,
+        "swap_bytes": 0,
+        "wall_time_ms": 128
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 4
+      },
+      "scenario_id": "warm_check_jobs_8",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 1,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "test",
+        "-p",
+        "jcode-app-core",
+        "--lib",
+        "tool::selfdev::tests::atomic_claim_selects_exactly_one_leader",
+        "--",
+        "--exact"
+      ],
+      "coordinator_evidence": {
+        "assertion": "atomic_claim_selects_exactly_one_leader",
+        "authorized_underlying_actions_per_sample": 1,
+        "coalesced_followers_per_sample": 23,
+        "followers_per_sample": 23,
+        "mode": "server_owned_in_process_test_harness",
+        "requests_per_sample": 24,
+        "shared_daemon_touched": false
+      },
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 2932,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 226545664,
+        "queue_time_ms": 0,
+        "retry_count": 0,
+        "swap_bytes": 0,
+        "wall_time_ms": 2932
+      },
+      "retry": {
+        "is_retry": false,
+        "retry_of_attempt": {
+          "reason": "first attempt",
+          "status": "not_applicable"
+        }
+      },
+      "scenario_id": "coordinated_duplicate_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 2,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "test",
+        "-p",
+        "jcode-app-core",
+        "--lib",
+        "tool::selfdev::tests::atomic_claim_selects_exactly_one_leader",
+        "--",
+        "--exact"
+      ],
+      "coordinator_evidence": {
+        "assertion": "atomic_claim_selects_exactly_one_leader",
+        "authorized_underlying_actions_per_sample": 1,
+        "coalesced_followers_per_sample": 23,
+        "followers_per_sample": 23,
+        "mode": "server_owned_in_process_test_harness",
+        "requests_per_sample": 24,
+        "shared_daemon_touched": false
+      },
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 2992,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 226537472,
+        "queue_time_ms": 0,
+        "retry_count": 1,
+        "swap_bytes": 0,
+        "wall_time_ms": 2992
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 1
+      },
+      "scenario_id": "coordinated_duplicate_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 3,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "test",
+        "-p",
+        "jcode-app-core",
+        "--lib",
+        "tool::selfdev::tests::atomic_claim_selects_exactly_one_leader",
+        "--",
+        "--exact"
+      ],
+      "coordinator_evidence": {
+        "assertion": "atomic_claim_selects_exactly_one_leader",
+        "authorized_underlying_actions_per_sample": 1,
+        "coalesced_followers_per_sample": 23,
+        "followers_per_sample": 23,
+        "mode": "server_owned_in_process_test_harness",
+        "requests_per_sample": 24,
+        "shared_daemon_touched": false
+      },
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 2853,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 226746368,
+        "queue_time_ms": 0,
+        "retry_count": 2,
+        "swap_bytes": 0,
+        "wall_time_ms": 2853
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 2
+      },
+      "scenario_id": "coordinated_duplicate_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 4,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "test",
+        "-p",
+        "jcode-app-core",
+        "--lib",
+        "tool::selfdev::tests::atomic_claim_selects_exactly_one_leader",
+        "--",
+        "--exact"
+      ],
+      "coordinator_evidence": {
+        "assertion": "atomic_claim_selects_exactly_one_leader",
+        "authorized_underlying_actions_per_sample": 1,
+        "coalesced_followers_per_sample": 23,
+        "followers_per_sample": 23,
+        "mode": "server_owned_in_process_test_harness",
+        "requests_per_sample": 24,
+        "shared_daemon_touched": false
+      },
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 2933,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 226037760,
+        "queue_time_ms": 0,
+        "retry_count": 3,
+        "swap_bytes": 0,
+        "wall_time_ms": 2933
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 3
+      },
+      "scenario_id": "coordinated_duplicate_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    },
+    {
+      "attempt": 5,
+      "cargo_gate": {
+        "status": "acquired",
+        "wait_ms": 0
+      },
+      "command": [
+        "test",
+        "-p",
+        "jcode-app-core",
+        "--lib",
+        "tool::selfdev::tests::atomic_claim_selects_exactly_one_leader",
+        "--",
+        "--exact"
+      ],
+      "coordinator_evidence": {
+        "assertion": "atomic_claim_selects_exactly_one_leader",
+        "authorized_underlying_actions_per_sample": 1,
+        "coalesced_followers_per_sample": 23,
+        "followers_per_sample": 23,
+        "mode": "server_owned_in_process_test_harness",
+        "requests_per_sample": 24,
+        "shared_daemon_touched": false
+      },
+      "effective_job_policy": {
+        "configured": {
+          "cargo_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          },
+          "jcode_build_jobs": {
+            "reason": "value was unset in the rust-action receipt",
+            "status": "not_applicable"
+          }
+        },
+        "effective": {
+          "jobs": 8,
+          "policy": "adaptive"
+        }
+      },
+      "metrics": {
+        "cache": {
+          "configured": {
+            "cargo_incremental": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "jcode_sccache": "off",
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_disable": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            }
+          },
+          "effective": {
+            "incremental": true,
+            "rustc_wrapper": {
+              "reason": "value was unset in the rust-action receipt",
+              "status": "not_applicable"
+            },
+            "sccache_status": "disabled-by-jcode-sccache"
+          }
+        },
+        "execution_time_ms": 3020,
+        "exit_status": 0,
+        "gate_time_ms": 0,
+        "peak_rss_bytes": 226435072,
+        "queue_time_ms": 0,
+        "retry_count": 4,
+        "swap_bytes": 0,
+        "wall_time_ms": 3020
+      },
+      "retry": {
+        "is_retry": true,
+        "retry_of_attempt": 4
+      },
+      "scenario_id": "coordinated_duplicate_adaptive_jobs",
+      "valid": true,
+      "validity_reason": "completed_without_interference"
+    }
+  ],
+  "schema_version": "1.0.0"
+}

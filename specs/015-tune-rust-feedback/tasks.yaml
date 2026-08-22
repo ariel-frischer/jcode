@@ -330,7 +330,7 @@ phases:
           - "scripts/test_dev_cargo_jobs.sh and scripts/test_dev_cargo_scope.sh pass."
       - id: "T024"
         title: "Run serialized adaptive-versus-6-versus-8 and coordinated-duplicate benchmarks into specs/015-tune-rust-feedback/evidence/job-counts.json"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
