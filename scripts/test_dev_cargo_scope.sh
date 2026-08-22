@@ -9,6 +9,7 @@ mkdir -p "$tmp/bin" "$tmp/home" "$tmp/work"
 cargo_log="$tmp/cargo.jsonl"
 resolver_log="$tmp/resolver.jsonl"
 action_log="$tmp/rust-actions.jsonl"
+gate_log="$tmp/cargo-gate.log"
 
 cat >"$tmp/bin/cargo" <<'EOF'
 #!/usr/bin/env bash
@@ -109,7 +110,13 @@ json.dump(results[case], sys.stdout)
 sys.stdout.write("\n")
 EOF
 
-chmod +x "$tmp/bin/cargo" "$tmp/bin/fake-scope-resolver"
+cat >"$tmp/bin/flock" <<'EOF'
+#!/usr/bin/env bash
+printf 'unexpected flock invocation: %q\n' "$*" >>"$TEST_GATE_LOG"
+exit 99
+EOF
+
+chmod +x "$tmp/bin/cargo" "$tmp/bin/fake-scope-resolver" "$tmp/bin/flock"
 
 reset_logs() {
   : >"$cargo_log"
@@ -126,6 +133,7 @@ run_dev_cargo() {
     export HOME="$tmp/home"
     export TMPDIR="$tmp/work"
     export TEST_CARGO_LOG="$cargo_log"
+    export TEST_GATE_LOG="$gate_log"
     export TEST_RESOLVER_LOG="$resolver_log"
     export TEST_SCOPE_CASE="$scope_case"
     export JCODE_BUILD_GIT_HASH=test
