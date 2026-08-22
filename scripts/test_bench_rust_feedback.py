@@ -7,6 +7,8 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 
 
@@ -64,7 +66,9 @@ def scenario(scenario_class: str) -> dict[str, object]:
             "instructions": "prepare a deterministic repository source state",
         },
         "temperature": (
-            "warm" if scenario_class.startswith("warm_") else "cold"
+            "warm"
+            if scenario_class.startswith("warm_")
+            else "cold"
             if scenario_class.startswith("cold_")
             else "controlled"
         ),
@@ -147,7 +151,10 @@ def valid_receipt() -> dict[str, object]:
                 "attempt": 1,
                 "valid": True,
                 "validity_reason": "completed_without_interference",
-                "retry": {"is_retry": False, "retry_of_attempt": not_applicable("first attempt")},
+                "retry": {
+                    "is_retry": False,
+                    "retry_of_attempt": not_applicable("first attempt"),
+                },
                 "metrics": {
                     "wall_time_ms": 1250,
                     "execution_time_ms": 1100,
@@ -239,6 +246,33 @@ def receipt_with_wall_times(wall_times_ms: list[int]) -> dict[str, object]:
         }
     }
     return receipt
+
+
+def runner_scenario(
+    scenario_class: str = "focused_test",
+    *,
+    minimum_valid_samples: int = 1,
+    maximum_attempts: int = 1,
+    timeout_seconds: float = 2,
+) -> dict[str, object]:
+    fixture = scenario(scenario_class)
+    fixture["sample_policy"] = {
+        "minimum_valid_samples": minimum_valid_samples,
+        "maximum_attempts": maximum_attempts,
+        "retry_invalid_samples": maximum_attempts > minimum_valid_samples,
+    }
+    fixture["timeout_seconds"] = timeout_seconds
+    return fixture
+
+
+def single_sample_matrix() -> dict[str, object]:
+    matrix = valid_matrix()
+    for fixture in matrix["scenarios"]:
+        fixture["sample_policy"] = {
+            "minimum_valid_samples": 1,
+            "maximum_attempts": 1,
+        }
+    return matrix
 
 
 class MatrixContractTests(unittest.TestCase):
@@ -356,7 +390,10 @@ class ReceiptContractTests(unittest.TestCase):
 
         mutations = (
             ("validity", lambda receipt: receipt["samples"][0].pop("valid")),
-            ("validity reason", lambda receipt: receipt["samples"][0].pop("validity_reason")),
+            (
+                "validity reason",
+                lambda receipt: receipt["samples"][0].pop("validity_reason"),
+            ),
             ("retry", lambda receipt: receipt["samples"][0].pop("retry")),
             ("action counts", lambda receipt: receipt.pop("action_counts")),
         )
@@ -376,7 +413,9 @@ class ReceiptContractTests(unittest.TestCase):
     def test_rejects_implicit_not_applicable_values(self) -> None:
         mutations = (
             lambda receipt: receipt["samples"][0]["metrics"].update(cache=None),
-            lambda receipt: receipt["samples"][0]["retry"].update(retry_of_attempt=None),
+            lambda receipt: receipt["samples"][0]["retry"].update(
+                retry_of_attempt=None
+            ),
             lambda receipt: receipt["fallback"].update(reason=None),
         )
         for mutate in mutations:
@@ -496,6 +535,172 @@ class AggregateContractTests(unittest.TestCase):
                 self.assert_invalid_receipt(invalid)
 
 
+class RunnerContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.module = load_benchmark_module()
+        for name in ("run_scenario", "is_complete_run"):
+            if not callable(getattr(self.module, name, None)):
+                self.fail(f"benchmark runner must define callable {name}()")
+
+    def run_fixture(
+        self,
+        fixture: dict[str, object],
+        code: str,
+        **kwargs: object,
+    ) -> list[dict[str, object]]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            return self.module.run_scenario(
+                fixture,
+                [sys.executable, "-c", code],
+                cwd=Path(temp_dir),
+                **kwargs,
+            )
+
+    def test_serializes_success_timings_resources_cache_and_exit_status(self) -> None:
+        samples = self.run_fixture(
+            runner_scenario(),
+            "import time; time.sleep(0.02)",
+            queue_time_ms=13,
+            gate_time_ms=8,
+            cache_metadata={"enabled": True, "hit": False, "backend": "fixture"},
+            resource_probe=lambda _pid: {
+                "peak_rss_bytes": 123_456,
+                "swap_bytes": 4_096,
+            },
+        )
+
+        self.assertEqual(1, len(samples))
+        sample = samples[0]
+        self.assertTrue(sample["valid"])
+        metrics = sample["metrics"]
+        self.assertGreater(metrics["wall_time_ms"], 0)
+        self.assertGreater(metrics["execution_time_ms"], 0)
+        self.assertGreaterEqual(metrics["wall_time_ms"], metrics["execution_time_ms"])
+        self.assertEqual(13, metrics["queue_time_ms"])
+        self.assertEqual(8, metrics["gate_time_ms"])
+        self.assertEqual(123_456, metrics["peak_rss_bytes"])
+        self.assertEqual(4_096, metrics["swap_bytes"])
+        self.assertEqual(
+            {"enabled": True, "hit": False, "backend": "fixture"},
+            metrics["cache"],
+        )
+        self.assertEqual(0, metrics["exit_status"])
+        self.assertEqual(0, metrics["retry_count"])
+
+    def test_accepts_the_declared_nonzero_exit_outcome(self) -> None:
+        samples = self.run_fixture(
+            runner_scenario("invalid_zero_test"),
+            "raise SystemExit(7)",
+            cache_metadata=not_applicable("cache disabled for fixture"),
+            resource_probe=lambda _pid: {
+                "peak_rss_bytes": 10,
+                "swap_bytes": 0,
+            },
+        )
+
+        self.assertEqual(1, len(samples))
+        self.assertTrue(samples[0]["valid"])
+        self.assertEqual(7, samples[0]["metrics"]["exit_status"])
+
+    def test_timeout_retains_terminal_invalid_evidence(self) -> None:
+        samples = self.run_fixture(
+            runner_scenario(timeout_seconds=0.05),
+            "import time; time.sleep(2)",
+            cache_metadata=not_applicable("cache disabled for fixture"),
+            resource_probe=lambda _pid: {
+                "peak_rss_bytes": 10,
+                "swap_bytes": 0,
+            },
+        )
+
+        self.assertEqual(1, len(samples))
+        sample = samples[0]
+        self.assertFalse(sample["valid"])
+        self.assertIn("timeout", sample["validity_reason"])
+        self.assertIsInstance(sample["metrics"]["exit_status"], int)
+
+    def test_invalid_attempt_is_retained_and_retried(self) -> None:
+        fixture = runner_scenario(minimum_valid_samples=1, maximum_attempts=2)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            counter = Path(temp_dir) / "attempt-count"
+            code = (
+                "from pathlib import Path; import sys; "
+                f"p=Path({str(counter)!r}); "
+                "attempt=int(p.read_text())+1 if p.exists() else 1; "
+                "p.write_text(str(attempt)); sys.exit(9 if attempt == 1 else 0)"
+            )
+            samples = self.module.run_scenario(
+                fixture,
+                [sys.executable, "-c", code],
+                cwd=Path(temp_dir),
+                cache_metadata=not_applicable("cache disabled for fixture"),
+                resource_probe=lambda _pid: {
+                    "peak_rss_bytes": 10,
+                    "swap_bytes": 0,
+                },
+            )
+
+        self.assertEqual(2, len(samples))
+        self.assertFalse(samples[0]["valid"])
+        self.assertTrue(samples[1]["valid"])
+        self.assertEqual(9, samples[0]["metrics"]["exit_status"])
+        self.assertEqual(0, samples[1]["metrics"]["exit_status"])
+        self.assertEqual({"is_retry": True, "retry_of_attempt": 1}, samples[1]["retry"])
+        self.assertEqual(1, samples[1]["metrics"]["retry_count"])
+
+    def test_environmental_interference_invalidates_an_otherwise_successful_sample(
+        self,
+    ) -> None:
+        samples = self.run_fixture(
+            runner_scenario(),
+            "pass",
+            cache_metadata=not_applicable("cache disabled for fixture"),
+            resource_probe=lambda _pid: {
+                "peak_rss_bytes": 10,
+                "swap_bytes": 0,
+            },
+            interference_probe=lambda: "external_cargo_activity",
+        )
+
+        self.assertEqual(1, len(samples))
+        self.assertFalse(samples[0]["valid"])
+        self.assertIn("external_cargo_activity", samples[0]["validity_reason"])
+        self.assertEqual(0, samples[0]["metrics"]["exit_status"])
+
+    def test_unsupported_linux_metrics_are_explicitly_not_applicable(self) -> None:
+        samples = self.run_fixture(
+            runner_scenario(),
+            "pass",
+            cache_metadata=not_applicable("cache disabled for fixture"),
+            platform_name="linux",
+            proc_root=Path("/definitely/missing/jcode-proc-fixture"),
+        )
+
+        metrics = samples[0]["metrics"]
+        for field in ("peak_rss_bytes", "swap_bytes"):
+            with self.subTest(field=field):
+                self.assertEqual("not_applicable", metrics[field]["status"])
+                self.assertIn("unavailable", metrics[field]["reason"])
+
+    def test_missing_or_invalid_scenario_samples_prevent_complete_run(self) -> None:
+        matrix = single_sample_matrix()
+        samples = []
+        for fixture in matrix["scenarios"]:
+            sample = benchmark_sample(100, attempt=1)
+            sample["scenario_id"] = fixture["id"]
+            samples.append(sample)
+
+        self.assertTrue(self.module.is_complete_run(matrix, samples))
+
+        missing = samples[:-1]
+        self.assertFalse(self.module.is_complete_run(matrix, missing))
+
+        invalid = copy.deepcopy(samples)
+        invalid[0]["valid"] = False
+        invalid[0]["validity_reason"] = "invalidated_by_host_interference"
+        self.assertFalse(self.module.is_complete_run(matrix, invalid))
+
+
 class ComparisonContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.module = load_benchmark_module()
@@ -504,19 +709,21 @@ class ComparisonContractTests(unittest.TestCase):
         mutations = (
             (
                 "source_revision",
-                lambda identity: identity.update(
-                    source_revision="fedcba9876543210"
-                ),
+                lambda identity: identity.update(source_revision="fedcba9876543210"),
             ),
             (
                 "lockfile_fingerprint",
-                lambda identity: identity.update(
-                    lockfile_fingerprint="sha256:other"
-                ),
+                lambda identity: identity.update(lockfile_fingerprint="sha256:other"),
             ),
             ("toolchain", lambda identity: identity.update(toolchain="rustc 1.90.0")),
-            ("matrix_version", lambda identity: identity.update(matrix_version="2.0.0")),
-            ("host_conditions", lambda identity: identity["host_conditions"].update(cpu_count=8)),
+            (
+                "matrix_version",
+                lambda identity: identity.update(matrix_version="2.0.0"),
+            ),
+            (
+                "host_conditions",
+                lambda identity: identity["host_conditions"].update(cpu_count=8),
+            ),
             (
                 "effective_configuration",
                 lambda identity: identity["effective_configuration"].update(jobs=8),

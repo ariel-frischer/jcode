@@ -103,7 +103,7 @@ phases:
           - "All T005 fixture tests pass."
       - id: "T007"
         title: "Add failing benchmark runner and resource-observation tests in scripts/test_bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
