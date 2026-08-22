@@ -462,7 +462,7 @@ phases:
     tasks:
       - id: "T034"
         title: "Validate feature artifacts and evidence references in specs/015-tune-rust-feedback/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: null

@@ -409,7 +409,7 @@
     "worktree_behavior": {
       "fresh_scenario_target_per_sample": true,
       "isolated_task_worktree": true,
-      "repository_worktree": "/home/ari/repos/jcode/.worktrees/agent/jcode-l89.4-feedback-tuning",
+      "repository_worktree": "$WORKTREE",
       "reused_incremental_artifacts": false,
       "source_revision_unchanged_during_samples": true
     }
