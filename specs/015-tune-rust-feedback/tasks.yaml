@@ -307,7 +307,7 @@ phases:
     tasks:
       - id: "T022"
         title: "Extend effective Cargo job receipt tests in scripts/test_dev_cargo_jobs.sh"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
