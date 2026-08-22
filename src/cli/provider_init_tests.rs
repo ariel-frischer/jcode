@@ -33,6 +33,7 @@ fn test_provider_choice_arg_values() {
     assert_eq!(ProviderChoice::Openai.as_arg_value(), "openai");
     assert_eq!(ProviderChoice::OpenaiApi.as_arg_value(), "openai-api");
     assert_eq!(ProviderChoice::Openrouter.as_arg_value(), "openrouter");
+    assert_eq!(ProviderChoice::Orcarouter.as_arg_value(), "orcarouter");
     assert_eq!(ProviderChoice::Bedrock.as_arg_value(), "bedrock");
     assert_eq!(ProviderChoice::Azure.as_arg_value(), "azure");
     assert_eq!(ProviderChoice::Opencode.as_arg_value(), "opencode");
@@ -286,7 +287,7 @@ fn test_init_provider_jcode_delegates_runtime_profile_to_wrapper() {
         .block_on(init_provider(&ProviderChoice::Jcode, None))
         .expect("init jcode provider");
 
-    assert_eq!(provider.name(), "Jcode Hosted Models");
+    assert_eq!(provider.name(), "Jcode Subscription");
     assert!(crate::subscription_catalog::is_runtime_mode_enabled());
     assert_eq!(
         std::env::var("JCODE_OPENROUTER_MODEL").ok().as_deref(),
@@ -479,6 +480,10 @@ fn choice_for_login_provider_round_trips_core_targets() {
     assert_eq!(
         choice_for_login_provider(provider_catalog::OPENROUTER_LOGIN_PROVIDER),
         Some(ProviderChoice::Openrouter)
+    );
+    assert_eq!(
+        choice_for_login_provider(provider_catalog::ORCAROUTER_LOGIN_PROVIDER),
+        Some(ProviderChoice::Orcarouter)
     );
     assert_eq!(
         choice_for_login_provider(provider_catalog::ANTHROPIC_API_LOGIN_PROVIDER),
