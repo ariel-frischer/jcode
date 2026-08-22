@@ -182,7 +182,7 @@ phases:
           - "Optional-feature fixtures fail under insufficient features and pass only with required features or a correctness-preserving broad scope."
       - id: "T013"
         title: "Implement Cargo-metadata-backed validation scope resolution in scripts/rust_validation_scope.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
