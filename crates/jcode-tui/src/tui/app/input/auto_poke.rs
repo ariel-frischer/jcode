@@ -56,7 +56,12 @@ impl App {
             if self.deliver_deferred_gate_digest_if_needed() {
                 return true;
             }
-            let goals = crate::todo::load_goals(&todo_session_id).unwrap_or_default();
+            let goals = crate::todo::load_goals(&todo_session_id).unwrap_or_else(|error| {
+                crate::logging::warn(&format!(
+                    "Failed to load todo goals for completion ownership check: {error}"
+                ));
+                Vec::new()
+            });
             let ownership_needs_followup =
                 !crate::todo::completed_groups_have_sufficient_delivery(&todos, &goals);
             let gate_budget_left =
@@ -128,27 +133,7 @@ impl App {
                 self.pending_queued_dispatch = false;
                 return false;
             }
-            // Cycle finished cleanly. When auto-poke is the configured default
-            // it stays armed so the next batch of work is covered too; only an
-            // explicit /poke off (or a circuit breaker above) disarms it.
-            self.auto_poke_incomplete_todos = self.auto_poke_default_on;
-            // A finished cycle re-arms the review for whatever work comes next;
-            // without this a session could only ever deliver one digest.
-            self.todo_gate_digest_delivered = false;
-            self.todo_completion_gate_attempts = 0;
-            if !self.todo_final_response_requested {
-                self.todo_final_response_requested = true;
-                self.push_display_message(DisplayMessage::system(format!(
-                    "✅ All todos done. Completion confidence: {}.",
-                    confidence_label
-                )));
-                self.queued_messages
-                    .push(crate::todo::TODO_FINAL_RESPONSE_CONTINUATION_MESSAGE.to_string());
-                self.pending_queued_dispatch = true;
-                return true;
-            }
-            self.pending_queued_dispatch = false;
-            return false;
+            return self.finish_completed_auto_poke_cycle(&confidence_label);
         }
 
         let poke_message = crate::tui::app::commands::build_poke_message(&incomplete);
@@ -190,5 +175,30 @@ impl App {
         self.queued_messages.push(poke_message);
         self.pending_queued_dispatch = true;
         true
+    }
+
+    pub(super) fn finish_completed_auto_poke_cycle(&mut self, confidence_label: &str) -> bool {
+        // A clean cycle remains armed only when auto-poke is the configured default.
+        self.auto_poke_incomplete_todos = self.auto_poke_default_on;
+        self.todo_gate_digest_delivered = false;
+        self.todo_completion_gate_attempts = 0;
+        if !self.auto_poke_incomplete_todos {
+            self.todo_confidence_spike_challenged = false;
+            self.pending_queued_dispatch = false;
+            return false;
+        }
+        if !self.todo_final_response_requested {
+            self.todo_final_response_requested = true;
+            self.push_display_message(DisplayMessage::system(format!(
+                "✅ All todos done. Completion confidence: {}.",
+                confidence_label
+            )));
+            self.queued_messages
+                .push(crate::todo::TODO_FINAL_RESPONSE_CONTINUATION_MESSAGE.to_string());
+            self.pending_queued_dispatch = true;
+            return true;
+        }
+        self.pending_queued_dispatch = false;
+        false
     }
 }
