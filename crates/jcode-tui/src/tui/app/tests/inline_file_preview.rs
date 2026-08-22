@@ -1,5 +1,5 @@
 #[test]
-fn test_click_on_relative_markdown_path_toggles_inline_preview() {
+fn test_click_on_relative_markdown_path_preserves_side_panel_behavior() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
     let docs = repository.path().join("docs");
@@ -61,22 +61,17 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     let (path_col, path_row) = locate_path(&terminal).expect("path must be visible");
     click(&mut app, path_col, path_row);
 
-    let expanded = render_and_snap(&app, &mut terminal);
-    assert!(
-        expanded.contains("Inline file · docs/guide.md"),
-        "expanded preview must have an inline header:\n{expanded}"
+    assert!(app.inline_file_previews.is_empty());
+    let page = app
+        .side_panel
+        .focused_page()
+        .expect("Markdown click should preserve the existing side-panel behavior");
+    assert_eq!(page.title, "guide.md");
+    assert!(page.content.contains("Preview Heading"));
+    assert_eq!(
+        page.source,
+        crate::side_panel::SidePanelPageSource::LinkedFile
     );
-    assert!(
-        expanded.contains("Preview Heading"),
-        "expanded preview must render markdown content:\n{expanded}"
-    );
-    assert!(expanded.contains("• first item"));
-
-    let (path_col, path_row) = locate_path(&terminal).expect("path remains visible when expanded");
-    click(&mut app, path_col, path_row);
-    let collapsed_again = render_and_snap(&app, &mut terminal);
-    assert!(!collapsed_again.contains("Inline file · docs/guide.md"));
-    assert!(!collapsed_again.contains("Preview Heading"));
 }
 
 #[test]

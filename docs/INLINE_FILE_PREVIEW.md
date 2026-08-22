@@ -17,7 +17,9 @@ path or preview again and it should collapse.
 
 ## Recognized targets
 
-Clickable targets include Markdown links, `@path` mentions, URLs, and conservative plain file paths. Plain paths support:
+Clickable targets include `@path` mentions, URLs, and conservative plain file paths.
+Existing repository Markdown links continue to open in the side panel. Prefix a
+Markdown path with `@` when an inline preview is desired. Plain paths support:
 
 - relative, parent-relative, absolute, and home-relative paths such as `docs/guide.md`, `../src/main.rs`, `/tmp/log.txt`, and `~/notes.md`;
 - common extensionless project files such as `Makefile`, `Dockerfile`, and `README`;

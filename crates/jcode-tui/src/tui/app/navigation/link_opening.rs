@@ -5,6 +5,9 @@ impl App {
         if let Some((target, message_index)) =
             crate::tui::ui::chat_link_target_from_screen(column, row)
         {
+            if !target.starts_with('@') && self.try_open_repository_markdown_link(&target) {
+                return true;
+            }
             let preview_target = target.strip_prefix('@').unwrap_or(&target);
             if self.try_toggle_inline_file_preview(preview_target, message_index) {
                 return true;
