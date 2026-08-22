@@ -1,3 +1,5 @@
+use super::*;
+
 #[test]
 fn complete_profile_round_trips_without_losing_fields() {
     let input = r#"
