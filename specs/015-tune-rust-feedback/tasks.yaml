@@ -139,7 +139,7 @@ phases:
           - "Tests require exactly the coordinator-authorized underlying execution count and internally consistent requested/executed/coalesced/reused/cancelled totals."
       - id: "T010"
         title: "Implement server-owned coordinated duplicate benchmark collection in scripts/bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

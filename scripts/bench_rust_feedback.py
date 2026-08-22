@@ -291,6 +291,119 @@ def _validate_action_counts(raw_counts: Any, path: str) -> None:
         _fail(path, "underlying_actions must equal executed")
 
 
+def collect_coordinated_duplicate_receipt(
+    raw_scenario: Mapping[str, Any],
+    requests: Sequence[Mapping[str, Any]],
+    *,
+    submit_request: Callable[[dict[str, Any]], Mapping[str, Any]],
+    coordinator_identity: str,
+) -> dict[str, Any]:
+    """Submit duplicate requests through the server coordinator and count outcomes.
+
+    The injected submitter is the only execution seam. This collector deliberately
+    does not call ``run_scenario`` or spawn Cargo, so the existing selfdev
+    coordinator and global Cargo gate remain authoritative for underlying work.
+    """
+    scenario = _mapping(raw_scenario, "scenario")
+    _required(scenario, REQUIRED_SCENARIO_FIELDS, "scenario")
+    if scenario.get("scenario_class") != "coordinated_duplicate":
+        _fail("scenario.scenario_class", "must be 'coordinated_duplicate'")
+    identity = _nonempty_string(coordinator_identity, "coordinator_identity")
+    if not callable(submit_request):
+        raise TypeError("submit_request: expected callable server coordinator seam")
+
+    outcomes: list[dict[str, Any]] = []
+    request_ids: set[str] = set()
+    action_ids: set[str] = set()
+    counts = {field: 0 for field in ACTION_COUNT_FIELDS}
+
+    for index, raw_request in enumerate(requests):
+        request = dict(_mapping(raw_request, f"requests[{index}]"))
+        request_id = _nonempty_string(
+            request.get("request_id"), f"requests[{index}].request_id"
+        )
+        if request_id in request_ids:
+            _fail(f"requests[{index}].request_id", "must be unique")
+        request_ids.add(request_id)
+
+        raw_outcome = _mapping(
+            submit_request(request), f"request_outcomes[{index}]"
+        )
+        outcome_request_id = _nonempty_string(
+            raw_outcome.get("request_id"),
+            f"request_outcomes[{index}].request_id",
+        )
+        if outcome_request_id != request_id:
+            _fail(
+                f"request_outcomes[{index}].request_id",
+                "must match the submitted request",
+            )
+        outcome = _nonempty_string(
+            raw_outcome.get("outcome"), f"request_outcomes[{index}].outcome"
+        )
+        if outcome not in {"producer", "follower", "reused", "cancelled"}:
+            _fail(
+                f"request_outcomes[{index}].outcome",
+                "must be producer, follower, reused, or cancelled",
+            )
+
+        action_id = raw_outcome.get("underlying_action_id")
+        if outcome == "cancelled":
+            _validate_not_applicable(
+                action_id, f"request_outcomes[{index}].underlying_action_id"
+            )
+        else:
+            action_ids.add(
+                _nonempty_string(
+                    action_id,
+                    f"request_outcomes[{index}].underlying_action_id",
+                )
+            )
+
+        normalized = {
+            "request_id": request_id,
+            "outcome": outcome,
+            "underlying_action_id": action_id,
+        }
+        if outcome == "follower":
+            coalesced = raw_outcome.get("coalesced", False)
+            if not isinstance(coalesced, bool):
+                raise TypeError(
+                    f"request_outcomes[{index}].coalesced: expected boolean"
+                )
+            normalized["coalesced"] = coalesced
+            counts["followers"] += 1
+            counts["coalesced"] += int(coalesced)
+        elif outcome == "producer":
+            counts["executed"] += 1
+        else:
+            counts[outcome] += 1
+        outcomes.append(normalized)
+
+    counts["requested"] = len(outcomes)
+    counts["underlying_actions"] = len(action_ids)
+    _validate_action_counts(counts, "action_counts")
+    if counts["requested"] == 0:
+        _fail("requests", "must contain at least one coordinated request")
+    if counts["executed"] != 1 or counts["underlying_actions"] != 1:
+        _fail(
+            "action_counts",
+            (
+                "coordinated duplicate scenario requires exactly one "
+                "coordinator-authorized underlying action"
+            ),
+        )
+
+    receipt = {
+        "scenario_id": _nonempty_string(scenario["id"], "scenario.id"),
+        "coordinator_identity": identity,
+        "request_outcomes": outcomes,
+        "action_counts": counts,
+    }
+    _validate_safe_artifact(receipt, "coordinated_duplicate_receipt")
+    return receipt
+
+
 def _percentile(values: Sequence[int | float], percentile: int) -> int | float:
     """Return median p50 or a deterministic nearest-rank percentile."""
     if not values:
