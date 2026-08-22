@@ -100,6 +100,11 @@ The clearest examples of my custom delta include:
 - **Configurable debugging:** DAP debugger operations, adapter setup and
   launch transport, policy controls, and CLI/configuration switches for
   disabling the debugger when it is not wanted.
+- **Experimental LSP feedback:** language-neutral diagnostics, navigation, and
+  edit synchronization based on the Oh My Pi LSP design. Language servers are
+  explicitly opt-in and remain disabled by default to avoid TypeScript/Rust
+  resource overhead. See the [LSP documentation](https://github.com/ariel-frischer/jcode/blob/dev/docs/LSP.md)
+  for configuration and safety details.
 - **Agent-oriented development tools:** the `agentgrep` context-saving search
   workflow, session-feedback workflows, memory-sidecar work, typed Go SDK event
   compatibility, side-pane image events, and the companion Go SDK maintained
