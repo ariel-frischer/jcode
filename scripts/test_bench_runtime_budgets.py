@@ -415,6 +415,8 @@ class PrivateRuntimeTests(unittest.TestCase):
         )
         self.addCleanup(stop_process, owned)
         self.addCleanup(stop_process, unrelated)
+        self.assertIsNotNone(owned.stdout)
+        self.addCleanup(owned.stdout.close)
         self.assertEqual(owned.stdout.readline(), b"ready\n")
         record = budget.OwnedProcess.capture(owned.pid)
 
