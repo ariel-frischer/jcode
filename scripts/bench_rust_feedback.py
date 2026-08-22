@@ -11,10 +11,13 @@ import argparse
 import json
 import math
 import re
+import subprocess
 import sys
+import threading
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, Callable, NoReturn
 
 
 REQUIRED_SCENARIO_CLASSES = {
@@ -107,6 +110,7 @@ AGGREGATED_METRICS = (
     "peak_rss_bytes",
     "swap_bytes",
 )
+_CARGO_SCENARIO_LOCK = threading.Lock()
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -164,6 +168,10 @@ def _validate_not_applicable(value: Any, path: str) -> None:
 
 def _is_not_applicable(value: Any) -> bool:
     return isinstance(value, Mapping) and value.get("status") == "not_applicable"
+
+
+def _not_applicable(reason: str) -> dict[str, str]:
+    return {"status": "not_applicable", "reason": reason}
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -296,6 +304,310 @@ def _percentile(values: Sequence[int | float], percentile: int) -> int | float:
     return ordered[max(1, math.ceil(percentile * len(ordered) / 100)) - 1]
 
 
+def _read_linux_status(proc_root: Path, pid: int) -> tuple[int, int]:
+    rss_bytes = 0
+    swap_bytes = 0
+    status = (proc_root / str(pid) / "status").read_text(encoding="utf-8")
+    for line in status.splitlines():
+        if line.startswith("VmRSS:"):
+            rss_bytes = int(line.split()[1]) * 1024
+        elif line.startswith("VmSwap:"):
+            swap_bytes = int(line.split()[1]) * 1024
+    return rss_bytes, swap_bytes
+
+
+def _linux_process_tree(proc_root: Path, root_pid: int) -> set[int]:
+    pending = [root_pid]
+    discovered: set[int] = set()
+    while pending:
+        pid = pending.pop()
+        if pid in discovered:
+            continue
+        discovered.add(pid)
+        children_path = proc_root / str(pid) / "task" / str(pid) / "children"
+        try:
+            pending.extend(int(child) for child in children_path.read_text().split())
+        except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
+            continue
+    return discovered
+
+
+def _linux_resource_probe(proc_root: Path, pid: int) -> dict[str, Any]:
+    if not proc_root.is_dir():
+        reason = f"Linux process metrics unavailable: {proc_root} is not readable"
+        return {
+            "peak_rss_bytes": _not_applicable(reason),
+            "swap_bytes": _not_applicable(reason),
+        }
+
+    rss_bytes = 0
+    swap_bytes = 0
+    observed = False
+    for process_pid in _linux_process_tree(proc_root, pid):
+        try:
+            process_rss, process_swap = _read_linux_status(proc_root, process_pid)
+        except (FileNotFoundError, PermissionError, ProcessLookupError, ValueError):
+            continue
+        observed = True
+        rss_bytes += process_rss
+        swap_bytes += process_swap
+    if observed:
+        return {"peak_rss_bytes": rss_bytes, "swap_bytes": swap_bytes}
+
+    reason = f"Linux process metrics unavailable for process tree {pid}"
+    return {
+        "peak_rss_bytes": _not_applicable(reason),
+        "swap_bytes": _not_applicable(reason),
+    }
+
+
+def _resource_probe_for(
+    *,
+    platform_name: str,
+    proc_root: Path,
+    resource_probe: Callable[[int], Mapping[str, Any]] | None,
+) -> Callable[[int], Mapping[str, Any]]:
+    if resource_probe is not None:
+        return resource_probe
+    if platform_name == "linux":
+        return lambda pid: _linux_resource_probe(proc_root, pid)
+    reason = f"process RSS and swap metrics unavailable on {platform_name}"
+    unsupported = {
+        "peak_rss_bytes": _not_applicable(reason),
+        "swap_bytes": _not_applicable(reason),
+    }
+    return lambda _pid: unsupported
+
+
+def _merge_resource_observation(
+    peaks: dict[str, Any], observation: Mapping[str, Any]
+) -> None:
+    for field in ("peak_rss_bytes", "swap_bytes"):
+        value = observation.get(field, _not_applicable(f"{field} unavailable"))
+        if isinstance(value, bool):
+            raise TypeError(f"resource observation {field}: expected number")
+        if isinstance(value, (int, float)):
+            if value < 0:
+                raise ValueError(f"resource observation {field}: must be non-negative")
+            previous = peaks.get(field)
+            peaks[field] = (
+                max(previous, value) if isinstance(previous, (int, float)) else value
+            )
+        elif field not in peaks:
+            _validate_not_applicable(value, f"resource observation {field}")
+            peaks[field] = value
+
+
+def _validate_declared_command(
+    scenario: Mapping[str, Any], command: Sequence[str]
+) -> list[str]:
+    argv = list(command)
+    if not argv or any(
+        not isinstance(argument, str) or not argument for argument in argv
+    ):
+        raise TypeError("command must contain at least one non-empty string")
+
+    declared = scenario.get("commands")
+    if declared is None and "command" in scenario:
+        declared = [scenario["command"]]
+    if declared is not None:
+        allowed = [list(item) for item in _list(declared, "scenario.commands")]
+        if argv not in allowed:
+            _fail("command", "is not declared by the selected matrix scenario")
+    return argv
+
+
+def run_scenario(
+    raw_scenario: Mapping[str, Any],
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    queue_time_ms: int | float = 0,
+    gate_time_ms: int | float = 0,
+    cache_metadata: Any = None,
+    resource_probe: Callable[[int], Mapping[str, Any]] | None = None,
+    interference_probe: Callable[[], str | None] | None = None,
+    platform_name: str = sys.platform,
+    proc_root: Path = Path("/proc"),
+    env: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Execute one matrix scenario within its declared timeout and sample bounds."""
+    scenario = _mapping(raw_scenario, "scenario")
+    _required(scenario, REQUIRED_SCENARIO_FIELDS, "scenario")
+    scenario_id = _nonempty_string(scenario["id"], "scenario.id")
+    argv = _validate_declared_command(scenario, command)
+    timeout_seconds = _nonnegative_number(
+        scenario["timeout_seconds"], "scenario.timeout_seconds"
+    )
+    if timeout_seconds == 0:
+        _fail("scenario.timeout_seconds", "must be greater than zero")
+    queue_ms = _nonnegative_number(queue_time_ms, "queue_time_ms")
+    gate_ms = _nonnegative_number(gate_time_ms, "gate_time_ms")
+
+    policy = _mapping(scenario["sample_policy"], "scenario.sample_policy")
+    _required(
+        policy, {"minimum_valid_samples", "maximum_attempts"}, "scenario.sample_policy"
+    )
+    minimum_valid = _nonnegative_integer(
+        policy["minimum_valid_samples"], "scenario.sample_policy.minimum_valid_samples"
+    )
+    maximum_attempts = _nonnegative_integer(
+        policy["maximum_attempts"], "scenario.sample_policy.maximum_attempts"
+    )
+    if minimum_valid < 1 or maximum_attempts < minimum_valid:
+        _fail(
+            "scenario.sample_policy", "maximum_attempts must cover the positive minimum"
+        )
+    retry_invalid = bool(
+        policy.get("retry_invalid_samples", maximum_attempts > minimum_valid)
+    )
+
+    validity_rules = _mapping(scenario["validity_rules"], "scenario.validity_rules")
+    expected_exit = validity_rules.get("expected_exit", "zero")
+    if expected_exit not in {"zero", "nonzero"}:
+        _fail("scenario.validity_rules.expected_exit", "must be 'zero' or 'nonzero'")
+    cache = cache_metadata or _not_applicable("cache metadata was not supplied")
+    probe = _resource_probe_for(
+        platform_name=platform_name,
+        proc_root=proc_root,
+        resource_probe=resource_probe,
+    )
+
+    samples: list[dict[str, Any]] = []
+    valid_samples = 0
+    with _CARGO_SCENARIO_LOCK:
+        for attempt in range(1, maximum_attempts + 1):
+            execution_started = time.monotonic()
+            peaks: dict[str, Any] = {}
+            timed_out = False
+            interrupted = False
+            spawn_error: OSError | None = None
+            process: subprocess.Popen[bytes] | None = None
+            exit_status = 127
+            try:
+                process = subprocess.Popen(
+                    argv,
+                    cwd=cwd,
+                    env=dict(env) if env is not None else None,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                while process.poll() is None:
+                    _merge_resource_observation(peaks, probe(process.pid))
+                    if time.monotonic() - execution_started >= timeout_seconds:
+                        timed_out = True
+                        process.terminate()
+                        try:
+                            process.wait(timeout=0.2)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                        break
+                    time.sleep(0.01)
+                _merge_resource_observation(peaks, probe(process.pid))
+                exit_status = 124 if timed_out else process.wait()
+            except KeyboardInterrupt:
+                interrupted = True
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                exit_status = 130
+            except OSError as error:
+                spawn_error = error
+
+            execution_time_ms = max(
+                0, round((time.monotonic() - execution_started) * 1000)
+            )
+            interference = (
+                interference_probe() if interference_probe is not None else None
+            )
+            valid = False
+            if interrupted:
+                validity_reason = "interrupted_before_completion"
+            elif timed_out:
+                validity_reason = f"timeout_after_{timeout_seconds}_seconds"
+            elif spawn_error is not None:
+                validity_reason = f"execution_error_{type(spawn_error).__name__}"
+            elif interference and validity_rules.get(
+                "invalidate_on_interference", True
+            ):
+                validity_reason = f"invalidated_by_{interference}"
+            elif expected_exit == "zero" and exit_status != 0:
+                validity_reason = f"unexpected_nonzero_exit_{exit_status}"
+            elif expected_exit == "nonzero" and exit_status == 0:
+                validity_reason = "unexpected_zero_exit"
+            else:
+                valid = True
+                validity_reason = "completed_without_interference"
+
+            is_retry = attempt > 1
+            samples.append(
+                {
+                    "scenario_id": scenario_id,
+                    "attempt": attempt,
+                    "valid": valid,
+                    "validity_reason": validity_reason,
+                    "retry": {
+                        "is_retry": is_retry,
+                        "retry_of_attempt": attempt - 1
+                        if is_retry
+                        else _not_applicable("first attempt"),
+                    },
+                    "metrics": {
+                        "wall_time_ms": execution_time_ms + queue_ms + gate_ms,
+                        "execution_time_ms": execution_time_ms,
+                        "queue_time_ms": queue_ms,
+                        "gate_time_ms": gate_ms,
+                        "peak_rss_bytes": peaks.get(
+                            "peak_rss_bytes", _not_applicable("peak RSS unavailable")
+                        ),
+                        "swap_bytes": peaks.get(
+                            "swap_bytes", _not_applicable("swap unavailable")
+                        ),
+                        "cache": cache,
+                        "exit_status": exit_status,
+                        "retry_count": attempt - 1,
+                    },
+                }
+            )
+            if valid:
+                valid_samples += 1
+                if valid_samples >= minimum_valid:
+                    break
+            elif interrupted or not retry_invalid:
+                break
+    return samples
+
+
+def is_complete_run(
+    matrix: Mapping[str, Any], samples: Sequence[Mapping[str, Any]]
+) -> bool:
+    """Return whether every declared scenario has its required valid samples."""
+    validate_matrix(matrix)
+    valid_counts: dict[str, int] = {}
+    for raw_sample in samples:
+        sample = _mapping(raw_sample, "sample")
+        if sample.get("valid") is True:
+            scenario_id = _nonempty_string(
+                sample.get("scenario_id"), "sample.scenario_id"
+            )
+            valid_counts[scenario_id] = valid_counts.get(scenario_id, 0) + 1
+    return all(
+        valid_counts.get(_nonempty_string(scenario["id"], "scenario.id"), 0)
+        >= _nonnegative_integer(
+            _mapping(scenario["sample_policy"], "scenario.sample_policy")[
+                "minimum_valid_samples"
+            ],
+            "scenario.sample_policy.minimum_valid_samples",
+        )
+        for scenario in _list(matrix["scenarios"], "matrix.scenarios")
+    )
+
+
 def aggregate_samples(samples: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
     """Derive reproducible per-scenario aggregates from retained raw samples."""
     grouped: dict[str, list[Mapping[str, Any]]] = {}
@@ -315,7 +627,11 @@ def aggregate_samples(samples: Sequence[Mapping[str, Any]]) -> dict[str, dict[st
             "retry_sample_count": len(retries),
         }
         for metric in AGGREGATED_METRICS:
-            values = [_nonnegative_number(sample["metrics"][metric], f"sample.metrics.{metric}") for sample in valid]
+            values = [
+                _nonnegative_number(sample["metrics"][metric], f"sample.metrics.{metric}")
+                for sample in valid
+                if not _is_not_applicable(sample["metrics"][metric])
+            ]
             if values:
                 aggregate[f"p50_{metric}"] = _percentile(values, 50)
                 aggregate[f"p95_{metric}"] = _percentile(values, 95)
@@ -394,7 +710,11 @@ def validate_receipt(receipt: Mapping[str, Any]) -> None:
         metrics = _mapping(sample["metrics"], f"{path}.metrics")
         _required(metrics, REQUIRED_SAMPLE_METRICS, f"{path}.metrics")
         for field in REQUIRED_SAMPLE_METRICS - {"cache", "exit_status"}:
-            _nonnegative_number(metrics[field], f"{path}.metrics.{field}")
+            value = metrics[field]
+            if field in {"peak_rss_bytes", "swap_bytes"} and _is_not_applicable(value):
+                _validate_not_applicable(value, f"{path}.metrics.{field}")
+            else:
+                _nonnegative_number(value, f"{path}.metrics.{field}")
         if isinstance(metrics["exit_status"], bool) or not isinstance(metrics["exit_status"], int):
             raise TypeError(f"{path}.metrics.exit_status: expected integer")
         cache = metrics["cache"]

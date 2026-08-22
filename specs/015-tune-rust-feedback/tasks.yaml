@@ -115,7 +115,7 @@ phases:
           - "Tests prove a missing or invalid scenario sample prevents a complete-run result."
       - id: "T008"
         title: "Implement bounded scenario execution and Linux resource sampling in scripts/bench_rust_feedback.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
