@@ -318,7 +318,7 @@ phases:
           - "Tests assert configured and effective job policy is emitted in rust-actions receipts without launching concurrent Cargo work."
       - id: "T023"
         title: "Add effective job and cache experiment metadata in scripts/dev_cargo.sh"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"

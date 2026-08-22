@@ -27,6 +27,13 @@ rust_action_log_path=""
 rust_action_log_execution="local"
 cargo_gate_wait_ms=0
 validation_scope_json=""
+configured_jcode_build_jobs="${JCODE_BUILD_JOBS:-}"
+configured_cargo_build_jobs="${CARGO_BUILD_JOBS:-}"
+configured_jcode_sccache="${JCODE_SCCACHE:-}"
+configured_sccache_disable="${SCCACHE_DISABLE:-}"
+configured_cargo_incremental="${CARGO_INCREMENTAL:-}"
+configured_rustc_wrapper="${RUSTC_WRAPPER:-}"
+build_jobs_policy="cargo-default"
 
 start_rust_action_log() {
   case "${JCODE_RUST_ACTION_LOG:-1}" in
@@ -46,11 +53,16 @@ record_rust_action_log() {
   [[ -n "$rust_action_log_started_ns" && -n "$rust_action_log_path" ]] || return 0
   trap - EXIT
 
-  local finished_ns duration_ms profile action
+  local finished_ns duration_ms profile action incremental_enabled
   finished_ns=$(date +%s%N)
   duration_ms=$(( (finished_ns - rust_action_log_started_ns) / 1000000 ))
   profile=$(selected_profile "${cargo_argv[@]}")
   action="${cargo_argv[0]:-unknown}"
+  if build_is_incremental "${cargo_argv[@]}"; then
+    incremental_enabled="true"
+  else
+    incremental_enabled="false"
+  fi
   mkdir -p "$(dirname "$rust_action_log_path")" 2>/dev/null || return 0
 
   JCODE_LOG_STARTED_AT="$rust_action_log_started_at" \
@@ -62,10 +74,31 @@ record_rust_action_log() {
   JCODE_LOG_REPO="$repo_root" \
   JCODE_LOG_EXECUTION="$rust_action_log_execution" \
   JCODE_LOG_VALIDATION_SCOPE="$validation_scope_json" \
+  JCODE_LOG_CONFIGURED_JCODE_JOBS="$configured_jcode_build_jobs" \
+  JCODE_LOG_CONFIGURED_CARGO_JOBS="$configured_cargo_build_jobs" \
+  JCODE_LOG_EFFECTIVE_JOB_POLICY="$build_jobs_policy" \
+  JCODE_LOG_EFFECTIVE_JOBS="${CARGO_BUILD_JOBS:-}" \
+  JCODE_LOG_CONFIGURED_JCODE_SCCACHE="$configured_jcode_sccache" \
+  JCODE_LOG_CONFIGURED_SCCACHE_DISABLE="$configured_sccache_disable" \
+  JCODE_LOG_CONFIGURED_CARGO_INCREMENTAL="$configured_cargo_incremental" \
+  JCODE_LOG_CONFIGURED_RUSTC_WRAPPER="$configured_rustc_wrapper" \
+  JCODE_LOG_EFFECTIVE_SCCACHE_STATUS="$sccache_status" \
+  JCODE_LOG_EFFECTIVE_INCREMENTAL="$incremental_enabled" \
+  JCODE_LOG_EFFECTIVE_RUSTC_WRAPPER="${RUSTC_WRAPPER:-}" \
+  JCODE_LOG_CARGO_GATE_STATUS="${cargo_gate_status:-not-evaluated}" \
   python3 - "$rust_action_log_path" "${cargo_argv[@]}" <<'PY' || true
 import json
 import os
 import sys
+
+def optional_positive_int(name):
+    value = os.environ.get(name, "")
+    return int(value) if value.isdigit() and int(value) > 0 else None
+
+
+def optional_string(name):
+    return os.environ.get(name) or None
+
 
 path = sys.argv[1]
 record = {
@@ -84,6 +117,47 @@ record = {
     "repository": os.environ["JCODE_LOG_REPO"],
     "execution": os.environ["JCODE_LOG_EXECUTION"],
     "argv": sys.argv[2:],
+    "cargo_jobs": {
+        "configured": {
+            "jcode_build_jobs": optional_positive_int(
+                "JCODE_LOG_CONFIGURED_JCODE_JOBS"
+            ),
+            "cargo_build_jobs": optional_positive_int(
+                "JCODE_LOG_CONFIGURED_CARGO_JOBS"
+            ),
+        },
+        "effective": {
+            "policy": os.environ["JCODE_LOG_EFFECTIVE_JOB_POLICY"],
+            "jobs": optional_positive_int("JCODE_LOG_EFFECTIVE_JOBS"),
+        },
+    },
+    "cargo_cache": {
+        "configured": {
+            "jcode_sccache": optional_string(
+                "JCODE_LOG_CONFIGURED_JCODE_SCCACHE"
+            ),
+            "sccache_disable": optional_string(
+                "JCODE_LOG_CONFIGURED_SCCACHE_DISABLE"
+            ),
+            "cargo_incremental": optional_string(
+                "JCODE_LOG_CONFIGURED_CARGO_INCREMENTAL"
+            ),
+            "rustc_wrapper": optional_string(
+                "JCODE_LOG_CONFIGURED_RUSTC_WRAPPER"
+            ),
+        },
+        "effective": {
+            "sccache_status": os.environ["JCODE_LOG_EFFECTIVE_SCCACHE_STATUS"],
+            "incremental": os.environ["JCODE_LOG_EFFECTIVE_INCREMENTAL"] == "true",
+            "rustc_wrapper": optional_string(
+                "JCODE_LOG_EFFECTIVE_RUSTC_WRAPPER"
+            ),
+        },
+    },
+    "cargo_gate": {
+        "status": os.environ["JCODE_LOG_CARGO_GATE_STATUS"],
+        "wait_ms": int(os.environ["JCODE_LOG_GATE_WAIT_MS"]),
+    },
 }
 if os.environ.get("JCODE_LOG_VALIDATION_SCOPE"):
     record["validation_scope"] = json.loads(
@@ -659,6 +733,11 @@ select_build_jobs() {
     if [[ "$override" =~ ^[0-9]+$ && "$override" -ge 1 ]]; then
       export CARGO_BUILD_JOBS="$override"
       build_jobs_status="override:$override"
+      if [[ -n "${JCODE_BUILD_JOBS:-}" ]]; then
+        build_jobs_policy="jcode-build-jobs"
+      else
+        build_jobs_policy="cargo-build-jobs"
+      fi
       return
     fi
     # Invalid override: warn and fall through to adaptive sizing.
@@ -669,6 +748,7 @@ select_build_jobs() {
   local mem_available_kib
   if ! mem_available_kib=$(available_memory_kib); then
     build_jobs_status="cargo-default"
+    build_jobs_policy="cargo-default"
     return
   fi
 
@@ -695,6 +775,7 @@ select_build_jobs() {
 
   export CARGO_BUILD_JOBS="$jobs"
   build_jobs_status="adaptive:${jobs} (cpus=${cpus}, mem_avail=${mem_available_mib}MiB, budget=${mib_per_job}MiB/job)"
+  build_jobs_policy="adaptive"
   if (( jobs < cpus )); then
     log "limiting cargo to ${jobs} job(s) under memory pressure (${mem_available_mib}MiB available, ~${mib_per_job}MiB/job); override with JCODE_BUILD_JOBS"
   fi
