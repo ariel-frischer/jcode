@@ -303,6 +303,83 @@ The three pattern dimensions are `dot_ok`, `let_underscore`, and `unwrap_or_defa
 
 The inventory contains `141` path rows. All rows have a baseline commit, previous value, current measurement, candidate value, causal path history, reconciliation Bead, bounded historical-Bead result, merged-state ancestry result, and at least one stable review-disposition identifier. `not_found` Bead searches remain explicit. No automatic ratchet update was run. Final acceptance remains owned by T019 and the C01 provenance validator.
 
+## Blocker-branch changed oversized-file audit
+
+This is the T004 pre-repair C02 inventory. It classifies files with the production and test predicates from `scripts/check_code_size_budget.py` and `scripts/check_test_size_budget.py`, uses their shared strict threshold of `1200` physical lines, limits candidates to Rust paths modified by `git diff --name-only 85f9f5e3b...HEAD`, and treats a file as already oversized only when its `85f9f5e3b` blob exceeds that threshold. Base values come from `git show 85f9f5e3b:<path>` and current values come from the worktree. The comparison found eight modified already-oversized production files and one modified already-oversized test file. No modified Rust path that was at or below the threshold at the branch base currently crosses the threshold.
+
+### Exact branch-base deltas
+
+| Class | Path | Base LOC | Current LOC | Delta | T004 disposition |
+|---|---|---:|---:|---:|---|
+| production | `crates/jcode-app-core/src/server/client_lifecycle.rs` | 3584 | 3582 | -2 | non-growing; retain lifecycle behavior checks |
+| production | `crates/jcode-app-core/src/tool/bash.rs` | 1543 | 1550 | +7 | **mandatory repair T009** |
+| production | `crates/jcode-harness-api-server/src/translate.rs` | 2233 | 2232 | -1 | non-growing; retain translation compatibility checks |
+| production | `crates/jcode-telemetry-core/src/lib.rs` | 2493 | 2535 | +42 | **mandatory repair T011** |
+| production | `crates/jcode-tui/src/tui/app/remote.rs` | 2401 | 2401 | +0 | flat; retain remote interaction and failure checks |
+| production | `crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs` | 2561 | 2563 | +2 | **mandatory repair T014** |
+| production | `crates/jcode-tui/src/tui/ui_messages.rs` | 4478 | 4478 | +0 | flat; retain todo-plan rendering check |
+| production | `src/cli/acp.rs` | 2189 | 2188 | -1 | non-growing; retain ACP response and explicit-error checks |
+| test | `tests/e2e/test_support/mod.rs` | 1429 | 1428 | -1 | non-growing; retain E2E compile and provider checks |
+
+The pre-repair positive-delta count is `3`, totaling `+51` lines. The positive paths are exactly `crates/jcode-app-core/src/tool/bash.rs`, `crates/jcode-telemetry-core/src/lib.rs`, and `crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs`. They block T016 and every historical baseline mutation until their focused checks pass and a repeated complete inventory reports zero positive deltas. Shrinkage or flat results in the other six files are not credits that can offset growth elsewhere.
+
+### Reproducible inventory command
+
+Run this from the repository root. The final T016 receipt must rerun the same complete comparison rather than checking only the three currently positive paths.
+
+```bash
+python3 - <<'PY'
+import subprocess
+from pathlib import Path
+
+base = "85f9f5e3b"
+changed = subprocess.check_output(
+    ["git", "diff", "--name-only", f"{base}...HEAD", "--", "*.rs"], text=True
+).splitlines()
+
+def is_test(path: str) -> bool:
+    name = Path(path).name
+    parts = path.split("/")
+    return (
+        parts[0] == "tests"
+        or any(
+            part == "tests"
+            or part.endswith("_tests")
+            or part.endswith("_test")
+            or part.startswith("tests_")
+            for part in parts
+        )
+        or name == "tests.rs"
+        or name.endswith("_tests.rs")
+        or name.endswith("_test.rs")
+        or name.startswith("tests_")
+    )
+
+for path in changed:
+    old = subprocess.check_output(["git", "show", f"{base}:{path}"], text=True).count("\n")
+    new = sum(1 for _ in Path(path).open(encoding="utf-8"))
+    if old > 1200:
+        print(f"{'test' if is_test(path) else 'production'}\t{path}\t{old}\t{new}\t{new-old:+d}")
+PY
+```
+
+### Pre-baseline changed-source validation matrix
+
+All commands below are mandatory before changing `scripts/code_size_budget.json`, `scripts/test_size_budget.json`, or `scripts/swallowed_error_budget.json`. Cargo-heavy commands run serially. T005-T015, T026-T028, and T036-T038 own the focused tests and repairs, while T016 owns the repeated zero-growth result. `Planned` is not a pass receipt.
+
+| Changed source area | Focused compile and warning checks | Behavior and explicit-error checks | Panic and swallowed-error checks | Current state |
+|---|---|---|---|---|
+| App-core lifecycle and promoted Bash progress: `client_lifecycle.rs`, `bash.rs` | `cargo check -p jcode-app-core --all-targets`; `cargo clippy -p jcode-app-core --all-targets --all-features -- -D warnings` | `cargo test -p jcode-app-core client_lifecycle`; `cargo test -p jcode-app-core test_timeout_promoted_command_reports_intermediate_progress`; `cargo test -p jcode-app-core test_detached_promoted_command_reports_intermediate_progress`. Preserve bounded lifecycle warnings, cleanup ordering, Bash progress after mutex poisoning, and actionable command errors. | `python3 scripts/check_panic_budget.py`; `python3 scripts/check_swallowed_error_budget.py`; confirm the changed hunks add no panic and do not discard a command or lifecycle error. | Planned; `bash.rs` repair required |
+| Harness translation: `translate.rs` | `cargo check -p jcode-harness-api-server --all-targets`; `cargo clippy -p jcode-harness-api-server --all-targets --all-features -- -D warnings` | `cargo test -p jcode-harness-api-server limited_session_list_reads_compact_index_without_transcript_records`; add T007 invalid or missing-field coverage. Preserve recent-session ordering, compact-index output, fallback behavior, and public translation shapes. | Run both Python checkers above and confirm deserialization or database failures remain explicit rather than converted to defaults. | Planned; no size repair currently required |
+| Grok fake ACP and root ACP: `fake_acp.rs`, `src/cli/acp.rs` | `cargo check -p jcode-provider-grok-build-runtime --bin fake_acp`; `cargo check -p jcode --all-targets`; matching package Clippy commands with `--all-features -- -D warnings` | `cargo test -p jcode prompt_response_reports_usage_accumulated_across_the_turn`; `cargo test -p jcode prompt_response_omits_unreported_usage_and_cache_fields`; run the focused Grok provider E2E path. Invalid JSON, log or stdout I/O failures, unexpected methods, and ACP public errors must return explicit errors without panic. | Run both Python checkers above and verify removed `expect` and `panic!` paths remain observable `Result` failures. | Planned; no size repair currently required |
+| Telemetry delivery: `jcode-telemetry-core/src/lib.rs` | `cargo check -p jcode-telemetry-core --all-targets`; `cargo clippy -p jcode-telemetry-core --all-targets --all-features -- -D warnings` | `cargo test -p jcode-telemetry-core`; T006 must add deterministic HTTP-client initialization, worker-spawn, queue-full, disconnected-worker, success, and later-retry checks. Initialization failure must not be cached permanently and delivery failure must remain observable without panic. | Run both Python checkers above and reject hidden `Result` loss in worker or delivery paths. | Planned; repair and missing recovery coverage required |
+| TUI remote, file discovery, swarm gallery, and todo rendering: `remote.rs`, `state_ui_input_helpers.rs`, `info_widget_swarm_gallery.rs`, `ui_messages.rs` | `cargo check -p jcode-tui --all-targets`; `cargo clippy -p jcode-tui --all-targets --all-features -- -D warnings` | `cargo test -p jcode-tui remote_tests`; `cargo test -p jcode-tui render_todo_plan_update_card_shows_only_changed_intent_fields`; T008 and T036 must cover catch-up resume success/failure, file-discovery warning behavior, empty gallery conversion without panic, and reviewed file-mention/path behavior. | Run both Python checkers above. Resume failures must remain visible, gallery absence must not panic, and file discovery must not restore warnings or ignored errors. | Planned; `state_ui_input_helpers.rs` repair required |
+| Root auth-test and E2E provider fixtures: `src/cli/auth_test/run.rs`, `tests/e2e/provider_behavior.rs`, `tests/e2e/test_support/mod.rs` | `cargo check -p jcode --all-targets --all-features`; `cargo clippy -p jcode --all-targets --all-features -- -D warnings` | `cargo test -p jcode --test e2e test_token_usage`; run the affected auth-test cancellation/report tests. Preserve cost-field compatibility, report and cancellation behavior, and E2E connection setup. | Run both Python checkers above. The documented `too_many_arguments` expectation is acceptable only while warning-clean, and cancellation or provider failures must remain explicit. | Planned; no size repair currently required |
+
+### T004 checkpoint
+
+The required branch-base audit is complete, all nine modified already-oversized files are enumerated, and the three positive deltas are assigned mandatory repairs. The pre-baseline compile, behavior, warning, panic, and explicit-error gates cover every blocker-branch source area. The three quality budget JSON files remain unmodified by this feature branch. T004 records the failing pre-repair state intentionally; only T016 may replace it with the final zero-positive-delta C02 pass receipt.
+
 ## Required pass receipts
 
 Receipts are appended or updated by later tasks. Each receipt must include the check ID, requirement IDs, exact non-secret command, UTC timestamp, resolved worktree and commit, result, durable or reproducible artifact reference, and any explicitly superseded receipt ID. A receipt may report only `PASS`, `FAIL`, or an explicitly approved `BLOCKED` state. Only `PASS` satisfies the matrix.

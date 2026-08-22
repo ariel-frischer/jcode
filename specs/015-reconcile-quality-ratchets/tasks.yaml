@@ -60,7 +60,7 @@ phases:
           - "Split mixed or aggregate mismatches so intentional and unexplained portions are independently measurable, and mark untraced, reverted, superseded, or disputed portions as rejected."
       - id: "T004"
         title: "Audit the blocker branch changed oversized-file surface against 85f9f5e3b in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
