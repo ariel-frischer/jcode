@@ -697,7 +697,7 @@ phases:
       tasks:
         - id: "T057"
           title: "Add session picker compatibility fixtures"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -708,7 +708,7 @@ phases:
             - "Preserve established ordering, names, and candidate counts with sidecars present, absent, rotated, expired, or disabled."
         - id: "T058"
           title: "Add session search compatibility fixtures"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -719,7 +719,7 @@ phases:
             - "Preserve established session search results and behavior across representative artifact states."
         - id: "T059"
           title: "Add productivity and crash-recovery compatibility tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -730,7 +730,7 @@ phases:
             - "Assert crash recovery remains snapshot and journal compatible when lifecycle artifacts are present, torn, rotated, or absent."
         - id: "T060"
           title: "Add import, takeover, export, and replay compatibility tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -741,7 +741,7 @@ phases:
             - "Assert export and replay remain transcript-based and never ingest internal lifecycle JSONL content."
         - id: "T061"
           title: "Add enabled-versus-disabled decision equivalence tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -752,7 +752,7 @@ phases:
             - "Assert event recording, persistence, logging, and query failures cannot change provider selection, retries, handoffs, blocks, compaction, or user-visible session outcomes."
         - id: "T062"
           title: "Add explicit scanner exclusions where compatibility requires them"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-005"
@@ -764,7 +764,7 @@ phases:
             - "Document why lifecycle files remain internal rather than treating them as user content."
         - id: "T063"
           title: "Add integrated compatibility smoke coverage"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-005"

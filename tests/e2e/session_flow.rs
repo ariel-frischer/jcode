@@ -2,6 +2,56 @@ use crate::test_support::*;
 use std::sync::atomic::Ordering;
 
 #[test]
+fn lifecycle_sidecars_preserve_session_replay_and_cleanup_compatibility() -> Result<()> {
+    let _env = setup_test_env()?;
+    let session_id = "session_lifecycle_e2e_compat";
+    let mut session = Session::create_with_id(
+        session_id.to_string(),
+        None,
+        Some("lifecycle compatibility smoke".to_string()),
+    );
+    session.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "ordinary transcript content".to_string(),
+            cache_control: None,
+        }],
+    );
+    session.save()?;
+
+    let session_path = jcode::session::session_path(session_id)?;
+    let jcode_dir = session_path
+        .parent()
+        .and_then(std::path::Path::parent)
+        .context("session path should be nested beneath the jcode directory")?;
+    let active = jcode::session::lifecycle_path_in_dir(jcode_dir, session_id)?;
+    std::fs::write(&active, "{\"event\":\"internal lifecycle metadata\"}\n")?;
+    for rotation in 1..=jcode::session::LIFECYCLE_MAX_ROTATIONS {
+        std::fs::write(
+            jcode::session::lifecycle_rotation_path_in_dir(jcode_dir, session_id, rotation)?,
+            "{\"event\":\"rotated internal lifecycle metadata\"}\n",
+        )?;
+    }
+
+    let loaded = Session::load(session_id)?;
+    let timeline = jcode::replay::export_timeline(&loaded);
+    let serialized_timeline = serde_json::to_string(&timeline)?;
+    assert!(serialized_timeline.contains("ordinary transcript content"));
+    assert!(!serialized_timeline.contains("internal lifecycle metadata"));
+
+    jcode::session::remove_session_artifacts_in_dir(jcode_dir, session_id)?;
+    assert!(!jcode::session::session_exists(session_id));
+    assert!(!active.exists());
+    for rotation in 1..=jcode::session::LIFECYCLE_MAX_ROTATIONS {
+        assert!(
+            !jcode::session::lifecycle_rotation_path_in_dir(jcode_dir, session_id, rotation)?
+                .exists()
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn interactive_profile_startup_wire_is_optional_and_session_scoped() -> Result<()> {
     let request = jcode::protocol::Request::Subscribe {
         id: 17,

@@ -624,6 +624,8 @@ impl SessionCandidateMeta {
 }
 
 fn session_file_stem_for_candidate(file_name: &str) -> Option<(&str, bool)> {
+    // Lifecycle JSONL sidecars are internal observability artifacts. Only the
+    // canonical snapshot and journal suffixes may produce picker candidates.
     if let Some(stem) = file_name.strip_suffix(".journal.jsonl") {
         return Some((stem, false));
     }

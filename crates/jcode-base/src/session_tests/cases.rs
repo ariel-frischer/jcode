@@ -1305,6 +1305,65 @@ fn test_recover_crashed_sessions_by_ids_restores_only_selected_group() -> Result
 }
 
 #[test]
+fn crash_recovery_ignores_lifecycle_sidecars_and_rotations() -> Result<()> {
+    let _env_lock = lock_env();
+    let temp_home = tempfile::tempdir()?;
+    let _home = EnvVarGuard::set("JCODE_HOME", temp_home.path().as_os_str());
+    let _test_flag = EnvVarGuard::set("JCODE_TEST_SESSION", "0");
+    let session_id = "session_crash_lifecycle_compat";
+
+    let mut crashed = Session::create_with_id(
+        session_id.to_string(),
+        None,
+        Some("crash lifecycle compatibility".to_string()),
+    );
+    crashed.mark_crashed(Some("compatibility fixture".to_string()));
+    crashed.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "recover this ordinary session".to_string(),
+            cache_control: None,
+        }],
+    );
+    crashed.save()?;
+
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        std::fs::write(
+            temp_home
+                .path()
+                .join("sessions")
+                .join(format!("{session_id}{suffix}")),
+            "torn lifecycle metadata",
+        )?;
+    }
+
+    let recovered_ids = recover_crashed_sessions_by_ids(&[session_id.to_string()])?;
+    assert_eq!(recovered_ids.len(), 1);
+    let recovered = Session::load(&recovered_ids[0])?;
+    assert_eq!(recovered.parent_id.as_deref(), Some(session_id));
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        assert!(
+            temp_home
+                .path()
+                .join("sessions")
+                .join(format!("{session_id}{suffix}"))
+                .exists()
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn test_save_persists_full_session_content() -> Result<()> {
     let _env_lock = lock_env();
     let temp_home = tempfile::Builder::new()

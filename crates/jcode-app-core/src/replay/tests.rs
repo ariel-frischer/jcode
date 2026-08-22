@@ -1,7 +1,8 @@
 use super::*;
+use crate::message::{ContentBlock, Role};
 use crate::plan::PlanItem;
 use crate::protocol::SwarmMemberStatus;
-use crate::session::{StoredReplayEvent, StoredReplayEventKind};
+use crate::session::{Session, StoredReplayEvent, StoredReplayEventKind};
 use chrono::{Duration, Utc};
 use std::ffi::OsString;
 
@@ -68,6 +69,40 @@ fn test_timeline_roundtrip() {
     assert_eq!(parsed.len(), 4);
     assert_eq!(parsed[0].t, 0);
     assert_eq!(parsed[2].t, 1500);
+}
+
+#[test]
+fn export_and_replay_remain_transcript_based_with_lifecycle_sidecar_present() {
+    let _guard = lock_env();
+    let temp = tempfile::TempDir::new().expect("create replay compatibility home");
+    let _home = EnvVarGuard::set("JCODE_HOME", temp.path());
+    let session_id = "session_replay_lifecycle_compat";
+    let sidecar_only_text = "lifecycle-sidecar-must-not-be-replayed";
+
+    let mut session = Session::create_with_id(session_id.to_string(), None, None);
+    session.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "ordinary replay transcript".to_string(),
+            cache_control: None,
+        }],
+    );
+    session.save().expect("save replay fixture");
+    std::fs::write(
+        temp.path()
+            .join("sessions")
+            .join(format!("{session_id}.lifecycle.jsonl")),
+        format!("{{\"event\":\"{sidecar_only_text}\"}}\n"),
+    )
+    .expect("write lifecycle sidecar");
+
+    let loaded = Session::load(session_id).expect("load replay fixture");
+    let timeline = export_timeline(&loaded);
+    let replay_events = timeline_to_replay_events(&timeline);
+    let serialized = serde_json::to_string(&timeline).expect("serialize replay timeline");
+    assert!(serialized.contains("ordinary replay transcript"));
+    assert!(!serialized.contains(sidecar_only_text));
+    assert!(!replay_events.is_empty());
 }
 
 #[test]
