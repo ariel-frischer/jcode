@@ -418,6 +418,14 @@ impl App {
     }
 
     pub(super) fn dispatch_command_palette_action(&mut self, action: CommandPaletteAction) {
+        // The palette is a transient action selector, not a replacement for the
+        // composer. Some actions open pickers or execute a slash command through
+        // the normal input path, both of which may temporarily mutate `input`.
+        // Restore the draft after the selected action so every palette entry has
+        // the same non-destructive composer contract.
+        let saved_input = self.input.clone();
+        let saved_cursor_pos = self.cursor_pos;
+
         match action {
             CommandPaletteAction::SlashCommand(command) => {
                 // `/model` and `/models` normally open a preview while typed in the
@@ -425,13 +433,13 @@ impl App {
                 // explicit selection, so open the full picker instead of simulating
                 // typing the command and immediately activating its first row.
                 if matches!(command.as_str(), "/model" | "/models") {
-                    self.open_model_picker();
-                    return;
+                    self.open_model_picker_preserving_input();
+                } else {
+                    self.input = command;
+                    self.cursor_pos = self.input.len();
+                    self.sync_model_picker_preview_from_input();
+                    super::input::handle_enter(self);
                 }
-                self.input = command;
-                self.cursor_pos = self.input.len();
-                self.sync_model_picker_preview_from_input();
-                super::input::handle_enter(self);
             }
             CommandPaletteAction::ProfileSelect(profile) => {
                 self.request_profile_transition(profile);
@@ -453,6 +461,9 @@ impl App {
                 ShortcutAction::ClearView => self.clear_view_terminal_style(),
             },
         }
+
+        self.input = saved_input;
+        self.cursor_pos = saved_cursor_pos;
     }
 
     #[cfg(test)]

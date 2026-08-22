@@ -152,6 +152,24 @@ impl Tool for EditTool {
             &new_content,
         );
 
+        // LSP is opt-in and fail-open. The registry defaults every built-in
+        // server to disabled, so ordinary edits do not start rust-analyzer,
+        // TypeScript, or any other adapter unless the operator explicitly
+        // enables one in user/project configuration.
+        if let Some(cwd) = ctx.working_dir.as_deref()
+            && let Ok(Some(feedback)) = jcode_lsp::writethrough::synchronize_after_edit(
+                &jcode_lsp::LspSessionManager::shared(),
+                cwd,
+                &path,
+                &new_content,
+                0,
+            )
+            .await
+        {
+            body.push_str("\n\nLSP feedback (explicitly enabled):\n");
+            body.push_str(&serde_json::to_string_pretty(&feedback)?);
+        }
+
         Ok(ToolOutput::new(body).with_title(params.file_path.clone()))
     }
 }

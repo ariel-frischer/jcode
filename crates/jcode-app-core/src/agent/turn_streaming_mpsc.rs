@@ -1590,21 +1590,13 @@ impl Agent {
                     match result {
                         Ok(output) => {
                             let output = cap_tool_output_for_history(&tc.name, output);
-                            if tc.name == "todo"
-                                && let Some(closed_groups) = output
-                                    .metadata
-                                    .as_ref()
-                                    .and_then(|metadata| metadata.get("closed_groups"))
-                                && let Ok(groups) = serde_json::from_value::<Vec<Option<String>>>(
-                                    closed_groups.clone(),
-                                )
+                            if let Some((closed_groups, next_pending)) =
+                                Agent::handoff_poke_metadata(&tc.name, &output)
                             {
-                                let next_pending = output
-                                    .metadata
-                                    .as_ref()
-                                    .and_then(|metadata| metadata.get("next_pending"))
-                                    .and_then(serde_json::Value::as_str);
-                                self.maybe_add_handoff_poke(&groups, next_pending);
+                                self.maybe_add_handoff_poke(
+                                    &closed_groups,
+                                    next_pending.as_deref(),
+                                );
                             }
                             let _ = event_tx.send(ServerEvent::ToolDone {
                                 id: tc.id.clone(),

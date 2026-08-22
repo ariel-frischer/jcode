@@ -141,10 +141,9 @@ fn persisted_swarm_state_round_trips_and_marks_running_stale() {
 }
 
 #[test]
-fn ready_headless_member_with_report_stops_without_losing_report() {
-    // A headless worker that finished its task has no process after restart.
-    // Preserve its report, but do not eagerly reconstruct the full Agent just
-    // to keep an idle worker reusable indefinitely.
+fn ready_headless_member_with_report_remains_recoverable() {
+    // A ready headless worker is reusable by its coordinator. Preserve its
+    // ready state so startup recovery reconstructs the Agent after restart.
     let dir = tempfile::TempDir::new().expect("tempdir");
     let _env = test_env(&dir);
 
@@ -176,11 +175,8 @@ fn ready_headless_member_with_report_stops_without_losing_report() {
     let loaded = load_runtime_state();
 
     let recovered = loaded.members.get("session-ready").expect("member");
-    assert_eq!(recovered.status, "stopped");
-    assert_eq!(
-        recovered.detail.as_deref(),
-        Some("idle worker not restored after server restart")
-    );
+    assert_eq!(recovered.status, "ready");
+    assert_eq!(recovered.detail, None);
     assert_eq!(
         recovered.latest_completion_report.as_deref(),
         Some("Done. Built the worker; all tests pass.")
@@ -366,7 +362,7 @@ fn legacy_terminal_member_uses_snapshot_time_as_retention_fallback() {
 }
 
 #[test]
-fn recovery_induced_terminal_status_starts_retention_at_load_time() {
+fn detached_client_recovery_starts_terminal_retention_at_load_time() {
     let (event_tx, _event_rx) = tokio::sync::mpsc::unbounded_channel();
     let member = SwarmMember {
         session_id: "session-ready-recovery".to_string(),
@@ -383,7 +379,7 @@ fn recovery_induced_terminal_status_starts_retention_at_load_time() {
         role: "agent".to_string(),
         joined_at: Instant::now(),
         last_status_change: Instant::now(),
-        is_headless: true,
+        is_headless: false,
         output_tail: None,
         todo_progress: None,
         todo_items: Vec::new(),

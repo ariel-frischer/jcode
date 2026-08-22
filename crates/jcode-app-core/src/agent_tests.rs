@@ -104,6 +104,100 @@ async fn lifecycle_recording_does_not_change_manual_compaction_or_agent_surface(
     }
 }
 
+#[test]
+fn soft_handoff_poke_guidance_distinguishes_milestone_boundaries() {
+    let guidance =
+        super::build_handoff_poke_guidance("research", 0.45, 0.70, Some("implementation"));
+
+    assert!(guidance.contains("session_transition"));
+    assert!(guidance.contains("materially different milestone"));
+    assert!(guidance.contains("same milestone"));
+    assert!(guidance.contains("continue in this session or compact"));
+    assert!(guidance.contains("Next pending item: implementation."));
+}
+
+#[test]
+fn hard_handoff_poke_guidance_requires_checkpoint_before_transition() {
+    let guidance = super::build_handoff_poke_guidance("implementation", 0.75, 0.70, None);
+
+    assert!(guidance.contains("Finish the current acceptance item"));
+    assert!(guidance.contains("checkpoint durable state"));
+    assert!(guidance.contains("session_transition"));
+    assert!(guidance.contains("before starting another milestone"));
+}
+
+#[test]
+fn handoff_poke_guidance_lists_checkpoint_safety_contract() {
+    let guidance = super::build_handoff_poke_guidance("validation", 0.45, 0.70, None);
+
+    for field in [
+        "Goal and current milestone",
+        "constraints and non-goals",
+        "completed and verified progress",
+        "key decisions",
+        "critical context",
+        "unresolved risks",
+        "exact next action",
+        "relevant files",
+        "durable Bead/tracking state",
+        "active-process ownership/recovery state",
+        "Copied todos by default",
+    ] {
+        assert!(
+            guidance.contains(field),
+            "handoff poke lost checkpoint field: {field}"
+        );
+    }
+    assert!(guidance.contains("Do not transition across an active process"));
+}
+
+#[test]
+fn handoff_poke_requires_existing_handoff_policy_flags() {
+    let mut policy = crate::config::session_profile::ResolvedHandoffPolicy {
+        enabled: true,
+        agent_enabled: true,
+        agent_requires_confirmation: false,
+        auto_start: true,
+        max_chain_transitions: 8,
+        poke_enabled: true,
+        poke_soft_floor: 0.40,
+        poke_hard_threshold: 0.70,
+        copy_todos: true,
+        instructions: None,
+    };
+
+    assert!(super::handoff_poke_policy_enabled(&policy));
+    for disable in [
+        |policy: &mut crate::config::session_profile::ResolvedHandoffPolicy| policy.enabled = false,
+        |policy: &mut crate::config::session_profile::ResolvedHandoffPolicy| {
+            policy.agent_enabled = false
+        },
+        |policy: &mut crate::config::session_profile::ResolvedHandoffPolicy| {
+            policy.poke_enabled = false
+        },
+    ] {
+        policy.enabled = true;
+        policy.agent_enabled = true;
+        policy.poke_enabled = true;
+        disable(&mut policy);
+        assert!(!super::handoff_poke_policy_enabled(&policy));
+    }
+}
+
+#[test]
+fn todo_output_metadata_extracts_closed_groups_for_handoff_poke() {
+    let output = ToolOutput::new("updated").with_metadata(serde_json::json!({
+        "closed_groups": ["runtime acceptance"],
+        "next_pending": "implementation",
+    }));
+
+    let (groups, next_pending) = Agent::handoff_poke_metadata("todo", &output)
+        .expect("todo completion metadata should trigger handoff evaluation");
+    assert_eq!(groups, vec![Some("runtime acceptance".to_string())]);
+    assert_eq!(next_pending.as_deref(), Some("implementation"));
+    assert!(Agent::handoff_poke_metadata("bash", &output).is_none());
+}
+
 #[path = "agent_tests/run_safety.rs"]
 mod run_safety;
 

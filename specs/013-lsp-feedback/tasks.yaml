@@ -1,0 +1,71 @@
+tasks:
+  - id: T001
+    phase: foundation
+    title: Add jcode-lsp crate and protocol types
+    status: pending
+    depends_on: []
+    files: [Cargo.toml, crates/jcode-lsp/Cargo.toml, crates/jcode-lsp/src/lib.rs, crates/jcode-lsp/src/protocol.rs, crates/jcode-lsp/src/error.rs]
+    verification: cargo test -p jcode-lsp protocol
+  - id: T002
+    phase: foundation
+    title: Implement bounded JSON-RPC transport
+    status: pending
+    depends_on: [T001]
+    files: [crates/jcode-lsp/src/transport.rs, crates/jcode-lsp/src/transport_tests.rs]
+    verification: cargo test -p jcode-lsp transport
+  - id: T003
+    phase: configuration
+    title: Implement registry precedence and ecosystem catalog
+    status: pending
+    depends_on: [T001]
+    files: [crates/jcode-lsp/src/config.rs, crates/jcode-lsp/src/config_tests.rs]
+    verification: cargo test -p jcode-lsp config
+  - id: T004
+    phase: lifecycle
+    title: Implement server sessions and document synchronization
+    status: pending
+    depends_on: [T002, T003]
+    files: [crates/jcode-lsp/src/session.rs, crates/jcode-lsp/src/session_tests.rs]
+    verification: cargo test -p jcode-lsp session
+  - id: T005
+    phase: feedback
+    title: Add diagnostics normalization, stale rejection, batching, and deferred status
+    status: pending
+    depends_on: [T004]
+    files: [crates/jcode-lsp/src/diagnostics.rs, crates/jcode-lsp/src/writethrough.rs]
+    verification: cargo test -p jcode-lsp diagnostics writethrough
+  - id: T006
+    phase: integration
+    title: Register the lsp app-core tool with bounded actions and profile policy
+    status: pending
+    depends_on: [T004, T005]
+    files: [crates/jcode-app-core/Cargo.toml, crates/jcode-app-core/src/tool/mod.rs, crates/jcode-app-core/src/tool/lsp.rs, crates/jcode-app-core/src/tool/lsp_tests.rs]
+    verification: cargo test -p jcode-app-core lsp
+  - id: T007
+    phase: integration
+    title: Wire edit/write feedback fail-open into existing mutation paths
+    status: pending
+    depends_on: [T005, T006]
+    files: [crates/jcode-app-core/src/tool/edit.rs, crates/jcode-app-core/src/tool/write.rs, crates/jcode-app-core/src/tool/writethrough.rs]
+    verification: cargo test -p jcode-app-core edit lsp
+  - id: T008
+    phase: validation
+    title: Add fake server fixtures and deterministic recordings
+    status: pending
+    depends_on: [T004, T005]
+    files: [crates/jcode-lsp/tests/fake_server.py, crates/jcode-lsp/tests/recordings/]
+    verification: cargo test -p jcode-lsp --all-targets
+  - id: T009
+    phase: validation
+    title: Add LSP documentation and offline benchmark
+    status: pending
+    depends_on: [T006, T007]
+    files: [docs/LSP.md, README.md, scripts/lsp_benchmark.py, scripts/test_lsp_benchmark.py]
+    verification: python3 scripts/test_lsp_benchmark.py
+  - id: T010
+    phase: delivery
+    title: Run focused and repository guardrails, commit, and prepare merge handoff
+    status: pending
+    depends_on: [T008, T009]
+    files: []
+    verification: cargo fmt --check; cargo clippy -p jcode-lsp -p jcode-app-core --tests -- -D warnings; scripts/check_guardrails.sh

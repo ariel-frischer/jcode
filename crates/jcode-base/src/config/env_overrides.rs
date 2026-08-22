@@ -220,6 +220,17 @@ impl Config {
                 self.display.centered = parsed;
             }
         }
+        if let Ok(v) = std::env::var("JCODE_HTML_FILE_OPEN") {
+            match v.trim().to_ascii_lowercase().as_str() {
+                "external" => {
+                    self.display.html_file_open = crate::config::HtmlFileOpenMode::External;
+                }
+                "inline" => {
+                    self.display.html_file_open = crate::config::HtmlFileOpenMode::Inline;
+                }
+                _ => {}
+            }
+        }
         if let Ok(v) = std::env::var("JCODE_DIFF_LINE_WRAP") {
             if let Some(parsed) = parse_env_bool(&v) {
                 self.display.diff_line_wrap = parsed;

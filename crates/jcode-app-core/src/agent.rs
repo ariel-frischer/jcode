@@ -94,6 +94,31 @@ fn stable_json_len<T: serde::Serialize + ?Sized>(value: &T) -> usize {
         .map(|encoded| encoded.len())
         .unwrap_or_default()
 }
+fn handoff_poke_policy_enabled(
+    policy: &crate::config::session_profile::ResolvedHandoffPolicy,
+) -> bool {
+    policy.enabled && policy.agent_enabled && policy.poke_enabled
+}
+fn build_handoff_poke_guidance(
+    group: &str,
+    usage: f32,
+    hard_threshold: f32,
+    next_pending: Option<&str>,
+) -> String {
+    let urgency = if usage >= hard_threshold {
+        "Finish the current acceptance item, checkpoint durable state, then call the `session_transition` tool before starting another milestone."
+    } else {
+        "If the next work is a materially different milestone, checkpoint durable state and call the `session_transition` tool. If the same milestone remains, continue in this session or compact instead."
+    };
+    let next = next_pending
+        .filter(|item| !item.trim().is_empty())
+        .map(|item| format!(" Next pending item: {item}."))
+        .unwrap_or_default();
+    format!(
+        "Handoff available: {group} completed at {:.1}% context. {urgency}{next} Checkpoint fields: Goal and current milestone; constraints and non-goals; completed and verified progress; key decisions; critical context including compaction state; unresolved risks and questions; exact next action; relevant files; durable Bead/tracking state; active-process ownership/recovery state. Copied todos by default. Do not transition across an active process unless its ownership and recovery state are durable.",
+        usage * 100.0,
+    )
+}
 
 fn message_hashes(messages: &[Message]) -> Vec<u64> {
     // Hash the cache-relevant projection, not the raw Message. Raw hashing
@@ -288,6 +313,23 @@ pub struct Agent {
 }
 
 impl Agent {
+    pub(crate) fn handoff_poke_metadata(
+        tool_name: &str,
+        output: &crate::tool::ToolOutput,
+    ) -> Option<(Vec<Option<String>>, Option<String>)> {
+        if tool_name != "todo" {
+            return None;
+        }
+        let metadata = output.metadata.as_ref()?;
+        let closed_groups = metadata.get("closed_groups")?;
+        let groups = serde_json::from_value::<Vec<Option<String>>>(closed_groups.clone()).ok()?;
+        let next_pending = metadata
+            .get("next_pending")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        Some((groups, next_pending))
+    }
+
     pub(crate) fn maybe_add_handoff_poke(
         &mut self,
         closed_groups: &[Option<String>],
@@ -302,7 +344,7 @@ impl Agent {
         ) else {
             return;
         };
-        if !policy.enabled || !policy.poke_enabled {
+        if !handoff_poke_policy_enabled(&policy) {
             return;
         }
         let parent_id = self.session.parent_id.clone();
@@ -333,18 +375,11 @@ impl Agent {
             .iter()
             .find_map(|group| group.as_deref())
             .unwrap_or("the current todo group");
-        let urgency = if usage >= policy.poke_hard_threshold {
-            "Finish the current item, then hand off before starting another milestone."
-        } else {
-            "Consider handing off before starting another milestone."
-        };
-        let next = next_pending
-            .filter(|item| !item.trim().is_empty())
-            .map(|item| format!(" Next pending item: {item}."))
-            .unwrap_or_default();
-        self.current_turn_system_reminder = Some(format!(
-            "Handoff available: {group} completed at {:.1}% context. {urgency}{next}",
-            usage * 100.0,
+        self.current_turn_system_reminder = Some(build_handoff_poke_guidance(
+            group,
+            usage,
+            policy.poke_hard_threshold,
+            next_pending,
         ));
         self.handoff_poke_cooldown = 3;
     }

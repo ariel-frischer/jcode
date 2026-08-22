@@ -82,6 +82,16 @@ Related deferred Bead: `jcode-cdp`.
 
 ## Workflow findings
 
+### `dev-workflow` usage in the frozen sample
+
+The exact 30-file set recorded in `~/.jcode/scratch/recent-jcode-insights/pending.json` contains **5 explicit `dev-workflow` skill loads across 4 sessions**, equal to **13.3% of sampled sessions** at the loader-call level. That is 0.17 loads per sampled session, or roughly one load for every six sessions at the call level. One session loaded it twice; the other three loaded it once. This is an instrumentation count of explicit loader calls, not a complete measure of whether the workflow was applied.
+
+Using the report's eight-session `>3 messages` proxy for substantive activity, 4 of 8 sessions explicitly loaded `dev-workflow` (**50%**). Global `AGENTS.md` already routes tracked mutations to `/dev-workflow` and includes the high-level mode, worktree, root-ownership, and merge-wt rules, so a session could follow the policy without a separate loader call. The count comes from structured assistant `skill_manage` records with `action=load` or `reload` and `name=dev-workflow`, including calls nested inside `batch`. It excludes prose mentions, documentation reads, copied skill results, merge-wt references, and negative instructions such as “do not invoke dev-workflow.” Treat it as a lower bound on workflow adoption unless the sample is reclassified using Bead, worktree, handoff, and merge evidence.
+
+### DAP debugger adoption after `jcode-1j0`
+
+A structured scan of all persisted Jcode session messages timestamped on or after 2026-08-15 found **zero `debugger` tool-use calls**. A full-history scan also found zero structured `debugger` calls. `DAP` and `debugger` terms do appear in session text, but those hits are documentation, instructions, or discussion rather than runtime debugger operations. This supports **no observed post-merge adoption through Jcode's debugger tool**, but it cannot rule out use through another client or direct code-level integration.
+
 ### Add a lifecycle gate before declaring completion
 
 The strongest recurring issue is not task execution. It is ambiguous final state. A session can finish implementation while leaving todos open, validation evidence unstated, a worktree unmerged, or cleanup ownership unclear.

@@ -138,6 +138,9 @@ timeout_secs = 90
 # Diff display mode: "off", "inline" (default), "full-inline", "pinned" (dedicated pane), or "file"
 diff_mode = "inline"
 
+# How clickable local HTML files are opened: "external" (default) or "inline"
+html_file_open = "external"
+
 # Center all content by default (default: false)
 centered = false
 

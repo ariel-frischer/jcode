@@ -6,6 +6,17 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Controls how clickable local HTML files are opened from the transcript.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HtmlFileOpenMode {
+    /// Open the file with the operating system's default application.
+    #[default]
+    External,
+    /// Render the file in jcode's inline file preview.
+    Inline,
+}
+
 /// Display/UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -13,6 +24,9 @@ pub struct DisplayConfig {
     /// How to display file diffs (off/inline/full-inline/pinned/file, default: inline)
     #[serde(deserialize_with = "crate::serde_lenient::lenient_enum")]
     pub diff_mode: DiffDisplayMode,
+    /// How clickable local HTML files are opened (external/inline, default: external).
+    #[serde(deserialize_with = "crate::serde_lenient::lenient_enum")]
+    pub html_file_open: HtmlFileOpenMode,
     /// Legacy: "show_diffs = true/false" maps to diff_mode inline/off
     #[serde(default)]
     pub(crate) show_diffs: Option<bool>,
@@ -131,6 +145,7 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             diff_mode: DiffDisplayMode::default(),
+            html_file_open: HtmlFileOpenMode::default(),
             show_diffs: None,
             pin_images: true,
             pin_todos: true,
@@ -218,7 +233,19 @@ impl DisplayConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::DisplayConfig;
+    use super::{DisplayConfig, HtmlFileOpenMode};
+
+    #[test]
+    fn html_file_open_defaults_to_external_and_accepts_inline_override() {
+        assert_eq!(
+            DisplayConfig::default().html_file_open,
+            HtmlFileOpenMode::External
+        );
+
+        let inline: DisplayConfig = toml::from_str("html_file_open = 'inline'")
+            .expect("inline HTML opener setting should parse");
+        assert_eq!(inline.html_file_open, HtmlFileOpenMode::Inline);
+    }
 
     #[test]
     fn todos_are_pinned_by_default_but_can_be_disabled() {

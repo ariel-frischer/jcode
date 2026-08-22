@@ -41,17 +41,25 @@ drop-in replacement for, or a fully equivalent distribution of, upstream Jcode.
 This section is intentionally limited to additions, behavior changes, and bug
 fixes that I have made or maintained in this fork. It does **not** restate the
 many features that are already part of regular upstream Jcode, such as the
-general swarm, debugger, browser, diagram, and provider surfaces.
+general swarm, browser, diagram, and provider surfaces. It also avoids
+restating the upstream debugger surface; the fork-specific DAP controls below
+are included because they are part of this custom delta.
 
 The clearest examples of my custom delta include:
 
-- **Interactive TUI controls:** a `Ctrl+P` command palette and model-picker
-  flow, including remote-session support, plus related picker behavior such as
-  keeping favorite models at the top and improving model-switch notices.
+- **Interactive TUI controls and file mentions:** a `Ctrl+P` command palette
+  and model-picker flow, including remote-session support, plus related picker
+  behavior such as keeping favorite models at the top, staging useful models
+  before the full catalog arrives, showing clear model-switch notices, and
+  keeping picker loading off the input path. The composer also has an `@`-based
+  fuzzy picker rooted at the session workspace, configurable ignore paths,
+  responsive discovery, and expansion of selected files into model context.
 - **Clickable inline document previews:** click a file shown in an inline
-  tool/diff preview to open or collapse it in the TUI. The fork also fixes
-  relative-path resolution when the displayed path is relative to the session
-  workspace rather than the client process.
+  tool/diff preview or an `@filepath` mention to open or collapse it in the
+  TUI. The fork fixes relative- and home-directory path resolution, detects
+  mentions in inline markup, keeps ordinary file content readable across light
+  and dark themes, and opens HTML mentions externally by default with a
+  configurable override.
 - **Named session profiles:** reusable named policies for a session that bundle
   the provider, model, reasoning effort, tools, skills, and additive
   instructions. Profiles can be selected from the CLI or TUI, inherited by
@@ -66,14 +74,17 @@ The clearest examples of my custom delta include:
 - **Fresh-session handoff and continuation:** a special workflow for moving
   work into a new session while carrying forward the relevant context. It can
   be configured for automatic or agent-directed handoff, preserves summaries
-  and prompt state, and uses startup barriers so input is not sent to the wrong
-  parent or child session. This fork also includes an optional **handoff-poke**:
+  and prompt state, supports generated summaries for no-argument `/handoff`,
+  carries todos by default with an opt-out, and uses startup barriers so input
+  is not sent to the wrong parent or child session. This fork also includes an
+  optional **handoff-poke**:
   when a todo group completes near a configured context threshold, Jcode gives
   the agent a concise advisory reminder with the current context percentage and
   next pending item. It never forces a transition. When enabled, the session
   prompt explains why handoff helps and how to leave a bounded continuation
   prompt with the outcome, decisions, risks, next steps, relevant files, and
-  Bead ID. Configure it under `[handoff]` in `~/.jcode/config.toml`, for example
+  Bead ID, and explicitly points the agent to `session_transition`. Configure
+  it under `[handoff]` in `~/.jcode/config.toml`. For example, set
   `poke_enabled = true`; the default remains disabled.
 
   The rationale is context quality first: completed milestones become irrelevant
@@ -84,18 +95,33 @@ The clearest examples of my custom delta include:
   not an automatic cost optimization. The poke is intentionally advisory so the
   agent can defer handoff when continuity is more valuable.
 - **Headless and session workflow fixes:** safer bounded `jcode run`
-  execution, restored prompt state across resume, and improvements to startup
-  behavior around child-session handoff.
+  execution and one-shot result delivery, restored prompt state across resume,
+  explicit socket handling during startup, and improvements to child-session
+  handoff behavior.
 - **Provider and session fixes:** OpenRouter reported-cost tracking and its
   downstream consumers, safer legacy provider-cost handling, redacted provider
-  failure codes, and fixes that prevent stale provider rerouting on restore.
+  failure codes surfaced through the harness and Go SDK, fixes that prevent
+  stale provider rerouting on restore, safer standard-tier OpenAI request
+  defaults, and bounded, cancellable post-login validation for `jcode login`.
+- **Configurable debugging:** DAP debugger operations, adapter setup and
+  launch transport, policy controls, and CLI/configuration switches for
+  disabling the debugger when it is not wanted.
+- **Experimental LSP feedback:** language-neutral diagnostics, navigation, and
+  edit synchronization based on the Oh My Pi LSP design. Language servers are
+  explicitly opt-in and remain disabled by default to avoid TypeScript/Rust
+  resource overhead. See the [LSP documentation](https://github.com/ariel-frischer/jcode/blob/dev/docs/LSP.md)
+  for configuration and safety details.
 - **Agent-oriented development tools:** the `agentgrep` context-saving search
-  workflow, session librarian and feedback workflows, memory-sidecar work, and
-  the companion Go SDK maintained for this fork.
+  workflow, session-feedback workflows, memory-sidecar work, typed Go SDK event
+  compatibility, side-pane image events, and the companion Go SDK maintained
+  for this fork.
 - **Operational and process fixes:** foreground process-group ownership and
   cancellation cleanup, prevention of orphaned `jcode serve` processes during
-  reinstall, and startup/reload behavior intended for my self-development
-  workflow.
+  reinstall, restoration of terminal modes on signal exit, safe draining of
+  terminal color-query replies, and startup/reload behavior intended for my
+  self-development workflow, including restoration of idle headless swarm
+  workers after reload. Linux compositor launch hotkeys are also explicitly
+  opt-in rather than enabled during setup by default.
 
 This is a representative list, not a claim that every upstream commit is
 absent here or that every item is enabled in every build. The commit history is
@@ -901,6 +927,7 @@ Notes:
 - [Ambient Mode / OpenClaw](docs/AMBIENT_MODE.md)
 - [Browser Provider Protocol](docs/BROWSER_PROVIDER_PROTOCOL.md)
 - [DAP Debugger Operations](docs/DAP.md)
+- [Opt-in LSP Feedback and Diagnostics](docs/LSP.md)
 - [Memory Architecture](docs/MEMORY_ARCHITECTURE.md)
 - [Swarm Architecture](docs/SWARM_ARCHITECTURE.md)
 - [Server Architecture](docs/SERVER_ARCHITECTURE.md)
