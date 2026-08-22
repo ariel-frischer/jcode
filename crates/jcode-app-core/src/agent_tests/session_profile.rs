@@ -1,3 +1,5 @@
+use super::*;
+
 #[tokio::test]
 async fn prompt_overlays_are_agent_local() {
     let provider: Arc<dyn Provider> = Arc::new(DelayedProvider {

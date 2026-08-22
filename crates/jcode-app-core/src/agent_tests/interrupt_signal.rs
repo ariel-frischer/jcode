@@ -1,3 +1,5 @@
+use super::*;
+
 #[tokio::test]
 async fn fire_before_notified_does_not_hang() {
     let sig = InterruptSignal::new();
