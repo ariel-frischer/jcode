@@ -1,7 +1,8 @@
 feature:
   branch: "014-coalesce-selfdev-cargo"
   created: "2026-08-22"
-  status: "Draft"
+  status: "Completed"
+  completed_at: "2026-08-22T12:08:11Z"
   input: "Coalesce and supersede redundant server-owned SelfDevTool Cargo validation for Bead jcode-l89.2. Extend the existing crates/jcode-app-core selfdev build queue, not a second daemon. Exact eligible build, test, and check requests from multiple sessions must share one leader execution and truthful subscriber results. Define a versioned redacted identity covering repository/worktree, source or dirty fingerprint, Cargo.lock, toolchain, action, profile, features, package/target, relevant environment, and normalized arguments. Near misses never coalesce. Revalidate queued work before Cargo gate acquisition so obsolete requests are visibly superseded without terminating unrelated active work. Followers cancel independently; final-subscriber cancellation preserves the existing safe contract. Preserve build, build-reload, test, status, follow-existing-build, cancel-build, progress, reload, failure, and global Cargo-gate behavior. Extend rust-actions/status receipts with queue/gate/execution timing, leader/follower/reuse, cancellation reason, exit, and source identity without secrets or raw source. Add focused concurrency, recovery, activation, and isolated built-binary multi-session validation plus before/after duplicate and latency evidence. Runtime budgets from jcode-l89.1 must not regress. Trace PRIN-002, PRIN-004, PRIN-005, PRIN-006, PRIN-007, PRIN-009, and PRIN-010. Use TDD and surgical changes."
 
 user_stories:
