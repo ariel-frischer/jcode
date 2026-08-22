@@ -42,6 +42,10 @@ jobs:
 
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            if (owner !== '1jehuang' || repo !== 'jcode') {
+              core.info('Fork-local comparison PR; linked upstream issue enforcement is not applicable.');
+              return;
+            }
             const text = `${pr.title || ''}\n\n${pr.body || ''}`;
 
             // Collect candidate issue numbers that belong to THIS repo.

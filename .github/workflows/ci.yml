@@ -2,20 +2,18 @@ name: CI
 
 env:
   JCODE_CI: "1"
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, upstream-review]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, upstream-review]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  CARGO_TERM_COLOR: always
-  SCCACHE_GHA_ENABLED: "true"
 
 jobs:
   quality:
