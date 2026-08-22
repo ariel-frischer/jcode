@@ -110,6 +110,21 @@ fn handoff_poke_requires_existing_handoff_policy_flags() {
         assert!(!super::handoff_poke_policy_enabled(&policy));
     }
 }
+
+#[test]
+fn todo_output_metadata_extracts_closed_groups_for_handoff_poke() {
+    let output = ToolOutput::new("updated").with_metadata(serde_json::json!({
+        "closed_groups": ["runtime acceptance"],
+        "next_pending": "implementation",
+    }));
+
+    let (groups, next_pending) = Agent::handoff_poke_metadata("todo", &output)
+        .expect("todo completion metadata should trigger handoff evaluation");
+    assert_eq!(groups, vec![Some("runtime acceptance".to_string())]);
+    assert_eq!(next_pending.as_deref(), Some("implementation"));
+    assert!(Agent::handoff_poke_metadata("bash", &output).is_none());
+}
+
 #[path = "agent_tests/run_safety.rs"]
 mod run_safety;
 

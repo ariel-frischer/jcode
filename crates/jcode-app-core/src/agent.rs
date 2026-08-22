@@ -311,6 +311,23 @@ pub struct Agent {
 }
 
 impl Agent {
+    pub(crate) fn handoff_poke_metadata(
+        tool_name: &str,
+        output: &crate::tool::ToolOutput,
+    ) -> Option<(Vec<Option<String>>, Option<String>)> {
+        if tool_name != "todo" {
+            return None;
+        }
+        let metadata = output.metadata.as_ref()?;
+        let closed_groups = metadata.get("closed_groups")?;
+        let groups = serde_json::from_value::<Vec<Option<String>>>(closed_groups.clone()).ok()?;
+        let next_pending = metadata
+            .get("next_pending")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        Some((groups, next_pending))
+    }
+
     pub(crate) fn maybe_add_handoff_poke(
         &mut self,
         closed_groups: &[Option<String>],
