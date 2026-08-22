@@ -10,14 +10,14 @@ recorded below. The canonical runtime owner remains the server-side
 
 | AC | Minimal implementation or reused contract | One direct check | Evidence location | Status |
 |---|---|---|---|---|
-| 1. Exact eligible build, test, and check requests share one execution and truthful results. | Add one atomic leader-or-follower claim around `BuildRequest` duplicate lookup plus initial persistence. Reuse `BuildRequestState::Attached` and `follow_existing_build` delivery for followers. Extend this path only to conservative, exact, eligible `selfdev test` Cargo commands. | Multi-threaded `atomic_claim_selects_exactly_one_leader` plus exact build/test/check attachment tests assert one producer, one leader, all other callers are followers, and every caller receives the producer's terminal result. | Focused tests in `crates/jcode-app-core/src/tool/selfdev/tests.rs`; built-binary duplicate scenario receipt in this document under **Built-binary evidence**. | Pending |
-| 2. Near-miss identities never coalesce. | Reuse the existing worktree scope, `SourceState` fingerprint, and exact rendered command. Prefix the key with one visible schema version. Eligibility defaults to independent execution for opaque or ambiguous shell shapes. | Table-driven near-miss tests vary source fingerprint, action, profile, features, package, target, arguments, and unsafe shell shape one dimension at a time and assert distinct leaders/keys. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`, near-miss test output summarized under **Focused validation**. | Pending |
-| 3. Obsolete queued work is visibly superseded without terminating unrelated active work. | Reuse persisted requested `SourceState` and existing source inspection. For eligible test producers only, revalidate after reaching the queue head and before command launch, then persist `Superseded` on drift. | `eligible_test_source_drift_supersedes_before_launch` holds unrelated work active, changes source identity, and asserts no command spawn, an explicit superseded result, and no cancellation signal to unrelated work. | Focused test receipt under **Focused validation**. | Pending |
-| 4. Follower cancellation is independent and the final-subscriber rule remains unchanged. | Reuse server-owned background delivery and existing attached-watcher cancellation behavior. Do not add a second subscriber lifecycle or alter the producer cancellation contract. | Cancellation test attaches at least two callers, cancels one `Attached` follower, and asserts the producer and remaining subscriber complete. Existing cancellation regressions verify final-subscriber behavior. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`, focused cancellation output under **Focused validation**. | Pending |
+| 1. Exact eligible build, test, and check requests share one execution and truthful results. | Add one atomic leader-or-follower claim around `BuildRequest` duplicate lookup plus initial persistence. Reuse `BuildRequestState::Attached` and `follow_existing_build` delivery for followers. Extend this path only to conservative, exact, eligible `selfdev test` Cargo commands. | Multi-threaded `atomic_claim_selects_exactly_one_leader` plus exact build/test/check attachment tests assert one producer, one leader, all other callers are followers, and every caller receives the producer's terminal result. | Focused tests in `crates/jcode-app-core/src/tool/selfdev/tests.rs`; built-binary duplicate scenario receipt in this document under **Built-binary evidence**. | PASS |
+| 2. Near-miss identities never coalesce. | Reuse the existing worktree scope, `SourceState` fingerprint, and exact rendered command. Prefix the key with one visible schema version. Eligibility defaults to independent execution for opaque or ambiguous shell shapes. | Table-driven near-miss tests vary source fingerprint, action, profile, features, package, target, arguments, and unsafe shell shape one dimension at a time and assert distinct leaders/keys. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`, near-miss test output summarized under **Focused validation**. | PASS |
+| 3. Obsolete queued work is visibly superseded without terminating unrelated active work. | Reuse persisted requested `SourceState` and existing source inspection. For eligible test producers only, revalidate after reaching the queue head and before command launch, then persist `Superseded` on drift. | `dirty_source_drift_supersedes_eligible_test_before_launch` holds unrelated work active, changes source identity, and asserts no command spawn, an explicit superseded result, and no cancellation signal to unrelated work. | Focused test receipt under **Focused validation**. | PASS |
+| 4. Follower cancellation is independent and the final-subscriber rule remains unchanged. | Reuse server-owned background delivery and existing attached-watcher cancellation behavior. Do not add a second subscriber lifecycle or alter the producer cancellation contract. | Cancellation test attaches at least two callers, cancels one `Attached` follower, and asserts the producer and remaining subscriber complete. Existing cancellation regressions verify final-subscriber behavior. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`, focused cancellation output under **Focused validation**. | PASS |
 | 5. Public selfdev actions and lifecycle behavior remain backward compatible. | Preserve the existing `build`, `build-reload`, `test`, `status`, `follow-existing-build`, and `cancel-build` handlers, progress polling, notification/wake metadata, failure propagation, and reload source validation. New receipt fields are additive and optional. | Run the existing selfdev module tests plus focused producer failure, status attribution, restart reconciliation, and build-reload tests. The isolated built-binary scenario verifies sessions continue after reload. | Focused command/results under **Focused validation** and runtime receipt under **Built-binary evidence**. | Pending |
 | 6. The global Cargo gate remains the final resource boundary. | Leave `scripts/dev_cargo.sh`, its `flock`, and direct/non-coordinated Cargo wrapping unchanged. Queue coalescing only avoids duplicate producers before they reach the existing gate. | Confirm no diff to `scripts/dev_cargo.sh`; run the existing Cargo-wrapper tests/guardrails and inspect built-binary `rust-actions.jsonl` receipts to verify broad actions remain serialized. | `git diff --exit-code -- scripts/dev_cargo.sh`; focused wrapper tests; redacted action receipt summary under **Measured outcome evidence**. | Pending |
-| 7. Receipts expose bounded identity and lifecycle attribution without sensitive data. | Add only bounded metadata for `identity_version`, leader/follower `role`, `coalesced`, and `duplicate_of`; reuse redacted `SourceState`, request timestamps, terminal state, and existing structured Cargo timing receipts. Never persist raw source, diffs, paths, raw commands beyond existing contracts, secrets, or sensitive environment values. | Serialization/status tests cover every additive field and sentinel secret/raw-source values, asserting the sentinels are absent while terminal failure/supersession remains explicit. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`; redaction result under **Focused validation**. | Pending |
-| 8. Focused tests cover concurrency and lifecycle recovery risks. | Tests are added before implementation and exercise the existing queue seam rather than a mock scheduler or new framework. | Exact-name tests cover atomic claim, build/test/check attachment, near misses, dirty drift, follower cancellation, producer failure, stale persisted ownership/restart reconciliation, status, and build-reload activation. | Exact commands and results under **Focused validation**. | Pending |
+| 7. Receipts expose bounded identity and lifecycle attribution without sensitive data. | Add only bounded metadata for `identity_version`, leader/follower `role`, `coalesced`, and `duplicate_of`; reuse redacted `SourceState`, request timestamps, terminal state, and existing structured Cargo timing receipts. Never persist raw source, diffs, paths, raw commands beyond existing contracts, secrets, or sensitive environment values. | Serialization/status tests cover every additive field and sentinel secret/raw-source values, asserting the sentinels are absent while terminal failure/supersession remains explicit. | `crates/jcode-app-core/src/tool/selfdev/tests.rs`; redaction result under **Focused validation**. | PASS |
+| 8. Focused tests cover concurrency and lifecycle recovery risks. | Tests are added before implementation and exercise the existing queue seam rather than a mock scheduler or new framework. | Exact-name tests cover atomic claim, build/test/check attachment, near misses, dirty drift, follower cancellation, producer failure, stale persisted ownership/restart reconciliation, status, and build-reload activation. | Exact commands and results under **Focused validation**. | PASS |
 | 9. A newly built binary proves multi-session coalescing and post-reload compatibility. | Use the repository's normal binary and server runtime through an isolated socket. Do not inspect the long-lived shared daemon or infer behavior from `cargo build` alone. | Build `target/selfdev/jcode`, resolve and record its executable identity, launch at least two isolated sessions against a private socket, submit duplicate eligible work, verify one underlying action and truthful results, then exercise build-reload and continued session behavior. | **Built-binary evidence** records binary path/hash or commit, socket, session count, request IDs, producer count, reload result, and continued-session observation. | Pending |
 | 10. Before/after efficiency and runtime-budget evidence is reported. | Reuse native `scripts/dev_cargo.sh` receipts and the maintained `jcode-l89.1` runtime-budget workflow. Do not introduce a parallel metrics system. | Compare controlled baseline and changed duplicate scenarios for duplicate-action count, summed Cargo-gate wait, and subscriber edit-to-feedback p50/p95. Run the maintained runtime-budget check against the resolved new binary and compare with the `jcode-l89.1` baseline. | **Measured outcome evidence** and **Runtime-budget evidence** below. | Pending |
 
@@ -26,10 +26,10 @@ recorded below. The canonical runtime owner remains the server-side
 | Principle | Requirement and minimal ownership decision | Direct compliance check | Evidence location | Status |
 |---|---|---|---|---|
 | PRIN-002, Backward-Compatible User and Data Contracts | Existing public actions, arbitrary `selfdev test` commands, persisted defaults, progress, cancellation, failure propagation, and reload behavior stay compatible. Additive persisted/receipt fields default safely when absent. | Existing selfdev module regressions plus legacy/missing-key, arbitrary-shell, status, failure, and build-reload tests. | **Focused validation** and **Built-binary evidence**. | Pending |
-| PRIN-004, Layered Rust Ownership and Dependency Direction | Coordination stays private to `jcode-app-core`'s server-owned queue and reuses dependency-light `SourceState`; no daemon, crate, client authority, protocol duplication, or dependency is added. | Scope-to-diff review plus `scripts/check_dependency_boundaries.py` through canonical guardrails. | **Repository validation**. | Pending |
-| PRIN-005, Focused Behavioral Tests | TDD freezes atomic claim, eligibility, near-miss, stale-source, cancellation, failure, recovery, status, and reload behavior before implementation. | Run exact-name selfdev tests first, then the complete selfdev module test set. | **Focused validation**. | Pending |
-| PRIN-006, Visible Failures and Trust-Boundary Validation | Ambiguous shell input remains independent; source drift, persistence failure, producer failure, cancellation, and supersession are explicit. Metadata is bounded and redacted. | Negative-path eligibility and lifecycle tests plus sentinel secret/raw-source exclusion assertions. | **Focused validation**. | Pending |
-| PRIN-007, Repository Guardrails Are Delivery Gates | Validation is serialized: focused tests, relevant build/check, then canonical guardrails using the current stable toolchain. | `scripts/check_guardrails.sh` after focused validation; use `--skip-slow` only for this documentation-only T001, not final feature delivery. | **Repository validation**. | Pending |
+| PRIN-004, Layered Rust Ownership and Dependency Direction | Coordination stays private to `jcode-app-core`'s server-owned queue and reuses dependency-light `SourceState`; no daemon, crate, client authority, protocol duplication, or dependency is added. | Scope-to-diff review plus `scripts/check_dependency_boundaries.py` through canonical guardrails. | **Repository validation**. | PASS |
+| PRIN-005, Focused Behavioral Tests | TDD freezes atomic claim, eligibility, near-miss, stale-source, cancellation, failure, recovery, status, and reload behavior before implementation. | Run exact-name selfdev tests first, then the complete selfdev module test set. | **Focused validation**. | PASS |
+| PRIN-006, Visible Failures and Trust-Boundary Validation | Ambiguous shell input remains independent; source drift, persistence failure, producer failure, cancellation, and supersession are explicit. Metadata is bounded and redacted. | Negative-path eligibility and lifecycle tests plus sentinel secret/raw-source exclusion assertions. | **Focused validation**. | PASS |
+| PRIN-007, Repository Guardrails Are Delivery Gates | Validation is serialized: focused tests, relevant build/check, then canonical guardrails using the current stable toolchain. | `scripts/check_guardrails.sh` after focused validation; use `--skip-slow` only for this documentation-only T001, not final feature delivery. | **Repository validation**. | PASS with unrelated feature-base failures recorded |
 | PRIN-009, Outcome Ownership and Safe Autonomy | Exact duplicate work is eliminated while cancellation remains subscriber-scoped and stale work never kills unrelated active work. | Multi-session outcome test plus follower cancellation and stale-source survival assertions. | **Focused validation** and **Built-binary evidence**. | Pending |
 | PRIN-010, Measured Efficiency and Runtime Truth | The actual new binary is exercised on an isolated socket; duplicate count, gate wait, feedback latency, and inherited runtime budgets are compared before/after. | Built-binary multi-session scenario and `scripts/bench_runtime_budgets.py` maintained-budget check against the resolved executable. | **Built-binary evidence**, **Measured outcome evidence**, and **Runtime-budget evidence**. | Pending |
 
@@ -68,17 +68,68 @@ execution. Cargo-heavy commands must run serially.
 |---|---|---|
 | Atomic and eligible request tests | `scripts/dev_cargo.sh test -p jcode-app-core tool::selfdev::tests -- --test-threads=1` | PASS: `atomic_claim_selects_exactly_one_leader`, `exact_eligible_cargo_requests_attach_and_propagate_terminal_result`, and build attachment coverage passed. |
 | Near-miss and lifecycle tests | Same serialized module command | PASS: source/command near misses, dirty drift supersession, follower cancellation, producer failure, stale persisted ownership, status reconciliation, and build-reload coverage passed. |
-| Existing selfdev module tests | Same serialized module command; rustc 1.95.0, cargo 1.95.0 | PASS: 45 passed, 0 failed, 0 ignored; no repair required. |
+| Existing selfdev module tests | Same serialized module command; rustc 1.95.0, cargo 1.95.0 | PASS before review: 45 passed in 35.25 s. PASS after the bounded review repair: 46 passed in 34.40 s, including `delivery_metadata_update_preserves_terminal_follower_state`. |
 
 ## Repository validation
 
 | Check | Command | Result |
 |---|---|---|
-| Tasks artifact | `autospec artifact specs/014-coalesce-selfdev-cargo/tasks.yaml` | Pending |
-| Relevant build/check | To be recorded by T009 | Pending |
-| Canonical guardrails | `scripts/check_guardrails.sh` | Pending |
-| Dependency boundaries | Covered by canonical guardrails | Pending |
-| `scripts/dev_cargo.sh` unchanged | `git diff --exit-code -- scripts/dev_cargo.sh` | Pending |
+| Tasks artifact | `autospec artifact specs/014-coalesce-selfdev-cargo/tasks.yaml` | PASS before execution after marking T009 InProgress; final post-completion validation recorded in the T009 commit. |
+| Relevant build/check | `RUSTUP_TOOLCHAIN=stable scripts/dev_cargo.sh check -p jcode-app-core --all-targets --all-features`; `RUSTUP_TOOLCHAIN=stable scripts/dev_cargo.sh build -p jcode-app-core`; post-review `scripts/dev_cargo.sh check -p jcode-app-core --all-targets --all-features` | PASS in 127 s, 188 s, and 6 s respectively; rustc 1.95.0 and cargo 1.95.0. |
+| Format | `cargo fmt --all -- --check` | PASS in 5 s before guardrails and again after the review repair. |
+| Canonical guardrails | `scripts/check_guardrails.sh` | CHANGED SURFACE PASS / UNRELATED FEATURE-BASE FAIL in 1050 s. Format, lockfile, dependency boundaries, wildcard re-exports, desktop frame budget, and onboarding invariants passed. The complete suite reported pre-existing all-target E2E compile errors, unrelated Clippy/warning failures, and unrelated size/panic/swallowed-error ratchet growth. No ratchet baseline was changed. |
+| Changed-surface Clippy | `scripts/dev_cargo.sh clippy -p jcode-app-core --all-targets --all-features -- -D warnings` | Feature code emitted no warning. Command stopped on two `collapsible_if` errors in unchanged `crates/jcode-app-core/src/server/client_lifecycle.rs`; the path is byte-identical to `dev` and absent from the feature diff. |
+| Dependency boundaries | Covered by canonical guardrails | PASS. |
+| CodeGraph affected tests | `git diff --name-only $(git merge-base HEAD dev)...HEAD | codegraph affected -p . --stdin --quiet` | PASS inspection in 5 s. CodeGraph returned a broad cross-repository affected set; the direct selfdev module test remains the acceptance-aligned focused check. The index reported one unrelated pending added file. |
+| `scripts/dev_cargo.sh` unchanged | `git diff --exit-code -- scripts/dev_cargo.sh` | PASS. |
+
+### T009 baseline isolation
+
+The feature diff is limited to the three existing selfdev Rust files and four
+feature artifacts. None of the canonical-guardrail failure paths are in that
+diff. `git diff --exit-code dev --` passed for the representative compile and
+Clippy failure paths `tests/e2e/test_support/mod.rs`,
+`tests/e2e/provider_behavior.rs`,
+`crates/jcode-harness-api-server/src/translate.rs`, and
+`crates/jcode-app-core/src/server/client_lifecycle.rs`. The duplicate
+`active_skill` initializer is self-contained on the feature base. The
+size/panic/swallowed-error failures likewise list no changed production file;
+the changed selfdev test file is not among the oversized-test failures.
+
+### T009 one-pass review
+
+`cr review --agent --base dev --committed` completed in 179 s across all seven
+feature files and returned five findings. The two major findings were valid and
+fixed in one bounded repair: eligible-test followers now emit the same bounded
+`duplicate_of` object shape as build followers, and follower delivery metadata
+is applied to a freshly loaded persisted request so an already-terminal state
+is not overwritten. A focused regression test proves terminal state,
+`completed_at`, and error preservation. Two documentation findings were fixed:
+the exact dirty-source test name and completed focused-evidence statuses. The
+remaining timing concern was not reproduced: the serialized module completed
+46 tests in 34.40 s within its existing deadlines. Per the one-pass contract,
+CodeRabbit was not rerun.
+
+Inline review of the complete feature diff found:
+
+- **Atomicity:** one process-wide mutex covers duplicate lookup plus initial
+  leader/follower persistence and is released before every await, spawn, queue
+  wait, source inspection, or Cargo action.
+- **Cancellation:** the public cancellation handler and final-subscriber
+  behavior are unchanged; cancelling an attached follower leaves the producer
+  running in focused coverage.
+- **Persistence compatibility:** new identity fields retain serde defaults;
+  missing keys remain independent; follower metadata updates preserve terminal
+  lifecycle fields after the bounded repair.
+- **Source drift:** only eligible tests revalidate the persisted requested
+  fingerprint after queue-head acquisition and before command launch, returning
+  explicit `Superseded` without signalling unrelated work.
+- **Secret redaction:** receipts add only the bounded identity version, role,
+  coalescing flag, request/task ownership fields, and existing redacted source
+  fingerprint. Sentinel raw-source and secret values remain absent in tests.
+- **Public behavior:** action schema and dispatch remain unchanged, arbitrary
+  shell shapes remain independently executable, and `scripts/dev_cargo.sh` has
+  no diff.
 
 ## Built-binary evidence
 

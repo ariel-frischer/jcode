@@ -375,10 +375,10 @@ fn assert_coalescing_metadata(
     );
 
     if expected_role == "follower" {
-        let duplicate_of = metadata["duplicate_of"]
-            .as_str()
-            .or_else(|| metadata["duplicate_of"]["request_id"].as_str());
-        assert_eq!(duplicate_of, Some(leader_request_id));
+        assert_eq!(
+            metadata["duplicate_of"]["request_id"].as_str(),
+            Some(leader_request_id)
+        );
     }
 
     let serialized = serde_json::to_string(metadata).expect("serialize metadata");
@@ -388,6 +388,39 @@ fn assert_coalescing_metadata(
             "coalescing metadata exposed forbidden value: {forbidden}"
         );
     }
+}
+
+#[test]
+fn delivery_metadata_update_preserves_terminal_follower_state() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let mut request = request_fixture(
+        "completed-follower",
+        BuildRequestState::Completed,
+        chrono::Utc::now().to_rfc3339(),
+    );
+    request.completed_at = Some("terminal-time".to_string());
+    request.error = Some("producer result".to_string());
+    request.save().expect("save terminal follower");
+
+    BuildRequest::save_delivery_metadata(
+        &request.request_id,
+        "watcher-task",
+        "/tmp/watcher-output",
+        "/tmp/watcher-status",
+    )
+    .expect("save watcher delivery metadata");
+
+    let reloaded = BuildRequest::load(&request.request_id)
+        .expect("load follower")
+        .expect("follower exists");
+    assert_eq!(reloaded.state, BuildRequestState::Completed);
+    assert_eq!(reloaded.completed_at.as_deref(), Some("terminal-time"));
+    assert_eq!(reloaded.error.as_deref(), Some("producer result"));
+    assert_eq!(reloaded.background_task_id.as_deref(), Some("watcher-task"));
+    assert_eq!(reloaded.output_file.as_deref(), Some("/tmp/watcher-output"));
+    assert_eq!(reloaded.status_file.as_deref(), Some("/tmp/watcher-status"));
 }
 
 #[test]

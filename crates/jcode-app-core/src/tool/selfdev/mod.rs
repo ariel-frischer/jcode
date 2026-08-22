@@ -152,10 +152,7 @@ struct BuildRequest {
 
 enum BuildRequestClaim {
     Leader(BuildRequest),
-    Follower {
-        request: BuildRequest,
-        leader: BuildRequest,
-    },
+    Follower { leader: BuildRequest },
 }
 
 impl BuildRequest {
@@ -182,6 +179,20 @@ impl BuildRequest {
             let _ = Self::archive_old_terminal_requests();
         }
         Ok(())
+    }
+
+    fn save_delivery_metadata(
+        request_id: &str,
+        task_id: &str,
+        output_file: &str,
+        status_file: &str,
+    ) -> Result<()> {
+        let mut request = Self::load(request_id)?
+            .ok_or_else(|| anyhow::anyhow!("Self-dev request {} disappeared", request_id))?;
+        request.background_task_id = Some(task_id.to_string());
+        request.output_file = Some(output_file.to_string());
+        request.status_file = Some(status_file.to_string());
+        request.save()
     }
 
     fn is_terminal(&self) -> bool {
@@ -335,7 +346,7 @@ impl BuildRequest {
             request.last_progress = Some("attached to existing build".to_string());
             request.attached_to_request_id = Some(leader.request_id.clone());
             request.save()?;
-            return Ok(BuildRequestClaim::Follower { request, leader });
+            return Ok(BuildRequestClaim::Follower { leader });
         }
 
         request.save()?;

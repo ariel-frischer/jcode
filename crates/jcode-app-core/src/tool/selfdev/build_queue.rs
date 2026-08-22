@@ -782,10 +782,7 @@ export -f cargo
 
         let claim = BuildRequest::claim_leader_or_follower(request)?;
         let mut request = match claim {
-            BuildRequestClaim::Follower {
-                mut request,
-                leader: existing,
-            } => {
+            BuildRequestClaim::Follower { leader: existing } => {
                 let request_id_for_task = request_id.clone();
                 let existing_request_id = existing.request_id.clone();
                 let info = background::global()
@@ -806,10 +803,12 @@ export -f cargo
                     )
                     .await;
 
-                request.background_task_id = Some(info.task_id.clone());
-                request.output_file = Some(info.output_file.display().to_string());
-                request.status_file = Some(info.status_file.display().to_string());
-                request.save()?;
+                BuildRequest::save_delivery_metadata(
+                    &request_id,
+                    &info.task_id,
+                    &info.output_file.display().to_string(),
+                    &info.status_file.display().to_string(),
+                )?;
 
                 let delivery = if wake {
                     "The requesting agent will be woken when the existing build finishes."
@@ -1203,10 +1202,7 @@ export -f cargo
 
         let claim = BuildRequest::claim_leader_or_follower(request)?;
         let mut request = match claim {
-            BuildRequestClaim::Follower {
-                mut request,
-                leader: existing,
-            } => {
+            BuildRequestClaim::Follower { leader: existing } => {
                 let request_id_for_task = request_id.clone();
                 let existing_request_id = existing.request_id.clone();
                 let info = background::global()
@@ -1227,10 +1223,12 @@ export -f cargo
                     )
                     .await;
 
-                request.background_task_id = Some(info.task_id.clone());
-                request.output_file = Some(info.output_file.display().to_string());
-                request.status_file = Some(info.status_file.display().to_string());
-                request.save()?;
+                BuildRequest::save_delivery_metadata(
+                    &request_id,
+                    &info.task_id,
+                    &info.output_file.display().to_string(),
+                    &info.status_file.display().to_string(),
+                )?;
 
                 let delivery = if wake {
                     "The requesting agent will be woken when the existing test finishes."
@@ -1256,7 +1254,19 @@ export -f cargo
                     "identity_version": COALESCING_IDENTITY_VERSION,
                     "role": "follower",
                     "coalesced": true,
-                    "duplicate_of": existing.request_id,
+                    "duplicate_of": {
+                        "request_id": existing.request_id,
+                        "task_id": existing.background_task_id,
+                        "session_id": existing.session_id,
+                        "session_short_name": existing.session_short_name,
+                        "session_title": existing.session_title,
+                        "reason": existing.reason,
+                        "version": existing.version,
+                        "source_fingerprint": existing
+                            .requested_source
+                            .as_ref()
+                            .map(|source| source.fingerprint.clone()),
+                    },
                     "request_id": request_id,
                     "task_id": info.task_id,
                     "output_file": info.output_file.to_string_lossy(),
