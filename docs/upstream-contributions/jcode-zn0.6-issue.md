@@ -115,6 +115,7 @@ Test-first evidence on the actual upstream-based worktree:
    - existing plain/JSON/NDJSON session-cleanup test: 1 passed
    - existing resumed-session cleanup test: 1 passed
    - existing provider-error cleanup test: 1 passed
+   - `max_turns_bounds_all_one_shot_output_modes`: 1 passed, exercising a real mock-provider turn through plain, JSON, and NDJSON modes, asserting the configured stop reason and closed session in each mode
 5. `JCODE_IN_DEV_CARGO=1 cargo fmt -p jcode -- --check` passed.
 6. `JCODE_IN_DEV_CARGO=1 ./scripts/dev_cargo.sh clippy -p jcode --lib --no-deps` passed. The only emitted warning was pre-existing dead-code noise in `jcode-harness-api-server`.
 7. `JCODE_IN_DEV_CARGO=1 ./scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode` passed.
