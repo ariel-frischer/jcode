@@ -1,6 +1,78 @@
 use super::*;
 
 impl SelfDevTool {
+    const MAX_TEST_PREFLIGHT_OUTPUT_BYTES: usize = 64 * 1024;
+
+    fn sanitize_test_preflight(value: Value) -> Option<Value> {
+        fn bounded_string(value: &Value, max_len: usize) -> Option<Value> {
+            let text = value.as_str()?.trim();
+            (!text.is_empty() && text.len() <= max_len).then(|| Value::String(text.to_string()))
+        }
+
+        let object = value.as_object()?;
+        let schema_version = bounded_string(object.get("schema_version")?, 32)?;
+        let decision = object.get("decision")?.as_str()?;
+        if !matches!(decision, "matches" | "unknown" | "empty" | "proven_empty") {
+            return None;
+        }
+
+        let mut sanitized = serde_json::Map::new();
+        sanitized.insert("schema_version".to_string(), schema_version);
+        sanitized.insert("decision".to_string(), Value::String(decision.to_string()));
+        for (field, max_len) in [("reason", 512), ("proof_provenance", 256)] {
+            if let Some(value) = object.get(field) {
+                sanitized.insert(field.to_string(), bounded_string(value, max_len)?);
+            }
+        }
+
+        if let Some(scope) = object.get("effective_scope") {
+            let scope = scope.as_object()?;
+            let mut clean_scope = serde_json::Map::new();
+            for field in [
+                "source_fingerprint",
+                "package",
+                "target",
+                "harness",
+                "discovery_id",
+                "filter",
+            ] {
+                if let Some(value) = scope.get(field) {
+                    clean_scope.insert(field.to_string(), bounded_string(value, 256)?);
+                }
+            }
+            if let Some(features) = scope.get("features") {
+                let features = features.as_array()?;
+                if features.len() > 64 {
+                    return None;
+                }
+                let clean = features
+                    .iter()
+                    .map(|value| bounded_string(value, 128))
+                    .collect::<Option<Vec<_>>>()?;
+                clean_scope.insert("features".to_string(), Value::Array(clean));
+            }
+            for field in ["exact", "ignored"] {
+                if let Some(value) = scope.get(field) {
+                    clean_scope.insert(field.to_string(), Value::Bool(value.as_bool()?));
+                }
+            }
+            sanitized.insert("effective_scope".to_string(), Value::Object(clean_scope));
+        }
+
+        if let Some(names) = object.get("matched_test_names") {
+            let names = names.as_array()?;
+            if names.len() > 100 {
+                return None;
+            }
+            let clean = names
+                .iter()
+                .map(|value| bounded_string(value, 256))
+                .collect::<Option<Vec<_>>>()?;
+            sanitized.insert("matched_test_names".to_string(), Value::Array(clean));
+        }
+        Some(Value::Object(sanitized))
+    }
+
     async fn test_preflight(
         repo_dir: &Path,
         command: &str,
@@ -8,26 +80,36 @@ impl SelfDevTool {
     ) -> Option<Value> {
         let script = std::env::var_os("JCODE_RUST_VALIDATION_SCOPE_SCRIPT")
             .filter(|value| !value.is_empty())?;
-        let output = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            tokio::process::Command::new("python3")
-                .arg(script)
-                .current_dir(repo_dir)
-                .env("JCODE_TEST_PREFLIGHT_COMMAND", command)
-                .env(
-                    "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT",
-                    &requested_source.fingerprint,
-                )
-                .output(),
-        )
+        let mut child = tokio::process::Command::new("python3")
+            .arg(script)
+            .current_dir(repo_dir)
+            .env("JCODE_TEST_PREFLIGHT_COMMAND", command)
+            .env(
+                "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT",
+                &requested_source.fingerprint,
+            )
+            .kill_on_drop(true)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let stdout = child.stdout.take()?;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut bytes = Vec::new();
+            stdout
+                .take((Self::MAX_TEST_PREFLIGHT_OUTPUT_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)
+                .await?;
+            let status = child.wait().await?;
+            Ok::<_, std::io::Error>((status, bytes))
+        })
         .await
         .ok()?
         .ok()?;
-        if !output.status.success() {
+        if !result.0.success() || result.1.len() > Self::MAX_TEST_PREFLIGHT_OUTPUT_BYTES {
             return None;
         }
-
-        serde_json::from_slice::<Value>(&output.stdout).ok()
+        Self::sanitize_test_preflight(serde_json::from_slice::<Value>(&result.1).ok()?)
     }
 
     fn proven_empty_test_output(mut preflight: Value, command: &str) -> Option<ToolOutput> {
@@ -1341,7 +1423,7 @@ export -f cargo
                     "status_file": info.status_file.to_string_lossy(),
                     "command": shell_command.display,
                 });
-                if let Some(preflight) = test_preflight.as_ref() {
+                if let Some(preflight) = existing.test_preflight.as_ref() {
                     metadata["test_preflight"] = preflight.clone();
                 }
                 return Ok(ToolOutput::new(output).with_metadata(metadata));

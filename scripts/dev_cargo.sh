@@ -517,7 +517,8 @@ resolve_focused_validation_scope() {
   [[ -n "$affected" ]] || return 0
 
   local resolver="${JCODE_DEV_CARGO_SCOPE_RESOLVER:-$repo_root/scripts/rust_validation_scope.py}"
-  local explicit_json result_json force_broad="false"
+  local explicit_json resolver_explicit_json result_json force_broad="false"
+  local broad_reason="explicit broad or release-sensitive Cargo request"
   local -a affected_paths=()
   while IFS= read -r path; do
     [[ -n "$path" ]] && affected_paths+=("$path")
@@ -525,14 +526,27 @@ resolve_focused_validation_scope() {
   [[ ${#affected_paths[@]} -gt 0 ]] || return 0
 
   explicit_json=$(cargo_scope_explicit_json "${cargo_argv[@]}")
+  resolver_explicit_json="$explicit_json"
+  case "${JCODE_DEV_FEATURE_PROFILE:-default}" in
+    ""|default) ;;
+    *)
+      # Repository feature profiles describe root-package features. They are not
+      # safe to apply to an inferred leaf package that may not own those names.
+      resolver_explicit_json='{}'
+      force_broad="true"
+      broad_reason="configured feature profile requires broad validation"
+      ;;
+  esac
   if cargo_request_requires_broad_scope "${cargo_argv[@]}"; then
     force_broad="true"
   fi
   result_json=$("$resolver" --workspace-root "$repo_root" \
-    --explicit-json "$explicit_json" --defaults-json '{}' "${affected_paths[@]}")
+    --explicit-json "$resolver_explicit_json" --defaults-json '{}' "${affected_paths[@]}")
 
   validation_scope_json=$(JCODE_SCOPE_RESULT="$result_json" \
-    JCODE_SCOPE_FORCE_BROAD="$force_broad" python3 - <<'PY'
+    JCODE_SCOPE_FORCE_BROAD="$force_broad" \
+    JCODE_SCOPE_BROAD_REASON="$broad_reason" \
+    JCODE_SCOPE_CONFIGURED_EXPLICIT="$explicit_json" python3 - <<'PY'
 import json
 import os
 import sys
@@ -541,16 +555,24 @@ result = json.loads(os.environ["JCODE_SCOPE_RESULT"])
 effective = dict(result.get("effective_scope") or {})
 source = result.get("resolution_source", "unknown")
 fallback = result.get("fallback_reason")
+configured_explicit = json.loads(os.environ["JCODE_SCOPE_CONFIGURED_EXPLICIT"])
 if os.environ["JCODE_SCOPE_FORCE_BROAD"] == "true" and effective.get("mode") != "broad":
-    effective.update({"mode": "broad", "packages": [], "targets": []})
+    effective.update({
+        "mode": "broad",
+        "packages": [],
+        "targets": [],
+        "features": configured_explicit.get("features", []),
+        "no_default_features": configured_explicit.get("no_default_features", False),
+        "all_features": configured_explicit.get("all_features", False),
+    })
     source = "conservative_fallback"
-    fallback = "explicit broad or release-sensitive Cargo request"
+    fallback = os.environ["JCODE_SCOPE_BROAD_REASON"]
 
 configured_inputs = result.get("configured_inputs") or {
     "explicit": result.get("explicit_inputs") or {},
     "defaults": result.get("defaults") or {},
 }
-explicit = configured_inputs.get("explicit") or {}
+explicit = configured_explicit
 defaults = configured_inputs.get("defaults") or {}
 configured = {
     "mode": defaults.get("mode", "broad"),

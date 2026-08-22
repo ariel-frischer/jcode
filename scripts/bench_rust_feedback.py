@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -523,11 +525,32 @@ def _validate_declared_command(
     declared = scenario.get("commands")
     if declared is None and "command" in scenario:
         declared = [scenario["command"]]
-    if declared is not None:
-        allowed = [list(item) for item in _list(declared, "scenario.commands")]
-        if argv not in allowed:
-            _fail("command", "is not declared by the selected matrix scenario")
+    if declared is None:
+        _fail("scenario", "must declare command or commands before execution")
+    allowed = [list(item) for item in _list(declared, "scenario.commands")]
+    if argv not in allowed:
+        _fail("command", "is not declared by the selected matrix scenario")
     return argv
+
+
+def _stop_process_tree(process: subprocess.Popen[bytes]) -> None:
+    """Terminate the isolated process group, with a direct-process fallback."""
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except (AttributeError, OSError):
+        process.terminate()
+    try:
+        process.wait(timeout=0.2)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (AttributeError, OSError):
+        process.kill()
+    process.wait()
 
 
 def run_scenario(
@@ -588,6 +611,7 @@ def run_scenario(
 
     samples: list[dict[str, Any]] = []
     valid_samples = 0
+    retry_of_attempt: int | None = None
     with _CARGO_SCENARIO_LOCK:
         for attempt in range(1, maximum_attempts + 1):
             execution_started = time.monotonic()
@@ -611,11 +635,7 @@ def run_scenario(
                     _merge_resource_observation(peaks, probe(process.pid))
                     if time.monotonic() - execution_started >= timeout_seconds:
                         timed_out = True
-                        process.terminate()
-                        try:
-                            process.wait(timeout=0.2)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
+                        _stop_process_tree(process)
                         break
                     time.sleep(0.01)
                 _merge_resource_observation(peaks, probe(process.pid))
@@ -623,11 +643,7 @@ def run_scenario(
             except KeyboardInterrupt:
                 interrupted = True
                 if process is not None and process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=0.2)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
+                    _stop_process_tree(process)
                 exit_status = 130
             except OSError as error:
                 spawn_error = error
@@ -657,7 +673,7 @@ def run_scenario(
                 valid = True
                 validity_reason = "completed_without_interference"
 
-            is_retry = attempt > 1
+            is_retry = retry_of_attempt is not None
             samples.append(
                 {
                     "scenario_id": scenario_id,
@@ -666,9 +682,9 @@ def run_scenario(
                     "validity_reason": validity_reason,
                     "retry": {
                         "is_retry": is_retry,
-                        "retry_of_attempt": attempt - 1
+                        "retry_of_attempt": retry_of_attempt
                         if is_retry
-                        else _not_applicable("first attempt"),
+                        else _not_applicable("planned sample"),
                     },
                     "metrics": {
                         "wall_time_ms": execution_time_ms + queue_ms + gate_ms,
@@ -683,16 +699,19 @@ def run_scenario(
                         ),
                         "cache": cache,
                         "exit_status": exit_status,
-                        "retry_count": attempt - 1,
+                        "retry_count": int(is_retry),
                     },
                 }
             )
             if valid:
                 valid_samples += 1
+                retry_of_attempt = None
                 if valid_samples >= minimum_valid:
                     break
             elif interrupted or not retry_invalid:
                 break
+            else:
+                retry_of_attempt = attempt
     return samples
 
 
@@ -762,10 +781,12 @@ def _validate_aggregates(raw_aggregates: Any, samples: Sequence[Mapping[str, Any
     for scenario_id, raw_aggregate in aggregates.items():
         path = f"receipt.aggregates.{scenario_id}"
         aggregate = _mapping(raw_aggregate, path)
-        _required(aggregate, {"valid_sample_count", "p50_wall_time_ms", "p95_wall_time_ms"}, path)
+        if set(aggregate) != set(expected[scenario_id]):
+            _fail(
+                path,
+                "must contain every aggregate reproducible from retained raw samples",
+            )
         for field, value in aggregate.items():
-            if field not in expected[scenario_id]:
-                _fail(f"{path}.{field}", "unknown or non-reproducible aggregate field")
             if value != expected[scenario_id][field]:
                 _fail(f"{path}.{field}", f"does not match retained raw samples; expected {expected[scenario_id][field]!r}")
 
@@ -862,8 +883,23 @@ def validate_receipts_compatible(baseline: Mapping[str, Any], candidate: Mapping
     validate_receipt(candidate)
     baseline_identity = _mapping(baseline["run_identity"], "baseline.run_identity")
     candidate_identity = _mapping(candidate["run_identity"], "candidate.run_identity")
-    compared_fields = ("source_revision", "dirty_fingerprint", "lockfile_fingerprint", "toolchain", "host_conditions", "effective_configuration", "matrix_version")
+    compared_fields = ("source_revision", "dirty_fingerprint", "lockfile_fingerprint", "toolchain", "host_conditions", "matrix_version")
     differences = [field for field in compared_fields if baseline_identity[field] != candidate_identity[field]]
+    baseline_boundary = _mapping(baseline["experiment_boundary"], "baseline.experiment_boundary")
+    candidate_boundary = _mapping(candidate["experiment_boundary"], "candidate.experiment_boundary")
+    baseline_controlled = baseline_boundary.get("controlled_configuration_fields", [])
+    candidate_controlled = candidate_boundary.get("controlled_configuration_fields", [])
+    for label, fields in (("baseline", baseline_controlled), ("candidate", candidate_controlled)):
+        if not isinstance(fields, list) or any(not isinstance(field, str) or not field for field in fields):
+            _fail(f"{label}.experiment_boundary.controlled_configuration_fields", "must be a list of non-empty strings")
+    controlled = set(baseline_controlled) if baseline_controlled == candidate_controlled else set()
+    baseline_configuration = dict(_mapping(baseline_identity["effective_configuration"], "baseline.run_identity.effective_configuration"))
+    candidate_configuration = dict(_mapping(candidate_identity["effective_configuration"], "candidate.run_identity.effective_configuration"))
+    for field in controlled:
+        baseline_configuration.pop(field, None)
+        candidate_configuration.pop(field, None)
+    if baseline_configuration != candidate_configuration:
+        differences.append("effective_configuration")
     if not differences:
         return
     disclosure = candidate.get("environment_compatibility")

@@ -357,6 +357,22 @@ run_dev_cargo fallback 'Cargo.lock' check --quiet
 assert_last_cargo_argv '["check","--quiet"]'
 assert_scope_receipt conservative_fallback broad '[]' '[]' '[]'
 
+# Repository feature profiles remain broad under affected-path narrowing because
+# their root-package feature names may not belong to the inferred leaf package.
+for profile_case in \
+  'minimal|["check","--quiet","--no-default-features"]|[]' \
+  'none|["check","--quiet","--no-default-features"]|[]' \
+  'pdf|["check","--quiet","--no-default-features","--features","pdf"]|["pdf"]' \
+  'embeddings|["check","--quiet","--no-default-features","--features","embeddings"]|["embeddings"]' \
+  'full|["check","--quiet","--features","embeddings,pdf,bedrock"]|["embeddings","pdf","bedrock"]'; do
+  IFS='|' read -r profile expected_argv expected_features <<<"$profile_case"
+  reset_logs
+  JCODE_DEV_FEATURE_PROFILE="$profile" run_dev_cargo inferred \
+    'crates/alpha/src/lib.rs' check --quiet
+  assert_last_cargo_argv "$expected_argv"
+  assert_scope_receipt conservative_fallback broad '[]' '[]' "$expected_features"
+done
+
 # Resolver conflicts fail before Cargo launch and remain actionable.
 reset_logs
 if run_dev_cargo conflict 'crates/alpha/src/telemetry/mod.rs' check \

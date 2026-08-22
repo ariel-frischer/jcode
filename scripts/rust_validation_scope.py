@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
@@ -597,7 +598,7 @@ def resolve_validation_scope(
             explicit_inputs=explicit_original,
             defaults=defaults_original,
             affected_paths=paths,
-            effective_scope=_broad_scope(defaults_original),
+            effective_scope=_broad_scope(defaults_original, explicit),
             resolution_source="conservative_fallback",
             fallback_reason="cross-package affected paths require broad validation",
         )
@@ -725,7 +726,39 @@ def _mapping_json(value: str | None, label: str) -> dict[str, object]:
     return parsed
 
 
+def _test_preflight_from_environment() -> dict[str, object] | None:
+    """Evaluate an explicitly supplied discovery snapshot for selfdev preflight."""
+    if "JCODE_TEST_PREFLIGHT_COMMAND" not in os.environ:
+        return None
+    snapshot_json = os.environ.get("JCODE_TEST_DISCOVERY_SNAPSHOT_JSON")
+    request_json = os.environ.get("JCODE_TEST_DISCOVERY_REQUEST_JSON")
+    if not snapshot_json or not request_json:
+        raise ValueError(
+            "test preflight requires JCODE_TEST_DISCOVERY_SNAPSHOT_JSON and "
+            "JCODE_TEST_DISCOVERY_REQUEST_JSON"
+        )
+    snapshot = _mapping_json(snapshot_json, "test discovery snapshot")
+    request = _mapping_json(request_json, "test discovery request")
+    source_fingerprint = os.environ.get(
+        "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT", ""
+    ).strip()
+    if not source_fingerprint:
+        raise ValueError("test preflight source fingerprint is required")
+    request["source_fingerprint"] = source_fingerprint
+    return evaluate_test_discovery_snapshot(snapshot, request)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        preflight = _test_preflight_from_environment()
+    except ValueError as error:
+        print(f"rust-validation-scope: {error}", file=sys.stderr)
+        return 2
+    if preflight is not None:
+        json.dump(preflight, sys.stdout, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", help="repository-relative affected paths")
     parser.add_argument("--workspace-root", default=".")

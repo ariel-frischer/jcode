@@ -6,9 +6,11 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -172,8 +174,24 @@ def valid_receipt() -> dict[str, object]:
         "aggregates": {
             "focused_test": {
                 "valid_sample_count": 1,
+                "invalid_sample_count": 0,
+                "retry_sample_count": 0,
                 "p50_wall_time_ms": 1250,
                 "p95_wall_time_ms": 1250,
+                "p50_execution_time_ms": 1100,
+                "p95_execution_time_ms": 1100,
+                "p50_queue_time_ms": 80,
+                "p95_queue_time_ms": 80,
+                "p50_gate_time_ms": 70,
+                "p95_gate_time_ms": 70,
+                "p50_peak_rss_bytes": 500_000_000,
+                "p95_peak_rss_bytes": 500_000_000,
+                "p50_swap_bytes": 0,
+                "p95_swap_bytes": 0,
+                "exit_statuses": [0],
+                "cache_observations": [
+                    not_applicable("cache disabled for this lane")
+                ],
             }
         },
         "action_counts": {
@@ -244,6 +262,19 @@ def receipt_with_wall_times(wall_times_ms: list[int]) -> dict[str, object]:
             "retry_sample_count": 0,
             "p50_wall_time_ms": p50,
             "p95_wall_time_ms": sorted_times[p95_index],
+            "p50_execution_time_ms": 1100,
+            "p95_execution_time_ms": 1100,
+            "p50_queue_time_ms": 80,
+            "p95_queue_time_ms": 80,
+            "p50_gate_time_ms": 70,
+            "p95_gate_time_ms": 70,
+            "p50_peak_rss_bytes": 500_000_000,
+            "p95_peak_rss_bytes": 500_000_000,
+            "p50_swap_bytes": 0,
+            "p95_swap_bytes": 0,
+            "exit_statuses": [0] * len(sorted_times),
+            "cache_observations": [not_applicable("cache disabled for this lane")]
+            * len(sorted_times),
         }
     }
     return receipt
@@ -508,15 +539,7 @@ class AggregateContractTests(unittest.TestCase):
             benchmark_sample(300, attempt=3),
             benchmark_sample(500, attempt=4),
         ]
-        receipt["aggregates"] = {
-            "focused_test": {
-                "valid_sample_count": 3,
-                "invalid_sample_count": 1,
-                "retry_sample_count": 1,
-                "p50_wall_time_ms": 300,
-                "p95_wall_time_ms": 500,
-            }
-        }
+        receipt["aggregates"] = self.module.aggregate_samples(receipt["samples"])
         self.module.validate_receipt(receipt)
         self.assertEqual(
             "invalidated_by_host_interference",
@@ -535,6 +558,12 @@ class AggregateContractTests(unittest.TestCase):
                 invalid["aggregates"]["focused_test"][field] = incorrect_value
                 self.assert_invalid_receipt(invalid)
 
+    def test_rejects_incomplete_reproducible_aggregates(self) -> None:
+        receipt = receipt_with_wall_times([100, 200, 300])
+        del receipt["aggregates"]["focused_test"]["p95_execution_time_ms"]
+
+        self.assert_invalid_receipt(receipt)
+
 
 class RunnerContractTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -550,9 +579,11 @@ class RunnerContractTests(unittest.TestCase):
         **kwargs: object,
     ) -> list[dict[str, object]]:
         with tempfile.TemporaryDirectory() as temp_dir:
+            command = [sys.executable, "-c", code]
+            fixture["commands"] = [command]
             return self.module.run_scenario(
                 fixture,
-                [sys.executable, "-c", code],
+                command,
                 cwd=Path(temp_dir),
                 **kwargs,
             )
@@ -620,6 +651,46 @@ class RunnerContractTests(unittest.TestCase):
         self.assertIn("timeout", sample["validity_reason"])
         self.assertIsInstance(sample["metrics"]["exit_status"], int)
 
+    def test_scenario_without_a_declared_command_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "declare command"):
+            self.module.run_scenario(
+                runner_scenario(),
+                [sys.executable, "-c", "pass"],
+                cwd=Path.cwd(),
+            )
+
+    @unittest.skipUnless(sys.platform != "win32", "process groups require POSIX")
+    def test_timeout_reaps_descendant_process_group(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            child_pid_path = Path(temp_dir) / "child.pid"
+            code = (
+                "import pathlib, subprocess, time; "
+                "child=subprocess.Popen(['sleep', '60']); "
+                f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid)); "
+                "time.sleep(60)"
+            )
+            fixture = runner_scenario(timeout_seconds=0.1)
+            command = [sys.executable, "-c", code]
+            fixture["commands"] = [command]
+            self.module.run_scenario(fixture, command, cwd=Path(temp_dir))
+            child_pid = int(child_pid_path.read_text())
+            for _ in range(50):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail(f"timed-out descendant process {child_pid} survived")
+
+    def test_planned_valid_samples_are_not_reported_as_retries(self) -> None:
+        samples = self.run_fixture(
+            runner_scenario(minimum_valid_samples=3, maximum_attempts=3),
+            "pass",
+        )
+        self.assertEqual([False, False, False], [s["retry"]["is_retry"] for s in samples])
+        self.assertEqual([0, 0, 0], [s["metrics"]["retry_count"] for s in samples])
+
     def test_invalid_attempt_is_retained_and_retried(self) -> None:
         fixture = runner_scenario(minimum_valid_samples=1, maximum_attempts=2)
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -630,9 +701,11 @@ class RunnerContractTests(unittest.TestCase):
                 "attempt=int(p.read_text())+1 if p.exists() else 1; "
                 "p.write_text(str(attempt)); sys.exit(9 if attempt == 1 else 0)"
             )
+            command = [sys.executable, "-c", code]
+            fixture["commands"] = [command]
             samples = self.module.run_scenario(
                 fixture,
-                [sys.executable, "-c", code],
+                command,
                 cwd=Path(temp_dir),
                 cache_metadata=not_applicable("cache disabled for fixture"),
                 resource_probe=lambda _pid: {
@@ -854,6 +927,19 @@ class ComparisonContractTests(unittest.TestCase):
             "reason": "candidate intentionally measures the explicit eight-job lane",
         }
         self.module.validate_receipts_compatible(baseline, candidate)
+
+    def test_controlled_experiment_configuration_difference_is_comparable(self) -> None:
+        baseline = receipt_with_wall_times([120, 130, 140])
+        candidate = receipt_with_wall_times([100, 110, 115])
+        baseline["run_identity"]["effective_configuration"]["jobs"] = "adaptive"
+        candidate["run_identity"]["effective_configuration"]["jobs"] = 6
+        for receipt in (baseline, candidate):
+            receipt["experiment_boundary"]["controlled_configuration_fields"] = ["jobs"]
+
+        report = self.module.comparison_report(baseline, candidate)
+
+        self.assertTrue(report["adoption"]["complete"], report["adoption"]["reasons"])
+        self.assertTrue(report["adoption"]["adoptable"], report["adoption"]["reasons"])
 
 
 if __name__ == "__main__":

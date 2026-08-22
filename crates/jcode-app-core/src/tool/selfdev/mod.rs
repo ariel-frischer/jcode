@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Mutex;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 mod build_queue;
 mod launch;
@@ -347,6 +347,7 @@ impl BuildRequest {
             request.state = BuildRequestState::Attached;
             request.last_progress = Some("attached to existing build".to_string());
             request.attached_to_request_id = Some(leader.request_id.clone());
+            request.test_preflight = leader.test_preflight.clone();
             request.save()?;
             return Ok(BuildRequestClaim::Follower { leader });
         }

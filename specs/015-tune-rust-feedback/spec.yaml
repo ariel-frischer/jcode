@@ -1,7 +1,8 @@
 feature:
   branch: "015-tune-rust-feedback"
   created: "2026-08-22"
-  status: "Draft"
+  status: "Completed"
+  completed_at: "2026-08-22T18:07:12Z"
   input: "Benchmark and tune Rust development feedback after deduplication. Implement the approved jcode-l89.4 contract: freeze a reproducible benchmark matrix for warm and cold builds, focused and invalid tests, broad validation, and coordinated duplicate requests; compare adaptive Cargo jobs against 6 and 8; safely narrow eligible package/target/features while preserving explicit feature precedence and optional-feature correctness; add visible zero-test preflight; bound nextest and non-incremental sccache experiments; adopt only measured p50/p95 wins with runtime budgets unchanged; preserve full-feature release validation; add focused tests, benchmark receipts, rejected-experiment evidence, guardrails, built-binary isolated-socket validation, and trace PRIN-002/003/005/007/008/010."
 
 user_stories:

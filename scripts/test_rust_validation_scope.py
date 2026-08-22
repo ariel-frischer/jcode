@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -206,6 +211,23 @@ class ValidationScopeContractTests(unittest.TestCase):
         )
 
         self.assert_broad_fallback(result, "cross-package")
+
+    def test_cross_package_fallback_preserves_explicit_feature_precedence(self):
+        result = resolve(
+            self.resolver,
+            ["crates/alpha/src/lib.rs", "crates/beta/src/lib.rs"],
+            explicit={
+                "features": ["telemetry"],
+                "no_default_features": True,
+                "all_features": False,
+            },
+            defaults={"features": ["serde"]},
+        )
+
+        self.assert_broad_fallback(result, "cross-package")
+        self.assertEqual(result["effective_scope"]["features"], ["telemetry"])
+        self.assertTrue(result["effective_scope"]["no_default_features"])
+        self.assertFalse(result["effective_scope"]["all_features"])
 
     def test_generated_build_workspace_unknown_guardrail_and_release_paths_fall_back(self):
         cases = {
@@ -511,6 +533,36 @@ class TestDiscoverySnapshotContractTests(unittest.TestCase):
         )
 
         self.assert_unknown(result, "bounded")
+
+    def test_canonical_cli_evaluates_environment_preflight(self):
+        request = discovery_request(filter="does_not_exist")
+        request["source_fingerprint"] = "stale-caller-value"
+        environment = {
+            "JCODE_TEST_PREFLIGHT_COMMAND": "cargo test -p alpha does_not_exist",
+            "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT": "source-state-a",
+            "JCODE_TEST_DISCOVERY_SNAPSHOT_JSON": json.dumps(discovery_snapshot()),
+            "JCODE_TEST_DISCOVERY_REQUEST_JSON": json.dumps(request),
+        }
+        stdout = io.StringIO()
+        with mock.patch.dict(os.environ, environment, clear=False), redirect_stdout(stdout):
+            exit_code = self.resolver.main([])
+
+        self.assertEqual(exit_code, 0)
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result["decision"], "empty")
+        self.assertEqual(
+            result["effective_scope"]["source_fingerprint"], "source-state-a"
+        )
+
+    def test_canonical_cli_rejects_incomplete_environment_preflight(self):
+        environment = {
+            "JCODE_TEST_PREFLIGHT_COMMAND": "cargo test -p alpha does_not_exist",
+            "JCODE_TEST_PREFLIGHT_SOURCE_FINGERPRINT": "source-state-a",
+        }
+        stderr = io.StringIO()
+        with mock.patch.dict(os.environ, environment, clear=True), redirect_stderr(stderr):
+            self.assertEqual(self.resolver.main([]), 2)
+        self.assertIn("requires JCODE_TEST_DISCOVERY_SNAPSHOT_JSON", stderr.getvalue())
 
 
 if __name__ == "__main__":

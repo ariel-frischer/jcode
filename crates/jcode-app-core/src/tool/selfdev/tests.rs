@@ -395,10 +395,6 @@ fn matching_preflight_result(target: &str, filter: &str) -> serde_json::Value {
     json!({
         "schema_version": "1.0",
         "decision": "matches",
-        "configured_inputs": {
-            "explicit": {"package": "jcode-app-core", "target": target},
-            "defaults": {"features": []},
-        },
         "effective_scope": {
             "package": "jcode-app-core",
             "target": target,
@@ -1459,6 +1455,48 @@ async fn stale_missing_incomplete_and_ambiguous_discovery_still_queue() {
         assert!(metadata["task_id"].is_string());
         assert!(output.output.contains("Self-dev test queued in background"));
     }
+}
+
+#[tokio::test]
+async fn preflight_metadata_is_bounded_and_sensitive_fields_are_not_persisted() {
+    let _storage_guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::tempdir().expect("temp home");
+    let _home_guard = EnvVarGuard::set("JCODE_HOME", temp_home.path());
+    let _test_guard = EnvVarGuard::set("JCODE_TEST_SESSION", "1");
+    let repo = create_repo_fixture();
+
+    let mut sensitive = matching_preflight_result("lib:jcode_app_core", "selfdev");
+    sensitive["secret"] = Value::String("RAW-PREFLIGHT-SECRET".to_string());
+    sensitive["configured_inputs"] = json!({"raw_source": "RAW-SOURCE-SENTINEL"});
+    let output = execute_test_with_preflight_result(
+        repo.path(),
+        "bounded-preflight-session",
+        "cargo test -p jcode-app-core --lib selfdev",
+        sensitive,
+    )
+    .await;
+    let metadata = output.metadata.as_ref().expect("queued metadata");
+    let serialized =
+        serde_json::to_string(&metadata["test_preflight"]).expect("serialize sanitized preflight");
+    assert!(!serialized.contains("RAW-PREFLIGHT-SECRET"));
+    assert!(!serialized.contains("RAW-SOURCE-SENTINEL"));
+    let request = request_for_output(&output);
+    let persisted =
+        serde_json::to_string(&request.test_preflight).expect("serialize persisted preflight");
+    assert!(!persisted.contains("RAW-PREFLIGHT-SECRET"));
+    assert!(!persisted.contains("RAW-SOURCE-SENTINEL"));
+
+    let oversized = uncertain_preflight_result(&"x".repeat(70_000));
+    let output = execute_test_with_preflight_result(
+        repo.path(),
+        "oversized-preflight-session",
+        "cargo test -p jcode-app-core --lib maybe_valid",
+        oversized,
+    )
+    .await;
+    let metadata = output.metadata.as_ref().expect("queued metadata");
+    assert!(metadata.get("test_preflight").is_none());
+    assert!(request_for_output(&output).test_preflight.is_none());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
