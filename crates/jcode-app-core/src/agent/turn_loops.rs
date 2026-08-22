@@ -1136,6 +1136,11 @@ impl Agent {
                 match result {
                     Ok(output) => {
                         let output = cap_tool_output_for_history(&tc.name, output);
+                        if let Some((closed_groups, next_pending)) =
+                            Agent::handoff_poke_metadata(&tc.name, &output)
+                        {
+                            self.maybe_add_handoff_poke(&closed_groups, next_pending.as_deref());
+                        }
                         Bus::global().publish(BusEvent::ToolUpdated(ToolEvent {
                             session_id: self.session.id.clone(),
                             message_id: message_id.clone(),
