@@ -66,9 +66,9 @@ execution. Cargo-heavy commands must run serially.
 
 | Check | Command | Result |
 |---|---|---|
-| Atomic and eligible request tests | To be recorded by T008 | Pending |
-| Near-miss and lifecycle tests | To be recorded by T008 | Pending |
-| Existing selfdev module tests | To be recorded by T008 | Pending |
+| Atomic and eligible request tests | `scripts/dev_cargo.sh test -p jcode-app-core tool::selfdev::tests -- --test-threads=1` | PASS: `atomic_claim_selects_exactly_one_leader`, `exact_eligible_cargo_requests_attach_and_propagate_terminal_result`, and build attachment coverage passed. |
+| Near-miss and lifecycle tests | Same serialized module command | PASS: source/command near misses, dirty drift supersession, follower cancellation, producer failure, stale persisted ownership, status reconciliation, and build-reload coverage passed. |
+| Existing selfdev module tests | Same serialized module command; rustc 1.95.0, cargo 1.95.0 | PASS: 45 passed, 0 failed, 0 ignored; no repair required. |
 
 ## Repository validation
 

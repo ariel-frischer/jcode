@@ -112,7 +112,7 @@ phases:
     tasks:
       - id: "T008"
         title: "Run focused selfdev tests and repair once if needed"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
