@@ -19,10 +19,12 @@ queued prompt does not expose an expanded payload.
 ## Validate this feature
 
 ```bash
-mkdir -p /tmp/jcode-file-mention-demo
-printf 'FILE_MENTION_DEMO=works\n' > /tmp/jcode-file-mention-demo/demo.txt
-cd /tmp/jcode-file-mention-demo
-jcode
+demo="$(mktemp -d)"
+mkdir -p "$demo/home" "$demo/work"
+printf '[file_mentions]\nenabled = true\n' > "$demo/home/config.toml"
+printf 'FILE_MENTION_DEMO=works\n' > "$demo/work/demo.txt"
+cd "$demo/work"
+JCODE_HOME="$demo/home" jcode
 ```
 
 In the TUI, type `Explain @demo.txt`, select `demo.txt`, press `Tab`, and send.
@@ -31,8 +33,9 @@ should identify `FILE_MENTION_DEMO=works` from the expanded provider context.
 
 ## Configuration
 
-File mentions are enabled by default. Disable filesystem-backed suggestions and
-expansion, or add gitignore-style exclusions, in `~/.jcode/config.toml`:
+File mentions are disabled by default to preserve existing composer and dispatch
+behavior. Enable filesystem-backed suggestions and expansion explicitly, and add
+optional gitignore-style exclusions, in `~/.jcode/config.toml`:
 
 ```toml
 [file_mentions]

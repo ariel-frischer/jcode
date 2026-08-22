@@ -105,9 +105,9 @@ swarm_panel_focus = "alt+n"
 session_picker_enter = "current-terminal"
 
 [file_mentions]
-# Filesystem-backed `@` suggestions are enabled by default. Set false to keep
-# ordinary `@` input without starting workspace discovery.
-enabled = true
+# Filesystem-backed `@` suggestions are opt-in to preserve existing input behavior.
+# Set true to enable workspace discovery and provider-time file expansion.
+enabled = false
 # Additional path components excluded from suggestions.
 # ignore = ["private/", "*.generated.*"]
 

@@ -149,14 +149,14 @@ fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
 }
 
 #[test]
-fn file_mentions_default_enabled_and_can_be_disabled_without_scanning() {
-    assert!(jcode_config_types::FileMentionsConfig::default().enabled);
+fn file_mentions_default_disabled_without_scanning() {
+    assert!(!jcode_config_types::FileMentionsConfig::default().enabled);
     let legacy: crate::config::Config =
         toml::from_str("[file_mentions]\nignore = []\n").expect("legacy config parses");
-    assert!(legacy.file_mentions.enabled);
+    assert!(!legacy.file_mentions.enabled);
 
     with_temp_jcode_home(|| {
-        write_test_config("[file_mentions]\nenabled = false\n");
+        write_test_config("[file_mentions]\nignore = []\n");
         crate::config::invalidate_config_cache();
 
         let temp = tempfile::tempdir().expect("tempdir");
