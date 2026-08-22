@@ -1,11 +1,13 @@
 #[test]
 fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selection() {
-    let _env_lock = crate::storage::lock_test_env();
-    let temp = tempfile::tempdir().expect("tempdir");
-    std::fs::create_dir_all(temp.path().join("src")).expect("src directory");
-    std::fs::create_dir_all(temp.path().join("node_modules/pkg")).expect("vendor directory");
-    std::fs::write(temp.path().join("src/main.rs"), "fn main() {}").expect("source file");
-    std::fs::write(temp.path().join("node_modules/pkg/index.js"), "").expect("vendor file");
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("src")).expect("src directory");
+        std::fs::create_dir_all(temp.path().join("node_modules/pkg"))
+            .expect("vendor directory");
+        std::fs::write(temp.path().join("src/main.rs"), "fn main() {}").expect("source file");
+        std::fs::write(temp.path().join("node_modules/pkg/index.js"), "")
+            .expect("vendor file");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
@@ -36,15 +38,16 @@ fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selectio
         crossterm::event::KeyModifiers::empty(),
     )
     .expect("accept suggestion");
-    assert!(app.input.starts_with("Explain @"));
-    assert!(app.input.ends_with('/') || app.input.ends_with("main.rs"));
+        assert!(app.input.starts_with("Explain @"));
+        assert!(app.input.ends_with('/') || app.input.ends_with("main.rs"));
+    });
 }
 
 #[test]
 fn tab_completes_an_active_file_mention_without_submitting() {
-    let _env_lock = crate::storage::lock_test_env();
-    let temp = tempfile::tempdir().expect("tempdir");
-    std::fs::write(temp.path().join("README.md"), "readme").expect("readme");
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "readme").expect("readme");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
@@ -59,17 +62,18 @@ fn tab_completes_an_active_file_mention_without_submitting() {
     )
     .expect("complete file mention");
 
-    assert_eq!(app.input, "Explain @README.md");
-    assert!(app.queued_messages.is_empty());
-    assert!(!app.queue_mode);
+        assert_eq!(app.input, "Explain @README.md");
+        assert!(app.queued_messages.is_empty());
+        assert!(!app.queue_mode);
+    });
 }
 
 #[test]
 fn repeated_tab_cycles_through_file_mention_suggestions() {
-    let _env_lock = crate::storage::lock_test_env();
-    let temp = tempfile::tempdir().expect("tempdir");
-    std::fs::write(temp.path().join("alpha.txt"), "").expect("alpha");
-    std::fs::write(temp.path().join("beta.txt"), "").expect("beta");
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("alpha.txt"), "").expect("alpha");
+        std::fs::write(temp.path().join("beta.txt"), "").expect("beta");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
@@ -91,16 +95,17 @@ fn repeated_tab_cycles_through_file_mention_suggestions() {
         crossterm::event::KeyModifiers::empty(),
     )
     .expect("cycle to second file mention");
-    assert_eq!(app.input, "@beta.txt");
+        assert_eq!(app.input, "@beta.txt");
+    });
 }
 
 #[test]
 fn file_mention_discovery_falls_back_to_the_launch_cwd() {
-    let _env_lock = crate::storage::lock_test_env();
-    let mut app = create_test_app();
-    app.session.working_dir = None;
-    app.input = "@".to_owned();
-    app.cursor_pos = 1;
+    with_file_mentions_enabled(|| {
+        let mut app = create_test_app();
+        app.session.working_dir = None;
+        app.input = "@".to_owned();
+        app.cursor_pos = 1;
 
     let _ = app.command_suggestions();
     let request = app
@@ -111,7 +116,8 @@ fn file_mention_discovery_falls_back_to_the_launch_cwd() {
         .request
         .clone();
 
-    assert_eq!(request.root, std::env::current_dir().expect("launch cwd"));
+        assert_eq!(request.root, std::env::current_dir().expect("launch cwd"));
+    });
 }
 
 #[test]
@@ -239,10 +245,10 @@ fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
 
 #[test]
 fn stale_file_mention_generations_are_discarded() {
-    let _env_lock = crate::storage::lock_test_env();
-    let temp = tempfile::tempdir().expect("tempdir");
-    std::fs::write(temp.path().join("old-name.txt"), "").expect("old file");
-    std::fs::write(temp.path().join("new-name.txt"), "").expect("new file");
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("old-name.txt"), "").expect("old file");
+        std::fs::write(temp.path().join("new-name.txt"), "").expect("new file");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
@@ -259,17 +265,18 @@ fn stale_file_mention_generations_are_discarded() {
             .any(|(value, _)| value == "@new-name.txt"),
         "new query suggestions: {suggestions:?}"
     );
-    assert!(
-        suggestions
-            .iter()
-            .all(|(value, _)| !value.contains("old-name"))
-    );
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.contains("old-name"))
+        );
+    });
 }
 
 #[test]
 fn file_mention_discovery_is_batched_and_input_stays_within_budget() {
-    let _env_lock = crate::storage::lock_test_env();
-    use std::time::{Duration, Instant};
+    with_file_mentions_enabled(|| {
+        use std::time::{Duration, Instant};
 
     let sizes = [32, 256, 1024];
     for size in sizes {
@@ -312,7 +319,16 @@ fn file_mention_discovery_is_batched_and_input_stays_within_budget() {
             first.candidates.len(),
             first.done,
         );
-    }
+        }
+    });
+}
+
+fn with_file_mentions_enabled<T>(f: impl FnOnce() -> T) -> T {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+        f()
+    })
 }
 
 fn wait_for_file_mention_suggestions(app: &mut App) -> Vec<(String, &'static str)> {
