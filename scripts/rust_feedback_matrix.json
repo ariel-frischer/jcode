@@ -1,0 +1,400 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Frozen benchmark and bounded-experiment matrix for Jcode Rust development feedback tuning.",
+  "percentile_method": "nearest_rank",
+  "execution_policy": {
+    "cargo_heavy_scenarios_serialized": true,
+    "coordinated_duplicate_exception": "Duplicate requests are submitted concurrently only through the existing server-owned selfdev coordinator; the coordinator and global Cargo gate must still authorize one underlying Cargo action.",
+    "secrets_and_source_contents_recorded": false
+  },
+  "scenarios": [
+    {
+      "id": "warm_touched_file_check_build",
+      "scenario_class": "warm_touched_file_check_build",
+      "source_preparation": {
+        "mode": "touched_file",
+        "instructions": "Complete one unmeasured priming run, then touch the declared representative Rust source file without changing its contents before each measured check or build sample.",
+        "requires_clean_baseline": true,
+        "fresh_worktree": false
+      },
+      "temperature": "warm",
+      "command_intent": "Measure warm incremental cargo check and development-profile build feedback through scripts/dev_cargo.sh for one representative touched Rust file.",
+      "command_families": [
+        "check",
+        "build"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 5,
+        "maximum_attempts": 8,
+        "warmup_attempts": 1,
+        "retry_invalid_samples": true
+      },
+      "timeout_seconds": 1800,
+      "validity_rules": {
+        "expected_exit": "zero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_incremental_enabled": true,
+        "require_single_underlying_action": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "effective_configuration",
+        "aggregate_p50_p95"
+      ]
+    },
+    {
+      "id": "cold_fresh_worktree_build",
+      "scenario_class": "cold_fresh_worktree_build",
+      "source_preparation": {
+        "mode": "fresh_worktree",
+        "instructions": "Create an isolated worktree at the recorded revision with a scenario-specific target directory and no reusable incremental artifacts before each sample.",
+        "requires_clean_baseline": true,
+        "fresh_worktree": true
+      },
+      "temperature": "cold",
+      "command_intent": "Measure a development-profile build from a fresh worktree and cold target state through scripts/dev_cargo.sh.",
+      "command_families": [
+        "build"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 3,
+        "maximum_attempts": 5,
+        "warmup_attempts": 0,
+        "retry_invalid_samples": true
+      },
+      "timeout_seconds": 3600,
+      "validity_rules": {
+        "expected_exit": "zero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_cold_target_state": true,
+        "require_single_underlying_action": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "effective_configuration",
+        "target_and_cache_state",
+        "aggregate_p50_p95"
+      ]
+    },
+    {
+      "id": "focused_test",
+      "scenario_class": "focused_test",
+      "source_preparation": {
+        "mode": "fixture",
+        "instructions": "Use the recorded package, target, feature set, and known matching test filter against an unchanged prepared source state.",
+        "requires_clean_baseline": false,
+        "fresh_worktree": false
+      },
+      "temperature": "controlled",
+      "command_intent": "Measure one eligible focused Cargo test request while preserving explicit package, target, feature, and Cargo filter semantics.",
+      "command_families": [
+        "test"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 5,
+        "maximum_attempts": 8,
+        "warmup_attempts": 1,
+        "retry_invalid_samples": true
+      },
+      "timeout_seconds": 1800,
+      "validity_rules": {
+        "expected_exit": "zero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_at_least_one_test_executed": true,
+        "require_single_underlying_action": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "configured_and_effective_scope",
+        "test_match_outcome",
+        "aggregate_p50_p95"
+      ]
+    },
+    {
+      "id": "invalid_zero_test",
+      "scenario_class": "invalid_zero_test",
+      "source_preparation": {
+        "mode": "fixture",
+        "instructions": "Use a current complete discovery snapshot and a recorded package/filter combination proven to select zero tests.",
+        "requires_clean_baseline": false,
+        "fresh_worktree": false
+      },
+      "temperature": "controlled",
+      "command_intent": "Measure visible rejection of a provably empty focused test request before avoidable selfdev queue and Cargo-gate waiting.",
+      "command_families": [
+        "test_preflight"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 5,
+        "maximum_attempts": 8,
+        "warmup_attempts": 0,
+        "retry_invalid_samples": true
+      },
+      "timeout_seconds": 300,
+      "validity_rules": {
+        "expected_exit": "nonzero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_actionable_zero_test_error": true,
+        "require_zero_underlying_actions": true,
+        "require_zero_queue_and_gate_acquisitions": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "discovery_proof_identity",
+        "rejection_message",
+        "aggregate_p50_p95"
+      ]
+    },
+    {
+      "id": "broad_validation",
+      "scenario_class": "broad_validation",
+      "source_preparation": {
+        "mode": "fixture",
+        "instructions": "Use the recorded source state and invoke the established broad all-target and all-feature validation command without inferred narrowing.",
+        "requires_clean_baseline": true,
+        "fresh_worktree": false
+      },
+      "temperature": "controlled",
+      "command_intent": "Measure the unchanged broad full-feature validation path used as the correctness and release-confidence guardrail.",
+      "command_families": [
+        "check_all_targets_all_features"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 3,
+        "maximum_attempts": 5,
+        "warmup_attempts": 0,
+        "retry_invalid_samples": true
+      },
+      "timeout_seconds": 3600,
+      "validity_rules": {
+        "expected_exit": "zero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_all_targets": true,
+        "require_all_features": true,
+        "require_single_underlying_action": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "effective_configuration",
+        "full_feature_guardrail_outcome",
+        "aggregate_p50_p95"
+      ]
+    },
+    {
+      "id": "coordinated_duplicate",
+      "scenario_class": "coordinated_duplicate",
+      "source_preparation": {
+        "mode": "fixture",
+        "instructions": "Submit equivalent requests from multiple isolated clients to one long-lived server at the same recorded source state.",
+        "requires_clean_baseline": false,
+        "fresh_worktree": false
+      },
+      "temperature": "controlled",
+      "command_intent": "Measure server-owned duplicate coalescing and follower behavior while proving one coordinator-authorized underlying Cargo action.",
+      "command_families": [
+        "selfdev_coordinated_duplicate"
+      ],
+      "sample_policy": {
+        "minimum_valid_samples": 5,
+        "maximum_attempts": 8,
+        "warmup_attempts": 1,
+        "retry_invalid_samples": true,
+        "requests_per_sample": 2
+      },
+      "timeout_seconds": 1800,
+      "validity_rules": {
+        "expected_exit": "zero",
+        "invalidate_on_interference": true,
+        "require_unchanged_source_identity": true,
+        "require_single_underlying_action": true,
+        "require_coordinator_owned_followers": true,
+        "forbid_uncontrolled_parallel_cargo": true
+      },
+      "required_metrics": [
+        "wall_time_ms",
+        "execution_time_ms",
+        "queue_time_ms",
+        "gate_time_ms",
+        "peak_rss_bytes",
+        "swap_bytes",
+        "cache",
+        "exit_status",
+        "retry_count",
+        "action_counts"
+      ],
+      "expected_evidence": [
+        "raw_samples",
+        "provenance",
+        "validity",
+        "coordinator_identity",
+        "follower_and_action_counts",
+        "aggregate_p50_p95"
+      ]
+    }
+  ],
+  "experiment_variants": [
+    {
+      "id": "adaptive_jobs",
+      "eligibility": "Equivalent isolated one-action warm, cold, focused-test, and broad-validation scenarios using the existing adaptive scripts/dev_cargo.sh job policy.",
+      "experiment_boundary": "Baseline policy for comparison; do not alter coordinator ownership, the global Cargo gate, features, target scope, or scenario preparation.",
+      "fallback": "Use the established adaptive scripts/dev_cargo.sh policy when any candidate is ineligible, invalid, or rejected.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "job_policy": "adaptive",
+        "requires_equivalent_environment": true
+      }
+    },
+    {
+      "id": "jobs_6",
+      "eligibility": "Equivalent isolated one-action scenarios on a host with at least six logical CPUs and sufficient memory, compared against adaptive with all non-job configuration fixed.",
+      "experiment_boundary": "Set the existing explicit Cargo job override to 6 for benchmark samples only; never apply it to coordinated duplicate execution as uncontrolled parallel Cargo work.",
+      "fallback": "Revert to the established adaptive job policy when host eligibility, comparability, reliability, or p50/p95 adoption gates fail.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "job_policy": 6,
+        "minimum_logical_cpus": 6,
+        "requires_equivalent_environment": true
+      }
+    },
+    {
+      "id": "jobs_8",
+      "eligibility": "Equivalent isolated one-action scenarios on a host with at least eight logical CPUs and sufficient memory, compared against adaptive with all non-job configuration fixed.",
+      "experiment_boundary": "Set the existing explicit Cargo job override to 8 for benchmark samples only; never apply it to coordinated duplicate execution as uncontrolled parallel Cargo work.",
+      "fallback": "Revert to the established adaptive job policy when host eligibility, comparability, reliability, or p50/p95 adoption gates fail.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "job_policy": 8,
+        "minimum_logical_cpus": 8,
+        "requires_equivalent_environment": true
+      }
+    },
+    {
+      "id": "nextest_focused",
+      "eligibility": "Focused-test scenarios whose package, target, features, filters, ignored/exact semantics, and harness arguments are supported equivalently by the installed cargo-nextest version.",
+      "experiment_boundary": "Bounded focused-test trial only; Cargo test remains the default and broad, invalid-zero-test, incompatible, unavailable, or ambiguous requests are excluded.",
+      "fallback": "Execute the established Cargo test path with unchanged arguments when nextest is unavailable, incompatible, invalid, slower, unstable, or rejected.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "record_nextest_version": true,
+        "record_disk_bytes": true,
+        "requires_equivalent_test_selection": true
+      }
+    },
+    {
+      "id": "sccache_cold_miss",
+      "eligibility": "Cold or fresh-worktree non-incremental build scenarios with sccache installed, an isolated empty cache, and identical compiler, source, target, feature, and job configuration.",
+      "experiment_boundary": "One bounded cold-miss lane with incremental compilation disabled; never enable sccache for warm incremental development or change the default cache policy.",
+      "fallback": "Disable sccache and execute the established cold build path when setup, cache service, compatibility, reliability, resource, or adoption checks fail.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "incremental_compilation": false,
+        "cache_state": "empty",
+        "isolated_cache_directory": true,
+        "record_cache_statistics": true,
+        "record_disk_bytes": true
+      }
+    },
+    {
+      "id": "sccache_reusable_hit",
+      "eligibility": "Cold or fresh-worktree non-incremental build scenarios following a valid matching cache-population sample with unchanged compiler, source, target, feature, and job identity.",
+      "experiment_boundary": "One bounded reusable-hit lane after the paired cold-miss lane; never reuse incompatible cache state or enable sccache for warm incremental development by default.",
+      "fallback": "Disable sccache and execute the established cold build path when cache identity, hit evidence, compatibility, reliability, resource, or adoption checks fail.",
+      "resource_constraints": {
+        "serialize_cargo": true,
+        "record_rss_swap_and_disk": true,
+        "maximum_parallel_underlying_actions": 1,
+        "incremental_compilation": false,
+        "cache_state": "reusable_matching",
+        "isolated_cache_directory": true,
+        "require_recorded_cache_hit": true,
+        "record_cache_statistics": true,
+        "record_disk_bytes": true
+      }
+    }
+  ]
+}

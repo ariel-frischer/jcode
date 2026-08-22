@@ -46,7 +46,7 @@ phases:
           - "The focused unittest command fails for the intended missing implementation rather than because of fixture or import errors."
       - id: "T003"
         title: "Define the versioned benchmark and experiment matrix in scripts/rust_feedback_matrix.json"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
