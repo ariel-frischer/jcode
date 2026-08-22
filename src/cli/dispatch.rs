@@ -235,13 +235,50 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             json,
             ndjson,
         }) => {
+            let split_list = |value: &str| {
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            };
+            let run_profile = super::profile::resolve_run_profile(
+                args.profile.as_deref(),
+                super::profile::RunProfileOverrides {
+                    provider: args.provider_was_explicit.then_some(args.provider),
+                    model: args.model.clone(),
+                    reasoning_effort: args.reasoning_effort.clone(),
+                    provider_profile: args.provider_profile.clone(),
+                    tool_profile: args.tool_profile.clone(),
+                    tools: args.tools.as_deref().map(split_list),
+                    disabled_tools: args.disabled_tools.as_deref().map(split_list),
+                },
+            )?;
+            if let Some(provider_profile) = run_profile
+                .as_ref()
+                .and_then(|profile| profile.provider_profile.as_deref())
+            {
+                provider_catalog::apply_named_provider_profile_env(provider_profile)?;
+                crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", provider_profile);
+                crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
+            }
+            let provider = run_profile
+                .as_ref()
+                .map(|profile| profile.provider)
+                .unwrap_or(args.provider);
+            let model = run_profile
+                .as_ref()
+                .and_then(|profile| profile.model.clone())
+                .or(args.model.clone());
             commands::run_single_message_command(
-                &args.provider,
-                args.model.as_deref(),
+                provider,
+                model,
                 args.resume.as_deref(),
                 &message,
                 json,
                 ndjson,
+                run_profile,
             )
             .await?;
         }

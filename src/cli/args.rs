@@ -1,4 +1,6 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::parser::ValueSource;
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use std::ffi::OsString;
 
 use super::provider_init::ProviderChoice;
 
@@ -34,6 +36,10 @@ pub(crate) struct Args {
     /// Initial provider to use (jcode, claude, openai, openai-api, openrouter, azure, opencode, opencode-go, zai, 302ai, baseten, cortecs, comtegra, deepseek, fpt, firmware, huggingface, moonshotai, nebius, scaleway, stackit, groq, mistral, perplexity, togetherai, deepinfra, xai, grok-build, nvidia-nim, lmstudio, ollama, chutes, cerebras, alibaba-coding-plan, openai-compatible, cursor, copilot, gemini, antigravity, google, or auto-detect). Interactive sessions can switch providers with /model.
     #[arg(short, long, default_value = "auto", global = true)]
     pub(crate) provider: ProviderChoice,
+
+    /// Whether --provider was supplied explicitly rather than populated by clap's default.
+    #[arg(skip)]
+    pub(crate) provider_was_explicit: bool,
 
     /// Working directory for the local client process
     #[arg(short = 'C', long, global = true)]
@@ -93,6 +99,18 @@ pub(crate) struct Args {
     #[arg(short, long, global = true)]
     pub(crate) model: Option<String>,
 
+    /// Named session profile from [profiles.<name>] in config.toml for headless runs.
+    #[arg(long, global = true)]
+    pub(crate) profile: Option<String>,
+
+    /// Reasoning effort override for this invocation.
+    #[arg(
+        long,
+        global = true,
+        value_parser = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+    )]
+    pub(crate) reasoning_effort: Option<String>,
+
     /// Named provider profile from [providers.<name>] in config.toml.
     /// Implies --provider openai-compatible for OpenAI-compatible profiles.
     #[arg(long, global = true)]
@@ -124,6 +142,26 @@ pub(crate) struct Args {
 
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
+}
+
+impl Args {
+    pub(crate) fn parse_with_provenance() -> Self {
+        Self::try_parse_from_with_provenance(std::env::args_os())
+            .unwrap_or_else(|error| error.exit())
+    }
+
+    pub(crate) fn try_parse_from_with_provenance<I, T>(itr: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let matches = Self::command().try_get_matches_from(itr)?;
+        let provider_was_explicit =
+            matches.value_source("provider") == Some(ValueSource::CommandLine);
+        let mut args = Self::from_arg_matches(&matches)?;
+        args.provider_was_explicit = provider_was_explicit;
+        Ok(args)
+    }
 }
 
 #[derive(Subcommand, Debug)]

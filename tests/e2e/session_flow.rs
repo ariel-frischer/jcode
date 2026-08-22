@@ -1,5 +1,207 @@
 use crate::test_support::*;
 
+#[test]
+fn complete_profile_resolves_for_plain_json_and_ndjson_runs() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("config path");
+    std::fs::create_dir_all(config_path.parent().expect("config parent"))?;
+    std::fs::write(
+        &config_path,
+        r#"
+[profiles.review]
+provider = "openrouter"
+model = "openai/gpt-5.6"
+reasoning_effort = "high"
+tool_profile = "minimal"
+tools = ["read", "agentgrep"]
+disabled_tools = ["bash"]
+"#,
+    )?;
+
+    for output_mode in ["plain", "json", "ndjson"] {
+        let resolved = jcode::cli::profile::resolve_run_profile(
+            Some("review"),
+            jcode::cli::profile::RunProfileOverrides::default(),
+        )?
+        .expect("selected profile should resolve");
+
+        assert_eq!(resolved.name, "review", "mode={output_mode}");
+        assert_eq!(
+            resolved.provider.as_arg_value(),
+            "openrouter",
+            "mode={output_mode}"
+        );
+        assert_eq!(resolved.model.as_deref(), Some("openai/gpt-5.6"));
+        assert_eq!(resolved.reasoning_effort.as_deref(), Some("high"));
+        let selection = resolved.tools.selection();
+        assert_eq!(
+            selection.allowed_tools,
+            Some(std::collections::HashSet::from([
+                "read".to_string(),
+                "agentgrep".to_string(),
+            ]))
+        );
+        assert!(selection.disabled_tools.contains("bash"));
+    }
+    Ok(())
+}
+
+#[test]
+fn explicit_run_overrides_win_without_discarding_unset_profile_fields() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("config path");
+    std::fs::create_dir_all(config_path.parent().expect("config parent"))?;
+    std::fs::write(
+        &config_path,
+        r#"
+[profiles.review]
+provider = "openrouter"
+model = "profile-model"
+reasoning_effort = "medium"
+provider_profile = "profile-gateway"
+tool_profile = "minimal"
+tools = ["read"]
+disabled_tools = ["bash"]
+instructions = "Keep this profile-only instruction."
+"#,
+    )?;
+
+    let resolved = jcode::cli::profile::resolve_run_profile(
+        Some("review"),
+        jcode::cli::profile::RunProfileOverrides {
+            provider: Some(jcode::cli::provider_init::ProviderChoice::Auto),
+            model: Some("invocation-model".to_string()),
+            reasoning_effort: Some("high".to_string()),
+            provider_profile: Some("invocation-gateway".to_string()),
+            tool_profile: Some("none".to_string()),
+            tools: Some(vec!["agentgrep".to_string()]),
+            disabled_tools: Some(vec!["write".to_string()]),
+        },
+    )?
+    .expect("selected profile");
+
+    assert_eq!(resolved.provider.as_arg_value(), "auto");
+    assert_eq!(resolved.model.as_deref(), Some("invocation-model"));
+    assert_eq!(resolved.reasoning_effort.as_deref(), Some("high"));
+    assert_eq!(
+        resolved.provider_profile.as_deref(),
+        Some("invocation-gateway")
+    );
+    assert_eq!(resolved.tools.profile, "none");
+    assert_eq!(resolved.tools.enabled, ["agentgrep"]);
+    assert_eq!(resolved.tools.disabled, ["write"]);
+    assert_eq!(
+        resolved.instructions.as_deref(),
+        Some("Keep this profile-only instruction.")
+    );
+    Ok(())
+}
+
+#[test]
+fn environment_overrides_win_when_invocation_omits_the_field() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("config path");
+    std::fs::create_dir_all(config_path.parent().expect("config parent"))?;
+    std::fs::write(
+        &config_path,
+        r#"
+[profiles.review]
+provider = "openrouter"
+model = "profile-model"
+reasoning_effort = "medium"
+tool_profile = "minimal"
+"#,
+    )?;
+    jcode::env::set_var("JCODE_PROVIDER", "openai");
+    jcode::env::set_var("JCODE_MODEL", "environment-model");
+    jcode::env::set_var("JCODE_OPENAI_REASONING_EFFORT", "high");
+    jcode::env::set_var("JCODE_TOOL_PROFILE", "none");
+
+    let resolved = jcode::cli::profile::resolve_run_profile(
+        Some("review"),
+        jcode::cli::profile::RunProfileOverrides::default(),
+    )?
+    .expect("selected profile");
+
+    assert_eq!(resolved.provider.as_arg_value(), "openai");
+    assert_eq!(resolved.model.as_deref(), Some("environment-model"));
+    assert_eq!(resolved.reasoning_effort.as_deref(), Some("high"));
+    assert_eq!(resolved.tools.profile, "none");
+    Ok(())
+}
+
+#[test]
+fn selected_profile_prompt_context_is_ordered_isolated_and_read_only() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("config path");
+    let jcode_home = config_path.parent().expect("config parent");
+    std::fs::create_dir_all(jcode_home)?;
+    for (name, body) in [
+        ("alpha-skill", "alpha selected skill content"),
+        ("beta-skill", "beta selected skill content"),
+    ] {
+        let skill_dir = jcode_home.join("skills").join(name);
+        std::fs::create_dir_all(&skill_dir)?;
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: test skill\n---\n{body}\n"),
+        )?;
+    }
+    let config_bytes = br#"
+[profiles.alpha]
+instructions = "alpha profile instructions"
+skills = ["alpha-skill"]
+
+[profiles.beta]
+instructions = "beta profile instructions"
+skills = ["beta-skill"]
+"#;
+    std::fs::write(&config_path, config_bytes)?;
+
+    let alpha = jcode::cli::profile::resolve_run_profile(
+        Some("alpha"),
+        jcode::cli::profile::RunProfileOverrides::default(),
+    )?
+    .expect("alpha profile");
+    let beta = jcode::cli::profile::resolve_run_profile(
+        Some("beta"),
+        jcode::cli::profile::RunProfileOverrides::default(),
+    )?
+    .expect("beta profile");
+
+    let mut alpha_prompt = jcode::prompt::SplitSystemPrompt::default();
+    alpha.prompt_overlay.append_to_split(&mut alpha_prompt);
+    let mut beta_prompt = jcode::prompt::SplitSystemPrompt::default();
+    beta.prompt_overlay.append_to_split(&mut beta_prompt);
+    assert!(
+        alpha_prompt
+            .dynamic_part
+            .find("alpha profile instructions")
+            .unwrap()
+            < alpha_prompt
+                .dynamic_part
+                .find("alpha selected skill content")
+                .unwrap()
+    );
+    assert!(
+        !alpha_prompt
+            .dynamic_part
+            .contains("beta profile instructions")
+    );
+    assert!(
+        beta_prompt
+            .dynamic_part
+            .contains("beta profile instructions")
+    );
+    assert!(
+        !beta_prompt
+            .dynamic_part
+            .contains("alpha profile instructions")
+    );
+    assert_eq!(std::fs::read(&config_path)?, config_bytes);
+    Ok(())
+}
+
 #[tokio::test]
 async fn resume_session_restores_persisted_compaction_for_provider_context() -> Result<()> {
     let _env = setup_test_env()?;

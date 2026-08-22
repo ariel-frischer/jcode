@@ -2,6 +2,48 @@ use super::*;
 use crate::cli::provider_init::ProviderChoice;
 
 #[test]
+fn session_profile_and_reasoning_effort_are_global_run_options() {
+    for argv in [
+        vec![
+            "jcode",
+            "--profile",
+            "review",
+            "--reasoning-effort",
+            "high",
+            "run",
+            "inspect",
+        ],
+        vec![
+            "jcode",
+            "run",
+            "--profile",
+            "review",
+            "--reasoning-effort",
+            "high",
+            "inspect",
+        ],
+    ] {
+        let args = Args::try_parse_from_with_provenance(argv).expect("global options should parse");
+        assert_eq!(args.profile.as_deref(), Some("review"));
+        assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
+        assert!(matches!(args.command, Some(Command::Run { .. })));
+    }
+}
+
+#[test]
+fn provider_parser_default_is_not_an_explicit_profile_override() {
+    let omitted = Args::try_parse_from_with_provenance(["jcode", "run", "inspect"]).unwrap();
+    assert_eq!(omitted.provider, ProviderChoice::Auto);
+    assert!(!omitted.provider_was_explicit);
+
+    let explicit =
+        Args::try_parse_from_with_provenance(["jcode", "--provider", "auto", "run", "inspect"])
+            .unwrap();
+    assert_eq!(explicit.provider, ProviderChoice::Auto);
+    assert!(explicit.provider_was_explicit);
+}
+
+#[test]
 fn server_start_and_internal_keepalive_parse() {
     let args = Args::try_parse_from(["jcode", "server", "start", "--json"])
         .expect("server start should parse");

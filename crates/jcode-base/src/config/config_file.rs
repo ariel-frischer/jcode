@@ -22,6 +22,7 @@ impl Config {
     pub fn load_strict() -> anyhow::Result<Self> {
         let mut config = Self::load_from_file_strict()?.unwrap_or_default();
         config.apply_env_overrides();
+        super::session_profile::validate_profile_definitions(&config.profiles)?;
         Ok(config)
     }
 

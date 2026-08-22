@@ -116,6 +116,7 @@ impl Agent {
             self.agents_md_snapshot.clone(),
         );
 
+        self.session_prompt_overlay.append_to_split(&mut split);
         self.append_current_turn_system_reminder(&mut split);
         crate::prompt::append_swarm_effort_directive(
             &mut split,

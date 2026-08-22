@@ -314,6 +314,22 @@ bing_market = "en-US"
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
 
+# Named session profiles are selected only by headless `jcode run`.
+# Resolution is field-by-field: explicit invocation > environment > selected
+# profile > unprofiled config > built-in default. Static values are checked when
+# strict run config loads; installed provider/model/profile/tool/skill references
+# are checked only when selected. Resolution is per-run and never rewrites this file.
+[profiles.review]
+provider = "openrouter"
+model = "openai/gpt-5.6"
+reasoning_effort = "high"
+provider_profile = "review-gateway"
+tool_profile = "minimal"
+tools = ["read", "agentgrep"]
+disabled_tools = ["bash"]
+skills = ["pr-reviewer"]
+instructions = "Review correctness, security, and regression risk."
+
 [tools]
 # Controls which built-in tools are sent to the model.
 # Profiles: "full" (default), "acp", "minimal"/"lite", or "none".

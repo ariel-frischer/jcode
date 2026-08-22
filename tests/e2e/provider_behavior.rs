@@ -1,5 +1,46 @@
 use crate::test_support::*;
 
+#[test]
+fn invalid_selected_profile_references_fail_before_a_provider_request() -> Result<()> {
+    let _env = setup_test_env()?;
+    let config_path = jcode::config::Config::path().expect("config path");
+    std::fs::create_dir_all(config_path.parent().expect("config parent"))?;
+    std::fs::write(
+        &config_path,
+        r#"
+[profiles.invalid-tool]
+tools = ["not-installed-tool"]
+
+[profiles.invalid-skill]
+skills = ["not-installed-skill"]
+"#,
+    )?;
+
+    let tool_profile = jcode::cli::profile::resolve_run_profile(
+        Some("invalid-tool"),
+        jcode::cli::profile::RunProfileOverrides::default(),
+    )?
+    .expect("selected tool profile resolves before registry validation");
+    let tool_error = jcode::cli::profile::validate_selected_tool_references(
+        &tool_profile,
+        &["read".to_string(), "bash".to_string()],
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(tool_error.contains("invalid-tool"));
+    assert!(tool_error.contains("not-installed-tool"));
+
+    let skill_error = jcode::cli::profile::resolve_run_profile(
+        Some("invalid-skill"),
+        jcode::cli::profile::RunProfileOverrides::default(),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(skill_error.contains("invalid-skill"));
+    assert!(skill_error.contains("not-installed-skill"));
+    Ok(())
+}
+
 /// Test that multi-turn conversation works with session resume
 #[tokio::test]
 async fn test_multi_turn_conversation() -> Result<()> {

@@ -2417,17 +2417,18 @@ Re-run with `--force` if you really want to stop the server.";
 }
 
 pub async fn run_single_message_command(
-    choice: &super::provider_init::ProviderChoice,
-    model: Option<&str>,
+    choice: super::provider_init::ProviderChoice,
+    model: Option<String>,
     resume_session: Option<&str>,
     message: &str,
     emit_json: bool,
     emit_ndjson: bool,
+    run_profile: Option<super::profile::ResolvedRunProfile>,
 ) -> Result<()> {
     let provider = if emit_json || emit_ndjson {
-        super::provider_init::init_provider_quiet(choice, model).await?
+        super::provider_init::init_provider_quiet(&choice, model.as_deref()).await?
     } else {
-        super::provider_init::init_provider_for_validation(choice, model).await?
+        super::provider_init::init_provider_for_validation(&choice, model.as_deref()).await?
     };
     let registry = crate::tool::Registry::new(provider.clone()).await;
     // Load MCP servers from ~/.jcode/mcp.json so headless `jcode run` has the
@@ -2449,7 +2450,28 @@ pub async fn run_single_message_command(
         // the agent runs. Warm runs skip this entirely and stay instant. (#390)
         wait_for_cold_cache_mcp_tools(&registry).await;
     }
-    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
+    if let Some(profile) = run_profile.as_ref() {
+        let available_tools = registry.tool_names().await;
+        super::profile::validate_selected_tool_references(profile, &available_tools)?;
+    }
+    let mut agent = if let Some(profile) = run_profile.as_ref() {
+        crate::agent::Agent::new_with_tool_selection(
+            provider.clone(),
+            registry,
+            profile.tools.selection(),
+        )
+    } else {
+        crate::agent::Agent::new(provider.clone(), registry)
+    };
+    if let Some(effort) = run_profile
+        .as_ref()
+        .and_then(super::profile::selected_reasoning_effort)
+    {
+        agent.set_reasoning_effort(effort)?;
+    }
+    if let Some(profile) = run_profile.as_ref() {
+        agent.set_session_prompt_overlay(profile.prompt_overlay.clone());
+    }
     if let Err(error) = restore_agent_session_if_requested(&mut agent, resume_session) {
         agent.mark_closed();
         return Err(error);

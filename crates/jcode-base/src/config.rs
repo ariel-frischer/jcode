@@ -3,6 +3,8 @@
 //! Config is loaded from `~/.jcode/config.toml` (or `$JCODE_HOME/config.toml`)
 //! Environment variables override config file settings.
 
+pub mod session_profile;
+
 pub use jcode_config_types::{
     AgentsConfig, AmbientConfig, AuthConfig, AutoJudgeConfig, AutoReviewConfig, CompactionConfig,
     CompactionMode, CrossProviderFailoverMode, DiagramDisplayMode, DiagramPanePosition,
@@ -11,8 +13,8 @@ pub use jcode_config_types::{
     MarkdownSpacingMode, NamedProviderAuth, NamedProviderConfig, NamedProviderModelConfig,
     NamedProviderType, NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode,
     PowerConfig, ProviderConfig, ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction,
-    SponsorsConfig, SwarmSpawnMode, SwarmStripLayout, TerminalConfig, UpdateChannel,
-    WebSearchConfig, WebSearchEngine,
+    SessionProfileConfig, SponsorsConfig, SwarmSpawnMode, SwarmStripLayout, TerminalConfig,
+    UpdateChannel, WebSearchConfig, WebSearchEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -492,6 +494,10 @@ pub struct Config {
 
     /// Provider configuration
     pub provider: ProviderConfig,
+
+    /// Named session profiles selectable by headless `jcode run`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub profiles: BTreeMap<String, SessionProfileConfig>,
 
     /// Named provider profiles, keyed by profile name.
     ///

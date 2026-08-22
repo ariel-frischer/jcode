@@ -40,6 +40,41 @@ pub struct PromptCapabilities {
     pub mermaid: bool,
 }
 
+/// Immutable prompt context selected for one session profile.
+///
+/// The overlay is appended after global and project guidance. Profile
+/// instructions precede profile-selected skill content, while the user message
+/// remains outside the system prompt and is therefore still last.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SessionPromptOverlay {
+    pub instructions: Option<String>,
+    pub selected_skills: Vec<(String, String)>,
+}
+
+impl SessionPromptOverlay {
+    pub fn append_to_split(&self, split: &mut SplitSystemPrompt) {
+        let mut parts = Vec::new();
+        if let Some(instructions) = self
+            .instructions
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            parts.push(format!("# Session Profile Instructions\n\n{instructions}"));
+        }
+        for (name, prompt) in &self.selected_skills {
+            parts.push(format!("# Profile Skill: {name}\n\n{prompt}"));
+        }
+        if parts.is_empty() {
+            return;
+        }
+        if !split.dynamic_part.is_empty() {
+            split.dynamic_part.push_str("\n\n");
+        }
+        split.dynamic_part.push_str(&parts.join("\n\n"));
+    }
+}
+
 impl Default for PromptCapabilities {
     fn default() -> Self {
         Self { mermaid: true }
