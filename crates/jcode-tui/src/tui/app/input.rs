@@ -382,7 +382,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        ClipboardPasteContent, ClipboardPasteKind, dropped_image_files, expand_file_mentions,
+        ClipboardPasteContent, ClipboardPasteKind, dropped_image_files,
         is_clipboard_paste_shortcut, parse_dropped_paths, preferred_wayland_text_type,
         read_clipboard_for_paste_with, shifted_printable_fallback, text_input_for_key,
     };
@@ -587,50 +587,6 @@ mod tests {
         assert_eq!(
             text_input_for_key(KeyCode::Char('@'), KeyModifiers::CONTROL),
             None
-        );
-    }
-
-    #[test]
-    fn file_mentions_expand_relative_paths_against_working_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(dir.path().join("docs")).unwrap();
-        std::fs::write(dir.path().join("docs/boundaries.md"), "# boundaries\n").unwrap();
-
-        let expanded = expand_file_mentions(
-            "Please inspect @docs/boundaries.md",
-            Some(dir.path().to_str().unwrap()),
-            true,
-        );
-
-        assert_eq!(
-            expanded,
-            "Please inspect <file path=\"docs/boundaries.md\">\n# boundaries\n\n</file>"
-        );
-    }
-
-    #[test]
-    fn file_mentions_preserve_unresolved_and_embedded_at_signs() {
-        let dir = tempfile::tempdir().unwrap();
-        let input = "email me@example.com about @missing.md";
-
-        assert_eq!(
-            expand_file_mentions(input, Some(dir.path().to_str().unwrap()), true),
-            input
-        );
-    }
-
-    #[test]
-    fn disabled_file_mentions_leave_existing_paths_literal() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("notes.md"), "private context").unwrap();
-
-        assert_eq!(
-            expand_file_mentions(
-                "Inspect @notes.md",
-                Some(dir.path().to_str().unwrap()),
-                false,
-            ),
-            "Inspect @notes.md"
         );
     }
 }
@@ -1457,81 +1413,7 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
     result
 }
 
-/// Expand repository-local `@path` references before sending a prompt.
-///
-/// The picker only changes the text in the composer. The provider must receive
-/// the referenced contents too, matching Claude Code's accepted file-reference
-/// behavior. Unresolved references are intentionally preserved:
-/// `@someone` and prose containing `@` are not file errors.
-pub(super) fn expand_file_mentions(
-    input: &str,
-    working_dir: Option<&str>,
-    enabled: bool,
-) -> String {
-    let Some(working_dir) = working_dir.filter(|_| enabled) else {
-        return input.to_owned();
-    };
-    let mut output = String::with_capacity(input.len());
-    let mut cursor = 0;
-    while cursor < input.len() {
-        let Some(relative_at) = input[cursor..].find('@') else {
-            output.push_str(&input[cursor..]);
-            break;
-        };
-        let at = cursor + relative_at;
-        output.push_str(&input[cursor..at]);
-
-        // An @ embedded in an identifier or email address is not a file
-        // reference. A file mention starts at the beginning or after whitespace.
-        let valid_start = at == 0
-            || input[..at]
-                .chars()
-                .next_back()
-                .is_some_and(char::is_whitespace);
-        let end = input[at + 1..]
-            .find(char::is_whitespace)
-            .map_or(input.len(), |offset| at + 1 + offset);
-        let mention = &input[at + 1..end];
-        if !valid_start || mention.is_empty() {
-            output.push('@');
-            cursor = at + 1;
-            continue;
-        }
-
-        let path = PathBuf::from(mention);
-        let resolved = if path.is_absolute() {
-            path
-        } else {
-            PathBuf::from(working_dir).join(path)
-        };
-        let replacement = resolved
-            .metadata()
-            .ok()
-            .filter(|metadata| {
-                metadata.is_file() && metadata.len() <= MAX_SUBMITTED_TEXT_BYTES as u64
-            })
-            .and_then(|_| std::fs::read_to_string(&resolved).ok())
-            .map(|contents| {
-                let escaped_path = mention
-                    .replace('&', "&amp;")
-                    .replace('"', "&quot;")
-                    .replace('<', "&lt;")
-                    .replace('>', "&gt;");
-                format!("<file path=\"{escaped_path}\">\n{contents}\n</file>")
-            })
-            .filter(|replacement| {
-                output.len() + replacement.len() + input.len().saturating_sub(end)
-                    <= MAX_SUBMITTED_TEXT_BYTES
-            });
-        if let Some(replacement) = replacement {
-            output.push_str(&replacement);
-        } else {
-            output.push_str(&input[at..end]);
-        }
-        cursor = end;
-    }
-    output
-}
+pub(super) use super::file_mentions::expand_file_mentions;
 
 pub(super) fn queue_message(app: &mut App) {
     let mut prepared = take_prepared_input(app);

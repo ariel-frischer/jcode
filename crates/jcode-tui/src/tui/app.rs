@@ -65,6 +65,7 @@ mod copy_selection;
 mod debug;
 mod dictation;
 mod event_wrappers;
+mod file_mentions;
 mod handterm_native_scroll;
 pub(crate) mod helpers;
 mod hotkey_feedback;
@@ -72,6 +73,7 @@ pub(crate) mod idle_animation_repaint;
 mod idle_heap_release;
 mod inline_interactive;
 mod input;
+mod input_completion;
 mod input_help;
 mod local;
 mod misc_ui;
@@ -659,12 +661,6 @@ struct CommandCandidatesCache {
     candidates: Vec<(String, &'static str)>,
 }
 
-#[derive(Clone, Debug)]
-struct TabCompletionState {
-    suggestion_index: usize,
-    suggestions: Vec<String>,
-}
-
 /// Memoized result of [`App::command_suggestions`] for one exact input buffer.
 ///
 /// The suggestion list is read up to eight times per rendered frame (input
@@ -855,7 +851,7 @@ pub struct App {
     /// [`CommandSuggestionsCache`].
     command_suggestions_cache: RefCell<Option<CommandSuggestionsCache>>,
     /// Background filesystem discovery for the `@` file mention picker.
-    file_mention_discovery: RefCell<Option<state_ui_input_helpers::FileMentionDiscovery>>,
+    file_mention_discovery: RefCell<Option<file_mentions::FileMentionDiscovery>>,
     /// Monotonic request generation used to reject stale worker batches.
     file_mention_generation: std::cell::Cell<u64>,
     /// Monotonic frame counter bounding the lifetime of
@@ -1546,7 +1542,7 @@ pub struct App {
     pending_queued_dispatch: bool,
     // Tab completion state retains the original input and suggestion snapshot so
     // repeated Tab can cycle file mentions even as the active query changes.
-    tab_completion_state: Option<TabCompletionState>,
+    tab_completion_state: Option<input_completion::TabCompletionState>,
     // Selected row in the visible command suggestion list.
     command_suggestion_selected: usize,
     // Time when app started (for startup animations)

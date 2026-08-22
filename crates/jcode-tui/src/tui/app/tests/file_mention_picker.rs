@@ -127,7 +127,7 @@ fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
     std::fs::write(temp.path().join("root-file.txt"), "").expect("root file");
 
     let (receiver, _cancel) =
-        super::state_ui_input_helpers::start_file_mention_discovery_for_test(
+        super::file_mentions::start_file_mention_discovery_for_test(
             temp.path().to_path_buf(),
             String::new(),
             Vec::new(),
@@ -240,7 +240,7 @@ fn file_mention_discovery_is_batched_and_input_stays_within_budget() {
         }
 
         let started = Instant::now();
-        let (receiver, _cancel) = super::state_ui_input_helpers::start_file_mention_discovery_for_test(
+        let (receiver, _cancel) = super::file_mentions::start_file_mention_discovery_for_test(
             temp.path().to_path_buf(),
             String::new(),
             Vec::new(),
