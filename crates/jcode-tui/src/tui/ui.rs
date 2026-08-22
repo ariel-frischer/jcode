@@ -84,6 +84,9 @@ pub(crate) mod prepare;
 mod shared_helpers;
 #[path = "ui_smoothness.rs"]
 mod smoothness;
+#[path = "ui_test_state.rs"]
+#[cfg(test)]
+mod test_state;
 #[path = "ui_todo_changes.rs"]
 mod todo_changes;
 #[path = "ui_tools.rs"]
@@ -1544,30 +1547,7 @@ pub(crate) fn clear_test_render_state_for_tests() {
 /// The actual reset, run with the render-state lock held.
 #[cfg(test)]
 fn clear_test_render_state_locked() {
-    set_last_max_scroll(0);
-    set_pinned_pane_total_lines(0);
-    set_last_diff_pane_effective_scroll(0);
-    set_last_diff_pane_max_scroll(0);
-    set_last_total_wrapped_lines(0);
-    set_last_resolved_chat_scroll(0);
-    TEST_TAIL_FOLLOW_SNAP_PENDING.with(|cell| cell.set(false));
-    update_user_prompt_positions(&[]);
-    // Flicker events recorded by sibling tests add a "⚠ flicker detected"
-    // notification line to subsequent renders, shifting every layout-sensitive
-    // assertion (click mapping, snapshot rows).
-    frame_metrics::clear_flicker_frame_history_for_tests();
-    TEST_LAST_LAYOUT.with(|snapshot| {
-        *snapshot.borrow_mut() = None;
-    });
-    TEST_LAST_STATUS_AREA.with(|snapshot| {
-        *snapshot.borrow_mut() = None;
-    });
-    set_visible_copy_targets(Vec::new());
-    clear_copy_viewport_snapshot();
-
-    TEST_PROMPT_VIEWPORT_STATE.with(|state| {
-        *state.borrow_mut() = PromptViewportState::default();
-    });
+    test_state::clear();
 }
 
 /// Test-only: render just the onboarding welcome screen into `area`, using the
