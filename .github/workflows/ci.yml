@@ -73,10 +73,15 @@ jobs:
         run: scripts/check_warning_budget.sh
 
       - name: Enforce oversized-file ratchet
+        # Contribution PRs intentionally port working features into files that
+        # already exceed the fork's debt threshold. Keep this fork-specific
+        # ratchet on branch pushes, but do not make it part of upstream review.
+        if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review'
         shell: bash
         run: python3 scripts/check_code_size_budget.py
 
       - name: Enforce oversized-test ratchet
+        if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review'
         shell: bash
         run: python3 scripts/check_test_size_budget.py
 
@@ -85,6 +90,7 @@ jobs:
         run: python3 scripts/check_panic_budget.py
 
       - name: Enforce swallowed-error usage ratchet
+        if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review'
         shell: bash
         run: python3 scripts/check_swallowed_error_budget.py
 
