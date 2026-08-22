@@ -1,0 +1,229 @@
+feature:
+  branch: "015-reconcile-quality-ratchets"
+  created: "2026-08-22"
+  status: "Draft"
+  input: "Reconcile stale repository quality ratchets after fixing branch-owned growth. Incorporate independent PR review comments. Preserve current behavior and test coverage. Make every blocker-branch change flat or smaller in already-oversized files, retain explicit error handling, add durable provenance mapping historical code-size, test-size, and swallowed-error baseline deltas to owning commits, Beads, and PR review dispositions, reconcile only traced intentional merged state, preserve future no-growth enforcement, and require focused ratchets, stable all-feature guardrails, focused behavior tests, and built-binary public/integration validation."
+
+user_stories:
+  - id: "US-001"
+    title: "Reconcile intentional quality baselines"
+    priority: "P0"
+    as_a: "repository maintainer"
+    i_want: "stale quality ratchets reconciled only to intentional merged changes with complete provenance"
+    so_that: "the guardrails represent accepted repository state without concealing unowned regressions"
+    why_this_priority: "Incorrect baselines can either block valid work or normalize regressions, so provenance and scope must be resolved before the blocker branch can land."
+    independent_test: "Review every changed baseline and verify that its delta is supported by an owning commit, Bead, and recorded PR review disposition."
+    acceptance_scenarios:
+      - given: "a historical code-size, test-size, or swallowed-error baseline differs from the current intentional merged state"
+        when: "the baseline is proposed for reconciliation"
+        then: "the proposal identifies the exact delta and maps it to its owning commit, Bead, and PR review disposition"
+      - given: "a baseline delta cannot be traced to intentional merged state"
+        when: "the reconciliation is evaluated"
+        then: "the delta is rejected and the no-growth baseline remains unchanged"
+
+  - id: "US-002"
+    title: "Keep blocker changes non-growing"
+    priority: "P0"
+    as_a: "repository maintainer"
+    i_want: "every blocker-branch change in an already-oversized file to be flat or smaller"
+    so_that: "the reconciliation does not worsen the repository debt it is intended to control"
+    why_this_priority: "Allowing additional growth would undermine the quality ratchets and create new unowned debt."
+    independent_test: "Compare each modified oversized file with its branch base and confirm that its measured size does not increase."
+    acceptance_scenarios:
+      - given: "an already-oversized file is modified by the blocker branch"
+        when: "its size is compared with the branch base"
+        then: "the file is unchanged in size or smaller"
+
+  - id: "US-003"
+    title: "Preserve behavior and explicit failures"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "existing behavior, test coverage, and explicit error handling preserved"
+    so_that: "quality reconciliation introduces no functional regression or hidden failure"
+    why_this_priority: "A guardrail-only reconciliation is unacceptable if it changes public behavior, reduces coverage, or swallows errors."
+    independent_test: "Run focused behavior and error-path checks and compare coverage expectations with the accepted baseline."
+    acceptance_scenarios:
+      - given: "a previously supported public or integration workflow"
+        when: "the reconciled branch is exercised"
+        then: "the observable behavior remains unchanged"
+      - given: "an operation encounters a handled failure"
+        when: "the failure path executes"
+        then: "the error remains explicit and observable rather than being silently discarded"
+
+  - id: "US-004"
+    title: "Validate durable guardrails"
+    priority: "P1"
+    as_a: "release integrator"
+    i_want: "focused ratchets, stable all-feature guardrails, focused behavior tests, and built-binary public and integration checks to pass"
+    so_that: "I can land the reconciliation with evidence that both enforcement and user-facing workflows remain sound"
+    why_this_priority: "Landing requires evidence across focused, broad, behavioral, and distributable-product boundaries."
+    independent_test: "Execute each required validation category independently and retain a passing result for every category."
+    acceptance_scenarios:
+      - given: "the reconciliation and review dispositions are complete"
+        when: "the full acceptance set is run"
+        then: "all focused ratchets, all-feature guardrails, focused behavior tests, and built-binary public and integration checks pass"
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "The reconciliation MUST adjust baselines only for deltas traced to intentional changes already present in merged repository state."
+      testable: true
+      acceptance_criteria: "Every adjusted baseline has evidence of the corresponding merged change, and no untraced delta is accepted."
+    - id: "FR-002"
+      description: "The reconciliation MUST record durable provenance for every historical code-size baseline delta."
+      testable: true
+      acceptance_criteria: "Each code-size delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+    - id: "FR-003"
+      description: "The reconciliation MUST record durable provenance for every historical test-size baseline delta."
+      testable: true
+      acceptance_criteria: "Each test-size delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+    - id: "FR-004"
+      description: "The reconciliation MUST record durable provenance for every historical swallowed-error baseline delta."
+      testable: true
+      acceptance_criteria: "Each swallowed-error delta records the affected scope, previous and reconciled values, owning commit, owning Bead, and PR review disposition."
+    - id: "FR-005"
+      description: "The reconciliation MUST incorporate every applicable independent PR review comment and record a disposition for each reviewed concern."
+      testable: true
+      acceptance_criteria: "Each independent review comment is linked to an implemented resolution, an evidence-backed rejection, or an explicit out-of-scope disposition."
+    - id: "FR-006"
+      description: "Every blocker-branch modification to an already-oversized file MUST leave that file flat or smaller relative to the branch base."
+      testable: true
+      acceptance_criteria: "A file-by-file comparison shows no positive size delta for any already-oversized file modified on the branch."
+    - id: "FR-007"
+      description: "The reconciliation MUST preserve current observable behavior."
+      testable: true
+      acceptance_criteria: "Focused behavior tests and public and integration workflows produce the previously accepted outcomes."
+    - id: "FR-008"
+      description: "The reconciliation MUST preserve existing test coverage and MUST NOT remove tests merely to satisfy size ratchets."
+      testable: true
+      acceptance_criteria: "No accepted coverage boundary regresses, and removed or consolidated tests have documented equivalent or stronger behavioral coverage."
+    - id: "FR-009"
+      description: "The reconciliation MUST retain explicit error handling and MUST NOT introduce newly swallowed errors."
+      testable: true
+      acceptance_criteria: "Focused error-path checks pass and the swallowed-error guardrail reports no new unapproved occurrences."
+    - id: "FR-010"
+      description: "Reconciled baselines MUST continue to enforce no future growth rather than exempting affected files or categories."
+      testable: true
+      acceptance_criteria: "A controlled positive delta beyond each reconciled baseline is rejected by the corresponding guardrail."
+    - id: "FR-011"
+      description: "Focused quality ratchets for all reconciled code-size, test-size, and swallowed-error scopes MUST pass."
+      testable: true
+      acceptance_criteria: "Each directly affected ratchet completes successfully against the reconciled state."
+    - id: "FR-012"
+      description: "The stable all-feature guardrail set MUST pass without weakening unrelated thresholds."
+      testable: true
+      acceptance_criteria: "The complete feature-inclusive guardrail set passes, and unrelated baseline values remain unchanged."
+    - id: "FR-013"
+      description: "Focused behavior tests for affected workflows and error paths MUST pass."
+      testable: true
+      acceptance_criteria: "All identified affected workflows and explicit error paths have passing focused tests."
+    - id: "FR-014"
+      description: "A built distributable binary MUST pass public-interface and integration validation."
+      testable: true
+      acceptance_criteria: "The built binary successfully completes the defined public command and integration scenarios in an isolated runtime environment."
+
+  non_functional:
+    - id: "NFR-001"
+      category: "code_quality"
+      description: "Provenance records must be complete, reviewable, and durable alongside the reconciled guardrails."
+      measurable_target: "100% of adjusted baseline deltas contain all required ownership and review fields."
+    - id: "NFR-002"
+      category: "reliability"
+      description: "The acceptance evidence must be repeatable and internally consistent across focused, broad, behavioral, and built-product validation."
+      measurable_target: "All required validation categories pass in one final acceptance run with zero contradictory results."
+    - id: "NFR-003"
+      category: "code_quality"
+      description: "The change must avoid expanding existing oversized-file debt."
+      measurable_target: "Zero modified already-oversized files have a positive size delta from the branch base."
+
+success_criteria:
+  measurable_outcomes:
+    - id: "SC-001"
+      description: "Maintainers can account for every reconciled historical quality delta without relying on undocumented context."
+      metric: "Adjusted baseline deltas with complete provenance"
+      target: "100%"
+    - id: "SC-002"
+      description: "The blocker branch introduces no additional growth in files already beyond their accepted size limit."
+      metric: "Modified already-oversized files with positive growth"
+      target: "0"
+    - id: "SC-003"
+      description: "Users encounter no changed outcomes in affected public and integration workflows."
+      metric: "Required behavior and built-product scenarios passing"
+      target: "100%"
+    - id: "SC-004"
+      description: "Future unapproved growth and newly swallowed errors remain blocked after reconciliation."
+      metric: "Controlled violating deltas rejected by guardrails"
+      target: "100% of sampled violations"
+    - id: "SC-005"
+      description: "Independent review feedback has a transparent final outcome."
+      metric: "Applicable PR review comments with recorded dispositions"
+      target: "100%"
+
+key_entities:
+  - name: "Baseline Delta Provenance"
+    description: "The durable record explaining why a historical quality baseline changed and who owns the change."
+    attributes:
+      - "quality category and affected scope"
+      - "previous and reconciled baseline values"
+      - "owning commit"
+      - "owning Bead"
+      - "PR review comment and disposition"
+      - "evidence of intentional merged state"
+  - name: "Quality Ratchet"
+    description: "An enforceable boundary that permits the reconciled state while rejecting future unapproved growth or swallowed errors."
+    attributes:
+      - "measured scope"
+      - "accepted baseline"
+      - "violation condition"
+      - "focused validation result"
+  - name: "Validation Evidence"
+    description: "The retained results demonstrating behavior preservation and guardrail stability."
+    attributes:
+      - "focused ratchet results"
+      - "all-feature guardrail result"
+      - "focused behavior-test results"
+      - "built-binary public validation result"
+      - "built-binary integration validation result"
+
+edge_cases:
+  - scenario: "A current baseline mismatch combines intentional merged growth with unrelated or unexplained growth."
+    expected_behavior: "Only the separately measured and fully traced intentional portion is eligible for reconciliation; the unexplained portion remains a failure."
+  - scenario: "A PR review comment conflicts with the requested no-growth or explicit-error-handling constraints."
+    expected_behavior: "The constraint is preserved and the comment receives an evidence-backed disposition rather than a weakening change."
+  - scenario: "A modified oversized file is flat overall but moves code into another oversized file."
+    expected_behavior: "Every affected oversized file is evaluated independently, and no file may gain unapproved size."
+  - scenario: "A test is consolidated to reduce test-file size."
+    expected_behavior: "Equivalent or stronger behavior and error-path coverage must be demonstrated before the consolidation is accepted."
+  - scenario: "Focused checks pass but an all-feature or built-binary check fails."
+    expected_behavior: "The reconciliation is not ready to land until the failure is resolved and the complete acceptance set passes."
+  - scenario: "Historical ownership evidence points to an unmerged, reverted, or superseded change."
+    expected_behavior: "The evidence is not treated as intentional merged state unless the active repository state and ownership trail are reconciled."
+
+assumptions:
+  - "The blocker branch and its branch base are known and provide the comparison boundary for file-size deltas."
+  - "Owning commits and Beads exist or can be identified for intentional historical baseline deltas."
+  - "Independent PR review comments are available with stable identifiers or links suitable for durable dispositions."
+  - "Existing accepted behavior and coverage expectations can be established from current tests and public or integration workflows."
+  - "A baseline may change only to describe already-merged intentional state, never to pre-authorize future growth."
+
+constraints:
+  - "No blocker-branch change may increase an already-oversized file."
+  - "Explicit error handling must be retained, and newly swallowed errors are prohibited."
+  - "Current behavior and test coverage must be preserved."
+  - "Only traced intentional merged state may be reconciled."
+  - "Future no-growth enforcement must remain active for every reconciled scope."
+  - "Landing evidence must include focused, all-feature, behavioral, and built-binary validation."
+
+out_of_scope:
+  - "Broad refactoring or cleanup unrelated to making the blocker branch satisfy the ratchets."
+  - "Increasing baselines for speculative, unmerged, reverted, or unowned work."
+  - "Weakening or removing unrelated repository quality guardrails."
+  - "Changing user-facing behavior or public contracts."
+  - "Reducing test coverage to satisfy file-size limits."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T20:26:16Z"
+  artifact_type: "spec"
