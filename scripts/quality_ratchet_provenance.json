@@ -1,0 +1,4561 @@
+{
+  "accepted_merged_state": "5e046442893c53bfec52a5d1fe0023d047e9bf6e",
+  "reconciliation_bead": "jcode-l89.5",
+  "records": [
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-001",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/agent.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "12204bd45ddae949e748442a5139122283d3751b",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "3ddd13ab43166f1219a4aef04b4056778b184a2f",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "4c1e596fb1ffddd52213c5ec28871a9b7af06771",
+        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
+        "f83eb091d4cf3d7430524c2dc57035662df68914",
+        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
+        "7015b21b332ba93afbc849fa22852ceabb5895c7"
+      ],
+      "previous_value": 1416,
+      "reconciled_value": 1756,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/agent.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "agent.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-002",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/agent/turn_loops.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+      ],
+      "previous_value": 1252,
+      "reconciled_value": 1318,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/agent/turn_loops.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "turn_loops.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-003",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+      ],
+      "previous_value": 1702,
+      "reconciled_value": 1776,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "turn_streaming_mpsc.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-004",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "ae84a14c1bb257aeca86819fbb42fd2120a674e6",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9cd2e4acd0af4cf998d50537339dbcc36458bb3a",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+      ],
+      "previous_value": 2376,
+      "reconciled_value": 2405,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "server.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-005",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/client_actions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "db3c5738c828200b5ae253c784b7f038ac533d2f",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "6277a90e05988fe7d615de3fef33a55b760d238b",
+        "555081f0390c697cd08f5d4679af584d672d8b51",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
+        "79e1b1bc3dff2fb02ef2c056b7de86807c4dbdc8",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325"
+      ],
+      "previous_value": 1270,
+      "reconciled_value": 1652,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/client_actions.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_actions.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-006",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/client_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325"
+      ],
+      "previous_value": 3416,
+      "reconciled_value": 3582,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/client_lifecycle.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_lifecycle.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-007",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/client_session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
+      ],
+      "previous_value": 1725,
+      "reconciled_value": 1749,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/client_session.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_session.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-008",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-app-core/src/server/comm_control.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2338,
+      "reconciled_value": 2347,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/comm_control.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "comm_control.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-009",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/comm_session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6e1ff917d261483f05fdaab8c547448accb5e37f"
+      ],
+      "previous_value": 1495,
+      "reconciled_value": 1502,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/comm_session.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "comm_session.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-010",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-app-core/src/server/provider_control.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 1600,
+      "reconciled_value": 1603,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/provider_control.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "provider_control.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-011",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/bash.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "ec01d7f35cd000ab137804faf4eb72bb0c2d7f51",
+        "f411ffc18614a38ad614f0903c2afa78431b3b87",
+        "0dbfd8f60a750e70bc793a7ad79979650fb08ef9",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "5549174d22f74d2bf25bff2e81e633bd19d4aaf8",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
+      ],
+      "previous_value": 1326,
+      "reconciled_value": 1542,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/bash.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "bash.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-012",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/communicate.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1f453829b808fcbecd43fec49e85481d67d62576"
+      ],
+      "previous_value": 3351,
+      "reconciled_value": 3364,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/communicate.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "communicate.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-013",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/discover.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "fccb2b596d1e2eeae2b1c1187ab90a7f10693a43",
+        "3beed275e11ceaee5f07951e74bc5b5c2986dba2",
+        "5971ebcc68496e866b7dec37fc0d25c35c3cc1a0"
+      ],
+      "previous_value": 2418,
+      "reconciled_value": 2430,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/discover.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "discover.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-014",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "c668e732653778a9abd0ee24ca8f1a51eff8669b",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "b720ff0bfa99200f4a793b8f32127395cc75d835",
+        "f29583504d3fca304dd9fb059e7e3b15133f556a",
+        "ced98bb31b7cfdc2d89b6d7bdd1dbc87992a4cb9",
+        "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "36ab158470a41afbf87e944fbc09107c50f6c80e",
+        "187ab98545560088c88cb60e0c198d5cf60a91db"
+      ],
+      "previous_value": 1285,
+      "reconciled_value": 1310,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-015",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/selfdev/build_queue.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3aaf49d840daa23b2f1aa98750cac18133448d58",
+        "411436789c6b3e48600e959853ec23113063ffcf",
+        "7b71b787efe59e9d7bacd192495ca6d74605de0f",
+        "87dffa725f6c25e1ca7486ab3e319fda4a3c2889",
+        "c1be5947c5fc523f01003d2d64a5abcb77bc5c5f",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68"
+      ],
+      "previous_value": 1352,
+      "reconciled_value": 1503,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/selfdev/build_queue.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "build_queue.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-016",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/session_search.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f629f884b25844318f3621de863f121962c6ffca"
+      ],
+      "previous_value": 1892,
+      "reconciled_value": 1894,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/session_search.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "session_search.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-017",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/tool/todo.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5"
+      ],
+      "previous_value": 2473,
+      "reconciled_value": 2544,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/todo.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "todo.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-018",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/update.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "9e7ba42a6f00f331e1c9c23b292fa691a776952d",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+      ],
+      "previous_value": 1717,
+      "reconciled_value": 1733,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/update.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "update.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-019",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-base/src/auth/lifecycle.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2592,
+      "reconciled_value": 2594,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/auth/lifecycle.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lifecycle.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-020",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/auth/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3a0745de14876bb1b47189039a29bf67cf51337b"
+      ],
+      "previous_value": 1615,
+      "reconciled_value": 1667,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/auth/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-021",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/background.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "031737c6287670fc66f454b5c63f3b4fbf3424b1",
+        "f3cd5dcf79157c55217a45780a350966710a73f8",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "29fe538c0cf719eacd2806bdff685fe180e07991",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "748435010b84eced475fd648a042d750ad450cb3",
+        "a0ccd7a591b9e3e4773653e65924abd2aa3fde7d",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
+      ],
+      "previous_value": 1465,
+      "reconciled_value": 2368,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/background.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "background.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-022",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/hooks.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "6991029b9a6b443e170b29db5a94c3fd3c7b2fac"
+      ],
+      "previous_value": 1442,
+      "reconciled_value": 1490,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/hooks.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "hooks.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-023",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/memory_agent.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "d283833a7da4cfe9ae1cf2377377a7d1fb2cc367"
+      ],
+      "previous_value": 1901,
+      "reconciled_value": 1904,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/memory_agent.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "memory_agent.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-024",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/prompt.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "0c54134f66716e401b4c9c16e5fccb0586a73882"
+      ],
+      "previous_value": 1239,
+      "reconciled_value": 1343,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/prompt.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "prompt.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-025",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/provider/catalog_routes.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "e1825580a766a2490525c178cbceb0bdf940b18e"
+      ],
+      "previous_value": 1653,
+      "reconciled_value": 1707,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/provider/catalog_routes.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "catalog_routes.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-026",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-base/src/provider/mod.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2907,
+      "reconciled_value": 2995,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/provider/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-027",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7"
+      ],
+      "previous_value": 1752,
+      "reconciled_value": 1784,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/session.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "session.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-028",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-base/src/todo.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "33be6c066fd6bfc01f2aceee5f4ad409a0001e79",
+        "79de395cb00ac548f9d2368b2b314c65c8def61c",
+        "febb1ec11300995086e596e6d10be14f9bc5762d",
+        "00a283d1ece12516585e19d8d9b0bb091805bb10",
+        "f6c7a1b656d48986b4b415efc0c408fb2a982e11",
+        "be9242e8de7f453104e917e2dbf1dc67c14f73ec",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "46915ebb1b6f2c8b79f9f7b26925e5edb6af9192",
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
+      ],
+      "previous_value": 2007,
+      "reconciled_value": 2188,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/todo.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "todo.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-029",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-config-types/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "13442162841617fee2f874879c105aa75dc27847",
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
+        "422d1a593dd4bcf09618230506bc45faf9cdbdb0",
+        "4047470341d961c487d7ddef65605f2a47b4ff69",
+        "4dbe405eff853ec6a44a3e2177a177ca5b143438",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "a423db8fce9667679ebd53385b03579473d7a212",
+        "8b66a3c0c13a3241070fc6cd458a0102a99b7f82",
+        "7da479dfe31d49cb28e87cebfcf3b70244dadb21",
+        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
+        "3309ad37bbdf2a3774a7173512e54d26cc087448"
+      ],
+      "previous_value": 1773,
+      "reconciled_value": 1832,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-config-types/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-030",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-desktop2/src/keymap.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 1372,
+      "reconciled_value": 1377,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-desktop2/src/keymap.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "keymap.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-031",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-desktop2/src/main.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2340,
+      "reconciled_value": 2435,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-desktop2/src/main.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "main.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-032",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-harness-api-server/src/translate.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "81996fde261b41b581a793d291672957de1bd565",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "f76c9a573861112b2ebe25cd9cecd3c2f2659182",
+        "bc1d99536a755b2dfab730d671353948c3379a04",
+        "f6d5da78004e866df8dce7cbae2f74747325e7af"
+      ],
+      "previous_value": 1854,
+      "reconciled_value": 2232,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-harness-api-server/src/translate.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "translate.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-033",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-protocol/src/wire.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+      ],
+      "previous_value": 1531,
+      "reconciled_value": 1550,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-protocol/src/wire.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "wire.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-034",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-provider-anthropic-runtime/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "f5d48a883f7fa1e1afe0334af9e69db68a12cc0a",
+        "ad1f63927766baf02c5f90d56870d2b168f02164"
+      ],
+      "previous_value": 2499,
+      "reconciled_value": 2664,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-anthropic-runtime/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-035",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-provider-bedrock/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "a987a3509f2a0e8b36254227af59e51c4782ec4d",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+      ],
+      "previous_value": 1980,
+      "reconciled_value": 1981,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-bedrock/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-036",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-provider-metadata/src/catalog.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "81e82db7de62aaf52ed3ca898d411710efed4ac7",
+        "a2622db13a4e2c87fb6f110ecffbecf67b2cb6e3"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1232,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-metadata/src/catalog.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "catalog.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-037",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-provider-openrouter-runtime/src/lib.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2707,
+      "reconciled_value": 2711,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-openrouter-runtime/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-038",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-sdk/src/client.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "bc1d99536a755b2dfab730d671353948c3379a04"
+      ],
+      "previous_value": 1380,
+      "reconciled_value": 1427,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-sdk/src/client.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-039",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui-core/src/keybind.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "e42bad3f7b8c4a580aeca8b9cd5dd9df963d94b1"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1207,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui-core/src/keybind.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "keybind.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-040",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-tui-render/src/swarm_gallery.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 3099,
+      "reconciled_value": 3249,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui-render/src/swarm_gallery.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "swarm_gallery.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-041",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "16c55a5a28cccbec328ead81eb42201afce59a41",
+        "16fc0290c6b5b7522a11acfd20ab54412a287a71",
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "a423db8fce9667679ebd53385b03579473d7a212",
+        "21e9cd2530bcbba7740b1976692f91ec5565244e",
+        "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "9afc59c2042bf467f94dee2cb71e9935685fd71c",
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
+      ],
+      "previous_value": 2582,
+      "reconciled_value": 2609,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "app.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-042",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/auth.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3a0745de14876bb1b47189039a29bf67cf51337b"
+      ],
+      "previous_value": 3433,
+      "reconciled_value": 3520,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/auth.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "auth.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-043",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/auth_account_picker.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
+        "c8189b5099c3750f9d1d5b905a53eb85fde44db2",
+        "b2872056273109c8d77de4870e3dc1c731e45732"
+      ],
+      "previous_value": 1220,
+      "reconciled_value": 1233,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/auth_account_picker.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "auth_account_picker.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-044",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/commands.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "4c58869beeb3885e5d772054fd763176c992465c"
+      ],
+      "previous_value": 3661,
+      "reconciled_value": 3664,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/commands.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "commands.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-045",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/inline_interactive.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "e1825580a766a2490525c178cbceb0bdf940b18e",
+        "59026e79b26451fec44dd6b96bc93a87a370c614",
+        "fb35ed8295d53836c64453c2323c35c5db3dc346",
+        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
+        "2d7b4a9a36b441e6f349d6738508c0c1f7f01392",
+        "b59cf3409dcb8dce0664a0f3110389c4b34e49a3",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "2df9b616e5d9581936be8a0df1e9ca8242dafae8"
+      ],
+      "previous_value": 4337,
+      "reconciled_value": 4646,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/inline_interactive.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "inline_interactive.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-046",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/input.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b",
+        "13442162841617fee2f874879c105aa75dc27847",
+        "dc0bdc58d817fd0a1f936714a4f9dca1f2a182fc",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "c65dde06e0679aa4197038fe32245ae94725276c",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
+        "79de395cb00ac548f9d2368b2b314c65c8def61c",
+        "f6c7a1b656d48986b4b415efc0c408fb2a982e11",
+        "ffa6454ff4fa04d6245af9997ff2f7e62bbbc8eb",
+        "be9242e8de7f453104e917e2dbf1dc67c14f73ec",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "5da90ec9722b72c567966e486ac7df65627b8fb1",
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
+        "a8636a16bd2343bca0bf3a4acab43dc04b3578b7",
+        "3309ad37bbdf2a3774a7173512e54d26cc087448",
+        "62de1469718bfccab1125f11934adca72b9e2399"
+      ],
+      "previous_value": 4073,
+      "reconciled_value": 4248,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-B1",
+        "PR1-REV-5000869215-B2",
+        "PR1-REV-5000869215-B3",
+        "PR1-REV-5000869215-B4"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/input.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "input.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-047",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/model_context.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "2df9b616e5d9581936be8a0df1e9ca8242dafae8"
+      ],
+      "previous_value": 1945,
+      "reconciled_value": 1980,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/model_context.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "model_context.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-048",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/navigation.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "422d1a593dd4bcf09618230506bc45faf9cdbdb0",
+        "491157e78e827e13b5e992ac76b1679b8d1c7f2e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "5da90ec9722b72c567966e486ac7df65627b8fb1",
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": 1921,
+      "reconciled_value": 2052,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/navigation.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "navigation.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-049",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/remote/key_handling.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "dc0bdc58d817fd0a1f936714a4f9dca1f2a182fc",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "05740a8b5a0db5c826fb645dc84747bbbc619dc1",
+        "d01fb18adc1ce2963fcc513eb9eedb28dfb04dca",
+        "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "3309ad37bbdf2a3774a7173512e54d26cc087448"
+      ],
+      "previous_value": 2706,
+      "reconciled_value": 2767,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/remote/key_handling.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "key_handling.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-050",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/remote/server_events.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
+        "a770cdf9767487eeb5caaf22ec3e20e7bc39b708",
+        "4b650afd64e408640d7446fdb308b1ec4707303c",
+        "46ad1d312f2d026b23f43b09f99abcfdef733a33",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "274277f30d922f39ad8404d0c4ddd342a9a5cec6",
+        "21e9cd2530bcbba7740b1976692f91ec5565244e",
+        "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "19e6cdc51836f43b7bd036de07b6025de6d59e1b"
+      ],
+      "previous_value": 2858,
+      "reconciled_value": 3049,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/remote/server_events.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "server_events.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-051",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-tui/src/tui/app/run_shell.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 1359,
+      "reconciled_value": 1413,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/run_shell.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "run_shell.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-052",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b",
+        "13442162841617fee2f874879c105aa75dc27847",
+        "c2fc63501eae51f8ff0aa594e96cabacd81147d8",
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "16fc0290c6b5b7522a11acfd20ab54412a287a71",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "7ba611e87a66766fd1a7c3903516e82659d0e758",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "a423db8fce9667679ebd53385b03579473d7a212",
+        "8b66a3c0c13a3241070fc6cd458a0102a99b7f82",
+        "2636a4fe3e3c54210f7d64fbd72f01298e36d211",
+        "c520c223ed73cc453123be78ec9f60ec4de8ab6e",
+        "7da479dfe31d49cb28e87cebfcf3b70244dadb21"
+      ],
+      "previous_value": 2109,
+      "reconciled_value": 2233,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-D1"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "state_ui_input_helpers.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-053",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "a423db8fce9667679ebd53385b03579473d7a212",
+        "21e9cd2530bcbba7740b1976692f91ec5565244e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "9afc59c2042bf467f94dee2cb71e9935685fd71c",
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
+        "c97621a96befaecaf067583ac212623b02457f70"
+      ],
+      "previous_value": 1387,
+      "reconciled_value": 1405,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tui_lifecycle.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tui_lifecycle.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-054",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_state.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "06cc40fb6bb4d7b14fb0f9614a34c27e8212ad69",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "9afc59c2042bf467f94dee2cb71e9935685fd71c",
+        "e42bad3f7b8c4a580aeca8b9cd5dd9df963d94b1",
+        "f8e5fe1f6c05026c417dca2bf2f8d25fd78f79d0",
+        "2c8735f69e28ce22c86d35e418fe19e6d2e4f197"
+      ],
+      "previous_value": 2431,
+      "reconciled_value": 2478,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tui_state.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tui_state.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-055",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/backend.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
+        "e2224d3e01c74d44d4a58b6339ac02fd98f9ad13",
+        "8775cf6851a074b54bb74d8e3748a41f5f89bea7"
+      ],
+      "previous_value": 1882,
+      "reconciled_value": 1927,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/backend.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "backend.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-056",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/info_widget.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "2c8735f69e28ce22c86d35e418fe19e6d2e4f197"
+      ],
+      "previous_value": 2233,
+      "reconciled_value": 2239,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/info_widget.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "info_widget.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-057",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "751024bc1814a65b3e68a336354eb2dc59825701",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "9afc59c2042bf467f94dee2cb71e9935685fd71c"
+      ],
+      "previous_value": 1902,
+      "reconciled_value": 1944,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-058",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/session_picker/loading.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f629f884b25844318f3621de863f121962c6ffca",
+        "502739ca81f5757bcc3985b0629398e8cd8c8bb8",
+        "468efb56bd67f0270de69fed3268e5a739d741ce"
+      ],
+      "previous_value": 2983,
+      "reconciled_value": 3040,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/session_picker/loading.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "loading.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-059",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "5da90ec9722b72c567966e486ac7df65627b8fb1",
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": 3685,
+      "reconciled_value": 3776,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-060",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_frame_metrics.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": 1437,
+      "reconciled_value": 1438,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_frame_metrics.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_frame_metrics.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-061",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_messages.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "b18cf642bb7c54b0d8f6fb20b0b09158237475b7",
+        "ce9e9fe4d441d682b436c5f8717a2d315d26b862",
+        "87c83ceddcbb3d64c45d073e690171adf8aa4106",
+        "376b12d64e1d63868bc10fccf6e98fb7205f8194",
+        "84df2ced74442e82a137ac15352f8be941aaccd3",
+        "19b003ec0c9f7f18bac74c85f8abaac8d56a5bb0",
+        "4285784557947441e29bf4b61e83c42f8342ce94"
+      ],
+      "previous_value": 4417,
+      "reconciled_value": 4478,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_messages.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_messages.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-062",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-tui/src/tui/ui_prepare.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 2675,
+      "reconciled_value": 2683,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_prepare.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_prepare.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-063",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_tools.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "376b12d64e1d63868bc10fccf6e98fb7205f8194"
+      ],
+      "previous_value": 1656,
+      "reconciled_value": 1683,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_tools.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_tools.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-064",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_viewport.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "751024bc1814a65b3e68a336354eb2dc59825701",
+        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "5da90ec9722b72c567966e486ac7df65627b8fb1",
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": 1514,
+      "reconciled_value": 1676,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_viewport.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_viewport.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-065",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/acp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f411ffc18614a38ad614f0903c2afa78431b3b87",
+        "6459bd52605305cf61e33d244a02a8692ff14887"
+      ],
+      "previous_value": 2078,
+      "reconciled_value": 2188,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/acp.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "acp.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-066",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/args.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "80e236baead391a5e1f9a9131aded0b191bb0dab",
+        "4047470341d961c487d7ddef65605f2a47b4ff69",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1213,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/args.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "args.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-067",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/commands.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "93d1446c6faf22e27922c74929e819d4582fc275",
+        "6653240b23ca9ef09bdeb81bc894f3d6f171d197",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
+        "1692fbe7af06530934c37bb357a01e2fd6b21c95",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "83efc48d3bc35859b6e22946405d8cf19195d31b",
+        "6459bd52605305cf61e33d244a02a8692ff14887",
+        "9e7ba42a6f00f331e1c9c23b292fa691a776952d",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+      ],
+      "previous_value": 3822,
+      "reconciled_value": 4008,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/commands.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "commands.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-068",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/dispatch.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "b428e84e2a33e51fdbfd653d8999a6c645b731f0",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+      ],
+      "previous_value": 1502,
+      "reconciled_value": 1527,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/dispatch.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "dispatch.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-069",
+      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains src/cli/login.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac"
+      ],
+      "previous_value": 1389,
+      "reconciled_value": 1414,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/login.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "login.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-070",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/profile.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6653240b23ca9ef09bdeb81bc894f3d6f171d197"
+      ],
+      "previous_value": 1265,
+      "reconciled_value": 1267,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/profile.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "profile.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
+      "category": "code_size",
+      "id": "QR-071",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/provider_init.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "4dbe405eff853ec6a44a3e2177a177ca5b143438"
+      ],
+      "previous_value": 1924,
+      "reconciled_value": 1983,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/provider_init.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "provider_init.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-072",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/agent_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "f629f884b25844318f3621de863f121962c6ffca",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "12204bd45ddae949e748442a5139122283d3751b",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "b32f50ad2d2a08ed52de0ad46daaf0ab23716719",
+        "3ddd13ab43166f1219a4aef04b4056778b184a2f",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "5ec1950223b045613d606860752736571d272664"
+      ],
+      "previous_value": 2361,
+      "reconciled_value": 2837,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/agent_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "agent_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-073",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_actions_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "6277a90e05988fe7d615de3fef33a55b760d238b",
+        "555081f0390c697cd08f5d4679af584d672d8b51",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "8ae6ece25193f0a07a6bb64828ccade00a457ab4",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
+        "79e1b1bc3dff2fb02ef2c056b7de86807c4dbdc8",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "fb902562d8b50cc391043c9b1d720d238965a3f1"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1210,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/client_actions_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_actions_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-074",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lifecycle_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1983f15425723f4d99b98fa1ab7b32c04acd568d",
+        "66758cf9fab0470812552da8797002d74d8dc503",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+      ],
+      "previous_value": 1534,
+      "reconciled_value": 1618,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/server/client_lifecycle_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_lifecycle_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-075",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/bash_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "0dbfd8f60a750e70bc793a7ad79979650fb08ef9",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "5549174d22f74d2bf25bff2e81e633bd19d4aaf8",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "c702ec886aa060d2d343c83aefd085d2c5b6e381",
+        "3f4cc0686d0a5574b681b0494efee69799403120",
+        "ff90e97ffbb4cb553cdd62000977ec914c65fb13",
+        "39a24e31da04f5de54cad59d21374ff8c9248c6a"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1325,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/bash_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "bash_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-076",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/communicate_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "ec15f387310a68db4680f0156c893f8d6c279f03",
+        "4acfbc1f3e62036ca9a1ffd6b22406611702bf8f",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+      ],
+      "previous_value": 1806,
+      "reconciled_value": 1829,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/communicate_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "communicate_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-077",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/selfdev/tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3aaf49d840daa23b2f1aa98750cac18133448d58",
+        "3031bf3dbbd28fb528360a49a0ba3a6d4949b1a1",
+        "c1be5947c5fc523f01003d2d64a5abcb77bc5c5f",
+        "1899be0b3c5c0422c87208358b925aff81d7b9ac",
+        "6db64281ae3b96e45be234c175228f9dcbe58f82",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
+      ],
+      "previous_value": 1440,
+      "reconciled_value": 2185,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/selfdev/tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-078",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "b720ff0bfa99200f4a793b8f32127395cc75d835",
+        "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
+        "489b0fc7072e21cda45183746ae40198ed8a1bb0",
+        "5b960bdc4c9ae4fa248088663fd162198b158c07"
+      ],
+      "previous_value": 1593,
+      "reconciled_value": 1647,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-app-core/src/tool/tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-079",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/background/tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "031737c6287670fc66f454b5c63f3b4fbf3424b1",
+        "f3cd5dcf79157c55217a45780a350966710a73f8",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "29fe538c0cf719eacd2806bdff685fe180e07991",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
+        "748435010b84eced475fd648a042d750ad450cb3",
+        "a0ccd7a591b9e3e4773653e65924abd2aa3fde7d",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1229,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/background/tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-080",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/config_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "4657dd3f2d3f90669a9ff88814c4412ab714c017",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7",
+        "0dbfd8f60a750e70bc793a7ad79979650fb08ef9",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "4dbe405eff853ec6a44a3e2177a177ca5b143438",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
+        "3309ad37bbdf2a3774a7173512e54d26cc087448",
+        "4f22fa4aff60f5770cd4a08517f80a264e7ffbb5"
+      ],
+      "previous_value": 1320,
+      "reconciled_value": 1582,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/config_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "config_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-081",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider_catalog_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "dc906ade08cd4bf1da4c2616052ec6d517a40409",
+        "ac05fea9315fa1242adba67ef95cf495390ef0d6",
+        "3ec0293c37c7ab58ff6f776c33b8a3f8f9116563",
+        "8517b8e854adf8a1f8044cc4eda1e9fa3be24999",
+        "81e82db7de62aaf52ed3ca898d411710efed4ac7",
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1253,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/provider_catalog_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "provider_catalog_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-082",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/session_tests/cases.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f629f884b25844318f3621de863f121962c6ffca",
+        "6e1ff917d261483f05fdaab8c547448accb5e37f",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "4eb82b8c78fb90a9cffa7265d51f68b3210e2126"
+      ],
+      "previous_value": 2597,
+      "reconciled_value": 3135,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-base/src/session_tests/cases.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "cases.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-083",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-desktop2/src/tests/actions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6761f5255cce295a47ee1dc9b92b89fe536002bf",
+        "ba50098e505ba1b55cbe442f49b7dad8516c14f0",
+        "552a8c1dd12f386397da3246e6fe939552ad24af"
+      ],
+      "previous_value": 1720,
+      "reconciled_value": 1794,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-desktop2/src/tests/actions.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "actions.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-084",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-harness-api-server/src/translate_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1983f15425723f4d99b98fa1ab7b32c04acd568d",
+        "090b48bc71173ed9712ad400423eb9c7e6ab1a02",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "f76c9a573861112b2ebe25cd9cecd3c2f2659182",
+        "bc1d99536a755b2dfab730d671353948c3379a04",
+        "f6d5da78004e866df8dce7cbae2f74747325e7af",
+        "c0019f0827a007bf4db5104d0802470f6da685bd",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "b86833ba2e91f422afc83fc0cb3ca0f038456e37"
+      ],
+      "previous_value": 1415,
+      "reconciled_value": 1763,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-harness-api-server/src/translate_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "translate_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-085",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-anthropic-runtime/src/anthropic_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
+      ],
+      "previous_value": 2017,
+      "reconciled_value": 2105,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-anthropic-runtime/src/anthropic_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "anthropic_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-086",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-openrouter-runtime/src/openrouter_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "80b7c4f79000b1085b06412562bcf5dde1bb4ba4"
+      ],
+      "previous_value": 3180,
+      "reconciled_value": 3209,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-provider-openrouter-runtime/src/openrouter_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "openrouter_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-087",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/remote_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1983f15425723f4d99b98fa1ab7b32c04acd568d",
+        "25fb2ba1edd6b3ed95f616c83f48b305aeafe4f4",
+        "6277a90e05988fe7d615de3fef33a55b760d238b",
+        "06cc40fb6bb4d7b14fb0f9614a34c27e8212ad69",
+        "05740a8b5a0db5c826fb645dc84747bbbc619dc1",
+        "4b650afd64e408640d7446fdb308b1ec4707303c",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "274277f30d922f39ad8404d0c4ddd342a9a5cec6",
+        "f929751446e6b55aee9ab401a6a4f6aab67b0c10",
+        "21e9cd2530bcbba7740b1976692f91ec5565244e",
+        "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
+        "8775cf6851a074b54bb74d8e3748a41f5f89bea7",
+        "cac5aeb6a2999b3017aad36e2eb4a69519843266",
+        "fb902562d8b50cc391043c9b1d720d238965a3f1"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1600,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/remote_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "remote_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-088",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "94c94c102cfdd3ae61ba7cf5e0ba622c5a6a7520",
+        "d2f77a450375eaf618907cc63d9e09785c599c71",
+        "f1608b1d681a8b50ef9ce682221693759201fbbc",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "2636a4fe3e3c54210f7d64fbd72f01298e36d211",
+        "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
+        "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
+        "8c203378a196fbb163d267fd50761a1e0474c053",
+        "c29503fbac1b6d759443be269cad028e8d8aea87",
+        "15af648ca99b7f706f9acaf7dfd1391d93b63471",
+        "489b0fc7072e21cda45183746ae40198ed8a1bb0",
+        "9989d4e2446acff6dc1992fd95341e804f9d9b60",
+        "af2e205d6721db610ca71ec4e2d30744e34522bb"
+      ],
+      "previous_value": 2223,
+      "reconciled_value": 2294,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-089",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/commands_accounts_01/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "4c58869beeb3885e5d772054fd763176c992465c"
+      ],
+      "previous_value": 1673,
+      "reconciled_value": 1677,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/commands_accounts_01/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-090",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/remote_events_reload_01/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "8f4fc9f2ad2106744d2923993c60b97e7e2985ac",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+      ],
+      "previous_value": 1930,
+      "reconciled_value": 1972,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/remote_events_reload_01/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-091",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/remote_events_reload_04.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3f7178d7519d08c6e3c02ac8010f3e7e8adf9a5f",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "b6848dec8535ea361b67ff78d5ba9e6beeb07d16",
+        "fcf7443bab2bfa4906ee615ff1cb3ba49c176c61"
+      ],
+      "previous_value": 2415,
+      "reconciled_value": 2481,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/remote_events_reload_04.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "remote_events_reload_04.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-092",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1983f15425723f4d99b98fa1ab7b32c04acd568d",
+        "13442162841617fee2f874879c105aa75dc27847",
+        "00ba336355decd6db7791febaa73ce0394ff2f26"
+      ],
+      "previous_value": 2033,
+      "reconciled_value": 2062,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-093",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/remote_startup_input_03/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "62de1469718bfccab1125f11934adca72b9e2399",
+        "2c2f4f20470374e6a645cb2210e78b9f3ea717a3"
+      ],
+      "previous_value": 1229,
+      "reconciled_value": 1308,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/remote_startup_input_03/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-094",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/scroll_copy_01/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "d01fb18adc1ce2963fcc513eb9eedb28dfb04dca",
+        "c97621a96befaecaf067583ac212623b02457f70"
+      ],
+      "previous_value": null,
+      "reconciled_value": 1235,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/scroll_copy_01/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-095",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": 1442,
+      "reconciled_value": 1480,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_01.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_01.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-096",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_02.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "5da90ec9722b72c567966e486ac7df65627b8fb1"
+      ],
+      "previous_value": 1337,
+      "reconciled_value": 1375,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/scroll_copy_02/part_02.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "part_02.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-097",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/state_model_poke_03.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "fb35ed8295d53836c64453c2323c35c5db3dc346",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "79de395cb00ac548f9d2368b2b314c65c8def61c",
+        "f6c7a1b656d48986b4b415efc0c408fb2a982e11",
+        "ffa6454ff4fa04d6245af9997ff2f7e62bbbc8eb",
+        "be9242e8de7f453104e917e2dbf1dc67c14f73ec",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
+        "00ba336355decd6db7791febaa73ce0394ff2f26"
+      ],
+      "previous_value": 2886,
+      "reconciled_value": 2918,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/app/tests/state_model_poke_03.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "state_model_poke_03.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-098",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/session_picker/loading_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f629f884b25844318f3621de863f121962c6ffca",
+        "502739ca81f5757bcc3985b0629398e8cd8c8bb8",
+        "468efb56bd67f0270de69fed3268e5a739d741ce"
+      ],
+      "previous_value": 1401,
+      "reconciled_value": 1506,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/session_picker/loading_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "loading_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-099",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui_messages/tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
+        "b18cf642bb7c54b0d8f6fb20b0b09158237475b7",
+        "ba80055e13bf8db643c0f14d27ad74859a3840bb",
+        "ce9e9fe4d441d682b436c5f8717a2d315d26b862",
+        "14324840a79829a61f2e0079321ded754e7e0c30",
+        "87c83ceddcbb3d64c45d073e690171adf8aa4106",
+        "376b12d64e1d63868bc10fccf6e98fb7205f8194",
+        "84df2ced74442e82a137ac15352f8be941aaccd3",
+        "19b003ec0c9f7f18bac74c85f8abaac8d56a5bb0",
+        "4285784557947441e29bf4b61e83c42f8342ce94"
+      ],
+      "previous_value": 3151,
+      "reconciled_value": 3325,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_messages/tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-100",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui_tests/tools.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "376b12d64e1d63868bc10fccf6e98fb7205f8194",
+        "5ffba9482ec144723f514a2497fb6fea81759a5d",
+        "4285784557947441e29bf4b61e83c42f8342ce94"
+      ],
+      "previous_value": 1352,
+      "reconciled_value": 1354,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "crates/jcode-tui/src/tui/ui_tests/tools.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "tools.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-101",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- src/cli/commands_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3656b0710725efb22f8a19c236b591089edad132",
+        "93d1446c6faf22e27922c74929e819d4582fc275",
+        "4657dd3f2d3f90669a9ff88814c4412ab714c017",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "83efc48d3bc35859b6e22946405d8cf19195d31b",
+        "45cdb33cb498c24a674732b131fb885c4acf5609",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "1ab482c77e8afbecb80e955164e19718fe6dd5c6"
+      ],
+      "previous_value": 1352,
+      "reconciled_value": 1663,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "src/cli/commands_tests.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "commands_tests.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "test_size",
+      "id": "QR-102",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- tests/e2e/test_support/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "84510b891c5eafd1a789133ce7ada738674d6078",
+        "c0dc6f192fe5d4ea8d8b48b32c2137e28e0858fa"
+      ],
+      "previous_value": 1427,
+      "reconciled_value": 1428,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "tests/e2e/test_support/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-103",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/agent.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "12204bd45ddae949e748442a5139122283d3751b",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "3ddd13ab43166f1219a4aef04b4056778b184a2f",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "4c1e596fb1ffddd52213c5ec28871a9b7af06771",
+        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
+        "f83eb091d4cf3d7430524c2dc57035662df68914",
+        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
+        "7015b21b332ba93afbc849fa22852ceabb5895c7",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "4eb82b8c78fb90a9cffa7265d51f68b3210e2126",
+        "255ca6ebbb2809ced64e5c8803dc0fcb9597fff0",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+      ],
+      "previous_value": {
+        "dot_ok": 3,
+        "let_underscore": 0,
+        "unwrap_or_default": 3
+      },
+      "reconciled_value": {
+        "dot_ok": 7,
+        "let_underscore": 2,
+        "unwrap_or_default": 4
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/agent.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "agent.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-104",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/lifecycle_observability.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "db3c5738c828200b5ae253c784b7f038ac533d2f",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 2,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/lifecycle_observability.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lifecycle_observability.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-105",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_actions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "db3c5738c828200b5ae253c784b7f038ac533d2f",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "6277a90e05988fe7d615de3fef33a55b760d238b",
+        "555081f0390c697cd08f5d4679af584d672d8b51",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
+        "79e1b1bc3dff2fb02ef2c056b7de86807c4dbdc8",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff"
+      ],
+      "previous_value": {
+        "dot_ok": 3,
+        "let_underscore": 47,
+        "unwrap_or_default": 1
+      },
+      "reconciled_value": {
+        "dot_ok": 4,
+        "let_underscore": 49,
+        "unwrap_or_default": 4
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/server/client_actions.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_actions.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-106",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "77c5119b9c342746389148d30dfc8189878eecda",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 35,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 38,
+        "unwrap_or_default": 3
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/server/client_lifecycle.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_lifecycle.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-107",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lightweight_control.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 5,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 7,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/server/client_lightweight_control.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_lightweight_control.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-108",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/debugger.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "36ab158470a41afbf87e944fbc09107c50f6c80e",
+        "187ab98545560088c88cb60e0c198d5cf60a91db"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/tool/debugger.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "debugger.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-109",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/mcp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "834ea8dcc4db7d303afc19fa0b9f7c7d2f920bee"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 2
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 3
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-app-core/src/tool/mcp.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mcp.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-110",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/auth/grok_build.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "ec15f387310a68db4680f0156c893f8d6c279f03",
+        "6efda099066b60714df87668ed69370653bdf004",
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
+        "659b8cc155c1aeb48009cbf2db19a540c573314b"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 5,
+        "let_underscore": 0,
+        "unwrap_or_default": 4
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/auth/grok_build.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "grok_build.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-111",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/background.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "031737c6287670fc66f454b5c63f3b4fbf3424b1",
+        "f3cd5dcf79157c55217a45780a350966710a73f8",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "29fe538c0cf719eacd2806bdff685fe180e07991",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "748435010b84eced475fd648a042d750ad450cb3",
+        "a0ccd7a591b9e3e4773653e65924abd2aa3fde7d",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
+      ],
+      "previous_value": {
+        "dot_ok": 14,
+        "let_underscore": 17,
+        "unwrap_or_default": 9
+      },
+      "reconciled_value": {
+        "dot_ok": 17,
+        "let_underscore": 13,
+        "unwrap_or_default": 11
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/background.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "background.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-112",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/client_input.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "1e6eab640c293e4517075af97dfe8be733759f06"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 1,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 2,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/client_input.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "client_input.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-113",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/platform.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f3cd5dcf79157c55217a45780a350966710a73f8",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "6991029b9a6b443e170b29db5a94c3fd3c7b2fac"
+      ],
+      "previous_value": {
+        "dot_ok": 1,
+        "let_underscore": 7,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 7,
+        "let_underscore": 11,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/platform.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "platform.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-114",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/prompt.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "0c54134f66716e401b4c9c16e5fccb0586a73882",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "898e3ef9309dbb934112e9d6cfd2c9ca6776c088"
+      ],
+      "previous_value": {
+        "dot_ok": 11,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 12,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/prompt.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "prompt.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-115",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider/anthropic.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 1,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/provider/anthropic.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "anthropic.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-116",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60",
+        "99a75914102e14e028e85eafbe63bc68e3e67704"
+      ],
+      "previous_value": {
+        "dot_ok": 3,
+        "let_underscore": 1,
+        "unwrap_or_default": 15
+      },
+      "reconciled_value": {
+        "dot_ok": 4,
+        "let_underscore": 1,
+        "unwrap_or_default": 15
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/provider/mod.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "mod.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-117",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider/startup.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "b1ac1fe90822b785bab63ae27bc7720ddb111a62",
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
+      ],
+      "previous_value": {
+        "dot_ok": 2,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 4,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/provider/startup.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "startup.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-118",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/session/artifacts.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6e1ff917d261483f05fdaab8c547448accb5e37f",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 1,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-base/src/session/artifacts.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "artifacts.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-119",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-dap/src/config.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "36ab158470a41afbf87e944fbc09107c50f6c80e",
+        "187ab98545560088c88cb60e0c198d5cf60a91db"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-dap/src/config.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "config.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-120",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-dap/src/session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "da6c70c0475b58ec3ac0e991c60128668958abe5",
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "36ab158470a41afbf87e944fbc09107c50f6c80e",
+        "187ab98545560088c88cb60e0c198d5cf60a91db"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 6,
+        "unwrap_or_default": 2
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-dap/src/session.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "session.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-121",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-dap/src/transport.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "da6c70c0475b58ec3ac0e991c60128668958abe5",
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "36ab158470a41afbf87e944fbc09107c50f6c80e",
+        "187ab98545560088c88cb60e0c198d5cf60a91db"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 2,
+        "let_underscore": 38,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-dap/src/transport.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "transport.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-122",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-harness-api-server/src/translate.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "189c58880307aae10c4bfd687ac4807a24e9a42e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "81996fde261b41b581a793d291672957de1bd565",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "f76c9a573861112b2ebe25cd9cecd3c2f2659182",
+        "bc1d99536a755b2dfab730d671353948c3379a04",
+        "f6d5da78004e866df8dce7cbae2f74747325e7af",
+        "c0019f0827a007bf4db5104d0802470f6da685bd",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "b86833ba2e91f422afc83fc0cb3ca0f038456e37"
+      ],
+      "previous_value": {
+        "dot_ok": 12,
+        "let_underscore": 2,
+        "unwrap_or_default": 23
+      },
+      "reconciled_value": {
+        "dot_ok": 17,
+        "let_underscore": 4,
+        "unwrap_or_default": 29
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-harness-api-server/src/translate.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "translate.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-123",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-anthropic-runtime/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "f5d48a883f7fa1e1afe0334af9e69db68a12cc0a",
+        "ad1f63927766baf02c5f90d56870d2b168f02164",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
+      ],
+      "previous_value": {
+        "dot_ok": 4,
+        "let_underscore": 15,
+        "unwrap_or_default": 1
+      },
+      "reconciled_value": {
+        "dot_ok": 9,
+        "let_underscore": 15,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-provider-anthropic-runtime/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-124",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-grok-build-runtime/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "681e80053e7896c040b520437b852d167c8d149e",
+        "5f46424c9be70414182f494f523b1c313c938610",
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
+        "659b8cc155c1aeb48009cbf2db19a540c573314b"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 4,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-provider-grok-build-runtime/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-125",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-openrouter/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7"
+      ],
+      "previous_value": {
+        "dot_ok": 14,
+        "let_underscore": 4,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 18,
+        "let_underscore": 4,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-provider-openrouter/src/lib.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "lib.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-126",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-openrouter/src/stream.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "df65c7a66a789b255f7dfb69b89ef282074ec343",
+        "ce77a7c4886aa1aabee7c56ec5086bf722ec1b26",
+        "3680007a773fe8d1f87a3d4ae2c1689180ab09a4",
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
+        "e0aea418ef45d801f241ef29aba936179d14e585"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 1,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-provider-openrouter/src/stream.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "stream.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-127",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/auth.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "681e80053e7896c040b520437b852d167c8d149e",
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
+        "659b8cc155c1aeb48009cbf2db19a540c573314b"
+      ],
+      "previous_value": {
+        "dot_ok": 7,
+        "let_underscore": 3,
+        "unwrap_or_default": 13
+      },
+      "reconciled_value": {
+        "dot_ok": 7,
+        "let_underscore": 4,
+        "unwrap_or_default": 13
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/auth.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "auth.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-128",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/conversation_state.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "13442162841617fee2f874879c105aa75dc27847"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 4,
+        "unwrap_or_default": 1
+      },
+      "reconciled_value": {
+        "dot_ok": 1,
+        "let_underscore": 4,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-B1",
+        "PR1-REV-5000869215-B3"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/conversation_state.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "conversation_state.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-129",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/inline_file_preview.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "13442162841617fee2f874879c105aa75dc27847",
+        "422d1a593dd4bcf09618230506bc45faf9cdbdb0",
+        "426f92f7d94f62e53b1e0ab55a8af4eb507d20c9",
+        "c2e1c9278ad0355ca0c42d9d4b08098f48f71a4a",
+        "cf202de91ab3fdfdd4b10bae5a0114c31c8da726",
+        "af2e205d6721db610ca71ec4e2d30744e34522bb"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 1,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR2-REV-5000867773-D1",
+        "PR2-REV-5000867773-D2",
+        "PR2-REV-5000867773-D4",
+        "PR2-REV-5000867773-D5",
+        "PR2-REV-5000867773-S1",
+        "PR2-REV-5000867773-S2"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/inline_file_preview.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "inline_file_preview.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-130",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/inline_interactive.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "e1825580a766a2490525c178cbceb0bdf940b18e",
+        "59026e79b26451fec44dd6b96bc93a87a370c614",
+        "fb35ed8295d53836c64453c2323c35c5db3dc346",
+        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
+        "2d7b4a9a36b441e6f349d6738508c0c1f7f01392",
+        "b59cf3409dcb8dce0664a0f3110389c4b34e49a3",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "2df9b616e5d9581936be8a0df1e9ca8242dafae8",
+        "00ba336355decd6db7791febaa73ce0394ff2f26"
+      ],
+      "previous_value": {
+        "dot_ok": 6,
+        "let_underscore": 11,
+        "unwrap_or_default": 4
+      },
+      "reconciled_value": {
+        "dot_ok": 6,
+        "let_underscore": 10,
+        "unwrap_or_default": 8
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/inline_interactive.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "inline_interactive.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-131",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/input/file_mentions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 3,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-D2",
+        "PR1-REV-5000869215-D3",
+        "PR1-REV-5000869215-S4",
+        "PR1-REV-5000869215-S5"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/input/file_mentions.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "file_mentions.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-132",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/local.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
+        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
+        "a423db8fce9667679ebd53385b03579473d7a212",
+        "751024bc1814a65b3e68a336354eb2dc59825701",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "00ba336355decd6db7791febaa73ce0394ff2f26"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 5,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 6,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/local.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "local.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-133",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/remote/followups.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 1,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-B1",
+        "PR1-REV-5000869215-B2",
+        "PR1-REV-5000869215-B3",
+        "PR1-REV-5000869215-B4"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/remote/followups.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "followups.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-134",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/remote/key_handling.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "dc0bdc58d817fd0a1f936714a4f9dca1f2a182fc",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "05740a8b5a0db5c826fb645dc84747bbbc619dc1",
+        "d01fb18adc1ce2963fcc513eb9eedb28dfb04dca",
+        "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "3309ad37bbdf2a3774a7173512e54d26cc087448"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 19,
+        "unwrap_or_default": 11
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 20,
+        "unwrap_or_default": 11
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/remote/key_handling.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "key_handling.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-135",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/state_ui_input_helpers/file_mentions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
+      ],
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 3,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR1-REV-5000869215-D2",
+        "PR1-REV-5000869215-D3",
+        "PR1-REV-5000869215-S4"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/app/state_ui_input_helpers/file_mentions.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "file_mentions.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-136",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/theme_detect.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "854ff3e5d6e56a9c12d31439976f0f282eef8d43",
+        "86a414acfb152e09e90ad6ddb66ba4a0afd0730c",
+        "60f38a5fc7bfa9fdf5f11b47f90ad5681ab9ddf0"
+      ],
+      "previous_value": {
+        "dot_ok": 7,
+        "let_underscore": 2,
+        "unwrap_or_default": 2
+      },
+      "reconciled_value": {
+        "dot_ok": 9,
+        "let_underscore": 3,
+        "unwrap_or_default": 2
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/theme_detect.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "theme_detect.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-137",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui/url.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "13442162841617fee2f874879c105aa75dc27847",
+        "039bcc8dc7142ebbf2657cdc78b578e15a10c9d5",
+        "6a9a33ea76b211c9bb7ba0b48d87c6d3939c20bf",
+        "491157e78e827e13b5e992ac76b1679b8d1c7f2e",
+        "af2e205d6721db610ca71ec4e2d30744e34522bb"
+      ],
+      "previous_value": {
+        "dot_ok": 2,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 3,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "PR2-REV-5000867773-B1A",
+        "PR2-IC-5382248439-B1B",
+        "PR2-REV-5000867773-B2"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/ui/url.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "url.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-138",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui_viewport.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "751024bc1814a65b3e68a336354eb2dc59825701",
+        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "5da90ec9722b72c567966e486ac7df65627b8fb1",
+        "6f743f264aafb16281782ea5480438cc52ff05e8"
+      ],
+      "previous_value": {
+        "dot_ok": 2,
+        "let_underscore": 0,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 3,
+        "let_underscore": 0,
+        "unwrap_or_default": 1
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:crates/jcode-tui/src/tui/ui_viewport.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "ui_viewport.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-139",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- src/cli/commands.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "owning_commits": [
+        "93d1446c6faf22e27922c74929e819d4582fc275",
+        "6653240b23ca9ef09bdeb81bc894f3d6f171d197",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
+        "1692fbe7af06530934c37bb357a01e2fd6b21c95",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "83efc48d3bc35859b6e22946405d8cf19195d31b",
+        "6459bd52605305cf61e33d244a02a8692ff14887",
+        "9e7ba42a6f00f331e1c9c23b292fa691a776952d",
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "0e8a48f625c3da545c522bf68d8b51315c7f996b",
+        "45cdb33cb498c24a674732b131fb885c4acf5609",
+        "3f9653a12dfd2c2dfe211cd9166a86fea0ad2a5e",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "1ab482c77e8afbecb80e955164e19718fe6dd5c6"
+      ],
+      "previous_value": {
+        "dot_ok": 11,
+        "let_underscore": 7,
+        "unwrap_or_default": 10
+      },
+      "reconciled_value": {
+        "dot_ok": 11,
+        "let_underscore": 8,
+        "unwrap_or_default": 10
+      },
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "file:src/cli/commands.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "commands.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-140",
+      "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+      ],
+      "previous_value": 1226,
+      "reconciled_value": 1274,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "pattern:dot_ok",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "swallowed_error_budget.json",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-141",
+      "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+      ],
+      "previous_value": 1203,
+      "reconciled_value": 1261,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "pattern:let_underscore",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "swallowed_error_budget.json",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-142",
+      "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+      ],
+      "previous_value": 840,
+      "reconciled_value": 871,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "pattern:unwrap_or_default",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "swallowed_error_budget.json",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    },
+    {
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "category": "swallowed_error",
+      "id": "QR-143",
+      "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "owning_commits": [
+        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+      ],
+      "previous_value": 3269,
+      "reconciled_value": 3406,
+      "reconciliation_bead": "jcode-l89.5",
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "scope": "aggregate:total",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "swallowed_error_budget.json",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
+    }
+  ],
+  "review_dispositions": [
+    {
+      "concern": "Submit-time expansion is duplicated and queue-time expansion leaks file contents back into the composer. Affects crates/jcode-tui/src/tui/app/input.rs, remote.rs, remote/input_dispatch.rs, turn.rs, and conversation_state.rs.",
+      "disposition": "implemented",
+      "evidence": "Focused local/remote queue, edit, interleave, and new-session tests must prove one final-dispatch expansion path and compact composer content. Resolve only when equivalent code is in accepted ancestry and tests pass. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-B1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Total expanded-size enforcement is missing from queue, interleave, remote, and new-session paths. Same submission paths as B1.",
+      "disposition": "implemented",
+      "evidence": "Focused tests must reject over-limit expansion on every dispatch path and preserve recoverable input. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-B2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Compact transcript text and expanded persisted session history diverge. Affects provider dispatch and session persistence in input.rs and related submit paths.",
+      "disposition": "implemented",
+      "evidence": "Resume/history tests must prove compact persisted user text while provider context receives materialized file content. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-B3",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Remote expansion reads on the client while using a server path string, leaving semantics ambiguous. Affects remote submit paths and README.md.",
+      "disposition": "implemented",
+      "evidence": "Documentation and focused remote tests must pin client-working-directory semantics and actionable unresolved-file behavior. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-B4",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "The async completion refactor is bundled with the feature without explaining why it is required. Affects state_ui_input_helpers.rs, input_completion.rs, and PR presentation.",
+      "disposition": "out_of_scope",
+      "evidence": "Before upstream PR #1 merges, split the refactor or document why async tab cycling requires it. It does not block this reconciliation unless equivalent code is integrated here. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-D1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Built-in ignores and config defaults duplicate one another and obscure whether users can opt out. Affects file_mentions.rs and jcode-config-types/src/lib.rs.",
+      "disposition": "implemented",
+      "evidence": "Config/default tests must establish one explicit built-in/custom precedence contract without duplicate defaults. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-D2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Documented gitignore-style glob patterns do not match literal component/prefix implementation. Affects file_mentions.rs, config, and README.md.",
+      "disposition": "implemented",
+      "evidence": "Focused matching tests must prove documented glob examples work and built-in exclusions remain active. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-D3",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Two independent directory walks can duplicate entries under mutation or symlinks and can exhaust the global match budget at depth one. Affects file_mentions.rs.",
+      "disposition": "out_of_scope",
+      "evidence": "Before upstream merge, document the accepted trade-off or add deterministic dedup/budget tests. Reopen here only if reconciliation modifies the walk. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-D4",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "A magic .take(100) duplicates nearby named discovery limits. Affects file_mentions.rs.",
+      "disposition": "out_of_scope",
+      "evidence": "Replace with a named constant or document the distinct limit before upstream merge. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "cancel: Arc<AtomicBool> uses inverted semantics where true means continue. Affects file-mention discovery state.",
+      "disposition": "out_of_scope",
+      "evidence": "Rename or document the polarity before upstream merge. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Deferred launch_cwd initialization is harder to read than a borrowed/owned path abstraction. Affects discovery launch code.",
+      "disposition": "out_of_scope",
+      "evidence": "Simplify or retain with reviewer acceptance before upstream merge. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S3",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "TryRecvError::Disconnected is treated as Empty, hiding a panicked discovery worker. Affects poll_file_mention_discovery.",
+      "disposition": "implemented",
+      "evidence": "A focused worker-disconnect test must prove the slot is cleared and an actionable diagnostic is observable. Resolve only after accepted-ancestry implementation and passing test. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S4",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Literal </file> in mentioned content can terminate the wrapper and escape into prompt text. Affects expand_file_mentions.",
+      "disposition": "implemented",
+      "evidence": "A focused delimiter-in-content test must prove the wrapper cannot be terminated early. Resolve only after accepted-ancestry implementation and passing test. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S5",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "The review asked whether ignore = \"0.4\" adds a new third-party dependency.",
+      "disposition": "rejected_with_evidence",
+      "evidence": "PR1-IC-5382159111 verifies ignore already exists in the upstream-base Cargo.lock; only a dependency edge is added. This concern is finally resolved. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR1-REV-5000869215-S6",
+      "source": "https://github.com/ariel-frischer/jcode/pull/1"
+    },
+    {
+      "concern": "Bare word.word matching turns ordinary coding prose such as self.input into consumed click targets. Affects crates/jcode-tui/src/tui/ui/url.rs and copy_selection.rs.",
+      "disposition": "implemented",
+      "evidence": "Focused negatives for ordinary dotted identifiers and positives for supported file extensions must pass after equivalent code enters accepted ancestry. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-B1A",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "The detector misses supported path formats including ~/notes.md, extensionless names such as Makefile, leading-digit names, anchors, and line suffixes even though downstream resolution handles several of them. Affects url.rs.",
+      "disposition": "implemented",
+      "evidence": "Add focused cases for every reported format, define the accepted bare-path grammar, and repair detector/resolver disagreement. Keep unresolved until the tests fail before repair, pass after repair, and equivalent code is in accepted ancestry. d37d86736 alone is not closure evidence. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-IC-5382248439-B1B",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Inline preview intentionally precedes the existing repository-Markdown side panel and permits display-only outside-repository paths. Affects url.rs, inline preview tests, and PR documentation.",
+      "disposition": "implemented",
+      "evidence": "Preserve the existing precedence regression test, document the intentional local display-only containment asymmetry, and verify URL precedence. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-B2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "The original review claimed Markdown precedence lacked a test.",
+      "disposition": "rejected_with_evidence",
+      "evidence": "The correction identifies test_click_on_relative_markdown_path_toggles_inline_preview, which directly pins inline precedence. This sub-concern is finally resolved. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-IC-5382150270-C1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Collapse hit testing matches a rendered header string that can drift from rendering. Affects inline_file_preview.rs and ui_inline_file_preview.rs.",
+      "disposition": "implemented",
+      "evidence": "Rendering and hit-testing must share one header contract, with focused collapse coverage. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-D1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "MAX_INLINE_FILE_BYTES is function-local and its 512 KiB value may be costly. Affects inline preview loading.",
+      "disposition": "out_of_scope",
+      "evidence": "Retain the tested boundary for compatibility here. Reassess with measured render/memory evidence before changing or exposing the limit. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-D2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Body-cache reuse comparisons are duplicated across four closures. Affects TUI body-cache code outside the review's functional defect.",
+      "disposition": "out_of_scope",
+      "evidence": "Extract only in a separately reviewed cache refactor with unchanged invalidation tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-D3",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Full preview contents remain retained after transcript clearing or compaction. Affects inline-preview state and clear paths.",
+      "disposition": "implemented",
+      "evidence": "Focused clear/compaction tests must prove preview contents are released with their transcript owners. Resolve only after accepted-ancestry implementation and passing tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-D4",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Expanded content is a point-in-time snapshot without a staleness signal. Affects preview UX and filesystem refresh semantics.",
+      "disposition": "out_of_scope",
+      "evidence": "Document snapshot semantics or add measured refresh behavior in a separate UX change before claiming live-file behavior. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-D5",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "try_toggle_inline_file_preview returns one boolean for success, handled errors, and non-action states.",
+      "disposition": "out_of_scope",
+      "evidence": "Introduce a result enum only in a separate behavior-preserving refactor with precedence tests. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-S1",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "Default TuiState preview methods silently disable previews for other implementations.",
+      "disposition": "out_of_scope",
+      "evidence": "Remove defaults or document the single-implementation invariant before another TuiState implementation is added. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "PR2-REV-5000867773-S2",
+      "source": "https://github.com/ariel-frischer/jcode/pull/2"
+    },
+    {
+      "concern": "send_payload uses a thread-spawn path whose failure can still panic. Affects crates/jcode-telemetry-core/src/lib.rs.",
+      "disposition": "implemented",
+      "evidence": "A focused injected spawn-failure test must prove no panic, bounded queue behavior, and explicit observability. Resolve only after the repair is present and the test passes. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "BEAD-jcode-l89.5-C5-TEL1",
+      "source": "bead:jcode-l89.5/comment/01a02b2e-8fcc-79ee-b2d2-6ebf476a08e4"
+    },
+    {
+      "concern": "Transient HTTP-client initialization failure is cached permanently. Affects telemetry client initialization in lib.rs.",
+      "disposition": "implemented",
+      "evidence": "A focused fail-then-recover test must prove a later attempt can initialize and deliver without changing successful-path behavior. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "BEAD-jcode-l89.5-C5-TEL2",
+      "source": "bead:jcode-l89.5/comment/01a02b2e-8fcc-79ee-b2d2-6ebf476a08e4"
+    },
+    {
+      "concern": "Transient background-worker initialization failure is cached permanently. Affects telemetry worker initialization in lib.rs.",
+      "disposition": "implemented",
+      "evidence": "A focused fail-then-recover test must prove retry, explicit failure visibility, and bounded queue behavior. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "BEAD-jcode-l89.5-C5-TEL3",
+      "source": "bead:jcode-l89.5/comment/01a02b2e-8fcc-79ee-b2d2-6ebf476a08e4"
+    },
+    {
+      "concern": "The blocker branch grows already-oversized telemetry lib.rs, so even a correct exceptional-path repair cannot land while its branch-base delta is positive.",
+      "disposition": "implemented",
+      "evidence": "Preserve or strengthen the telemetry tests while making the complete file flat or smaller than 85f9f5e3b; resolve only when C02 and focused telemetry checks pass. Resolution evidence is recorded in validation.md T016 and T036-T038 receipts.",
+      "id": "BEAD-jcode-l89.5-C5-TEL4",
+      "source": "bead:jcode-l89.5/comment/01a02b2e-8fcc-79ee-b2d2-6ebf476a08e4"
+    },
+    {
+      "concern": "No independent PR-review concern names this historical ratchet scope.",
+      "disposition": "out_of_scope",
+      "evidence": "The bounded T002 inventory names no applicable review; provenance validation and current merged-state measurements provide the ratchet evidence.",
+      "id": "T003-HIST-NO-APPLICABLE-REVIEW",
+      "source": "specs/015-reconcile-quality-ratchets/validation.md#historical-ratchet-delta-and-ownership-inventory"
+    }
+  ],
+  "version": 1
+}

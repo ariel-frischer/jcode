@@ -82,6 +82,7 @@ fi
 # 8 of 9 jobs and fails Windows at "Build release binary".
 run_gate "Cargo.lock is up to date" cargo metadata --locked --format-version 1
 run_gate "warning budget" bash scripts/check_warning_budget.sh
+run_gate "quality-ratchet provenance" python3 scripts/check_quality_ratchet_provenance.py
 run_ratchet "oversized-file ratchet" check_code_size_budget.py
 run_ratchet "oversized-test ratchet" check_test_size_budget.py
 run_ratchet "panic-prone usage ratchet" check_panic_budget.py

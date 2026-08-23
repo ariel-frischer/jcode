@@ -293,7 +293,7 @@ phases:
           - "Passing fixtures prove current accepted values remain allowed without exemptions or weakened unrelated thresholds."
       - id: "T019"
         title: "Create the canonical ownership and review ledger in scripts/quality_ratchet_provenance.json"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -305,7 +305,7 @@ phases:
           - "Exclude untraced, reverted, superseded, disputed, or unexplained growth from approved reconciled values."
       - id: "T020"
         title: "Implement the standard-library provenance gate in scripts/check_quality_ratchet_provenance.py"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -318,7 +318,7 @@ phases:
           - "Exit zero only when the complete ledger and all adjusted budget scopes are consistent."
       - id: "T021"
         title: "Register provenance validation before ratchet acceptance in scripts/check_guardrails.sh"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -330,7 +330,7 @@ phases:
           - "Do not add an update, bypass, exemption, or optional path that permits incomplete provenance."
       - id: "T022"
         title: "Reconcile traced production-size scopes in scripts/code_size_budget.json"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: "US-001"
@@ -342,7 +342,7 @@ phases:
           - "Unrelated entries remain byte-for-byte unchanged where practical and no future-growth exemption is added."
       - id: "T023"
         title: "Reconcile traced test-size scopes in scripts/test_size_budget.json"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: "US-001"
@@ -354,7 +354,7 @@ phases:
           - "No tests or accepted coverage are removed merely to satisfy the budget, and unrelated entries remain unchanged."
       - id: "T024"
         title: "Reconcile traced swallowed-error scopes in scripts/swallowed_error_budget.json"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: true
         story_id: "US-001"
@@ -366,7 +366,7 @@ phases:
           - "Existing explicit-error enforcement and all unrelated swallowed-error thresholds remain active and unchanged."
       - id: "T025"
         title: "Run focused provenance and ratchet checks and record reconciliation evidence in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
