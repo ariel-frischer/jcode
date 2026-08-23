@@ -60,6 +60,53 @@ fn parse_provider(value: &str, profile_name: &str) -> Result<ProviderChoice> {
     })
 }
 
+fn source_precedence(source: crate::config::session_profile::ProfileValueSource) -> u8 {
+    use crate::config::session_profile::ProfileValueSource;
+
+    match source {
+        ProfileValueSource::BuiltInDefault => 0,
+        ProfileValueSource::BaseConfig => 1,
+        ProfileValueSource::Profile => 2,
+        ProfileValueSource::Environment => 3,
+        ProfileValueSource::Invocation => 4,
+    }
+}
+
+fn named_provider_choice(
+    config: &crate::config::Config,
+    provider_profile: &str,
+) -> Result<ProviderChoice> {
+    let profile = config.providers.get(provider_profile).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown provider profile '{}'. Add [providers.{}] to config.toml.",
+            provider_profile,
+            provider_profile
+        )
+    })?;
+    Ok(
+        if matches!(
+            profile.provider_type,
+            crate::config::NamedProviderType::AnthropicCompatible
+        ) {
+            ProviderChoice::AnthropicApi
+        } else {
+            ProviderChoice::OpenaiCompatible
+        },
+    )
+}
+
+fn activate_named_provider_profile(provider_profile: &str) -> Result<ProviderChoice> {
+    let config = crate::config::Config::load_strict()?;
+    let provider = named_provider_choice(&config, provider_profile)?;
+    crate::provider_catalog::apply_named_provider_profile_env_from_config(
+        provider_profile,
+        &config,
+    )?;
+    crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", provider_profile);
+    crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
+    Ok(provider)
+}
+
 fn parse_list(value: &str) -> Vec<String> {
     value
         .split(',')
@@ -118,7 +165,30 @@ fn compose_run_profile(
         config.provider.default_provider.clone(),
         "auto".to_string(),
     );
-    let provider = parse_provider(&provider.value, name)?;
+    let provider_profile = crate::config::session_profile::resolve_sourced(
+        overrides.provider_profile.map(Some),
+        environment.provider_profile.map(Some),
+        profile.provider_profile.clone().map(Some),
+        None,
+        None,
+    );
+    let (provider, provider_profile) = match provider_profile.value {
+        None => (parse_provider(&provider.value, name)?, None),
+        Some(provider_profile_name) => {
+            match source_precedence(provider.source)
+                .cmp(&source_precedence(provider_profile.source))
+            {
+                std::cmp::Ordering::Greater => (parse_provider(&provider.value, name)?, None),
+                std::cmp::Ordering::Less => (
+                    named_provider_choice(config, &provider_profile_name)?,
+                    Some(provider_profile_name),
+                ),
+                std::cmp::Ordering::Equal => anyhow::bail!(
+                    "profile '{name}' selects both provider and provider_profile at the same precedence; remove one provider selector"
+                ),
+            }
+        }
+    };
 
     let model = overrides
         .model
@@ -146,11 +216,6 @@ fn compose_run_profile(
             | crate::config::session_profile::ProfileValueSource::Profile
     );
     let reasoning_effort = reasoning_effort.value;
-    let provider_profile = overrides
-        .provider_profile
-        .or(environment.provider_profile)
-        .or_else(|| profile.provider_profile.clone());
-
     let mut tools = crate::config::session_profile::overlay_profile_tools(
         &config.tools,
         profile.tool_profile.as_deref(),
@@ -295,18 +360,16 @@ pub(crate) fn resolve_run_invocation(
             disabled_tools: args.disabled_tools.as_deref().map(split_list),
         },
     )?;
+    let mut provider = profile
+        .as_ref()
+        .map(|profile| profile.provider)
+        .unwrap_or(args.provider);
     if let Some(provider_profile) = profile
         .as_ref()
         .and_then(|profile| profile.provider_profile.as_deref())
     {
-        crate::provider_catalog::apply_named_provider_profile_env(provider_profile)?;
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", provider_profile);
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
+        provider = activate_named_provider_profile(provider_profile)?;
     }
-    let provider = profile
-        .as_ref()
-        .map(|profile| profile.provider)
-        .unwrap_or(args.provider);
     let model = profile
         .as_ref()
         .and_then(|profile| profile.model.clone())
@@ -351,10 +414,23 @@ pub(crate) fn apply_agent_session_options(args: &mut super::args::Args) -> Resul
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        crate::provider_catalog::apply_named_provider_profile_env(profile_name)?;
+        let config = crate::config::Config::load_strict()?;
+        let profile_provider = named_provider_choice(&config, profile_name)?;
+        if args.provider_was_explicit
+            && (args.profile.is_none() || args.provider != profile_provider)
+        {
+            anyhow::bail!(
+                "--provider {} conflicts with --provider-profile {profile_name}; remove one provider selector",
+                args.provider.as_arg_value()
+            );
+        }
+        crate::provider_catalog::apply_named_provider_profile_env_from_config(
+            profile_name,
+            &config,
+        )?;
         crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", profile_name);
         crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
-        args.provider = ProviderChoice::OpenaiCompatible;
+        args.provider = profile_provider;
     }
 
     if let Some(reasoning_effort) = args.reasoning_effort.as_deref() {
@@ -414,6 +490,34 @@ pub(crate) async fn run_profiled_single_message(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EnvVarGuard {
+        name: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(name: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let previous = std::env::var_os(name);
+            crate::env::set_var(name, value);
+            Self { name, previous }
+        }
+
+        fn remove(name: &'static str) -> Self {
+            let previous = std::env::var_os(name);
+            crate::env::remove_var(name);
+            Self { name, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => crate::env::set_var(self.name, value),
+                None => crate::env::remove_var(self.name),
+            }
+        }
+    }
 
     #[cfg(unix)]
     #[test]
@@ -502,7 +606,7 @@ mod tests {
                 provider: Some(ProviderChoice::Auto),
                 model: Some("invocation-model".to_string()),
                 reasoning_effort: Some("xhigh".to_string()),
-                provider_profile: Some("invocation-gateway".to_string()),
+                provider_profile: None,
                 tool_profile: Some("none".to_string()),
                 tools: Some(vec!["read".to_string(), "agentgrep".to_string()]),
                 disabled_tools: Some(vec!["bash".to_string()]),
@@ -513,10 +617,7 @@ mod tests {
         assert_eq!(resolved.provider.as_arg_value(), "auto");
         assert_eq!(resolved.model.as_deref(), Some("invocation-model"));
         assert_eq!(resolved.reasoning_effort.as_deref(), Some("xhigh"));
-        assert_eq!(
-            resolved.provider_profile.as_deref(),
-            Some("invocation-gateway")
-        );
+        assert_eq!(resolved.provider_profile, None);
         assert_eq!(resolved.tools.profile, "none");
         assert_eq!(resolved.tools.enabled, ["read", "agentgrep"]);
         assert_eq!(resolved.tools.disabled, ["bash"]);
@@ -547,6 +648,174 @@ mod tests {
         assert_eq!(resolved.tools.profile, "minimal");
         assert_eq!(resolved.tools.enabled, ["read"]);
         assert!(resolved.tools.disabled.contains(&"bash".to_string()));
+    }
+
+    #[test]
+    fn explicit_provider_clears_lower_precedence_profile_provider_profile() {
+        let config = crate::config::Config::default();
+        let profile = crate::config::SessionProfileConfig {
+            provider_profile: Some("profile-gateway".to_string()),
+            ..Default::default()
+        };
+
+        let resolved = compose_run_profile(
+            "review",
+            &config,
+            &profile,
+            RunProfileEnvironment::default(),
+            RunProfileOverrides {
+                provider: Some(ProviderChoice::AnthropicApi),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(resolved.provider, ProviderChoice::AnthropicApi);
+        assert_eq!(resolved.provider_profile, None);
+    }
+
+    #[test]
+    fn explicit_provider_remains_final_after_session_profile_application() {
+        let _lock = crate::storage::lock_test_env();
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.toml"),
+            r#"
+            [providers.profile-gateway]
+            type = "openai-compatible"
+            base_url = "https://gateway.example.test/v1"
+            auth = "none"
+
+            [profiles.review]
+            provider_profile = "profile-gateway"
+            "#,
+        )
+        .unwrap();
+        let _home = EnvVarGuard::set("JCODE_HOME", home.path());
+        let _provider = EnvVarGuard::remove("JCODE_PROVIDER");
+        let _provider_profile = EnvVarGuard::remove("JCODE_PROVIDER_PROFILE_NAME");
+        let _provider_profile_active = EnvVarGuard::remove("JCODE_PROVIDER_PROFILE_ACTIVE");
+        let _named_provider_profile = EnvVarGuard::remove("JCODE_NAMED_PROVIDER_PROFILE");
+
+        let mut args = super::super::args::Args::try_parse_from_with_provenance([
+            "jcode",
+            "--provider",
+            "anthropic-api",
+            "--profile",
+            "review",
+            "run",
+            "inspect",
+        ])
+        .unwrap();
+
+        let resolved = apply_selected_profile_to_args(&mut args)
+            .unwrap()
+            .expect("selected profile");
+        apply_agent_session_options(&mut args).unwrap();
+
+        assert_eq!(resolved.provider, ProviderChoice::AnthropicApi);
+        assert_eq!(resolved.provider_profile, None);
+        assert_eq!(args.provider, ProviderChoice::AnthropicApi);
+        assert_eq!(args.provider_profile, None);
+        assert!(std::env::var_os("JCODE_PROVIDER_PROFILE_ACTIVE").is_none());
+    }
+
+    #[test]
+    fn direct_provider_selector_conflict_is_rejected_before_profile_activation() {
+        let _lock = crate::storage::lock_test_env();
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.toml"),
+            r#"
+            [providers.direct-gateway]
+            type = "openai-compatible"
+            base_url = "https://gateway.example.test/v1"
+            auth = "none"
+            "#,
+        )
+        .unwrap();
+        let _home = EnvVarGuard::set("JCODE_HOME", home.path());
+        let _provider_profile_active = EnvVarGuard::remove("JCODE_PROVIDER_PROFILE_ACTIVE");
+        let _named_provider_profile = EnvVarGuard::remove("JCODE_NAMED_PROVIDER_PROFILE");
+        let mut args = super::super::args::Args::try_parse_from_with_provenance([
+            "jcode",
+            "--provider",
+            "openai-compatible",
+            "--provider-profile",
+            "direct-gateway",
+            "run",
+            "inspect",
+        ])
+        .unwrap();
+
+        let error = apply_agent_session_options(&mut args)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("--provider openai-compatible"));
+        assert!(error.contains("--provider-profile direct-gateway"));
+        assert_eq!(args.provider, ProviderChoice::OpenaiCompatible);
+        assert!(std::env::var_os("JCODE_PROVIDER_PROFILE_ACTIVE").is_none());
+        assert!(std::env::var_os("JCODE_NAMED_PROVIDER_PROFILE").is_none());
+    }
+
+    #[test]
+    fn higher_precedence_provider_profile_selects_the_final_provider() {
+        let config: crate::config::Config = toml::from_str(
+            r#"
+            [providers.environment-gateway]
+            type = "openai-compatible"
+            base_url = "https://gateway.example.test/v1"
+            auth = "none"
+            "#,
+        )
+        .unwrap();
+        let profile = crate::config::SessionProfileConfig {
+            provider: Some("openrouter".to_string()),
+            ..Default::default()
+        };
+
+        let resolved = compose_run_profile(
+            "review",
+            &config,
+            &profile,
+            RunProfileEnvironment {
+                provider_profile: Some("environment-gateway".to_string()),
+                ..Default::default()
+            },
+            RunProfileOverrides::default(),
+        )
+        .unwrap();
+
+        assert_eq!(resolved.provider, ProviderChoice::OpenaiCompatible);
+        assert_eq!(
+            resolved.provider_profile.as_deref(),
+            Some("environment-gateway")
+        );
+    }
+
+    #[test]
+    fn same_source_provider_selectors_are_rejected() {
+        let config = crate::config::Config::default();
+        let profile = crate::config::SessionProfileConfig {
+            provider: Some("openrouter".to_string()),
+            provider_profile: Some("profile-gateway".to_string()),
+            ..Default::default()
+        };
+
+        let error = compose_run_profile(
+            "review",
+            &config,
+            &profile,
+            RunProfileEnvironment::default(),
+            RunProfileOverrides::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("review"));
+        assert!(error.contains("provider"));
+        assert!(error.contains("provider_profile"));
     }
 
     #[test]

@@ -314,16 +314,18 @@ bing_market = "en-US"
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
 
-# Named session profiles are selected only by headless `jcode run`.
+# Named session profiles apply to the interactive TUI, `jcode run`, `jcode repl`,
+# and `jcode serve`.
 # Resolution is field-by-field: explicit invocation > environment > selected
 # profile > unprofiled config > built-in default. Static values are checked when
 # strict run config loads; installed provider/model/profile/tool/skill references
 # are checked only when selected. Resolution is per-run and never rewrites this file.
+# `provider` and `provider_profile` are competing provider selectors. The
+# higher-precedence selector wins; defining both at one precedence is an error.
 [profiles.review]
 provider = "openrouter"
 model = "openai/gpt-5.6"
 reasoning_effort = "high"
-provider_profile = "review-gateway"
 tool_profile = "minimal"
 tools = ["read", "agentgrep"]
 disabled_tools = ["bash"]
@@ -746,6 +748,21 @@ mod tests {
             template.contains("/colors"),
             "the template should point at the /colors command"
         );
+    }
+
+    #[test]
+    fn default_config_template_documents_session_profile_scope_and_valid_example() {
+        let template = Config::default_config_file_contents();
+        assert!(template.contains("interactive TUI, `jcode run`, `jcode repl`,"));
+        assert!(template.contains("# and `jcode serve`."));
+
+        let config = toml::from_str::<Config>(&template).expect("template must parse");
+        let review = config
+            .profiles
+            .get("review")
+            .expect("review profile example");
+        assert_eq!(review.provider.as_deref(), Some("openrouter"));
+        assert_eq!(review.provider_profile, None);
     }
 
     /// Uncommenting the documented color example must actually work, which is
