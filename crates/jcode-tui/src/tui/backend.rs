@@ -580,6 +580,7 @@ impl RemoteConnection {
             system_reminder,
             active_skill,
             no_reply: false,
+            run_safety: None,
         };
         self.next_request_id += 1;
         self.send_request(request).await?;

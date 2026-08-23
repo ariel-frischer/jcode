@@ -78,6 +78,21 @@ const RELOAD_STARTING_GUARD_MAX_AGE: Duration = Duration::from_secs(30);
 const REQUEST_HANDLER_STALL_THRESHOLDS_MS: [u64; 3] = [2_000, 10_000, 60_000];
 const MAX_LIFECYCLE_QUERY_WARNINGS: usize = 32;
 
+fn resolve_message_run_safety(
+    invocation: jcode_config_types::RunSafetyConfig,
+    environment: jcode_config_types::RunSafetyConfig,
+    persisted: jcode_config_types::RunSafetyConfig,
+    baseline: crate::protocol::TokenUsageTotals,
+) -> Result<crate::agent::run_safety::RunSafetyController> {
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation,
+        environment,
+        persisted,
+    };
+    let policy = crate::agent::run_safety::resolve_run_safety(&candidates, baseline)?;
+    Ok(crate::agent::run_safety::RunSafetyController::new(policy))
+}
+
 async fn read_lifecycle_query_stream(
     lifecycle_recorder: &crate::lifecycle_observability::LifecycleRecorder,
     resolved_session_id: &str,
@@ -877,6 +892,11 @@ pub(super) async fn handle_client(
                     processing_task = None;
                     client_is_processing = false;
                     {
+                        let mut agent = agent.lock().await;
+                        agent.run_safety_complete_turn();
+                        agent.replace_run_safety(None);
+                    }
+                    {
                         let mut connections = client_connections.write().await;
                         if let Some(info) = connections.get_mut(&client_connection_id) {
                             info.is_processing = false;
@@ -1246,8 +1266,18 @@ pub(super) async fn handle_client(
                 system_reminder,
                 active_skill,
                 no_reply,
+                run_safety,
             } => {
                 if no_reply {
+                    if run_safety.is_some() {
+                        let _ = client_event_tx.send(ServerEvent::Error {
+                            id,
+                            message: "run safety controls require a real provider turn; omit no_reply or remove the controls".to_string(),
+                            retry_after_secs: None,
+                            provider_code: None,
+                        });
+                        continue;
+                    }
                     append_context_message(
                         id,
                         &content,
@@ -1260,6 +1290,37 @@ pub(super) async fn handle_client(
                     .await;
                     continue;
                 }
+                let controller = if let Some(invocation) = run_safety {
+                    let (persisted, environment) = match crate::config::Config::run_safety_sources()
+                    {
+                        Ok(sources) => sources,
+                        Err(error) => {
+                            let _ = client_event_tx.send(ServerEvent::Error {
+                                id,
+                                message: format!("Invalid run safety configuration: {error}"),
+                                retry_after_secs: None,
+                                provider_code: None,
+                            });
+                            continue;
+                        }
+                    };
+                    let baseline = agent.lock().await.token_usage_totals();
+                    match resolve_message_run_safety(invocation, environment, persisted, baseline) {
+                        Ok(controller) => Some(controller),
+                        Err(error) => {
+                            let _ = client_event_tx.send(ServerEvent::Error {
+                                id,
+                                message: format!("Invalid run safety configuration: {error}"),
+                                retry_after_secs: None,
+                                provider_code: None,
+                            });
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+                agent.lock().await.replace_run_safety(controller);
                 if !client_is_processing {
                     let mut connections = client_connections.write().await;
                     if let Some(info) = connections.get_mut(&client_connection_id) {

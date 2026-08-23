@@ -1,0 +1,226 @@
+plan:
+  branch: "agent/jcode-8on"
+  created: "2026-08-23"
+  spec_path: "specs/015-harness-profile-safety/spec.yaml"
+
+summary: |
+  Extend the stable harness request contract and legacy daemon wire message additively. The bridge resolves string profile names by loading Jcode configuration and using Config::resolve_session_profile, then converts the resolved non-secret policy into the existing SessionProfileStartup wire object. Existing object-shaped profiles and omitted profiles retain their current behavior; profile resolution failures are converted to typed InvalidRequest API replies before subscribe state is marked pending.
+
+  Add optional message run_safety data to jcode-protocol and feed it through server message handling into the existing RunSafetyCandidates resolver and Agent controller before provider work. The per-message invocation config is validated at the daemon trust boundary, emits a normal typed protocol error on failure, and is cleared/replaced for each turn so omitted fields preserve legacy behavior. Unit contract tests precede code, followed by isolated daemon/bridge and built-binary public API smokes.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "Tokio JSON-lines socket services"
+  primary_dependencies:
+    - name: "jcode-harness-api"
+      version: "workspace path dependency"
+      purpose: "Owns the stable public request schema and typed error events."
+    - name: "jcode-protocol"
+      version: "workspace path dependency"
+      purpose: "Owns the daemon SessionProfileStartup and message wire contract."
+    - name: "jcode-base"
+      version: "workspace path dependency"
+      purpose: "Owns Config loading and canonical named-profile resolution."
+    - name: "jcode-app-core"
+      version: "workspace path dependency"
+      purpose: "Owns daemon message handling, Agent execution, and canonical run-safety enforcement."
+    - name: "serde / serde_json"
+      version: "1"
+      purpose: "Maintains additive protocol-v1 JSON compatibility."
+  storage: "Existing JCODE_HOME configuration and session records; no new persistence."
+  testing:
+    framework: "Rust built-in test harness plus isolated socket/built-binary smoke scripts"
+    approach: "TDD contract tests in harness and protocol crates, daemon integration tests with fake providers, then private-socket built-binary and free-model public API smokes."
+  target_platform: "Jcode-supported Linux, macOS, and Windows server/client builds"
+  project_type: "service"
+  performance_goals: "No additional work for omitted fields; one bounded config load/profile resolution per named create request and constant-time safety installation per message."
+  constraints:
+    - "No credential-bearing data may enter SessionProfileStartup, diagnostics, or smoke receipts."
+    - "Existing object-shaped profile and no-profile clients remain compatible."
+    - "Safety controls are invocation-scoped and cannot persist to later messages."
+    - "Invalid input fails before provider work without closing the client connection."
+    - "No new external dependencies."
+  scale_scope: "One bridge translation state per API connection and one active turn per attached session."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Only stable request/wire fields, bridge resolution, daemon safety installation, focused tests, and receipts are in scope."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "All fields are optional/defaulted; object profiles and omitted safety retain protocol-v1 behavior."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Named profiles use Config::resolve_session_profile and message fields become invocation candidates in the canonical resolver."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Public shape remains in harness-api, daemon wire in protocol, resolution in base, and runtime enforcement in app-core."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Every acceptance criterion maps to exact schema, translation, daemon integration, or isolated smoke evidence."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "String profiles and safety values are validated before subscribe/provider work and errors expose only non-secret field guidance."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Focused tests, affected builds, built-binary runtime checks, and scripts/check_guardrails.sh are required before delivery."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "This closes a local named-profile and jcode run workflow gap through existing canonical owners."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "The plan includes the public SDK smoke outcome while excluding push, release, and credentials."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Validation runs newly built binaries on private sockets and verifies executable identity."
+
+research_findings:
+  decisions:
+    - topic: "Named profile input compatibility"
+      decision: "Accept either a JSON string name or the existing object-shaped startup payload; resolve only strings in the bridge."
+      rationale: "The released Go SDK sends a string while protocol-v1 Rust fixtures already model resolved objects."
+      alternatives_considered:
+        - "Change the Go SDK back to sending objects, which would leave released clients broken."
+        - "Teach the daemon subscribe parser to accept strings, which duplicates config resolution below the bridge boundary."
+    - topic: "Profile conversion ownership"
+      decision: "Add a dependency-light conversion from ResolvedSessionProfile plus ToolConfig to SessionProfileStartup in jcode-base or a bridge-local explicit conversion using public resolved fields."
+      rationale: "The bridge must forward the same credential-free effective values as CLI profile startup without depending on root CLI orchestration."
+      alternatives_considered:
+        - "Depend on src/cli/profile.rs, which violates crate layering."
+        - "Forward only profile_name, which would not apply the resolved policy on the server."
+    - topic: "Run-safety wire shape"
+      decision: "Add an optional RunSafetyConfig field to daemon Message requests and matching optional stable harness request fields."
+      rationale: "RunSafetyConfig already owns raw invocation semantics and serde defaults, avoiding a parallel wire validator."
+      alternatives_considered:
+        - "Send three unrelated ad hoc fields only in legacy JSON translation."
+        - "Store safety on the session, which would leak one request's limits into later turns."
+    - topic: "Daemon validation and errors"
+      decision: "Resolve invocation/environment/persisted candidates before start_processing_message and return the existing typed daemon error event on validation failure."
+      rationale: "This is the last canonical trust boundary before provider work and keeps environment/persisted precedence consistent."
+      alternatives_considered:
+        - "Validate only in the bridge, which other daemon clients could bypass."
+        - "Let malformed values fail inside provider execution, which is too late and risks disconnects."
+
+data_model:
+  entities:
+    - name: "SessionProfileSelection"
+      description: "Public create-session profile input and its credential-free resolved startup overlay."
+      fields:
+        - name: "input"
+          type: "Option<String | JSON object>"
+          description: "Named profile from released SDKs or legacy resolved object."
+          constraints: "Strings must be non-empty configured names; objects must deserialize as SessionProfileStartup."
+        - name: "startup"
+          type: "Option<SessionProfileStartup>"
+          description: "Resolved daemon subscribe payload."
+          constraints: "Contains no credentials or provider secrets."
+      relationships: []
+    - name: "HarnessTurnSafety"
+      description: "Optional raw invocation limits for one message."
+      fields:
+        - name: "max_turns"
+          type: "Option<String>"
+          description: "Positive decimal maximum completed turns."
+          constraints: "Validated by the canonical resolver."
+        - name: "token_budget"
+          type: "Option<String>"
+          description: "Positive decimal native token-usage delta."
+          constraints: "Validated by the canonical resolver."
+        - name: "deadline"
+          type: "Option<String>"
+          description: "Absolute RFC3339 deadline."
+          constraints: "Must include an explicit offset and be in the future."
+      relationships:
+        - target: "RunSafetyController"
+          type: "one-to-one"
+          description: "One message may install one invocation-scoped controller for its real turn."
+    - name: "RunSafetyController"
+      description: "Existing typed Agent enforcement state resolved from invocation, environment, and persisted candidates."
+      fields:
+        - name: "policy"
+          type: "EffectiveRunSafetyPolicy"
+          description: "Validated typed limits plus source metadata."
+          constraints: "Must be replaced or absent for every new message."
+      relationships: []
+
+api_contracts:
+  endpoints:
+    - method: "JSONL"
+      path: "create_session"
+      description: "Create and attach a session with optional named or resolved profile input."
+      request:
+        content_type: "application/json"
+        body_schema: "{req:create_session, working_dir?:string, profile?:string|SessionProfileStartup}"
+      response:
+        success_code: 200
+        body_schema: "typed session_created/state events"
+      errors:
+        - code: 400
+          description: "Invalid profile type, empty name, unknown name, or invalid configured profile."
+    - method: "JSONL"
+      path: "send_message"
+      description: "Start a real turn with optional invocation-scoped safety controls."
+      request:
+        content_type: "application/json"
+        body_schema: "{req:send_message, session_id:string, content:string, max_turns?:string, token_budget?:string, deadline?:string}"
+      response:
+        success_code: 200
+        body_schema: "typed turn events ending in turn_done or bounded stop/error"
+      errors:
+        - code: 400
+          description: "Invalid counter or deadline before provider work."
+
+project_structure:
+  documentation:
+    - path: "specs/015-harness-profile-safety/"
+      description: "Approved Autospec specification, plan, tasks, and validation receipts."
+  source_code:
+    - path: "crates/jcode-harness-api/src/requests.rs"
+      description: "Stable optional public request fields."
+    - path: "crates/jcode-harness-api-server/src/translate.rs"
+      description: "Named profile resolution and bridge translation."
+    - path: "crates/jcode-protocol/src/wire.rs"
+      description: "Optional daemon message run-safety wire data."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+      description: "Trust-boundary safety resolution and per-turn controller installation."
+  tests:
+    - path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+      description: "Public additive wire compatibility tests."
+    - path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+      description: "Profile and safety translation tests, including typed local errors."
+    - path: "crates/jcode-protocol/src/protocol_tests/"
+      description: "Legacy and safety message round-trip tests."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+      description: "Zero-provider-work invalid input and invocation-scoped enforcement tests."
+
+implementation_phases:
+  - phase: 1
+    name: "Contract tests"
+    goal: "Freeze public and daemon wire compatibility before production edits."
+    deliverables: ["Failing harness schema tests", "Failing bridge translation tests", "Failing protocol round-trip tests"]
+  - phase: 2
+    name: "Named profile resolution"
+    goal: "Resolve string names to credential-free startup objects and return typed errors locally."
+    dependencies: ["Phase 1"]
+    deliverables: ["Canonical resolver reuse", "Valid, invalid, object, and omitted profile coverage"]
+  - phase: 3
+    name: "Per-turn run safety"
+    goal: "Forward, validate, and install message safety before real provider work."
+    dependencies: ["Phase 1"]
+    deliverables: ["Optional harness/protocol fields", "Daemon preflight", "Invocation-scoped controller", "Each/combined/omitted/error tests"]
+  - phase: 4
+    name: "Runtime validation"
+    goal: "Prove newly built public harness behavior on private sockets and a free model."
+    dependencies: ["Phase 2", "Phase 3"]
+    deliverables: ["Focused crate checks", "Built-binary smoke", "Free-model smoke", "Guardrail evidence"]
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-23T11:10:55Z"
+  artifact_type: "plan"

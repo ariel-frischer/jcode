@@ -692,6 +692,9 @@ impl JcodeClient {
             content: content.to_string(),
             images,
             no_reply: false,
+            max_turns: None,
+            token_budget: None,
+            deadline: None,
         })?;
         if let (Some(stream), Some(timeout)) = (stream, wait_for_accept) {
             let deadline = std::time::Instant::now() + timeout;

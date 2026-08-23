@@ -98,6 +98,9 @@ pub enum Request {
         /// acknowledges it without starting a model turn.
         #[serde(default, skip_serializing_if = "is_false")]
         no_reply: bool,
+        /// Optional invocation-scoped safety candidates for this real turn.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_safety: Option<jcode_config_types::RunSafetyConfig>,
     },
 
     /// Cancel current generation

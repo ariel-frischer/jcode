@@ -1,4 +1,68 @@
 use super::*;
+
+#[test]
+fn harness_message_run_safety_preflight_validates_each_control_and_sources() {
+    let valid = resolve_message_run_safety(
+        jcode_config_types::RunSafetyConfig {
+            max_turns: Some("2".to_string()),
+            max_tool_steps: None,
+            token_budget: Some("1000".to_string()),
+            deadline: Some("2999-01-01T00:00:00+00:00".to_string()),
+        },
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    )
+    .expect("valid harness safety");
+    assert_eq!(
+        valid.policy().max_turns.map(std::num::NonZeroU64::get),
+        Some(2)
+    );
+    assert_eq!(
+        valid.policy().token_budget.map(std::num::NonZeroU64::get),
+        Some(1000)
+    );
+    assert!(valid.policy().deadline.is_some());
+    assert_eq!(
+        valid.policy().sources.max_turns,
+        crate::agent::run_safety::RunSafetySource::Invocation
+    );
+
+    for (field, invocation) in [
+        (
+            "max_turns",
+            jcode_config_types::RunSafetyConfig {
+                max_turns: Some("0".to_string()),
+                ..Default::default()
+            },
+        ),
+        (
+            "token_budget",
+            jcode_config_types::RunSafetyConfig {
+                token_budget: Some("invalid".to_string()),
+                ..Default::default()
+            },
+        ),
+        (
+            "deadline",
+            jcode_config_types::RunSafetyConfig {
+                deadline: Some("2030-01-01T00:00:00".to_string()),
+                ..Default::default()
+            },
+        ),
+    ] {
+        let error = resolve_message_run_safety(
+            invocation,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        )
+        .expect_err("invalid harness safety must fail before provider work");
+        let message = error.to_string();
+        assert!(message.contains(field), "{message}");
+        assert!(message.contains("invocation"), "{message}");
+    }
+}
 use crate::message::{ContentBlock, Message, StreamEvent, ToolDefinition};
 use crate::provider::{EventStream, Provider};
 use async_trait::async_trait;

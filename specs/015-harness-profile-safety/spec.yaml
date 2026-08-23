@@ -1,0 +1,141 @@
+feature:
+  branch: "agent/jcode-8on"
+  created: "2026-08-23"
+  status: "Approved"
+  input: "Complete harness API support for named profiles and run-safety fields per Bead jcode-8on."
+
+user_stories:
+  - id: "US-001"
+    title: "Start harness sessions with named profiles"
+    priority: "P1"
+    as_a: "harness SDK client"
+    i_want: "to name a configured Jcode session profile when creating a session"
+    so_that: "the new session uses the same provider, model, tool, skill, and prompt policy as other Jcode clients"
+    independent_test: "Create one session with a valid named profile and one with an unknown name through the public harness API."
+    acceptance_scenarios:
+      - given: "a configured named profile"
+        when: "create_session supplies its name"
+        then: "the bridge resolves it to the credential-free daemon startup profile and the session starts"
+      - given: "an unknown profile name"
+        when: "create_session is requested"
+        then: "the API returns a typed actionable error and keeps the connection usable"
+  - id: "US-002"
+    title: "Bound harness turns"
+    priority: "P1"
+    as_a: "automation using the harness SDK"
+    i_want: "to set maximum turns, a native token budget, and an absolute deadline for a message"
+    so_that: "a real provider turn cannot exceed the caller's explicit unattended-run safety policy"
+    independent_test: "Send messages with each control, all controls, omitted controls, and invalid values through an isolated built bridge and daemon."
+    acceptance_scenarios:
+      - given: "valid safety fields"
+        when: "send_message starts a provider turn"
+        then: "the daemon validates and installs those fields as the invocation source before provider work"
+      - given: "invalid or expired safety fields"
+        when: "send_message is requested"
+        then: "the caller receives a typed actionable error before any provider request"
+      - given: "all safety fields are omitted"
+        when: "send_message is requested"
+        then: "legacy protocol-v1 behavior remains unchanged"
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "The harness API MUST accept a named profile string on create_session and resolve it through the canonical Jcode profile resolver before daemon subscribe."
+      testable: true
+      acceptance_criteria: "A valid name produces a SessionProfileStartup object with the resolved non-secret policy fields."
+    - id: "FR-002"
+      description: "Unknown or invalid named profiles MUST return a typed actionable API error without forwarding malformed subscribe data or disconnecting the client."
+      testable: true
+      acceptance_criteria: "A failed create_session is followed by a successful request on the same bridge connection."
+    - id: "FR-003"
+      description: "Existing object-shaped profile startup payloads and omitted profile values MUST remain compatible."
+      testable: true
+      acceptance_criteria: "Protocol-v1 object and no-profile fixtures retain their serialized and translated behavior."
+    - id: "FR-004"
+      description: "send_message MUST accept optional max_turns, token_budget, and deadline fields and forward them into the canonical per-turn RunSafetyConfig as invocation candidates."
+      testable: true
+      acceptance_criteria: "Each field and the combined shape reaches daemon message handling without renaming or loss."
+    - id: "FR-005"
+      description: "The daemon MUST validate harness invocation safety before provider work using the existing run-safety resolver and install the resulting controller only for that requested turn."
+      testable: true
+      acceptance_criteria: "Invalid values start zero provider requests; valid values affect the real turn and do not persist into a later omitted-field turn."
+    - id: "FR-006"
+      description: "Maximum turns and token budgets MUST be positive decimal whole numbers, and deadlines MUST be future RFC3339 timestamps with explicit offsets."
+      testable: true
+      acceptance_criteria: "Zero, malformed, overflowing, missing-offset, and past values return typed InvalidRequest errors with corrective guidance."
+    - id: "FR-007"
+      description: "The stable Rust harness request contract MUST expose the same optional safety fields used by released SDK clients."
+      testable: true
+      acceptance_criteria: "Rust schema snapshots cover each field, combined fields, and legacy omission."
+    - id: "FR-008"
+      description: "An isolated built-binary smoke and a disposable free-model smoke MUST prove the public harness path for a named profile marker and at least one enforced budget."
+      testable: true
+      acceptance_criteria: "Receipts identify the built executables, private sockets, profile marker, and bounded outcome without revealing credentials."
+  non_functional:
+    - id: "NFR-001"
+      category: "reliability"
+      description: "Invalid harness input must fail before provider work and must not terminate an otherwise healthy API connection."
+      measurable_target: "100% of negative-path fixtures produce typed errors and zero provider requests."
+    - id: "NFR-002"
+      category: "security"
+      description: "Profile resolution and diagnostics must remain credential-free and redact provider secrets, prompts, and tool arguments."
+      measurable_target: "No test, error, log, or smoke receipt contains credential values or unneeded prompt content."
+    - id: "NFR-003"
+      category: "code_quality"
+      description: "The implementation must reuse Config::resolve_session_profile and the existing run-safety resolver/controller instead of duplicating policy logic."
+      measurable_target: "No parallel profile parser or run-safety validator is introduced."
+
+success_criteria:
+  measurable_outcomes:
+    - id: "SC-001"
+      description: "Harness clients can start a real session by profile name without disconnects."
+      metric: "Valid and invalid named-profile public API scenarios"
+      target: "All valid names start; all unknown names return typed errors on a reusable connection."
+    - id: "SC-002"
+      description: "Harness clients can bound real turns with released safety controls."
+      metric: "max_turns, token_budget, deadline, combined, omitted, and invalid scenarios"
+      target: "100% reach the expected enforcement or validation outcome."
+    - id: "SC-003"
+      description: "Legacy clients observe no change when new fields are omitted."
+      metric: "Protocol-v1 compatibility fixtures"
+      target: "100% preserve prior wire and runtime behavior."
+
+key_entities:
+  - name: "Harness session profile selection"
+    description: "A caller-supplied named or resolved credential-free startup policy for one session."
+    attributes: ["profile name", "resolved startup overlay", "validation result"]
+  - name: "Harness turn safety override"
+    description: "Optional invocation-scoped limits attached to one send_message request."
+    attributes: ["max turns", "token budget", "deadline", "validation source"]
+
+edge_cases:
+  - scenario: "profile is omitted, null, an existing startup object, an empty string, or an unknown string"
+    expected_behavior: "Omission and valid object remain compatible; invalid strings return typed errors without disconnecting."
+  - scenario: "safety fields are omitted, null, wrong JSON types, empty, zero, malformed, overflowing, or expired"
+    expected_behavior: "Omission preserves legacy behavior; invalid supplied values fail before provider work with actionable errors."
+  - scenario: "a bounded turn is followed by an unbounded turn on the same session"
+    expected_behavior: "The safety controller is invocation-scoped and does not leak into the later turn."
+
+assumptions:
+  - "The released Go SDK sends named profiles as JSON strings and safety counters as JSON integers."
+  - "Protocol-v1 clients may continue sending resolved object-shaped profile overlays."
+  - "max_tool_steps remains outside this Bead."
+
+constraints:
+  - "Preserve protocol-v1 omitted-field behavior and the single-server multi-client architecture."
+  - "No provider credential changes, push, release, or SDK publication in this Bead."
+  - "Live validation uses disposable private sockets and a free model only."
+
+out_of_scope:
+  - "Autospec product changes"
+  - "max_tool_steps harness support"
+  - "CLI exec flags"
+  - "Provider credential changes"
+  - "Push, release, or SDK publication"
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-23T11:10:55Z"
+  artifact_type: "spec"
