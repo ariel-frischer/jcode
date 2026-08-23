@@ -250,7 +250,7 @@ phases:
           - "Inline preview cleanup, shared header constants, outside-repository rationale, and Markdown/URL/path precedence satisfy focused tests and documented review dispositions."
       - id: "T016"
         title: "Verify every changed oversized file is flat or smaller and record the audit in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
