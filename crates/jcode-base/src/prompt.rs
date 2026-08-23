@@ -42,9 +42,9 @@ pub struct PromptCapabilities {
 
 /// Immutable prompt context selected for one session profile.
 ///
-/// The overlay is appended after global and project guidance. Profile
-/// instructions precede profile-selected skill content, while the user message
-/// remains outside the system prompt and is therefore still last.
+/// The overlay is appended to the trusted system prompt. Profile instructions
+/// precede profile-selected skill content, while the user message remains
+/// outside the system prompt and is therefore still last.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SessionPromptOverlay {
     pub instructions: Option<String>,
@@ -70,13 +70,13 @@ impl SessionPromptOverlay {
         if parts.is_empty() {
             return;
         }
-        // Keep this after project guidance so the explicitly selected profile can
-        // refine it. The ordering is intentional even though it places immutable
-        // profile text after the provider prompt-cache boundary.
-        if !split.dynamic_part.is_empty() {
-            split.dynamic_part.push_str("\n\n");
+        // Profile configuration is trusted session policy. Keep it in the static
+        // system prompt instead of the dynamic user-role system reminder so
+        // providers and models preserve its instruction priority.
+        if !split.static_part.is_empty() {
+            split.static_part.push_str("\n\n");
         }
-        split.dynamic_part.push_str(&parts.join("\n\n"));
+        split.static_part.push_str(&parts.join("\n\n"));
     }
 }
 

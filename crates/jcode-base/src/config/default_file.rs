@@ -314,7 +314,8 @@ bing_market = "en-US"
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
 
-# Named session profiles are selected only by headless `jcode run`.
+# Named session profiles apply to interactive sessions, `jcode run`, `jcode repl`,
+# and explicitly started `jcode serve` sessions.
 # Resolution is field-by-field: explicit invocation > environment > selected
 # profile > unprofiled config > built-in default. Static values are checked when
 # strict run config loads; installed provider/model/profile/tool/skill references
