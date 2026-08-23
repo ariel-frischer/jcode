@@ -58,7 +58,6 @@ fn explicit_run_overrides_win_without_discarding_unset_profile_fields() -> Resul
 provider = "openrouter"
 model = "profile-model"
 reasoning_effort = "medium"
-provider_profile = "profile-gateway"
 tool_profile = "minimal"
 tools = ["read"]
 disabled_tools = ["bash"]
@@ -72,7 +71,7 @@ instructions = "Keep this profile-only instruction."
             provider: Some(jcode::cli::provider_init::ProviderChoice::Auto),
             model: Some("invocation-model".to_string()),
             reasoning_effort: Some("high".to_string()),
-            provider_profile: Some("invocation-gateway".to_string()),
+            provider_profile: None,
             tool_profile: Some("none".to_string()),
             tools: Some(vec!["agentgrep".to_string()]),
             disabled_tools: Some(vec!["write".to_string()]),
@@ -83,10 +82,7 @@ instructions = "Keep this profile-only instruction."
     assert_eq!(resolved.provider.as_arg_value(), "auto");
     assert_eq!(resolved.model.as_deref(), Some("invocation-model"));
     assert_eq!(resolved.reasoning_effort.as_deref(), Some("high"));
-    assert_eq!(
-        resolved.provider_profile.as_deref(),
-        Some("invocation-gateway")
-    );
+    assert_eq!(resolved.provider_profile, None);
     assert_eq!(resolved.tools.profile, "none");
     assert_eq!(resolved.tools.enabled, ["agentgrep"]);
     assert_eq!(resolved.tools.disabled, ["write"]);
