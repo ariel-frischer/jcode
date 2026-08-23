@@ -6,6 +6,7 @@ use jcode_harness_api::{
     ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, ServerFrame, SessionInfo,
     TextMatch,
 };
+use jcode_protocol::SessionProfileStartup;
 use rusqlite::{Connection, params};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -238,6 +239,80 @@ fn filtered_internal_event(kind: &str) -> Vec<ServerFrame> {
 }
 
 impl BridgeState {
+    fn resolved_profile_startup(profile_name: &str) -> Result<SessionProfileStartup, String> {
+        let profile_name = profile_name.trim();
+        if profile_name.is_empty() {
+            return Err("profile must be a non-empty configured session profile name".to_string());
+        }
+
+        let config = jcode_base::config::Config::load_strict()
+            .map_err(|error| format!("could not load Jcode configuration: {error}"))?;
+        let resolved = config
+            .resolve_session_profile(Some(profile_name))
+            .map_err(|error| error.to_string())?;
+        let selection = resolved.tool_selection(&config.tools);
+        let mut allowed_tools = selection
+            .allowed_tools
+            .map(|tools| tools.into_iter().collect::<Vec<_>>());
+        if let Some(tools) = allowed_tools.as_mut() {
+            tools.sort_unstable();
+        }
+        let mut disabled_tools = selection.disabled_tools.into_iter().collect::<Vec<_>>();
+        disabled_tools.sort_unstable();
+
+        Ok(SessionProfileStartup {
+            profile_name: resolved.profile_name,
+            provider: resolved.provider,
+            model: resolved.model,
+            provider_profile: resolved.provider_profile,
+            reasoning_effort: resolved.reasoning_effort,
+            allowed_tools,
+            disabled_tools,
+            skill_names: resolved.prompt_overlay.skill_names,
+            skills_mode: resolved.skill_policy.mode,
+            disabled_skills: resolved.skill_policy.disabled_skills,
+            skill_prompts: resolved.prompt_overlay.skill_prompts,
+            instructions: resolved.prompt_overlay.instructions,
+        })
+    }
+
+    fn profile_startup(request: &Value) -> Result<Option<Value>, String> {
+        match request.get("profile") {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(profile_name)) => Self::resolved_profile_startup(profile_name)
+                .and_then(|profile| {
+                    serde_json::to_value(profile).map_err(|error| error.to_string())
+                })
+                .map(Some),
+            Some(Value::Object(_)) => Ok(Some(request["profile"].clone())),
+            Some(_) => Err(
+                "profile must be a configured profile name string or a resolved profile object"
+                    .to_string(),
+            ),
+        }
+    }
+
+    fn optional_string_field(request: &Value, field: &str) -> Result<Option<String>, String> {
+        match request.get(field) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.clone())),
+            Some(_) => Err(format!("{field} must be a string when provided")),
+        }
+    }
+
+    fn optional_integer_field(request: &Value, field: &str) -> Result<Option<String>, String> {
+        match request.get(field) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Number(value)) => value
+                .as_u64()
+                .map(|value| Some(value.to_string()))
+                .ok_or_else(|| format!("{field} must be a non-negative integer when provided")),
+            Some(_) => Err(format!(
+                "{field} must be a non-negative integer when provided"
+            )),
+        }
+    }
+
     /// Apply the canonical event publication disposition at the translation
     /// boundary. Internal-only values are filtered here; owned-turn and
     /// request-reply events retain their typed wire representation.
@@ -377,6 +452,12 @@ impl BridgeState {
                 }
             }
             "create_session" | "attach_session" => {
+                let profile = match Self::profile_startup(request) {
+                    Ok(profile) => profile,
+                    Err(message) => {
+                        return Self::error_reply(api_id, ErrorCode::InvalidRequest, &message);
+                    }
+                };
                 let id = self.legacy_id();
                 let state_id = self.legacy_id();
                 let catalog_id = self.legacy_id();
@@ -407,8 +488,8 @@ impl BridgeState {
                 {
                     subscribe["selfdev"] = json!(true);
                 }
-                if !request["profile"].is_null() {
-                    subscribe["profile"] = request["profile"].clone();
+                if let Some(profile) = profile {
+                    subscribe["profile"] = profile;
                 }
                 if req == "attach_session"
                     && let Some(target) = request["session_id"].as_str()
@@ -426,6 +507,24 @@ impl BridgeState {
                 ]
             }
             "send_message" => {
+                let max_turns = match Self::optional_integer_field(request, "max_turns") {
+                    Ok(value) => value,
+                    Err(message) => {
+                        return Self::error_reply(api_id, ErrorCode::InvalidRequest, &message);
+                    }
+                };
+                let token_budget = match Self::optional_integer_field(request, "token_budget") {
+                    Ok(value) => value,
+                    Err(message) => {
+                        return Self::error_reply(api_id, ErrorCode::InvalidRequest, &message);
+                    }
+                };
+                let deadline = match Self::optional_string_field(request, "deadline") {
+                    Ok(value) => value,
+                    Err(message) => {
+                        return Self::error_reply(api_id, ErrorCode::InvalidRequest, &message);
+                    }
+                };
                 let id = self.legacy_id();
                 let no_reply = request["no_reply"].as_bool().unwrap_or(false);
                 if no_reply {
@@ -445,6 +544,13 @@ impl BridgeState {
                     && !images.is_empty()
                 {
                     message["images"] = json!(images);
+                }
+                if max_turns.is_some() || token_budget.is_some() || deadline.is_some() {
+                    message["run_safety"] = json!({
+                        "max_turns": max_turns,
+                        "token_budget": token_budget,
+                        "deadline": deadline,
+                    });
                 }
                 vec![Outbound::Legacy(message)]
             }

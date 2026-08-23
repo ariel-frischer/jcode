@@ -423,6 +423,12 @@ fn test_message_request_roundtrip_preserves_images_and_system_reminder() -> Resu
         system_reminder: Some("be concise".to_string()),
         active_skill: Some("verification".to_string()),
         no_reply: true,
+        run_safety: Some(jcode_config_types::RunSafetyConfig {
+            max_turns: Some("2".to_string()),
+            max_tool_steps: None,
+            token_budget: Some("1000".to_string()),
+            deadline: Some("2030-01-01T00:00:00+00:00".to_string()),
+        }),
     };
     let json = serde_json::to_string(&req)?;
     let decoded = parse_request_json(&json)?;
@@ -433,6 +439,7 @@ fn test_message_request_roundtrip_preserves_images_and_system_reminder() -> Resu
         system_reminder,
         active_skill,
         no_reply,
+        run_safety,
     } = decoded
     else {
         return Err(anyhow!("expected Message"));
@@ -445,6 +452,23 @@ fn test_message_request_roundtrip_preserves_images_and_system_reminder() -> Resu
     assert_eq!(system_reminder.as_deref(), Some("be concise"));
     assert_eq!(active_skill.as_deref(), Some("verification"));
     assert!(no_reply);
+    let run_safety = run_safety.expect("run safety");
+    assert_eq!(run_safety.max_turns.as_deref(), Some("2"));
+    assert_eq!(run_safety.token_budget.as_deref(), Some("1000"));
+    assert_eq!(
+        run_safety.deadline.as_deref(),
+        Some("2030-01-01T00:00:00+00:00")
+    );
+    Ok(())
+}
+
+#[test]
+fn test_message_request_defaults_optional_run_safety() -> Result<()> {
+    let decoded = parse_request_json(r#"{"type":"message","id":92,"content":"legacy"}"#)?;
+    let Request::Message { run_safety, .. } = decoded else {
+        return Err(anyhow!("expected Message"));
+    };
+    assert_eq!(run_safety, None);
     Ok(())
 }
 

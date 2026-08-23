@@ -3760,6 +3760,7 @@ dependencies = [
  "jcode-background-types",
  "jcode-base",
  "jcode-harness-api",
+ "jcode-protocol",
  "jcode-transport",
  "libc",
  "rusqlite",

@@ -127,6 +127,7 @@ async fn test_token_usage() -> Result<()> {
             output_tokens: Some(20),
             cache_read_input_tokens: None,
             cache_creation_input_tokens: None,
+            reported_cost_usd: None,
         },
         StreamEvent::TextDelta("Response".to_string()),
         StreamEvent::MessageEnd {

@@ -12,6 +12,9 @@ fn client_frame_wire_shape() {
             content: "hi".into(),
             images: vec![],
             no_reply: false,
+            max_turns: None,
+            token_budget: None,
+            deadline: None,
         },
     );
     let json = serde_json::to_string(&frame).unwrap();
@@ -52,6 +55,9 @@ fn send_message_no_reply_wire_shape_and_legacy_default() {
             content: "context".into(),
             images: vec![],
             no_reply: true,
+            max_turns: None,
+            token_budget: None,
+            deadline: None,
         },
     );
     let json = serde_json::to_string(&frame).unwrap();
@@ -68,6 +74,40 @@ fn send_message_no_reply_wire_shape_and_legacy_default() {
         legacy.request,
         ApiRequest::SendMessage {
             no_reply: false,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn send_message_run_safety_wire_shape_and_legacy_default() {
+    let frame = ClientFrame::new(
+        10,
+        ApiRequest::SendMessage {
+            session_id: "s1".into(),
+            content: "bounded".into(),
+            images: vec![],
+            no_reply: false,
+            max_turns: Some(2),
+            token_budget: Some(1000),
+            deadline: Some("2030-01-01T00:00:00+00:00".into()),
+        },
+    );
+    let value = serde_json::to_value(frame).unwrap();
+    assert_eq!(value["max_turns"], 2);
+    assert_eq!(value["token_budget"], 1000);
+    assert_eq!(value["deadline"], "2030-01-01T00:00:00+00:00");
+
+    let legacy: ClientFrame = serde_json::from_str(
+        r#"{"v":1,"id":11,"req":"send_message","session_id":"s1","content":"legacy"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        legacy.request,
+        ApiRequest::SendMessage {
+            max_turns: None,
+            token_budget: None,
+            deadline: None,
             ..
         }
     ));

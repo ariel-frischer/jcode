@@ -1632,6 +1632,11 @@ impl Agent {
         self.run_safety = Some(controller);
     }
 
+    /// Replace invocation-scoped safety state for the next real turn.
+    pub fn replace_run_safety(&mut self, controller: Option<run_safety::RunSafetyController>) {
+        self.run_safety = controller;
+    }
+
     pub fn run_safety_stop_reason(&self) -> Option<run_safety::RunStopReason> {
         self.run_safety
             .as_ref()

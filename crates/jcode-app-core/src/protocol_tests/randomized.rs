@@ -29,6 +29,7 @@ fn test_protocol_request_roundtrip_randomized_samples() -> Result<()> {
             images: images.clone(),
             system_reminder: system_reminder.clone(),
             no_reply: rng.random_bool(0.5),
+            run_safety: None,
         };
         let decoded = parse_request_json(&serde_json::to_string(&req)?)?;
         let Request::Message {
