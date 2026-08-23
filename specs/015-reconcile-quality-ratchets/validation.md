@@ -521,3 +521,38 @@ T033 may declare the acceptance run complete only when R01 through R07 are curre
 - **Review dispositions:** all applicable PR #1, PR #2, historical, and Bead-comment concerns have stable final evidence. Applicable correctness concerns are implemented; bounded design suggestions retain evidence-backed `out_of_scope` or `rejected_with_evidence` dispositions.
 - **Non-goals preserved:** no user-facing contract, runtime storage format, dependency, unrelated threshold, automatic update path, exemption, warning allowance, or future no-growth enforcement changed. The private runtime harness used only scratch artifacts and a localhost mock provider; no credential or secret was recorded.
 - **Landing boundary:** source acceptance was initially anchored at `c8f20d70d58d351c8d06309c97651647ba172796`. Independent final review of documentation commit `977985993` identified missing CI provenance wiring, unsafe `--fix` mutation ordering, ancestry-only ownership checks, and stale acceptance wording. The subsequent repair adds CI enforcement, makes provenance-bound budgets check-only under `--fix`, validates every owner against the exact claimed metric, prunes the ledger to metric-causal commits, and resolves the artifact contradictions. Merge, installation, shared-server reload, push, and worktree cleanup remain owned by the risk-gated landing workflow.
+
+## Superseding independent-review repair acceptance
+
+This section supersedes the T030-T035 source identity and validation receipts above. The earlier receipts remain as historical evidence for the pre-review candidate, not as the landing candidate.
+
+### Repair scope and focused validation
+
+- **Repair commit:** `4cda2cf68cb0085ce675a7d7e07cb0c414ce7476` (`fix: close guardrail provenance review gaps`).
+- **Resolved blockers:** CI now runs provenance before the dependent code-size, test-size, and swallowed-error ratchets; `scripts/check_guardrails.sh --fix` cannot update those provenance-bound budgets; provenance owners must change the exact claimed LOC or swallowed-error metric against a parent; the ledger contains only metric-causal owners; and the spec/validation status is internally consistent.
+- **Focused receipt:** task `619856b91d`, started `2026-08-23T20:40:19Z`, completed `2026-08-23T20:42:46Z`, duration 146.9 seconds, exit 0. Python compilation, all 18 provenance/ratchet regression tests, the provenance validator, all three focused ratchets, worktree-bound `scripts/check_guardrails.sh --skip-slow`, YAML parsing, and `git diff --check` passed.
+
+### Superseding canonical guardrails
+
+- **Command:** `export JCODE_DEV_CARGO_SCRIPT="$PWD/scripts/dev_cargo.sh" JCODE_IN_DEV_CARGO=1 RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR="$PWD/target" && scripts/check_guardrails.sh`.
+- **Receipt:** task `858696zl9m`, started `2026-08-23T20:44:18Z`, completed `2026-08-23T20:46:21Z`, duration 122.9 seconds, exit 0, with Cargo-heavy work serialized.
+- **Result:** module declarations, formatting, all-target/all-feature check, Clippy with warnings denied, lockfile freshness, warning budget, provenance, code-size, test-size, panic, swallowed-error, dependency boundaries, wildcard re-exports, desktop2 frame budget, and onboarding invariants all passed. `cargo machete` remained an optional skip because it is not installed.
+
+### Superseding exact-head build and runtime
+
+- **Isolated build:** task `989350v7bp`, exit 0, used `JCODE_IN_DEV_CARGO=1` and the isolated target directory `/home/ari/.jcode/scratch/jcode-l89.5-exact-4cda2cf68cb0085ce675a7d7e07cb0c414ce7476`. The artifact is `/home/ari/.jcode/scratch/jcode-l89.5-exact-4cda2cf68cb0085ce675a7d7e07cb0c414ce7476/selfdev/jcode`, version `jcode v0.79.649-dev (4cda2cf68)`, SHA-256 `784b219767047f296050b4f1808d1d9089e8dbcc76a1d5bfaeff957cfe07f85c`.
+- **Private runtime:** task `3583182678`, exit 0. The exact artifact returned `simple-ok` with exit 0, completed the public `read` tool round trip and returned `tool-ok` with exit 0, and preserved a deterministic `401 Unauthorized` as exit 1. Four localhost mock requests covered the simple, tool request, tool result, and error turns.
+- **Isolation proof:** `~/.jcode/builds/shared-server/jcode` resolved to `/home/ari/.jcode/builds/versions/29d7ec132/jcode` before and after. No installation, reload, restart, or repoint occurred.
+
+### Landing boundary
+
+- The implementation and validation candidate is commit `4cda2cf68cb0085ce675a7d7e07cb0c414ce7476`; this validation document will receive a final evidence-only commit after bounded independent confirmation.
+- The branch is intentionally not pushed or landed because `github/dev` at `29d7ec132825d478b548fc1b276d372deb43acc6` is not an ancestor of the candidate. Fresh-base reconciliation belongs to the risk-gated merge workflow.
+- Risk is **Medium** due to cross-cutting delivery guardrails and historical baseline provenance. Ariel approval is required before merge, installation, reload, push, or cleanup.
+
+### Independent repair confirmation
+
+- **Reviewer:** bounded read-only worker `session_blowfish_1787518380867_030b54d32fca6534`, restricted to the eight repair files and fast non-Cargo checks.
+- **Result:** PASS on all four prior landing blockers. The reviewer confirmed provenance precedes dependent ratchets in CI and local guardrails, `--fix` cannot mutate provenance-bound budgets, owners are checked for exact metric changes rather than ancestry alone, and the superseding acceptance artifacts consistently identify the repair candidate and landing boundary.
+- **Independent checks:** exact implementation HEAD confirmed; provenance validator passed with 143 records and 30 reviews; all 18 scoped unit tests passed; provenance and all three dependent ratchets passed; the scoped checks did not mutate their inputs.
+- **Remaining boundary:** no blocker remains in the four repaired claims. Fresh-base reconciliation and Medium-risk approval remain intentionally outside the review scope.
