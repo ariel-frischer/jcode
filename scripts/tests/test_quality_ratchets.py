@@ -44,6 +44,26 @@ class RatchetFixture:
 
 
 class QualityRatchetGrowthTests(unittest.TestCase):
+    def test_ci_runs_provenance_before_reconciled_ratchets(self) -> None:
+        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        provenance = workflow.index("python3 scripts/check_quality_ratchet_provenance.py")
+        for checker in (
+            "python3 scripts/check_code_size_budget.py",
+            "python3 scripts/check_test_size_budget.py",
+            "python3 scripts/check_swallowed_error_budget.py",
+        ):
+            self.assertLess(provenance, workflow.index(checker))
+
+    def test_guardrail_fix_mode_never_updates_provenance_bound_budgets(self) -> None:
+        script = (SOURCE_ROOT / "scripts/check_guardrails.sh").read_text(encoding="utf-8")
+        for checker in (
+            "check_code_size_budget.py",
+            "check_test_size_budget.py",
+            "check_swallowed_error_budget.py",
+        ):
+            invocation = next(line for line in script.splitlines() if checker in line and "ratchet" in line)
+            self.assertIn("run_provenance_ratchet", invocation)
+
     def test_code_size_accepts_current_value_and_rejects_positive_delta(self) -> None:
         fixture = RatchetFixture("check_code_size_budget.py")
         self.addCleanup(fixture.close)

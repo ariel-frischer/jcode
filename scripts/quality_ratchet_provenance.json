@@ -78,7 +78,6 @@
         "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
         "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
         "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
-        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
         "e87cad161582162f46af57a1b01898e63f623285",
         "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
         "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
@@ -144,10 +143,7 @@
         "555081f0390c697cd08f5d4679af584d672d8b51",
         "358757cf4fa570c6f9224cec981bcbcc6622bd69",
         "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
-        "1e6eab640c293e4517075af97dfe8be733759f06",
-        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
         "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
-        "79e1b1bc3dff2fb02ef2c056b7de86807c4dbdc8",
         "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
         "8f5891a8c6b6d0c9767741646c7759ecea04b325"
       ],
@@ -249,9 +245,9 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-009",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/comm_session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "Merge commit 535d55f4cd7dfac35357648d442653e16d020eac changes crates/jcode-app-core/src/server/comm_session.rs from 1434 to 1502 LOC relative to an accepted parent while committing the stale 1495 budget; the reconciled 1502 measurement is active merged state.",
       "owning_commits": [
-        "6e1ff917d261483f05fdaab8c547448accb5e37f"
+        "535d55f4cd7dfac35357648d442653e16d020eac"
       ],
       "previous_value": 1495,
       "reconciled_value": 1502,
@@ -390,7 +386,6 @@
         "f29583504d3fca304dd9fb059e7e3b15133f556a",
         "ced98bb31b7cfdc2d89b6d7bdd1dbc87992a4cb9",
         "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
-        "adfa3885f6689349ef704bacdfc2386ba623edfd",
         "36ab158470a41afbf87e944fbc09107c50f6c80e",
         "187ab98545560088c88cb60e0c198d5cf60a91db"
       ],
@@ -495,7 +490,6 @@
       "id": "QR-018",
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/update.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "9e7ba42a6f00f331e1c9c23b292fa691a776952d",
         "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
       ],
       "previous_value": 1717,
@@ -783,15 +777,11 @@
       "owning_commits": [
         "13442162841617fee2f874879c105aa75dc27847",
         "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
-        "422d1a593dd4bcf09618230506bc45faf9cdbdb0",
-        "4047470341d961c487d7ddef65605f2a47b4ff69",
-        "4dbe405eff853ec6a44a3e2177a177ca5b143438",
         "358757cf4fa570c6f9224cec981bcbcc6622bd69",
         "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
         "a423db8fce9667679ebd53385b03579473d7a212",
         "8b66a3c0c13a3241070fc6cd458a0102a99b7f82",
         "7da479dfe31d49cb28e87cebfcf3b70244dadb21",
-        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
         "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
@@ -841,9 +831,10 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-031",
-      "merged_state_evidence": "535d55f4cd7dfac35357648d442653e16d020eac already contains crates/jcode-desktop2/src/main.rs at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
+      "merged_state_evidence": "Commits ba50098e505ba1b55cbe442f49b7dad8516c14f0 and 6761f5255cce295a47ee1dc9b92b89fe536002bf increase crates/jcode-desktop2/src/main.rs from 2338 to 2346 and then 2435 LOC before the stale 2340 budget was committed; both are ancestors of the accepted merged state.",
       "owning_commits": [
-        "535d55f4cd7dfac35357648d442653e16d020eac"
+        "ba50098e505ba1b55cbe442f49b7dad8516c14f0",
+        "6761f5255cce295a47ee1dc9b92b89fe536002bf"
       ],
       "previous_value": 2340,
       "reconciled_value": 2435,
@@ -870,7 +861,6 @@
         "189c58880307aae10c4bfd687ac4807a24e9a42e",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
         "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
-        "81996fde261b41b581a793d291672957de1bd565",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
         "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
@@ -979,7 +969,6 @@
       "id": "QR-036",
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-provider-metadata/src/catalog.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "81e82db7de62aaf52ed3ca898d411710efed4ac7",
         "a2622db13a4e2c87fb6f110ecffbecf67b2cb6e3"
       ],
       "previous_value": null,
@@ -1107,7 +1096,6 @@
       "owning_commits": [
         "16c55a5a28cccbec328ead81eb42201afce59a41",
         "16fc0290c6b5b7522a11acfd20ab54412a287a71",
-        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
         "358757cf4fa570c6f9224cec981bcbcc6622bd69",
         "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
         "a423db8fce9667679ebd53385b03579473d7a212",
@@ -1165,8 +1153,6 @@
       "id": "QR-043",
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/auth_account_picker.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
-        "c8189b5099c3750f9d1d5b905a53eb85fde44db2",
         "b2872056273109c8d77de4870e3dc1c731e45732"
       ],
       "previous_value": 1220,
@@ -1255,15 +1241,10 @@
         "c65dde06e0679aa4197038fe32245ae94725276c",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
-        "79de395cb00ac548f9d2368b2b314c65c8def61c",
-        "f6c7a1b656d48986b4b415efc0c408fb2a982e11",
         "ffa6454ff4fa04d6245af9997ff2f7e62bbbc8eb",
-        "be9242e8de7f453104e917e2dbf1dc67c14f73ec",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "5da90ec9722b72c567966e486ac7df65627b8fb1",
         "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
         "a8636a16bd2343bca0bf3a4acab43dc04b3578b7",
-        "3309ad37bbdf2a3774a7173512e54d26cc087448",
         "62de1469718bfccab1125f11934adca72b9e2399"
       ],
       "previous_value": 4073,
@@ -1292,8 +1273,7 @@
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/model_context.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "9c1647da3632970a1361e3a49ed344180353cc6c",
-        "2df9b616e5d9581936be8a0df1e9ca8242dafae8"
+        "9c1647da3632970a1361e3a49ed344180353cc6c"
       ],
       "previous_value": 1945,
       "reconciled_value": 1980,
@@ -1477,8 +1457,7 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "9afc59c2042bf467f94dee2cb71e9935685fd71c",
-        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
-        "c97621a96befaecaf067583ac212623b02457f70"
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
       ],
       "previous_value": 1387,
       "reconciled_value": 1405,
@@ -1507,7 +1486,6 @@
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "9afc59c2042bf467f94dee2cb71e9935685fd71c",
         "e42bad3f7b8c4a580aeca8b9cd5dd9df963d94b1",
-        "f8e5fe1f6c05026c417dca2bf2f8d25fd78f79d0",
         "2c8735f69e28ce22c86d35e418fe19e6d2e4f197"
       ],
       "previous_value": 2431,
@@ -1533,7 +1511,6 @@
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/backend.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
-        "e2224d3e01c74d44d4a58b6339ac02fd98f9ad13",
         "8775cf6851a074b54bb74d8e3748a41f5f89bea7"
       ],
       "previous_value": 1882,
@@ -1686,12 +1663,10 @@
       "id": "QR-061",
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_messages.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "189c58880307aae10c4bfd687ac4807a24e9a42e",
         "b18cf642bb7c54b0d8f6fb20b0b09158237475b7",
         "ce9e9fe4d441d682b436c5f8717a2d315d26b862",
         "87c83ceddcbb3d64c45d073e690171adf8aa4106",
         "376b12d64e1d63868bc10fccf6e98fb7205f8194",
-        "84df2ced74442e82a137ac15352f8be941aaccd3",
         "19b003ec0c9f7f18bac74c85f8abaac8d56a5bb0",
         "4285784557947441e29bf4b61e83c42f8342ce94"
       ],
@@ -1765,7 +1740,6 @@
       "id": "QR-064",
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui_viewport.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "751024bc1814a65b3e68a336354eb2dc59825701",
         "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "5da90ec9722b72c567966e486ac7df65627b8fb1",
@@ -1820,7 +1794,6 @@
       "owning_commits": [
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
-        "80e236baead391a5e1f9a9131aded0b191bb0dab",
         "4047470341d961c487d7ddef65605f2a47b4ff69",
         "b8d39caac92529f61894b6240ca7a2080f25df8e",
         "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
@@ -2234,7 +2207,6 @@
         "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7",
         "0dbfd8f60a750e70bc793a7ad79979650fb08ef9",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
-        "4dbe405eff853ec6a44a3e2177a177ca5b143438",
         "b8d39caac92529f61894b6240ca7a2080f25df8e",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "dffe0b3a80f0a1261ba6ee67c480fad6b876657b",
@@ -2266,8 +2238,6 @@
         "dc906ade08cd4bf1da4c2616052ec6d517a40409",
         "ac05fea9315fa1242adba67ef95cf495390ef0d6",
         "3ec0293c37c7ab58ff6f776c33b8a3f8f9116563",
-        "8517b8e854adf8a1f8044cc4eda1e9fa3be24999",
-        "81e82db7de62aaf52ed3ca898d411710efed4ac7",
         "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
       ],
       "previous_value": null,
@@ -2481,8 +2451,7 @@
         "c29503fbac1b6d759443be269cad028e8d8aea87",
         "15af648ca99b7f706f9acaf7dfd1391d93b63471",
         "489b0fc7072e21cda45183746ae40198ed8a1bb0",
-        "9989d4e2446acff6dc1992fd95341e804f9d9b60",
-        "af2e205d6721db610ca71ec4e2d30744e34522bb"
+        "9989d4e2446acff6dc1992fd95341e804f9d9b60"
       ],
       "previous_value": 2223,
       "reconciled_value": 2294,
@@ -2610,7 +2579,6 @@
       "id": "QR-093",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/remote_startup_input_03/part_01.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "62de1469718bfccab1125f11934adca72b9e2399",
         "2c2f4f20470374e6a645cb2210e78b9f3ea717a3"
       ],
       "previous_value": 1229,
@@ -2709,15 +2677,12 @@
       "id": "QR-097",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/tests/state_model_poke_03.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "fb35ed8295d53836c64453c2323c35c5db3dc346",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "79de395cb00ac548f9d2368b2b314c65c8def61c",
-        "f6c7a1b656d48986b4b415efc0c408fb2a982e11",
         "ffa6454ff4fa04d6245af9997ff2f7e62bbbc8eb",
         "be9242e8de7f453104e917e2dbf1dc67c14f73ec",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
-        "00ba336355decd6db7791febaa73ce0394ff2f26"
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
       ],
       "previous_value": 2886,
       "reconciled_value": 2918,
@@ -2829,7 +2794,6 @@
         "3656b0710725efb22f8a19c236b591089edad132",
         "93d1446c6faf22e27922c74929e819d4582fc275",
         "4657dd3f2d3f90669a9ff88814c4412ab714c017",
-        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "83efc48d3bc35859b6e22946405d8cf19195d31b",
@@ -2890,22 +2854,10 @@
         "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
-        "12204bd45ddae949e748442a5139122283d3751b",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
-        "3ddd13ab43166f1219a4aef04b4056778b184a2f",
-        "b8d39caac92529f61894b6240ca7a2080f25df8e",
-        "4c1e596fb1ffddd52213c5ec28871a9b7af06771",
-        "e6280699fe7e4185571e6db23f93fa5e6feb810e",
         "e87cad161582162f46af57a1b01898e63f623285",
         "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
-        "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
-        "f83eb091d4cf3d7430524c2dc57035662df68914",
-        "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
-        "7015b21b332ba93afbc849fa22852ceabb5895c7",
-        "535d55f4cd7dfac35357648d442653e16d020eac",
-        "4eb82b8c78fb90a9cffa7265d51f68b3210e2126",
-        "255ca6ebbb2809ced64e5c8803dc0fcb9597fff0",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "535d55f4cd7dfac35357648d442653e16d020eac"
       ],
       "previous_value": {
         "dot_ok": 3,
@@ -2937,8 +2889,6 @@
       "id": "QR-104",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/lifecycle_observability.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "db3c5738c828200b5ae253c784b7f038ac533d2f",
-        "77c5119b9c342746389148d30dfc8189878eecda",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
       ],
       "previous_value": {
@@ -2971,20 +2921,9 @@
       "id": "QR-105",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_actions.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "db3c5738c828200b5ae253c784b7f038ac533d2f",
-        "77c5119b9c342746389148d30dfc8189878eecda",
         "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
-        "6277a90e05988fe7d615de3fef33a55b760d238b",
-        "555081f0390c697cd08f5d4679af584d672d8b51",
-        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
-        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
-        "1e6eab640c293e4517075af97dfe8be733759f06",
-        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
-        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
-        "79e1b1bc3dff2fb02ef2c056b7de86807c4dbdc8",
         "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
-        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff"
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325"
       ],
       "previous_value": {
         "dot_ok": 3,
@@ -3016,15 +2955,9 @@
       "id": "QR-106",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "189c58880307aae10c4bfd687ac4807a24e9a42e",
-        "77c5119b9c342746389148d30dfc8189878eecda",
         "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
-        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
-        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
         "535d55f4cd7dfac35357648d442653e16d020eac",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
         "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
       ],
       "previous_value": {
@@ -3057,8 +2990,7 @@
       "id": "QR-107",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lightweight_control.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff"
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -3090,9 +3022,6 @@
       "id": "QR-108",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/debugger.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "04640237a27016d97b0e9fadba94e579039228a0",
-        "adfa3885f6689349ef704bacdfc2386ba623edfd",
-        "36ab158470a41afbf87e944fbc09107c50f6c80e",
         "187ab98545560088c88cb60e0c198d5cf60a91db"
       ],
       "previous_value": {
@@ -3125,8 +3054,7 @@
       "id": "QR-109",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/tool/mcp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "b8d39caac92529f61894b6240ca7a2080f25df8e",
-        "834ea8dcc4db7d303afc19fa0b9f7c7d2f920bee"
+        "b8d39caac92529f61894b6240ca7a2080f25df8e"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -3159,10 +3087,8 @@
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/auth/grok_build.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "3a0745de14876bb1b47189039a29bf67cf51337b",
-        "ec15f387310a68db4680f0156c893f8d6c279f03",
         "6efda099066b60714df87668ed69370653bdf004",
-        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
-        "659b8cc155c1aeb48009cbf2db19a540c573314b"
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -3194,13 +3120,8 @@
       "id": "QR-111",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/background.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "031737c6287670fc66f454b5c63f3b4fbf3424b1",
-        "f3cd5dcf79157c55217a45780a350966710a73f8",
         "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
-        "29fe538c0cf719eacd2806bdff685fe180e07991",
         "0e408bb7f49d9efda089a317862edb868fe994de",
-        "748435010b84eced475fd648a042d750ad450cb3",
-        "a0ccd7a591b9e3e4773653e65924abd2aa3fde7d",
         "bc0e25de668724ee90f45d6934ca0256d8310f6e"
       ],
       "previous_value": {
@@ -3265,7 +3186,6 @@
       "id": "QR-113",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/platform.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "f3cd5dcf79157c55217a45780a350966710a73f8",
         "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
         "0e408bb7f49d9efda089a317862edb868fe994de",
         "6991029b9a6b443e170b29db5a94c3fd3c7b2fac"
@@ -3300,7 +3220,6 @@
       "id": "QR-114",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/prompt.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "0c54134f66716e401b4c9c16e5fccb0586a73882",
         "535d55f4cd7dfac35357648d442653e16d020eac",
         "898e3ef9309dbb934112e9d6cfd2c9ca6776c088"
       ],
@@ -3366,8 +3285,7 @@
       "id": "QR-116",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60",
-        "99a75914102e14e028e85eafbe63bc68e3e67704"
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
       ],
       "previous_value": {
         "dot_ok": 3,
@@ -3399,7 +3317,6 @@
       "id": "QR-117",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/provider/startup.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "b1ac1fe90822b785bab63ae27bc7720ddb111a62",
         "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
       ],
       "previous_value": {
@@ -3432,7 +3349,6 @@
       "id": "QR-118",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-base/src/session/artifacts.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "6e1ff917d261483f05fdaab8c547448accb5e37f",
         "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7"
       ],
       "previous_value": {
@@ -3465,10 +3381,6 @@
       "id": "QR-119",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-dap/src/config.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "04640237a27016d97b0e9fadba94e579039228a0",
-        "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
-        "adfa3885f6689349ef704bacdfc2386ba623edfd",
-        "36ab158470a41afbf87e944fbc09107c50f6c80e",
         "187ab98545560088c88cb60e0c198d5cf60a91db"
       ],
       "previous_value": {
@@ -3501,11 +3413,8 @@
       "id": "QR-120",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-dap/src/session.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "da6c70c0475b58ec3ac0e991c60128668958abe5",
-        "04640237a27016d97b0e9fadba94e579039228a0",
         "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
         "adfa3885f6689349ef704bacdfc2386ba623edfd",
-        "36ab158470a41afbf87e944fbc09107c50f6c80e",
         "187ab98545560088c88cb60e0c198d5cf60a91db"
       ],
       "previous_value": {
@@ -3541,7 +3450,6 @@
         "da6c70c0475b58ec3ac0e991c60128668958abe5",
         "04640237a27016d97b0e9fadba94e579039228a0",
         "adfa3885f6689349ef704bacdfc2386ba623edfd",
-        "36ab158470a41afbf87e944fbc09107c50f6c80e",
         "187ab98545560088c88cb60e0c198d5cf60a91db"
       ],
       "previous_value": {
@@ -3574,22 +3482,12 @@
       "id": "QR-122",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-harness-api-server/src/translate.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "189c58880307aae10c4bfd687ac4807a24e9a42e",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
         "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
-        "81996fde261b41b581a793d291672957de1bd565",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
         "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
-        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
-        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "f76c9a573861112b2ebe25cd9cecd3c2f2659182",
-        "bc1d99536a755b2dfab730d671353948c3379a04",
-        "f6d5da78004e866df8dce7cbae2f74747325e7af",
-        "c0019f0827a007bf4db5104d0802470f6da685bd",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
-        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
-        "b86833ba2e91f422afc83fc0cb3ca0f038456e37"
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93"
       ],
       "previous_value": {
         "dot_ok": 12,
@@ -3621,11 +3519,7 @@
       "id": "QR-123",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-anthropic-runtime/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "f296d8287baee603adee934b048c913cd13c25f6",
-        "f5d48a883f7fa1e1afe0334af9e69db68a12cc0a",
-        "ad1f63927766baf02c5f90d56870d2b168f02164",
         "535d55f4cd7dfac35357648d442653e16d020eac",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
         "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60"
       ],
       "previous_value": {
@@ -3658,11 +3552,6 @@
       "id": "QR-124",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-grok-build-runtime/src/lib.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "535d55f4cd7dfac35357648d442653e16d020eac",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
-        "681e80053e7896c040b520437b852d167c8d149e",
-        "5f46424c9be70414182f494f523b1c313c938610",
-        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
         "659b8cc155c1aeb48009cbf2db19a540c573314b"
       ],
       "previous_value": {
@@ -3727,13 +3616,7 @@
       "id": "QR-126",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-provider-openrouter/src/stream.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "df65c7a66a789b255f7dfb69b89ef282074ec343",
-        "ce77a7c4886aa1aabee7c56ec5086bf722ec1b26",
-        "3680007a773fe8d1f87a3d4ae2c1689180ab09a4",
-        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
-        "535d55f4cd7dfac35357648d442653e16d020eac",
-        "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
-        "e0aea418ef45d801f241ef29aba936179d14e585"
+        "3680007a773fe8d1f87a3d4ae2c1689180ab09a4"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -3765,10 +3648,7 @@
       "id": "QR-127",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/auth.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "3a0745de14876bb1b47189039a29bf67cf51337b",
-        "681e80053e7896c040b520437b852d167c8d149e",
-        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
-        "659b8cc155c1aeb48009cbf2db19a540c573314b"
+        "3a0745de14876bb1b47189039a29bf67cf51337b"
       ],
       "previous_value": {
         "dot_ok": 7,
@@ -3833,12 +3713,7 @@
       "id": "QR-129",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/inline_file_preview.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "13442162841617fee2f874879c105aa75dc27847",
-        "422d1a593dd4bcf09618230506bc45faf9cdbdb0",
-        "426f92f7d94f62e53b1e0ab55a8af4eb507d20c9",
-        "c2e1c9278ad0355ca0c42d9d4b08098f48f71a4a",
-        "cf202de91ab3fdfdd4b10bae5a0114c31c8da726",
-        "af2e205d6721db610ca71ec4e2d30744e34522bb"
+        "426f92f7d94f62e53b1e0ab55a8af4eb507d20c9"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -3878,14 +3753,7 @@
         "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
         "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
         "e1825580a766a2490525c178cbceb0bdf940b18e",
-        "59026e79b26451fec44dd6b96bc93a87a370c614",
-        "fb35ed8295d53836c64453c2323c35c5db3dc346",
-        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
-        "2d7b4a9a36b441e6f349d6738508c0c1f7f01392",
-        "b59cf3409dcb8dce0664a0f3110389c4b34e49a3",
-        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "2df9b616e5d9581936be8a0df1e9ca8242dafae8",
-        "00ba336355decd6db7791febaa73ce0394ff2f26"
+        "59026e79b26451fec44dd6b96bc93a87a370c614"
       ],
       "previous_value": {
         "dot_ok": 6,
@@ -3952,15 +3820,8 @@
       "id": "QR-132",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/local.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
-        "358757cf4fa570c6f9224cec981bcbcc6622bd69",
-        "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
-        "a423db8fce9667679ebd53385b03579473d7a212",
-        "751024bc1814a65b3e68a336354eb2dc59825701",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "9c1647da3632970a1361e3a49ed344180353cc6c",
-        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
-        "00ba336355decd6db7791febaa73ce0394ff2f26"
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -4027,13 +3888,8 @@
       "id": "QR-134",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/remote/key_handling.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "dc0bdc58d817fd0a1f936714a4f9dca1f2a182fc",
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
-        "05740a8b5a0db5c826fb645dc84747bbbc619dc1",
-        "d01fb18adc1ce2963fcc513eb9eedb28dfb04dca",
-        "b4dd3cf4314118c394e8a46c24e54b0d27246fa4",
-        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "3309ad37bbdf2a3774a7173512e54d26cc087448"
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -4099,7 +3955,6 @@
       "id": "QR-136",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/theme_detect.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "854ff3e5d6e56a9c12d31439976f0f282eef8d43",
         "86a414acfb152e09e90ad6ddb66ba4a0afd0730c",
         "60f38a5fc7bfa9fdf5f11b47f90ad5681ab9ddf0"
       ],
@@ -4133,10 +3988,6 @@
       "id": "QR-137",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui/url.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "13442162841617fee2f874879c105aa75dc27847",
-        "039bcc8dc7142ebbf2657cdc78b578e15a10c9d5",
-        "6a9a33ea76b211c9bb7ba0b48d87c6d3939c20bf",
-        "491157e78e827e13b5e992ac76b1679b8d1c7f2e",
         "af2e205d6721db610ca71ec4e2d30744e34522bb"
       ],
       "previous_value": {
@@ -4171,10 +4022,7 @@
       "id": "QR-138",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/ui_viewport.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "751024bc1814a65b3e68a336354eb2dc59825701",
-        "cfe88cc02e4a1f862d9b83e7de6c37b2919a9d3a",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
-        "5da90ec9722b72c567966e486ac7df65627b8fb1",
         "6f743f264aafb16281782ea5480438cc52ff05e8"
       ],
       "previous_value": {
@@ -4208,21 +4056,9 @@
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- src/cli/commands.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "93d1446c6faf22e27922c74929e819d4582fc275",
-        "6653240b23ca9ef09bdeb81bc894f3d6f171d197",
-        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "a7ed2fe7efa5a81dc690a40d8c76f577deb21f1a",
-        "1692fbe7af06530934c37bb357a01e2fd6b21c95",
         "f296d8287baee603adee934b048c913cd13c25f6",
-        "83efc48d3bc35859b6e22946405d8cf19195d31b",
-        "6459bd52605305cf61e33d244a02a8692ff14887",
-        "9e7ba42a6f00f331e1c9c23b292fa691a776952d",
-        "dda81e8fb9fc1fae443f2931f1ef10c196f34812",
         "535d55f4cd7dfac35357648d442653e16d020eac",
-        "0e8a48f625c3da545c522bf68d8b51315c7f996b",
-        "45cdb33cb498c24a674732b131fb885c4acf5609",
-        "3f9653a12dfd2c2dfe211cd9166a86fea0ad2a5e",
-        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
-        "1ab482c77e8afbecb80e955164e19718fe6dd5c6"
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe"
       ],
       "previous_value": {
         "dot_ok": 11,
@@ -4254,7 +4090,31 @@
       "id": "QR-140",
       "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
       "owning_commits": [
-        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "13442162841617fee2f874879c105aa75dc27847",
+        "187ab98545560088c88cb60e0c198d5cf60a91db",
+        "3680007a773fe8d1f87a3d4ae2c1689180ab09a4",
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "426f92f7d94f62e53b1e0ab55a8af4eb507d20c9",
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60",
+        "60f38a5fc7bfa9fdf5f11b47f90ad5681ab9ddf0",
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "6efda099066b60714df87668ed69370653bdf004",
+        "6f743f264aafb16281782ea5480438cc52ff05e8",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "86a414acfb152e09e90ad6ddb66ba4a0afd0730c",
+        "898e3ef9309dbb934112e9d6cfd2c9ca6776c088",
+        "af2e205d6721db610ca71ec4e2d30744e34522bb",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
       ],
       "previous_value": 1226,
       "reconciled_value": 1274,
@@ -4278,7 +4138,37 @@
       "id": "QR-141",
       "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
       "owning_commits": [
-        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "187ab98545560088c88cb60e0c198d5cf60a91db",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "59026e79b26451fec44dd6b96bc93a87a370c614",
+        "60f38a5fc7bfa9fdf5f11b47f90ad5681ab9ddf0",
+        "659b8cc155c1aeb48009cbf2db19a540c573314b",
+        "6991029b9a6b443e170b29db5a94c3fd3c7b2fac",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "93d1446c6faf22e27922c74929e819d4582fc275",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "da6c70c0475b58ec3ac0e991c60128668958abe5",
+        "e1825580a766a2490525c178cbceb0bdf940b18e",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
       ],
       "previous_value": 1203,
       "reconciled_value": 1261,
@@ -4302,7 +4192,27 @@
       "id": "QR-142",
       "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
       "owning_commits": [
-        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
+        "187ab98545560088c88cb60e0c198d5cf60a91db",
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
       ],
       "previous_value": 840,
       "reconciled_value": 871,
@@ -4326,7 +4236,56 @@
       "id": "QR-143",
       "merged_state_evidence": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67 already contains scripts/swallowed_error_budget.json at the reconciled measurement while its committed budget entry retained the older value; the stale-at-creation mismatch is active merged state.",
       "owning_commits": [
-        "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67"
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b",
+        "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
+        "02d6d96112dc4d7e7bebe402f244465b5d922b19",
+        "04640237a27016d97b0e9fadba94e579039228a0",
+        "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
+        "0ceca956b9ba8f40207b969835bc5bd7a4a6ba49",
+        "0e408bb7f49d9efda089a317862edb868fe994de",
+        "13442162841617fee2f874879c105aa75dc27847",
+        "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
+        "187ab98545560088c88cb60e0c198d5cf60a91db",
+        "1e6eab640c293e4517075af97dfe8be733759f06",
+        "3680007a773fe8d1f87a3d4ae2c1689180ab09a4",
+        "3a0745de14876bb1b47189039a29bf67cf51337b",
+        "426f92f7d94f62e53b1e0ab55a8af4eb507d20c9",
+        "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
+        "535d55f4cd7dfac35357648d442653e16d020eac",
+        "5578d3bb4df15d2ffe3b9f09fa17d99d0e3fcb65",
+        "59026e79b26451fec44dd6b96bc93a87a370c614",
+        "5d09fc555b2a9657c139c564d3c1c058ebb1f793",
+        "6057b9f0d3e03552206bf0c10ef56f1b0e6ccb60",
+        "60f38a5fc7bfa9fdf5f11b47f90ad5681ab9ddf0",
+        "644fddabaf4ea835d3e65b910dfd0ec3b37775e6",
+        "659b8cc155c1aeb48009cbf2db19a540c573314b",
+        "6991029b9a6b443e170b29db5a94c3fd3c7b2fac",
+        "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
+        "6e4217880085bb9ea24db2adbda2f60a8aabfba7",
+        "6efda099066b60714df87668ed69370653bdf004",
+        "6f743f264aafb16281782ea5480438cc52ff05e8",
+        "75c39d7a6ccc981f6aed60af1428ab9d6acfbbc7",
+        "76bd9a811c6cb86ded882be7376f01af37b35ec7",
+        "77b85e8c5a0d519dd73f9b4bd10ff1f3a948790d",
+        "849c4c64227d4b5ac16670bd9ea4b5fde480be68",
+        "86a414acfb152e09e90ad6ddb66ba4a0afd0730c",
+        "898e3ef9309dbb934112e9d6cfd2c9ca6776c088",
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "93d1446c6faf22e27922c74929e819d4582fc275",
+        "9c1647da3632970a1361e3a49ed344180353cc6c",
+        "adfa3885f6689349ef704bacdfc2386ba623edfd",
+        "af2e205d6721db610ca71ec4e2d30744e34522bb",
+        "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
+        "b8d39caac92529f61894b6240ca7a2080f25df8e",
+        "bc0e25de668724ee90f45d6934ca0256d8310f6e",
+        "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
+        "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
+        "da6c70c0475b58ec3ac0e991c60128668958abe5",
+        "e1825580a766a2490525c178cbceb0bdf940b18e",
+        "e87cad161582162f46af57a1b01898e63f623285",
+        "f296d8287baee603adee934b048c913cd13c25f6",
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
       ],
       "previous_value": 3269,
       "reconciled_value": 3406,

@@ -56,6 +56,13 @@ run_ratchet() {
     run_gate "$label" python3 "scripts/$script"
 }
 
+# Provenance-bound budgets are never auto-updated. Their accepted values must be
+# changed together with the reviewed ledger, so --fix may check but not mutate them.
+run_provenance_ratchet() {
+    local label=$1 script=$2
+    run_gate "$label" python3 "scripts/$script"
+}
+
 echo "=== Format ==="
 # Before rustfmt: a `mod x;` with no file makes rustfmt fail with "Error writing
 # files: failed to resolve mod", which reads like a formatting problem and hides
@@ -83,10 +90,10 @@ fi
 run_gate "Cargo.lock is up to date" cargo metadata --locked --format-version 1
 run_gate "warning budget" bash scripts/check_warning_budget.sh
 run_gate "quality-ratchet provenance" python3 scripts/check_quality_ratchet_provenance.py
-run_ratchet "oversized-file ratchet" check_code_size_budget.py
-run_ratchet "oversized-test ratchet" check_test_size_budget.py
+run_provenance_ratchet "oversized-file ratchet" check_code_size_budget.py
+run_provenance_ratchet "oversized-test ratchet" check_test_size_budget.py
 run_ratchet "panic-prone usage ratchet" check_panic_budget.py
-run_ratchet "swallowed-error usage ratchet" check_swallowed_error_budget.py
+run_provenance_ratchet "swallowed-error usage ratchet" check_swallowed_error_budget.py
 run_gate "crate dependency boundaries" python3 scripts/check_dependency_boundaries.py
 run_gate "wildcard re-export ratchet" python3 scripts/check_wildcard_reexport_budget.py
 

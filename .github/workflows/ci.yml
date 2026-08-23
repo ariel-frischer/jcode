@@ -95,6 +95,10 @@ jobs:
         shell: bash
         run: scripts/check_warning_budget.sh
 
+      - name: Validate quality-ratchet provenance
+        shell: bash
+        run: python3 scripts/check_quality_ratchet_provenance.py
+
       - name: Enforce oversized-file ratchet
         shell: bash
         run: python3 scripts/check_code_size_budget.py

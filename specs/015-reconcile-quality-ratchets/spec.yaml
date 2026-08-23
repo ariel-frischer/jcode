@@ -1,7 +1,7 @@
 feature:
   branch: "015-reconcile-quality-ratchets"
   created: "2026-08-22"
-  status: "Draft"
+  status: "Completed"
   input: "Reconcile stale repository quality ratchets after fixing branch-owned growth. Incorporate independent PR review comments. Preserve current behavior and test coverage. Make every blocker-branch change flat or smaller in already-oversized files, retain explicit error handling, add durable provenance mapping historical code-size, test-size, and swallowed-error baseline deltas to owning commits, Beads, and PR review dispositions, reconcile only traced intentional merged state, preserve future no-growth enforcement, and require focused ratchets, stable all-feature guardrails, focused behavior tests, and built-binary public/integration validation."
 
 user_stories:

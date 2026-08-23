@@ -52,14 +52,30 @@ class ProvenanceFixture:
                 },
             },
         )
-        self.git("add", "scripts")
+        (self.root / "src").mkdir()
+        (self.root / "tests").mkdir()
+        (self.root / "src/lib.rs").write_text(
+            "fn baseline() {\n    let _ = work();\n    work().ok();\n    value.unwrap_or_default();\n}\n"
+            + "// baseline\n" * 7,
+            encoding="utf-8",
+        )
+        (self.root / "tests/case.rs").write_text("// baseline test\n" * 13, encoding="utf-8")
+        self.git("add", "scripts", "src", "tests")
         self.git("commit", "-qm", "baseline")
         self.baseline = self.git("rev-parse", "HEAD").stdout.strip()
+
+        with (self.root / "src/lib.rs").open("a", encoding="utf-8") as source:
+            source.write("fn added() { work().ok(); let _ = work(); value.unwrap_or_default(); }\n// owner\n")
+        with (self.root / "tests/case.rs").open("a", encoding="utf-8") as test:
+            test.write("// owner\n// owner\n")
+        self.git("add", "src/lib.rs", "tests/case.rs")
+        self.git("commit", "-qm", "causal source change")
+        self.owner = self.git("rev-parse", "HEAD").stdout.strip()
 
         (self.root / "intent.txt").write_text("intentional merged state\n", encoding="utf-8")
         self.git("add", "intent.txt")
         self.git("commit", "-qm", "intentional change")
-        self.owner = self.git("rev-parse", "HEAD").stdout.strip()
+        self.unrelated_owner = self.git("rev-parse", "HEAD").stdout.strip()
 
         self.write_json(
             "scripts/code_size_budget.json",
@@ -222,6 +238,11 @@ class QualityRatchetProvenanceTests(unittest.TestCase):
         ledger = copy.deepcopy(self.fixture.ledger)
         ledger["records"][0]["owning_commits"] = [side_commit]
         self.assert_rejected(ledger, "owning commit is not an ancestor")
+
+    def test_ancestor_that_does_not_change_claimed_metric_is_rejected(self) -> None:
+        ledger = copy.deepcopy(self.fixture.ledger)
+        ledger["records"][0]["owning_commits"] = [self.fixture.unrelated_owner]
+        self.assert_rejected(ledger, "does not change the claimed metric")
 
     def test_invalid_reconciliation_bead_is_rejected(self) -> None:
         ledger = copy.deepcopy(self.fixture.ledger)

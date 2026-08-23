@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,13 @@ REQUIRED_RECORD_FIELDS = (
 )
 REQUIRED_REVIEW_FIELDS = ("id", "source", "concern", "disposition", "evidence")
 REQUIRED_SEARCH_FIELDS = ("query", "status", "limit", "result", "matched_beads")
+CFG_TEST_RE = re.compile(r"^\s*#\s*\[\s*cfg\s*\(\s*(?:all\s*\(\s*)?test\s*[,)]")
+ITEM_START_RE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:mod|fn)\b")
+PATTERN_RES = {
+    "let_underscore": re.compile(r"\blet\s+_\s*="),
+    "dot_ok": re.compile(r"\.ok\(\)"),
+    "unwrap_or_default": re.compile(r"\.unwrap_or_default\(\)"),
+}
 
 
 def load_json(path: Path) -> Any:
@@ -62,6 +70,78 @@ def git_object_exists(commit: str) -> bool:
 
 def is_ancestor(commit: str, accepted_state: str) -> bool:
     return git("merge-base", "--is-ancestor", commit, accepted_state).returncode == 0
+
+
+@lru_cache(maxsize=None)
+def commit_parents(commit: str) -> tuple[str, ...]:
+    result = git("rev-list", "--parents", "-n", "1", commit)
+    if result.returncode != 0:
+        return ()
+    return tuple(result.stdout.split()[1:])
+
+
+@lru_cache(maxsize=None)
+def git_text(commit: str, path: str) -> str:
+    result = git("show", f"{commit}:{path}")
+    return result.stdout if result.returncode == 0 else ""
+
+
+def production_lines(text: str) -> list[str]:
+    output: list[str] = []
+    skip_stack: list[int] = []
+    pending_cfg_test = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not skip_stack:
+            if pending_cfg_test and ITEM_START_RE.match(line):
+                delta = line.count("{") - line.count("}")
+                if delta > 0:
+                    skip_stack.append(delta)
+                pending_cfg_test = False
+                continue
+            if pending_cfg_test and stripped and not stripped.startswith("#"):
+                pending_cfg_test = False
+            if CFG_TEST_RE.match(line):
+                pending_cfg_test = True
+                continue
+            output.append(line)
+        else:
+            skip_stack[-1] += line.count("{") - line.count("}")
+            if skip_stack[-1] <= 0:
+                skip_stack.pop()
+    return output
+
+
+@lru_cache(maxsize=None)
+def swallowed_counts(commit: str, path: str) -> tuple[int, int, int]:
+    lines = production_lines(git_text(commit, path))
+    return tuple(
+        sum(bool(PATTERN_RES[name].search(line)) for line in lines)
+        for name in sorted(PATTERNS)
+    )
+
+
+def owning_commit_metric_changes(category: str, scope: str, commit: str) -> set[str]:
+    parents = commit_parents(commit) or ("",)
+    if category in {"code_size", "test_size"}:
+        current = git_text(commit, scope).count("\n")
+        return (
+            {"loc"}
+            if any(current != git_text(parent, scope).count("\n") for parent in parents)
+            else set()
+        )
+    if not scope.startswith("file:"):
+        return set()
+    path = scope.removeprefix("file:")
+    current = swallowed_counts(commit, path)
+    changed: set[str] = set()
+    pattern_names = sorted(PATTERNS)
+    for parent in parents:
+        previous = swallowed_counts(parent, path)
+        changed.update(
+            name for index, name in enumerate(pattern_names) if current[index] != previous[index]
+        )
+    return changed
 
 
 def historical_budget(commit: str, relative_path: str) -> Any:
@@ -235,6 +315,9 @@ def validate() -> list[str]:
     baselines: dict[str, str] = {}
     ledger_scopes: dict[str, set[str]] = {category: set() for category in CATEGORIES}
     historical_cache: dict[tuple[str, str], dict[str, Any]] = {}
+    swallowed_pattern_owners: dict[str, set[str]] = {name: set() for name in PATTERNS}
+    swallowed_total_owners: set[str] = set()
+    deferred_swallowed_owners: list[tuple[str, str, set[str]]] = []
 
     for index, record in enumerate(records):
         label = f"records[{index}]"
@@ -320,6 +403,7 @@ def validate() -> list[str]:
         if not isinstance(owning_commits, list) or not owning_commits:
             errors.append(f"{label}: owning_commits must be a non-empty list")
         else:
+            valid_owners: set[str] = set()
             for commit in owning_commits:
                 if not isinstance(commit, str) or not git_object_exists(commit):
                     errors.append(f"{label}: owning commit does not exist: {commit!r}")
@@ -327,6 +411,34 @@ def validate() -> list[str]:
                     errors.append(
                         f"{label}: owning commit is not an ancestor of {accepted_state}: {commit}"
                     )
+                else:
+                    valid_owners.add(commit)
+                    if category in {"code_size", "test_size"} or scope.startswith("file:"):
+                        changed_patterns = owning_commit_metric_changes(category, scope, commit)
+                        if not changed_patterns:
+                            errors.append(
+                                f"{label}: owning commit does not change the claimed metric: {commit}"
+                            )
+                        elif category == "swallowed_error":
+                            swallowed_total_owners.add(commit)
+                            for pattern in changed_patterns:
+                                swallowed_pattern_owners[pattern].add(commit)
+            if category == "swallowed_error" and (
+                scope == "aggregate:total" or scope.startswith("pattern:")
+            ):
+                deferred_swallowed_owners.append((label, scope, valid_owners))
+
+    for label, scope, owners in deferred_swallowed_owners:
+        expected = (
+            swallowed_total_owners
+            if scope == "aggregate:total"
+            else swallowed_pattern_owners.get(scope.removeprefix("pattern:"), set())
+        )
+        if owners != expected:
+            errors.append(
+                f"{label}: owning_commits do not match metric-causal file owners for {scope}: "
+                f"expected {sorted(expected)!r}, got {sorted(owners)!r}"
+            )
 
     for category, baseline in baselines.items():
         current = current_budgets.get(category)
