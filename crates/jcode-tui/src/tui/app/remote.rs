@@ -1499,8 +1499,20 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
         {
             let interleave_images = std::mem::take(&mut app.interleave_images);
             let msg_clone = interleave_msg.clone();
+            let expanded = match super::input::expand_file_mentions_for_submit(app, &interleave_msg)
+            {
+                Ok(expanded) => expanded,
+                Err(notice) => {
+                    app.input = interleave_msg;
+                    app.cursor_pos = app.input.len();
+                    app.pending_images.extend(interleave_images);
+                    app.set_status_notice(notice.clone());
+                    app.push_display_message(DisplayMessage::system(notice));
+                    return;
+                }
+            };
             match remote
-                .soft_interrupt(interleave_msg, interleave_images, false)
+                .soft_interrupt(expanded, interleave_images, false)
                 .await
             {
                 Err(e) => {
@@ -1523,6 +1535,18 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
         // send while still compiling, so the comment marks why the take matters.
         let interleave_images = std::mem::take(&mut app.interleave_images);
         if !interleave_msg.trim().is_empty() {
+            let expanded = match super::input::expand_file_mentions_for_submit(app, &interleave_msg)
+            {
+                Ok(expanded) => expanded,
+                Err(notice) => {
+                    app.input = interleave_msg;
+                    app.cursor_pos = app.input.len();
+                    app.pending_images.extend(interleave_images);
+                    app.set_status_notice(notice.clone());
+                    app.push_display_message(DisplayMessage::system(notice));
+                    return;
+                }
+            };
             app.push_display_message(DisplayMessage {
                 role: "user".to_string(),
                 content: interleave_msg.clone(),
@@ -1534,7 +1558,7 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
             if let Err(e) = begin_remote_send(
                 app,
                 remote,
-                interleave_msg,
+                expanded,
                 interleave_images,
                 false,
                 None,
@@ -1572,10 +1596,23 @@ pub(super) async fn process_remote_followups(app: &mut App, remote: &mut RemoteC
                 app.visible_turn_started = Some(Instant::now());
             }
         }
+        let expanded = match super::input::expand_file_mentions_for_submit(app, &combined) {
+            Ok(expanded) => expanded,
+            Err(notice) => {
+                if let Some(reminder) = reminder {
+                    app.hidden_queued_system_messages.insert(0, reminder);
+                }
+                app.input = combined;
+                app.cursor_pos = app.input.len();
+                app.set_status_notice(notice.clone());
+                app.push_display_message(DisplayMessage::system(notice));
+                return;
+            }
+        };
         if begin_remote_send(
             app,
             remote,
-            combined.clone(),
+            expanded,
             vec![],
             true,
             reminder.clone(),

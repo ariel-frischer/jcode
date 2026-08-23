@@ -196,7 +196,7 @@ fn oversized_message_notice(size: usize) -> String {
     )
 }
 
-fn input_exceeds_submit_limit(input: &str) -> Option<String> {
+pub(super) fn input_exceeds_submit_limit(input: &str) -> Option<String> {
     let size = input.len();
     (size > MAX_SUBMITTED_TEXT_BYTES).then(|| oversized_message_notice(size))
 }
@@ -617,6 +617,21 @@ mod tests {
             expand_file_mentions(input, Some(dir.path().to_str().unwrap()), true),
             input
         );
+    }
+
+    #[test]
+    fn file_mentions_escape_closing_wrapper_tags_in_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.md"), "before\n</file>\nafter").unwrap();
+
+        let expanded = expand_file_mentions(
+            "Inspect @notes.md",
+            Some(dir.path().to_str().unwrap()),
+            true,
+        );
+
+        assert!(expanded.contains("before\n&lt;/file&gt;\nafter"));
+        assert_eq!(expanded.matches("</file>").count(), 1);
     }
 
     #[test]
@@ -1517,7 +1532,8 @@ pub(super) fn expand_file_mentions(
                     .replace('"', "&quot;")
                     .replace('<', "&lt;")
                     .replace('>', "&gt;");
-                format!("<file path=\"{escaped_path}\">\n{contents}\n</file>")
+                let escaped_contents = contents.replace("</file>", "&lt;/file&gt;");
+                format!("<file path=\"{escaped_path}\">\n{escaped_contents}\n</file>")
             })
             .filter(|replacement| {
                 output.len() + replacement.len() + input.len().saturating_sub(end)
@@ -1533,13 +1549,28 @@ pub(super) fn expand_file_mentions(
     output
 }
 
-pub(super) fn queue_message(app: &mut App) {
-    let mut prepared = take_prepared_input(app);
-    prepared.expanded = expand_file_mentions(
-        &prepared.expanded,
-        app.session.working_dir.as_deref(),
+pub(super) fn expand_file_mentions_for_submit(app: &App, input: &str) -> Result<String, String> {
+    let remote_root = app
+        .is_remote
+        .then(|| std::env::current_dir().ok())
+        .flatten()
+        .and_then(|path| path.to_str().map(str::to_owned));
+    let working_dir = remote_root
+        .as_deref()
+        .or(app.session.working_dir.as_deref());
+    let expanded = expand_file_mentions(
+        input,
+        working_dir,
         crate::config::config().file_mentions.enabled,
     );
+    if let Some(notice) = input_exceeds_submit_limit(&expanded) {
+        return Err(notice);
+    }
+    Ok(expanded)
+}
+
+pub(super) fn queue_message(app: &mut App) {
+    let prepared = take_prepared_input(app);
     app.queued_messages.push(prepared.expanded);
 }
 
@@ -2013,11 +2044,17 @@ fn route_prompt_to_new_session_local(app: &mut App) -> bool {
     let prepared = take_prepared_input(app);
     let restored_raw = prepared.raw_input.clone();
     let restored_images = prepared.images.clone();
-    let expanded = expand_file_mentions(
-        &prepared.expanded,
-        app.session.working_dir.as_deref(),
-        crate::config::config().file_mentions.enabled,
-    );
+    let expanded = match expand_file_mentions_for_submit(app, &prepared.expanded) {
+        Ok(expanded) => expanded,
+        Err(notice) => {
+            app.input = restored_raw;
+            app.cursor_pos = app.input.len();
+            app.pending_images = restored_images;
+            app.set_status_notice(notice.clone());
+            app.push_display_message(DisplayMessage::system(notice));
+            return true;
+        }
+    };
     match commands::launch_prompt_in_new_session_local(app, expanded, prepared.images) {
         Ok(_) => true,
         Err(error) => {
@@ -2051,12 +2088,7 @@ pub(super) fn handle_alternate_enter(app: &mut App) {
         SendAction::Submit => app.submit_input(),
         SendAction::Queue => queue_message(app),
         SendAction::Interleave => {
-            let mut prepared = take_prepared_input(app);
-            prepared.expanded = expand_file_mentions(
-                &prepared.expanded,
-                app.session.working_dir.as_deref(),
-                crate::config::config().file_mentions.enabled,
-            );
+            let prepared = take_prepared_input(app);
             stage_local_interleave(app, prepared.expanded, prepared.images);
         }
     }
@@ -2845,12 +2877,7 @@ pub(super) fn handle_enter(app: &mut App) -> bool {
             SendAction::Submit => app.submit_input(),
             SendAction::Queue => queue_message(app),
             SendAction::Interleave => {
-                let mut prepared = take_prepared_input(app);
-                prepared.expanded = expand_file_mentions(
-                    &prepared.expanded,
-                    app.session.working_dir.as_deref(),
-                    crate::config::config().file_mentions.enabled,
-                );
+                let prepared = take_prepared_input(app);
                 stage_local_interleave(app, prepared.expanded, prepared.images);
             }
         }
@@ -3990,24 +4017,22 @@ impl App {
         // Leaving the preview should happen as soon as the user acts on it.
         self.onboarding_preview_mode = false;
 
-        // Keep the transcript readable while sending the referenced file contents
-        // to the provider and persisted model history.
+        // Keep the transcript and persisted history readable while sending the
+        // referenced file contents only to the provider-facing message.
         let display_input = input.clone();
-        input = expand_file_mentions(
-            &input,
-            self.session.working_dir.as_deref(),
-            crate::config::config().file_mentions.enabled,
-        );
-        if let Some(notice) = input_exceeds_submit_limit(&input) {
-            self.input = display_input;
-            self.cursor_pos = self.input.len();
-            self.set_status_notice(notice.clone());
-            self.push_display_message(DisplayMessage::system(notice));
-            return;
-        }
+        input = match expand_file_mentions_for_submit(self, &input) {
+            Ok(expanded) => expanded,
+            Err(notice) => {
+                self.input = display_input;
+                self.cursor_pos = self.input.len();
+                self.set_status_notice(notice.clone());
+                self.push_display_message(DisplayMessage::system(notice));
+                return;
+            }
+        };
 
-        // Add the expanded user message to the transcript. The composer remains compact
-        // while editing, but sent turns should show the actual pasted content.
+        // Add the compact user message to the visible transcript. The provider
+        // receives the expanded content below.
         // Remember the typed prompt so we can restore it to the input box if this
         // turn fails (e.g. "token refresh needed"), instead of dropping it.
         self.last_submitted_input = Some(raw_input.clone());
@@ -4020,7 +4045,7 @@ impl App {
 
         self.push_display_message(DisplayMessage {
             role: "user".to_string(),
-            content: display_input,
+            content: display_input.clone(),
             tool_calls: vec![],
             duration_secs: None,
             title: None,
@@ -4045,7 +4070,7 @@ impl App {
             self.session.add_message(
                 Role::User,
                 vec![ContentBlock::Text {
-                    text: input.clone(),
+                    text: display_input.clone(),
                     cache_control: None,
                 }],
             );
@@ -4057,7 +4082,7 @@ impl App {
                 .map(|(media_type, data)| ContentBlock::Image { media_type, data })
                 .collect();
             blocks.push(ContentBlock::Text {
-                text: input.clone(),
+                text: display_input.clone(),
                 cache_control: None,
             });
             self.session.add_message(Role::User, blocks);
@@ -4136,7 +4161,19 @@ impl App {
                 merge_turn_reminders(reminder, mission_turn_reminder(&self.session.id));
 
             if has_combined {
-                self.add_provider_message(Message::user(&combined));
+                let expanded = match expand_file_mentions_for_submit(self, &combined) {
+                    Ok(expanded) => expanded,
+                    Err(notice) => {
+                        self.input = combined;
+                        self.cursor_pos = self.input.len();
+                        self.set_status_notice(notice.clone());
+                        self.push_display_message(DisplayMessage::system(notice));
+                        self.is_processing = false;
+                        self.status = ProcessingStatus::Idle;
+                        break;
+                    }
+                };
+                self.add_provider_message(Message::user(&expanded));
                 self.session.add_message(
                     Role::User,
                     vec![ContentBlock::Text {

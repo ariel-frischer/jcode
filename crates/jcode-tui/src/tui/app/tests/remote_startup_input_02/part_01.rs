@@ -1660,6 +1660,27 @@ fn test_retrieve_pending_message_prefers_pending_interleave_for_editing() {
 }
 
 #[test]
+fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("notes.md"), "private file contents").unwrap();
+    let mut app = create_test_app();
+    app.session.working_dir = Some(dir.path().to_string_lossy().into_owned());
+    app.is_processing = true;
+    app.queue_mode = true;
+    app.input = "Inspect @notes.md".to_string();
+    app.cursor_pos = app.input.len();
+
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .unwrap();
+    assert_eq!(app.queued_messages(), &["Inspect @notes.md".to_string()]);
+
+    app.retrieve_pending_message_for_edit();
+
+    assert_eq!(app.input(), "Inspect @notes.md");
+    assert!(!app.input().contains("private file contents"));
+}
+
+#[test]
 fn test_send_action_modes() {
     let mut app = create_test_app();
     app.is_processing = true;

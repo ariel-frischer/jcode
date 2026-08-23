@@ -113,6 +113,33 @@ fn file_mention_discovery_falls_back_to_the_launch_cwd() {
 }
 
 #[test]
+fn disconnected_file_mention_worker_is_visible_and_clears_pending_state() {
+    let mut app = create_test_app();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    drop(sender);
+    *app.file_mention_discovery.borrow_mut() = Some(
+        super::state_ui_input_helpers::FileMentionDiscovery {
+            request: super::state_ui_input_helpers::FileMentionRequest {
+                root: std::env::current_dir().expect("launch cwd"),
+                query: String::new(),
+                ignore_patterns: Vec::new(),
+            },
+            generation: 1,
+            receiver,
+            cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            candidates: Vec::new(),
+        },
+    );
+
+    assert!(app.poll_file_mention_discovery());
+    assert!(app.file_mention_discovery.borrow().is_none());
+    assert_eq!(
+        app.status_notice.as_ref().map(|(text, _)| text.as_str()),
+        Some("File mention scan stopped unexpectedly")
+    );
+}
+
+#[test]
 fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
     let _env_lock = crate::storage::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -192,6 +219,13 @@ fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
             .expect("displayed user message");
         assert_eq!(displayed.content, "Explain @docs/context.md");
         let submitted = app.session.messages.last().expect("submitted message");
+        assert!(matches!(
+            submitted.content.as_slice(),
+            [ContentBlock::Text { text, .. }]
+                if text == "Explain @docs/context.md"
+        ));
+        let provider_messages = app.materialized_provider_messages();
+        let submitted = provider_messages.last().expect("provider user message");
         assert!(matches!(
             submitted.content.as_slice(),
             [ContentBlock::Text { text, .. }]

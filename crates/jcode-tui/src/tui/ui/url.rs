@@ -21,11 +21,71 @@ fn file_path_regex() -> Option<&'static Regex> {
     FILE_PATH_REGEX
         .get_or_init(|| {
             Regex::new(
-                r#"(?:^|[\s'\"`(])((?:(?:\.{0,2}/|~/|/)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9_-]+)?)|(?:[A-Za-z][A-Za-z0-9_.@+-]*\.[A-Za-z][A-Za-z0-9_-]*))(?:$|[\s'\"`),:;])"#,
+                r#"(?:^|[\s'\"`(])((?:(?:\.{0,2}/|~/|/)(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.@+-]+|(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.@+-]+|[A-Za-z0-9][A-Za-z0-9_.@+-]*\.[A-Za-z][A-Za-z0-9_-]*|Dockerfile|Gemfile|Justfile|Makefile|Rakefile)(?:#[A-Za-z0-9_.-]+|:\d+(?::\d+)?)?)(?:$|[\s'\"`),;])"#,
             )
             .ok()
         })
         .as_ref()
+}
+
+fn is_supported_file_path(path: &str) -> bool {
+    let path = path.split('#').next().unwrap_or(path);
+    let path = path
+        .split_once(':')
+        .filter(|(_, suffix)| suffix.split(':').all(|part| part.parse::<u32>().is_ok()))
+        .map_or(path, |(path, _)| path);
+    if path.contains('/') || path.starts_with(['.', '~']) {
+        return true;
+    }
+
+    if matches!(
+        path,
+        "Dockerfile" | "Gemfile" | "Justfile" | "Makefile" | "Rakefile"
+    ) {
+        return true;
+    }
+
+    let extension = path.rsplit_once('.').map(|(_, extension)| extension);
+    extension.is_some_and(|extension| {
+        matches!(
+            extension.to_ascii_lowercase().as_str(),
+            "bash"
+                | "c"
+                | "cc"
+                | "cfg"
+                | "conf"
+                | "cpp"
+                | "css"
+                | "csv"
+                | "fish"
+                | "go"
+                | "h"
+                | "hpp"
+                | "html"
+                | "ini"
+                | "java"
+                | "js"
+                | "json"
+                | "jsx"
+                | "log"
+                | "markdown"
+                | "md"
+                | "mdx"
+                | "py"
+                | "rs"
+                | "scss"
+                | "sh"
+                | "sql"
+                | "toml"
+                | "ts"
+                | "tsx"
+                | "txt"
+                | "xml"
+                | "yaml"
+                | "yml"
+                | "zsh"
+        )
+    })
 }
 
 pub(crate) fn trim_url_candidate(candidate: &str) -> &str {
@@ -126,7 +186,7 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
                 continue;
             };
             let trimmed = trim_file_mention_candidate(path.as_str());
-            if trimmed.is_empty() {
+            if trimmed.is_empty() || !is_supported_file_path(trimmed) {
                 continue;
             }
             let start_col = raw_text[..path.start()].width();
@@ -142,7 +202,7 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
 
 #[cfg(test)]
 mod tests {
-    use super::{link_target_for_display_column, trim_url_candidate, url_regex};
+    use super::{file_path_regex, link_target_for_display_column, trim_url_candidate, url_regex};
     use unicode_width::UnicodeWidthStr;
 
     #[test]
@@ -312,9 +372,46 @@ mod tests {
         );
         assert_eq!(
             link_target_for_display_column(text, "🙂 @../src/main.rs us".width()),
-            Some("user@example.com".to_string()),
-            "existing plain-path classification remains unchanged"
+            None,
+            "email domains are not file paths"
         );
+    }
+
+    #[test]
+    fn ordinary_dotted_prose_is_not_a_file_target() {
+        for text in [
+            "This is a.b in prose",
+            "Try foo.bar next",
+            "Visit example.com later",
+        ] {
+            let dotted = text.find('.').expect("fixture has a dotted word");
+            assert_eq!(link_target_for_display_column(text, dotted), None, "{text}");
+        }
+
+        let known_file = "Edit config.toml next";
+        assert_eq!(
+            link_target_for_display_column(known_file, 8),
+            Some("config.toml".to_string())
+        );
+    }
+
+    #[test]
+    fn supported_bare_path_formats_preserve_anchors_and_line_suffixes() {
+        assert!(file_path_regex().is_some(), "file path regex must compile");
+        for (text, column, expected) in [
+            ("Open ~/notes.md", 8, "~/notes.md"),
+            ("Edit Makefile", 7, "Makefile"),
+            ("Read 2026-notes.md", 8, "2026-notes.md"),
+            ("See docs/guide.md#setup", 12, "docs/guide.md#setup"),
+            ("Fix src/main.rs:42", 8, "src/main.rs:42"),
+            ("Fix src/main.rs:42:7", 8, "src/main.rs:42:7"),
+        ] {
+            assert_eq!(
+                link_target_for_display_column(text, column),
+                Some(expected.to_string()),
+                "path fixture {text:?}"
+            );
+        }
     }
 
     #[test]

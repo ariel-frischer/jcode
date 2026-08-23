@@ -214,7 +214,7 @@ phases:
           - "No unrelated CLI behavior or contract changes are included."
       - id: "T036"
         title: "Add focused PR #1 and PR #2 review-regression tests across the TUI input and URL test modules"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
@@ -226,7 +226,7 @@ phases:
           - "Preview cleanup and shared header behavior are covered without weakening Markdown or URL precedence."
       - id: "T037"
         title: "Integrate the pushed PR #1 correctness remediation into the dev-based TUI implementation"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
@@ -238,7 +238,7 @@ phases:
           - "Gitignore-style exclusions, worker disconnect handling, and closing-tag escaping satisfy the focused review tests; nonblocking style suggestions receive explicit dispositions."
       - id: "T038"
         title: "Integrate the pushed PR #2 remediation and close its remaining path-format gaps"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"

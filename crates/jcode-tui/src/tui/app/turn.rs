@@ -370,6 +370,17 @@ impl App {
                                     }
                                     // Check for interleave request (Shift+Enter)
                                     if let Some(interleave_msg) = self.interleave_message.take() {
+                                        let expanded_interleave = match super::input::expand_file_mentions_for_submit(self, &interleave_msg) {
+                                            Ok(expanded) => expanded,
+                                            Err(notice) => {
+                                                self.input = interleave_msg;
+                                                self.cursor_pos = self.input.len();
+                                                self.pending_images.append(&mut self.interleave_images);
+                                                self.set_status_notice(notice.clone());
+                                                self.push_display_message(DisplayMessage::system(notice));
+                                                continue;
+                                            }
+                                        };
                                         // Save partial assistant response if any
                                         if !text_content.is_empty() || !tool_calls.is_empty() {
                                             // Complete any pending tool
@@ -426,7 +437,7 @@ impl App {
                                             }
                                         }
                                         // Add user's interleaved message
-                                        self.add_provider_message(Message::user(&interleave_msg));
+                                        self.add_provider_message(Message::user(&expanded_interleave));
                                         self.push_display_message(DisplayMessage {
                                             role: "user".to_string(),
                                             content: interleave_msg,

@@ -1,6 +1,10 @@
 use super::*;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
+const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
+
+// Inline previews intentionally allow user-clicked local paths outside the
+// repository. This only renders selected local text and never sends or mutates it.
 pub(super) fn resolve_local_file_target(
     target: &str,
     working_dir: Option<&std::path::Path>,
@@ -113,7 +117,6 @@ impl App {
             return true;
         }
 
-        const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
         let metadata = match std::fs::metadata(&path) {
             Ok(metadata) => metadata,
             Err(error) => {
