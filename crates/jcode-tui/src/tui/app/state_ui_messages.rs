@@ -507,6 +507,7 @@ impl App {
             self.inline_file_previews.clear();
             self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
         }
+        self.pending_inline_file_preview_loads.clear();
     }
 
     /// Terminal-style clear (Ctrl+L): append a viewport-height blank spacer

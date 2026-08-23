@@ -829,7 +829,11 @@ pub struct App {
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,
-    inline_file_previews: HashMap<u64, crate::tui::InlineFilePreview>,
+    inline_file_previews: HashMap<crate::tui::InlineFilePreviewKey, crate::tui::InlineFilePreview>,
+    pending_inline_file_preview_loads: HashMap<
+        crate::tui::InlineFilePreviewKey,
+        inline_file_preview::PendingInlineFilePreviewLoad,
+    >,
     inline_file_previews_version: u64,
     display_user_message_count: usize,
     display_edit_tool_message_count: usize,

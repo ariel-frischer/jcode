@@ -1623,7 +1623,7 @@ fn render_message_into(
         _ => {}
     }
 
-    if let Some(preview) = app.inline_file_preview(msg.stable_cache_hash()) {
+    if let Some(preview) = app.inline_file_preview(msg_global_idx, msg.stable_cache_hash()) {
         for line in super::inline_file_preview_ui::render(preview) {
             acc.push_auto(line);
         }

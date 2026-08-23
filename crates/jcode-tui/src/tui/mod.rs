@@ -1,7 +1,9 @@
 pub mod account_picker;
 pub(crate) mod app;
 mod state_types;
-pub use state_types::{BackgroundTaskRowStatus, ContextSnapshot, InlineFilePreview};
+pub use state_types::{
+    BackgroundTaskRowStatus, ContextSnapshot, InlineFilePreview, InlineFilePreviewKey,
+};
 
 /// Compact presentation state for one retained background task.
 #[derive(Clone, Debug, PartialEq)]
@@ -208,7 +210,11 @@ pub trait TuiState {
     }
     /// Version counter for display_messages (monotonic, increments on mutation)
     fn display_messages_version(&self) -> u64;
-    fn inline_file_preview(&self, _message_hash: u64) -> Option<&InlineFilePreview> {
+    fn inline_file_preview(
+        &self,
+        _message_index: usize,
+        _message_hash: u64,
+    ) -> Option<&InlineFilePreview> {
         None
     }
     fn inline_file_previews_version(&self) -> u64 {

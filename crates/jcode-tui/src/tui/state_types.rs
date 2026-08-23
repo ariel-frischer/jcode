@@ -18,3 +18,9 @@ pub struct InlineFilePreview {
     pub content: String,
     pub markdown: bool,
 }
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub struct InlineFilePreviewKey {
+    pub message_index: usize,
+    pub message_hash: u64,
+}

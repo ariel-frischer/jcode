@@ -4,6 +4,12 @@ use std::io::Read;
 
 const MAX_INLINE_FILE_BYTES: u64 = 512 * 1024;
 
+pub(super) struct PendingInlineFilePreviewLoad {
+    display_messages_version: u64,
+    display_path: String,
+    receiver: std::sync::mpsc::Receiver<Result<crate::tui::InlineFilePreview, String>>,
+}
+
 fn preview_path_target(target: &str) -> &str {
     let target = target.split(['#', '?']).next().unwrap_or(target);
     let Some((candidate, suffix)) = target.rsplit_once(':') else {
@@ -57,7 +63,11 @@ impl App {
         else {
             return false;
         };
-        if self.inline_file_previews.remove(&message_hash).is_none() {
+        let key = crate::tui::InlineFilePreviewKey {
+            message_index,
+            message_hash,
+        };
+        if self.inline_file_previews.remove(&key).is_none() {
             return false;
         }
         self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
@@ -69,6 +79,20 @@ impl App {
         &mut self,
         target: &str,
         message_index: usize,
+    ) -> bool {
+        let display_path = preview_path_target(target).to_string();
+        self.start_inline_file_preview_load_with(target, message_index, move |path| {
+            read_inline_file_preview(path, display_path)
+        })
+    }
+
+    pub(super) fn start_inline_file_preview_load_with(
+        &mut self,
+        target: &str,
+        message_index: usize,
+        load: impl FnOnce(std::path::PathBuf) -> Result<crate::tui::InlineFilePreview, String>
+        + Send
+        + 'static,
     ) -> bool {
         let path_target = preview_path_target(target);
         if path_target.contains("://") || path_target.starts_with("mailto:") {
@@ -102,10 +126,6 @@ impl App {
             };
             working_dir.join(candidate)
         };
-        if !path.is_file() {
-            return false;
-        }
-
         let Some(message_hash) = self
             .display_messages
             .get(message_index)
@@ -113,65 +133,146 @@ impl App {
         else {
             return false;
         };
+        let key = crate::tui::InlineFilePreviewKey {
+            message_index,
+            message_hash,
+        };
         if self
             .inline_file_previews
-            .get(&message_hash)
+            .get(&key)
             .is_some_and(|preview| preview.display_path == path_target)
         {
-            self.inline_file_previews.remove(&message_hash);
+            self.inline_file_previews.remove(&key);
             self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
             self.set_status_notice(format!("Collapsed file: {path_target}"));
             return true;
         }
 
-        let file = match std::fs::File::open(&path) {
-            Ok(file) => file,
-            Err(error) => {
-                self.set_status_notice(format!("File is not readable text: {error}"));
-                return true;
-            }
+        if self
+            .pending_inline_file_preview_loads
+            .get(&key)
+            .is_some_and(|pending| pending.display_path == path_target)
+        {
+            self.pending_inline_file_preview_loads.remove(&key);
+            self.set_status_notice(format!("Cancelled file preview: {path_target}"));
+            return true;
+        }
+        self.pending_inline_file_preview_loads.remove(&key);
+
+        let display_messages_version = self.display_messages_version;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let task = move || {
+            let _ = sender.send(load(path));
         };
-        let mut bytes = Vec::with_capacity((MAX_INLINE_FILE_BYTES + 1) as usize);
-        if let Err(error) = file.take(MAX_INLINE_FILE_BYTES + 1).read_to_end(&mut bytes) {
-            self.set_status_notice(format!("File is not readable text: {error}"));
-            return true;
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn_blocking(task);
+        } else {
+            std::thread::spawn(task);
         }
-        if bytes.len() as u64 > MAX_INLINE_FILE_BYTES {
-            self.set_status_notice(format!(
-                "File is too large for inline preview: {path_target}"
-            ));
-            return true;
-        }
-        let content = match String::from_utf8(bytes) {
-            Ok(content) => content,
-            Err(error) => {
-                self.set_status_notice(format!("File is not readable text: {error}"));
-                return true;
-            }
-        };
-        if content.contains('\0') {
-            self.set_status_notice("File is not readable text: binary content".to_string());
-            return true;
-        }
-        let markdown = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| {
-                matches!(
-                    extension.to_ascii_lowercase().as_str(),
-                    "md" | "mdx" | "markdown"
-                )
-            });
-        self.inline_file_previews.insert(
-            message_hash,
-            crate::tui::InlineFilePreview {
+        self.pending_inline_file_preview_loads.insert(
+            key,
+            PendingInlineFilePreviewLoad {
+                display_messages_version,
                 display_path: path_target.to_string(),
-                content,
-                markdown,
+                receiver,
             },
         );
-        self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
-        self.set_status_notice(format!("Expanded file: {path_target}"));
+        self.set_status_notice(format!("Loading file: {path_target}"));
         true
     }
+
+    pub(super) fn poll_inline_file_preview_loads(&mut self) -> bool {
+        let keys = self
+            .pending_inline_file_preview_loads
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        let mut changed = false;
+
+        for key in keys {
+            let received = match self
+                .pending_inline_file_preview_loads
+                .get(&key)
+                .map(|pending| pending.receiver.try_recv())
+            {
+                Some(Ok(result)) => Some(result),
+                Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => Some(Err(
+                    "File preview load failed: background worker stopped".to_string(),
+                )),
+                Some(Err(std::sync::mpsc::TryRecvError::Empty)) | None => None,
+            };
+            let Some(result) = received else {
+                continue;
+            };
+            let Some(pending) = self.pending_inline_file_preview_loads.remove(&key) else {
+                continue;
+            };
+            changed = true;
+
+            let message_is_current = pending.display_messages_version
+                == self.display_messages_version
+                && self
+                    .display_messages
+                    .get(key.message_index)
+                    .is_some_and(|message| message.stable_cache_hash() == key.message_hash);
+            if !message_is_current {
+                continue;
+            }
+
+            match result {
+                Ok(preview) => {
+                    let display_path = preview.display_path.clone();
+                    self.inline_file_previews.insert(key, preview);
+                    self.inline_file_previews_version =
+                        self.inline_file_previews_version.wrapping_add(1);
+                    self.set_status_notice(format!("Expanded file: {display_path}"));
+                }
+                Err(error) => self.set_status_notice(error),
+            }
+        }
+
+        changed
+    }
+}
+
+fn read_inline_file_preview(
+    path: std::path::PathBuf,
+    display_path: String,
+) -> Result<crate::tui::InlineFilePreview, String> {
+    let metadata =
+        std::fs::metadata(&path).map_err(|_| format!("File is not available: {display_path}"))?;
+    if !metadata.is_file() {
+        return Err(format!("File is not available: {display_path}"));
+    }
+
+    let file = std::fs::File::open(&path)
+        .map_err(|error| format!("File is not readable text: {error}"))?;
+    let mut bytes = Vec::with_capacity((MAX_INLINE_FILE_BYTES + 1) as usize);
+    file.take(MAX_INLINE_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("File is not readable text: {error}"))?;
+    if bytes.len() as u64 > MAX_INLINE_FILE_BYTES {
+        return Err(format!(
+            "File is too large for inline preview: {display_path}"
+        ));
+    }
+    let content =
+        String::from_utf8(bytes).map_err(|error| format!("File is not readable text: {error}"))?;
+    if content.contains('\0') {
+        return Err("File is not readable text: binary content".to_string());
+    }
+    let markdown = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "md" | "mdx" | "markdown"
+            )
+        });
+    Ok(crate::tui::InlineFilePreview {
+        display_path,
+        content,
+        markdown,
+    })
 }

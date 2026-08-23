@@ -1,3 +1,14 @@
+fn wait_for_inline_file_preview_loads(app: &mut App) {
+    for _ in 0..200 {
+        app.poll_inline_file_preview_loads();
+        if app.pending_inline_file_preview_loads.is_empty() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    panic!("inline file preview load did not complete");
+}
+
 #[test]
 fn test_click_on_relative_markdown_path_preserves_side_panel_behavior() {
     let _render_lock = scroll_render_test_lock();
@@ -81,6 +92,7 @@ fn test_relative_file_preview_falls_back_to_process_working_directory() {
     app.display_messages = vec![DisplayMessage::assistant("`Cargo.toml`")];
     app.bump_display_messages_version();
     let opened = app.try_toggle_inline_file_preview("Cargo.toml", 0);
+    wait_for_inline_file_preview_loads(&mut app);
 
     assert!(
         opened,
@@ -124,6 +136,7 @@ fn test_click_on_relative_file_uses_process_working_directory_without_session_cw
             modifiers: KeyModifiers::empty(),
         });
     }
+    wait_for_inline_file_preview_loads(&mut app);
 
     assert_eq!(app.inline_file_previews.len(), 1);
 }
@@ -141,6 +154,7 @@ fn line_suffixed_path_previews_the_underlying_file() {
     app.bump_display_messages_version();
 
     assert!(app.try_toggle_inline_file_preview("main.rs:42:7", 0));
+    wait_for_inline_file_preview_loads(&mut app);
     let preview = app
         .inline_file_previews
         .values()
@@ -194,6 +208,7 @@ fn test_click_on_home_relative_file_path_toggles_inline_preview() {
         .expect("home-relative path must be visible");
 
     assert!(app.try_open_link_at(column, row));
+    wait_for_inline_file_preview_loads(&mut app);
     let preview = app
         .inline_file_previews
         .values()
@@ -267,18 +282,21 @@ fn test_clicking_file_mentions_in_user_and_prior_messages_uses_session_cwd() {
 
     let (column, row) = locate(&terminal, "@current.txt").expect("current mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let current = render_and_snap(&app, &mut terminal);
     assert!(current.contains("Inline file · current.txt"));
     assert!(current.contains("current mention content"));
 
     let (column, row) = locate(&terminal, "@prior.txt").expect("prior mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let prior = render_and_snap(&app, &mut terminal);
     assert!(prior.contains("Inline file · prior.txt"));
     assert!(prior.contains("prior mention content"));
 
     let (column, row) = locate(&terminal, "@system.txt").expect("system mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let system = render_and_snap(&app, &mut terminal);
     assert!(system.contains("Inline file · system.txt"));
     assert!(system.contains("system mention content"));
@@ -315,6 +333,7 @@ fn test_clicking_invalid_file_mention_is_consumed_locally() {
         .expect("invalid mention visible");
 
     assert!(app.try_open_link_at(column, row));
+    wait_for_inline_file_preview_loads(&mut app);
     assert!(app.inline_file_previews.is_empty());
     assert!(
         app.status_notice
@@ -343,6 +362,7 @@ fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     ];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 1));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -382,6 +402,7 @@ fn test_clicking_visible_inline_file_body_collapses_preview() {
     app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -446,6 +467,7 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
     app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -519,6 +541,7 @@ fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
     app.bump_display_messages_version();
 
     assert!(app.try_toggle_inline_file_preview("large.txt", 0));
+    wait_for_inline_file_preview_loads(&mut app);
     assert!(app.inline_file_previews.is_empty());
     assert!(
         app.status_notice()
@@ -526,6 +549,7 @@ fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
     );
 
     assert!(app.try_toggle_inline_file_preview("binary.bin", 0));
+    wait_for_inline_file_preview_loads(&mut app);
     assert!(app.inline_file_previews.is_empty());
     assert!(
         app.status_notice()
@@ -539,7 +563,10 @@ fn clearing_transcript_releases_inline_file_preview_contents() {
     app.push_display_message(DisplayMessage::user("src/main.rs"));
     let message_hash = app.display_messages[0].stable_cache_hash();
     app.inline_file_previews.insert(
-        message_hash,
+        crate::tui::InlineFilePreviewKey {
+            message_index: 0,
+            message_hash,
+        },
         crate::tui::InlineFilePreview {
             display_path: "src/main.rs".to_string(),
             content: "fn main() {}".to_string(),
@@ -552,4 +579,81 @@ fn clearing_transcript_releases_inline_file_preview_contents() {
 
     assert!(app.inline_file_previews.is_empty());
     assert_ne!(app.inline_file_previews_version, version);
+}
+
+#[test]
+fn identical_messages_keep_independent_inline_file_previews() {
+    let _render_lock = scroll_render_test_lock();
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    std::fs::write(repository.path().join("first.txt"), "first preview")
+        .expect("write first preview fixture");
+    std::fs::write(repository.path().join("second.txt"), "second preview")
+        .expect("write second preview fixture");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![
+        DisplayMessage::assistant("identical message"),
+        DisplayMessage::assistant("identical message"),
+    ];
+    app.bump_display_messages_version();
+
+    assert!(app.try_toggle_inline_file_preview("first.txt", 0));
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.try_toggle_inline_file_preview("second.txt", 1));
+    wait_for_inline_file_preview_loads(&mut app);
+    assert_eq!(app.inline_file_previews.len(), 2);
+
+    let backend = ratatui::backend::TestBackend::new(80, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
+    let both = render_and_snap(&app, &mut terminal);
+    assert!(both.contains("first preview"));
+    assert!(both.contains("second preview"));
+
+    assert!(app.try_collapse_inline_file_preview(0));
+    assert_eq!(app.inline_file_previews.len(), 1);
+    assert!(app
+        .inline_file_previews
+        .values()
+        .any(|preview| preview.display_path == "second.txt"));
+    let second_only = render_and_snap(&app, &mut terminal);
+    assert!(!second_only.contains("first preview"));
+    assert!(second_only.contains("second preview"));
+}
+
+#[test]
+fn inline_file_load_runs_off_thread_and_discards_stale_result() {
+    let repository = tempfile::tempdir().expect("repository tempdir");
+    let mut app = create_test_app();
+    app.session.working_dir = Some(repository.path().to_string_lossy().into_owned());
+    app.display_messages = vec![DisplayMessage::assistant("slow.txt")];
+    app.bump_display_messages_version();
+
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    assert!(app.start_inline_file_preview_load_with("slow.txt", 0, move |_path| {
+        started_tx.send(()).expect("signal background load start");
+        release_rx.recv().expect("release background load");
+        Ok(crate::tui::InlineFilePreview {
+            display_path: "slow.txt".to_string(),
+            content: "stale content".to_string(),
+            markdown: false,
+        })
+    }));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("background load should start");
+
+    app.replace_display_messages(vec![DisplayMessage::assistant("slow.txt")]);
+    release_tx.send(()).expect("release background load");
+    for _ in 0..100 {
+        app.poll_inline_file_preview_loads();
+        if app.pending_inline_file_preview_loads.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+
+    assert!(app.pending_inline_file_preview_loads.is_empty());
+    assert!(app.inline_file_previews.is_empty());
 }

@@ -65,8 +65,16 @@ impl crate::tui::TuiState for App {
         self.display_messages_version
     }
 
-    fn inline_file_preview(&self, message_hash: u64) -> Option<&crate::tui::InlineFilePreview> {
-        self.inline_file_previews.get(&message_hash)
+    fn inline_file_preview(
+        &self,
+        message_index: usize,
+        message_hash: u64,
+    ) -> Option<&crate::tui::InlineFilePreview> {
+        self.inline_file_previews
+            .get(&crate::tui::InlineFilePreviewKey {
+                message_index,
+                message_hash,
+            })
     }
 
     fn inline_file_previews_version(&self) -> u64 {
