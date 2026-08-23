@@ -84,6 +84,7 @@ fn test_remote_bus_productivity_failure_clears_refresh_state() {
 #[test]
 fn test_handle_server_event_transcript_send_prefixes_user_message() {
     let mut app = create_test_app();
+    let initial_provider_messages = app.materialized_provider_messages().len();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
     let mut remote = crate::tui::backend::RemoteConnection::dummy();
@@ -102,7 +103,11 @@ fn test_handle_server_event_transcript_send_prefixes_user_message() {
         .expect("user message displayed");
     assert_eq!(last.role, "user");
     assert_eq!(last.content, "[transcription] dictated hello");
-    assert!(app.messages.is_empty());
+    assert_eq!(app.messages.len(), initial_provider_messages + 1);
+    assert!(matches!(
+        app.messages.last().and_then(|message| message.content.last()),
+        Some(crate::message::ContentBlock::Text { text, .. }) if text == "[transcription] dictated hello"
+    ));
     assert!(matches!(
         app.session.messages.last().and_then(|message| message.content.last()),
         Some(crate::message::ContentBlock::Text { text, .. }) if text == "[transcription] dictated hello"
