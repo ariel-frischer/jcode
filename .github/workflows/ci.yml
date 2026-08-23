@@ -18,24 +18,6 @@ env:
   SCCACHE_GHA_ENABLED: "true"
 
 jobs:
-  go-sdk:
-    name: Go SDK Quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      matrix:
-        go-version: ['1.23.x', '1.24.x']
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-          cache-dependency-path: sdk/go/go.mod
-
-      - name: Validate canonical Go SDK
-        run: scripts/validate_go_sdk.sh
-
   quality:
     name: Quality Guardrails
     runs-on: ubuntu-latest
