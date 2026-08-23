@@ -141,7 +141,7 @@ phases:
           - "No new allow, exemption, panic-prone path, or silently ignored Result is introduced."
       - id: "T010"
         title: "Keep lifecycle repairs flat or smaller in crates/jcode-app-core/src/server/client_lifecycle.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"
