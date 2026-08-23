@@ -202,7 +202,7 @@ phases:
           - "The repair does not restore compiler warnings or convert explicit failures into ignored results."
       - id: "T015"
         title: "Keep ACP error-path repair flat or smaller in src/cli/acp.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"
