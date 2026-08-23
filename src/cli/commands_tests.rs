@@ -8,6 +8,7 @@ use crate::tool::Registry;
 use async_trait::async_trait;
 use std::io::{Read, Write};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -93,6 +94,53 @@ impl Provider for FailingTestProvider {
 
     fn fork(&self) -> Arc<dyn Provider> {
         Arc::new(Self)
+    }
+}
+
+struct SequentialToolProvider {
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Provider for SequentialToolProvider {
+    async fn complete(
+        &self,
+        _messages: &[Message],
+        _tools: &[ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> Result<EventStream> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = tokio_mpsc::channel::<Result<StreamEvent>>(8);
+        tokio::spawn(async move {
+            let id = format!("sequential-tool-{call}");
+            let _ = tx
+                .send(Ok(StreamEvent::ToolUseStart {
+                    id,
+                    name: "functions.read".to_string(),
+                }))
+                .await;
+            let _ = tx
+                .send(Ok(StreamEvent::ToolInputDelta("{}".to_string())))
+                .await;
+            let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
+            let _ = tx
+                .send(Ok(StreamEvent::MessageEnd {
+                    stop_reason: Some("tool_use".to_string()),
+                }))
+                .await;
+        });
+        Ok(Box::pin(ReceiverStream::new(rx)))
+    }
+
+    fn name(&self) -> &str {
+        "sequential-tool-test"
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(Self {
+            calls: Arc::clone(&self.calls),
+        })
     }
 }
 

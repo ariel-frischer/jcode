@@ -2736,7 +2736,7 @@ async fn run_single_message_command_plain_with_auto_poke(
     loop {
         agent.run_once(&next_message).await?;
         turns_completed += 1;
-        if turn_limit.complete_turn_and_should_stop() {
+        if turn_limit.complete_turn_and_should_stop(agent.take_tool_round_limit_reached()) {
             break;
         }
         if !run_command_auto_poke_enabled() {
@@ -2822,7 +2822,7 @@ async fn run_single_message_command_capture_with_auto_poke(
     loop {
         outputs.push(agent.run_once_capture(&next_message).await?);
         turns_completed += 1;
-        if turn_limit.complete_turn_and_should_stop() {
+        if turn_limit.complete_turn_and_should_stop(agent.take_tool_round_limit_reached()) {
             break;
         }
         if !run_command_auto_poke_enabled() {
@@ -2962,7 +2962,7 @@ async fn run_single_message_command_ndjson(
             break;
         }
         turns_completed += 1;
-        if turn_limit.complete_turn_and_should_stop() {
+        if turn_limit.complete_turn_and_should_stop(agent.take_tool_round_limit_reached()) {
             break;
         }
         if !run_command_auto_poke_enabled() {

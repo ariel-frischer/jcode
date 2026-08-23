@@ -97,6 +97,7 @@ impl Agent {
         let mut incomplete_continuations = 0u32;
         let mut empty_post_tool_continuations = 0u32;
         let mut fable_guardrail_reconsiderations = 0u32;
+        let mut completed_tool_rounds = 0u32;
 
         loop {
             // Never open a new provider request after a cancel. Several paths
@@ -107,6 +108,10 @@ impl Agent {
             // the interrupt was ignored (issue #732, regression of #428).
             if self.is_graceful_shutdown() {
                 logging::info("Cancel observed at turn-loop head - not starting another request");
+                break;
+            }
+            if self.stop_before_next_tool_round(completed_tool_rounds) {
+                logging::warn("Tool-round limit reached - not starting another provider request");
                 break;
             }
             let repaired = self.repair_missing_tool_outputs();
@@ -1253,6 +1258,7 @@ impl Agent {
             }
 
             // Execute tools and add results
+            completed_tool_rounds = completed_tool_rounds.saturating_add(1);
             let tool_count = tool_calls.len();
             let mut tool_results_dirty = false;
             for tool_index in 0..tool_count {

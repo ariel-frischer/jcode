@@ -216,6 +216,10 @@ pub struct Agent {
     background_tool_signal: InterruptSignal,
     /// Signal to gracefully stop generation (checkpoint partial response and exit)
     graceful_shutdown: InterruptSignal,
+    /// Optional per-turn tool-round budget for bounded unattended runs.
+    max_tool_rounds_per_turn: Option<u32>,
+    /// Set when the current turn stops before starting another provider/tool round.
+    tool_round_limit_reached: bool,
     /// Client-side cache tracking for detecting append-only violations
     cache_tracker: CacheTracker,
     /// Last token usage from API request (for debug socket queries)
@@ -315,6 +319,8 @@ impl Agent {
             soft_interrupt_queue: Arc::new(std::sync::Mutex::new(Vec::new())),
             background_tool_signal: InterruptSignal::new(),
             graceful_shutdown: InterruptSignal::new(),
+            max_tool_rounds_per_turn: None,
+            tool_round_limit_reached: false,
             cache_tracker: CacheTracker::new(),
             last_usage: TokenUsage::default(),
             locked_tools: None,
@@ -335,6 +341,27 @@ impl Agent {
             agent.disabled_tools.clone(),
         );
         agent
+    }
+
+    pub fn set_max_tool_rounds_per_turn(&mut self, limit: Option<u32>) {
+        self.max_tool_rounds_per_turn = limit;
+        self.tool_round_limit_reached = false;
+    }
+
+    pub fn take_tool_round_limit_reached(&mut self) -> bool {
+        std::mem::take(&mut self.tool_round_limit_reached)
+    }
+
+    fn stop_before_next_tool_round(&mut self, completed_tool_rounds: u32) -> bool {
+        if self
+            .max_tool_rounds_per_turn
+            .is_some_and(|limit| completed_tool_rounds >= limit)
+        {
+            self.tool_round_limit_reached = true;
+            true
+        } else {
+            false
+        }
     }
 
     fn current_skills_snapshot(&self) -> Arc<SkillRegistry> {

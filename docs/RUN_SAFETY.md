@@ -1,7 +1,7 @@
 # Non-interactive Run Safety
 
-Use the invocation-level `--max-turns` option to bound completed agent turns in a
-single `jcode run` process:
+Use the invocation-level `--max-turns` option to bound a single `jcode run`
+process. It limits both completed agent turns and the tool loop inside each turn:
 
 ```bash
 jcode run --max-turns 3 "Complete the task, then verify it"
@@ -11,6 +11,12 @@ The value must be a positive decimal whole number. Jcode validates it before
 provider initialization. If `JCODE_RUN_AUTO_POKE_MAX_TURNS` is also configured,
 the lower bound stops first. When both limits are equal, the invocation-level
 `--max-turns` bound wins before another automated follow-up is scheduled.
+
+Each turn in a bounded invocation may execute at most 32 provider/tool rounds.
+After the 32nd tool round, Jcode stops before starting another provider request.
+This inner bound applies to plain, JSON, and NDJSON runs and prevents one agent
+turn from postponing the invocation safety check indefinitely. Runs without
+`--max-turns` retain the existing unbounded tool-loop behavior.
 
 ## Validate this feature
 
@@ -37,7 +43,7 @@ agent turn.
 
 ## Output contract
 
-When the invocation bound stops a run:
+When the completed-turn bound stops a run:
 
 - plain output writes `Run stopped: maximum turns reached (max_turns_reached)`
   to stderr after the response
@@ -46,4 +52,13 @@ When the invocation bound stops a run:
   `safety_bound: {"bound":"max_turns","source":"invocation"}`
 - the final NDJSON `done` object adds the same structured fields
 
-These fields are omitted when the invocation bound did not stop the run.
+When the per-turn tool-round bound stops a run, the corresponding values are:
+
+- plain stderr: `Run stopped: maximum tool rounds reached (max_tool_rounds_reached)`
+- JSON and final NDJSON `done` object:
+  `stop_reason: "max_tool_rounds_reached"`, `outcome: "bounded_stop"`, and
+  `safety_bound: {"bound":"max_tool_rounds_per_turn","source":"invocation"}`
+
+A bounded stop is a successful, deliberate outcome and exits with status 0.
+Structured modes write valid JSON only to stdout. Stop fields are omitted when
+neither invocation bound stopped the run.

@@ -5,18 +5,23 @@ use std::num::NonZeroU64;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RunStopReason {
     MaxTurnsReached,
+    MaxToolRoundsReached,
 }
+
+pub(super) const MAX_TOOL_ROUNDS_PER_BOUNDED_TURN: usize = 32;
 
 impl RunStopReason {
     pub(super) fn code(self) -> &'static str {
         match self {
             Self::MaxTurnsReached => "max_turns_reached",
+            Self::MaxToolRoundsReached => "max_tool_rounds_reached",
         }
     }
 
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::MaxTurnsReached => "maximum turns reached",
+            Self::MaxToolRoundsReached => "maximum tool rounds reached",
         }
     }
 }
@@ -44,7 +49,10 @@ impl RunStopMetadata {
                 stop_reason: Some(reason.code()),
                 outcome: Some("bounded_stop"),
                 safety_bound: Some(RunSafetyBound {
-                    bound: "max_turns",
+                    bound: match reason {
+                        RunStopReason::MaxTurnsReached => "max_turns",
+                        RunStopReason::MaxToolRoundsReached => "max_tool_rounds_per_turn",
+                    },
                     source: "invocation",
                 }),
             },
@@ -93,8 +101,19 @@ impl RunTurnLimit {
         self.completed_turns
     }
 
-    pub(super) fn complete_turn_and_should_stop(&mut self) -> bool {
+    pub(super) fn configure_agent(&self, agent: &mut crate::agent::Agent) {
+        agent.set_max_tool_rounds_per_turn(
+            self.max_turns
+                .map(|_| MAX_TOOL_ROUNDS_PER_BOUNDED_TURN as u32),
+        );
+    }
+
+    pub(super) fn complete_turn_and_should_stop(&mut self, tool_round_limit_reached: bool) -> bool {
         self.completed_turns = self.completed_turns.saturating_add(1);
+        if tool_round_limit_reached {
+            self.stop_reason = Some(RunStopReason::MaxToolRoundsReached);
+            return true;
+        }
         if self
             .max_turns
             .is_some_and(|max_turns| self.completed_turns >= max_turns.get())
@@ -113,7 +132,7 @@ impl RunTurnLimit {
 
 pub(super) fn print_plain_stop(reason: Option<RunStopReason>) {
     if let Some(message) = plain_stop_message(reason) {
-        println!("{message}");
+        eprintln!("{message}");
     }
 }
 
@@ -141,6 +160,7 @@ pub(super) async fn run_single_message_with_agent(
     emit_ndjson: bool,
     turn_limit: &mut RunTurnLimit,
 ) -> Result<()> {
+    turn_limit.configure_agent(agent);
     let result: Result<()> = async {
         if emit_json {
             let text = super::run_single_message_command_capture_with_auto_poke(
@@ -195,9 +215,9 @@ mod tests {
     fn max_turns_stops_after_the_configured_completed_turn() {
         let mut limit = RunTurnLimit::parse(Some("2")).expect("limit should parse");
 
-        assert!(!limit.complete_turn_and_should_stop());
+        assert!(!limit.complete_turn_and_should_stop(false));
         assert_eq!(limit.stop_reason(), None);
-        assert!(limit.complete_turn_and_should_stop());
+        assert!(limit.complete_turn_and_should_stop(false));
         assert_eq!(limit.stop_reason(), Some(RunStopReason::MaxTurnsReached));
         assert_eq!(limit.completed_turns(), 2);
     }
@@ -206,7 +226,7 @@ mod tests {
     fn unset_limit_preserves_legacy_unbounded_behavior() {
         let mut limit = RunTurnLimit::parse(None).expect("unset limit should parse");
         for _ in 0..10 {
-            assert!(!limit.complete_turn_and_should_stop());
+            assert!(!limit.complete_turn_and_should_stop(false));
         }
         assert_eq!(limit.stop_reason(), None);
     }
@@ -232,5 +252,22 @@ mod tests {
         assert!(legacy.get("stop_reason").is_none());
         assert!(legacy.get("outcome").is_none());
         assert!(legacy.get("safety_bound").is_none());
+    }
+
+    #[test]
+    fn tool_round_reason_has_stable_plain_and_structured_contracts() {
+        let reason = RunStopReason::MaxToolRoundsReached;
+        assert_eq!(reason.code(), "max_tool_rounds_reached");
+        assert_eq!(reason.label(), "maximum tool rounds reached");
+        assert_eq!(
+            plain_stop_message(Some(reason)).as_deref(),
+            Some("Run stopped: maximum tool rounds reached (max_tool_rounds_reached)")
+        );
+
+        let encoded = serde_json::to_value(RunStopMetadata::from_reason(Some(reason))).unwrap();
+        assert_eq!(encoded["stop_reason"], "max_tool_rounds_reached");
+        assert_eq!(encoded["outcome"], "bounded_stop");
+        assert_eq!(encoded["safety_bound"]["bound"], "max_tool_rounds_per_turn");
+        assert_eq!(encoded["safety_bound"]["source"], "invocation");
     }
 }

@@ -48,6 +48,7 @@ impl Agent {
         let mut fable_guardrail_reconsiderations = 0u32;
         let mut sequential_single_tool_rounds = 0u32;
         let mut batch_nudge_pending = false;
+        let mut completed_tool_rounds = 0u32;
 
         loop {
             // Do not start another provider request once a cancel has been
@@ -55,6 +56,10 @@ impl Agent {
             // (issue #732, regression of #428).
             if self.is_graceful_shutdown() {
                 logging::info("Cancel observed at turn-loop head - not starting another request");
+                break;
+            }
+            if self.stop_before_next_tool_round(completed_tool_rounds) {
+                logging::warn("Tool-round limit reached - not starting another provider request");
                 break;
             }
             let repaired = self.repair_missing_tool_outputs();
@@ -912,6 +917,7 @@ impl Agent {
             }
 
             // Execute tools and add results
+            completed_tool_rounds = completed_tool_rounds.saturating_add(1);
             let mut tool_results_dirty = false;
             for tc in tool_calls {
                 let message_id = assistant_message_id
