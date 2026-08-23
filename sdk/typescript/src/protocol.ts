@@ -88,6 +88,9 @@ export type ApiRequest =
       content: string;
       images?: ImageAttachment[];
       no_reply?: boolean;
+      max_turns?: number;
+      token_budget?: number;
+      deadline?: string;
     }
   | { req: "cancel"; session_id: string }
   | {

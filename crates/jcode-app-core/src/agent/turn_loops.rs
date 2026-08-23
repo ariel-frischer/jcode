@@ -171,7 +171,21 @@ impl Agent {
                 Err(e) => {
                     if self.try_auto_compact_after_context_limit(&e.to_string()) {
                         context_limit_retries += 1;
+                        self.record_retry_lifecycle(
+                            crate::session::lifecycle_types::LifecycleDecisionType::Started,
+                            crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                            None,
+                            context_limit_retries,
+                            Self::MAX_CONTEXT_LIMIT_RETRIES,
+                        );
                         if context_limit_retries > Self::MAX_CONTEXT_LIMIT_RETRIES {
+                            self.record_retry_lifecycle(
+                                crate::session::lifecycle_types::LifecycleDecisionType::Exhausted,
+                                crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                                None,
+                                context_limit_retries,
+                                Self::MAX_CONTEXT_LIMIT_RETRIES,
+                            );
                             logging::warn(
                                 "Context-limit compaction retry limit reached; giving up",
                             );
@@ -272,7 +286,21 @@ impl Agent {
                                 ],
                             );
                             context_limit_retries += 1;
+                            self.record_retry_lifecycle(
+                                crate::session::lifecycle_types::LifecycleDecisionType::Started,
+                                crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                                None,
+                                context_limit_retries,
+                                Self::MAX_CONTEXT_LIMIT_RETRIES,
+                            );
                             if context_limit_retries > Self::MAX_CONTEXT_LIMIT_RETRIES {
+                                self.record_retry_lifecycle(
+                                    crate::session::lifecycle_types::LifecycleDecisionType::Exhausted,
+                                    crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                                    None,
+                                    context_limit_retries,
+                                    Self::MAX_CONTEXT_LIMIT_RETRIES,
+                                );
                                 logging::warn(
                                     "Context-limit compaction retry limit reached; giving up",
                                 );
@@ -513,6 +541,13 @@ impl Agent {
                         self.last_status_detail = Some(detail);
                     }
                     StreamEvent::RetryRollback { attempt, max } => {
+                        self.record_retry_lifecycle(
+                            crate::session::lifecycle_types::LifecycleDecisionType::Started,
+                            crate::session::lifecycle_types::LifecycleSemanticReason::RetryableFailure,
+                            None,
+                            attempt,
+                            max,
+                        );
                         // Transient transport fault mid-stream; the provider is
                         // replaying the request. Discard this attempt's partial
                         // output so the replay doesn't duplicate it in history.
@@ -678,7 +713,21 @@ impl Agent {
                                 ],
                             );
                             context_limit_retries += 1;
+                            self.record_retry_lifecycle(
+                                crate::session::lifecycle_types::LifecycleDecisionType::Started,
+                                crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                                None,
+                                context_limit_retries,
+                                Self::MAX_CONTEXT_LIMIT_RETRIES,
+                            );
                             if context_limit_retries > Self::MAX_CONTEXT_LIMIT_RETRIES {
+                                self.record_retry_lifecycle(
+                                    crate::session::lifecycle_types::LifecycleDecisionType::Exhausted,
+                                    crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
+                                    None,
+                                    context_limit_retries,
+                                    Self::MAX_CONTEXT_LIMIT_RETRIES,
+                                );
                                 logging::warn(
                                     "Context-limit compaction retry limit reached; giving up",
                                 );

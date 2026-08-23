@@ -125,10 +125,14 @@ pub(crate) fn link_target_for_display_column(raw_text: &str, column: usize) -> O
             let Some(path) = captures.get(1) else {
                 continue;
             };
+            let trimmed = trim_file_mention_candidate(path.as_str());
+            if trimmed.is_empty() {
+                continue;
+            }
             let start_col = raw_text[..path.start()].width();
-            let end_col = start_col + path.as_str().width();
+            let end_col = start_col + trimmed.width();
             if column >= start_col && column < end_col {
-                return Some(path.as_str().to_string());
+                return Some(trimmed.to_string());
             }
         }
     }
@@ -247,6 +251,31 @@ mod tests {
         assert_eq!(
             link_target_for_display_column(bare, 6),
             Some("README.md".to_string())
+        );
+    }
+
+    #[test]
+    fn link_target_for_display_column_trims_sentence_punctuation_from_file_paths() {
+        let text = "Written to /home/ari/.jcode/docs/how-my-dev-workflow-works.md.";
+        let path_start = "Written to ".len();
+
+        assert_eq!(
+            link_target_for_display_column(text, path_start + 8),
+            Some("/home/ari/.jcode/docs/how-my-dev-workflow-works.md".to_string())
+        );
+        assert_eq!(
+            link_target_for_display_column(
+                text,
+                path_start + "/home/ari/.jcode/docs/how-my-dev-workflow-works.md".len()
+            ),
+            None,
+            "the sentence-ending period must remain outside the clickable target"
+        );
+
+        let relative = "See docs/guide.md. for details";
+        assert_eq!(
+            link_target_for_display_column(relative, "See docs/guide".len()),
+            Some("docs/guide.md".to_string())
         );
     }
 

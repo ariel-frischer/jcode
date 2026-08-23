@@ -542,8 +542,15 @@ pub(in crate::tui::app) fn handle_server_event(
     remote: &mut impl RemoteEventState,
 ) -> bool {
     let eager_stream_redraw = !crate::perf::tui_policy().enable_decorative_animations;
-    if app.is_processing {
+    if app.is_processing && event_counts_as_provider_progress(&event) {
         app.last_stream_activity = Some(Instant::now());
+        if app
+            .status_detail
+            .as_deref()
+            .is_some_and(|detail| detail.starts_with("No provider progress for "))
+        {
+            app.status_detail = None;
+        }
     }
 
     let had_remote_resume_activity = app.remote_resume_activity.is_some();
@@ -2942,6 +2949,88 @@ pub(in crate::tui::app) fn handle_server_event(
             false
         }
         _ => false,
+    }
+}
+
+/// Synthetic socket traffic proves that the local server is alive, not that the
+/// upstream model or tool orchestration is making progress. In particular, the
+/// server emits `Pong` every 30 seconds while `complete_split` is still pending;
+/// counting that as provider activity disables the stall watchdog indefinitely.
+fn event_counts_as_provider_progress(event: &ServerEvent) -> bool {
+    matches!(
+        event,
+        ServerEvent::TextDelta { .. }
+            | ServerEvent::TextReplace { .. }
+            | ServerEvent::ReasoningDelta { .. }
+            | ServerEvent::ReasoningDone { .. }
+            | ServerEvent::ToolStart { .. }
+            | ServerEvent::ToolInput { .. }
+            | ServerEvent::ToolExec { .. }
+            | ServerEvent::ToolDone { .. }
+            | ServerEvent::SidePaneImages { .. }
+            | ServerEvent::GeneratedImage { .. }
+            | ServerEvent::BatchProgress { .. }
+            | ServerEvent::TokenUsage { .. }
+            | ServerEvent::ConnectionType { .. }
+            | ServerEvent::ConnectionPhase { .. }
+            | ServerEvent::StatusDetail { .. }
+            | ServerEvent::MessageEnd { .. }
+            | ServerEvent::RetryRollback { .. }
+            | ServerEvent::UpstreamProvider { .. }
+            | ServerEvent::Interrupted
+            | ServerEvent::Done { .. }
+            | ServerEvent::Error { .. }
+    )
+}
+
+#[cfg(test)]
+mod stream_activity_tests {
+    use super::*;
+    use crate::tui::backend::ReplayRemoteState;
+
+    #[test]
+    fn transport_keepalive_does_not_mask_provider_inactivity() {
+        let mut app = App::new_for_remote(None);
+        app.is_processing = true;
+        let provider_activity = Instant::now() - Duration::from_secs(90);
+        app.last_stream_activity = Some(provider_activity);
+        app.status_detail = Some(
+            "No provider progress for 90 seconds; phase: model reasoning; watchdog recovery at 3.5 minutes"
+                .to_string(),
+        );
+        let mut remote = ReplayRemoteState::default();
+
+        handle_server_event(&mut app, ServerEvent::Pong { id: 0 }, &mut remote);
+
+        assert_eq!(app.last_stream_activity, Some(provider_activity));
+        assert!(app.status_detail.is_some());
+    }
+
+    #[test]
+    fn reasoning_delta_counts_as_provider_progress() {
+        let mut app = App::new_for_remote(None);
+        app.is_processing = true;
+        let provider_activity = Instant::now() - Duration::from_secs(90);
+        app.last_stream_activity = Some(provider_activity);
+        app.status_detail = Some(
+            "No provider progress for 90 seconds; phase: model reasoning; watchdog recovery at 3.5 minutes"
+                .to_string(),
+        );
+        let mut remote = ReplayRemoteState::default();
+
+        handle_server_event(
+            &mut app,
+            ServerEvent::ReasoningDelta {
+                text: "still working".to_string(),
+            },
+            &mut remote,
+        );
+
+        assert!(
+            app.last_stream_activity
+                .is_some_and(|at| at > provider_activity)
+        );
+        assert_eq!(app.status_detail, None);
     }
 }
 

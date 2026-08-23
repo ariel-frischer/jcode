@@ -395,7 +395,7 @@ impl App {
                     state.selected = 0;
                 }
             }
-            KeyCode::Enter if modifiers.is_empty() => {
+            KeyCode::Enter | KeyCode::Tab if modifiers.is_empty() => {
                 if let Some(action) = self.accept_command_palette_selection() {
                     self.dispatch_command_palette_action(action);
                 }

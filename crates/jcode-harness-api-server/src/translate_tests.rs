@@ -124,6 +124,106 @@ fn state_with_session() -> BridgeState {
 }
 
 #[test]
+fn named_profile_resolves_before_subscribe_and_unknown_name_is_typed() {
+    let home = ScopedJcodeHome::new("named-profile");
+    std::fs::write(
+        home.path.join("config.toml"),
+        "[profiles.harness]\ninstructions = \"HARNESS_PROFILE_MARKER\"\n",
+    )
+    .expect("write config");
+
+    let mut state = BridgeState::default();
+    let outbound = state.api_request_to_legacy(&json!({
+        "id": 1,
+        "req": "create_session",
+        "working_dir": "/work",
+        "profile": "harness",
+    }));
+    let subscribe = match &outbound[0] {
+        Outbound::Legacy(value) => value,
+        other => panic!("expected subscribe, got {other:?}"),
+    };
+    assert_eq!(subscribe["profile"]["profile_name"], "harness");
+    assert_eq!(
+        subscribe["profile"]["instructions"],
+        "HARNESS_PROFILE_MARKER"
+    );
+
+    let mut state = BridgeState::default();
+    let event = only_reply_event(state.api_request_to_legacy(&json!({
+        "id": 2,
+        "req": "create_session",
+        "working_dir": "/work",
+        "profile": "missing",
+    })));
+    match event {
+        ApiEvent::Error { code, message, .. } => {
+            assert_eq!(code, ErrorCode::InvalidRequest);
+            assert!(message.contains("missing"));
+            assert!(message.contains("harness"));
+        }
+        other => panic!("expected typed profile error, got {other:?}"),
+    }
+    assert!(state.pending_attach_id.is_none());
+}
+
+#[test]
+fn send_message_forwards_run_safety_and_omission_stays_legacy() {
+    let mut state = state_with_session();
+    let outbound = state.api_request_to_legacy(&json!({
+        "id": 3,
+        "req": "send_message",
+        "session_id": "s1",
+        "content": "bounded",
+        "max_turns": 2,
+        "token_budget": 1000,
+        "deadline": "2030-01-01T00:00:00+00:00",
+    }));
+    let message = match &outbound[0] {
+        Outbound::Legacy(value) => value,
+        other => panic!("expected message, got {other:?}"),
+    };
+    assert_eq!(message["run_safety"]["max_turns"], "2");
+    assert_eq!(message["run_safety"]["token_budget"], "1000");
+    assert_eq!(
+        message["run_safety"]["deadline"],
+        "2030-01-01T00:00:00+00:00"
+    );
+
+    let outbound = state.api_request_to_legacy(&json!({
+        "id": 4,
+        "req": "send_message",
+        "session_id": "s1",
+        "content": "legacy",
+    }));
+    let message = match &outbound[0] {
+        Outbound::Legacy(value) => value,
+        other => panic!("expected message, got {other:?}"),
+    };
+    assert!(message.get("run_safety").is_none());
+
+    let invalid = state.api_request_to_legacy(&json!({
+        "id": 5,
+        "req": "send_message",
+        "session_id": "s1",
+        "content": "invalid",
+        "max_turns": "2",
+    }));
+    let [
+        Outbound::Reply(ServerFrame {
+            event: ApiEvent::Error { code, message, .. },
+            ..
+        }),
+    ] = invalid.as_slice()
+    else {
+        panic!("expected typed invalid limit reply");
+    };
+    assert_eq!(*code, ErrorCode::InvalidRequest);
+    assert!(message.contains("max_turns"));
+    assert!(message.contains("integer"));
+}
+
+#[test]
 fn connection_phase_is_forwarded_to_api_clients() {
     let mut state = state_with_session();
     let frames = state.legacy_event_to_api(&json!({

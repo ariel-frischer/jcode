@@ -10,7 +10,7 @@ impl Config {
             self.tools.selection().disabled_tools.into_iter().collect();
         effective_disabled_tools.sort();
 
-        format!(
+        let summary = format!(
             r#"**Configuration** (`{}`)
 
 **Keybindings:**
@@ -382,6 +382,17 @@ impl Config {
             } else {
                 "disabled"
             },
+        );
+
+        let lifecycle = self.lifecycle_observability.effective_status();
+        format!(
+            "{summary}\n\n**Lifecycle observability:**\n- Enabled: configured={} effective={}\n- Persist session events: configured={} effective={}\n- Emit structured logs: configured={} effective={}",
+            self.lifecycle_observability.enabled,
+            lifecycle.enabled,
+            self.lifecycle_observability.persist_session_events,
+            lifecycle.persist_session_events,
+            self.lifecycle_observability.emit_structured_logs,
+            lifecycle.emit_structured_logs
         )
     }
 }

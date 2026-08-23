@@ -195,7 +195,7 @@ export -f cargo
             format!("[test mode] Simulated selfdev build for reason: {}", reason),
         )
         .await;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         Self::append_output_line(&mut file, "--- Command finished with exit code: 0 ---").await;
         Ok(TaskResult::completed(Some(0)))
     }
@@ -218,26 +218,59 @@ export -f cargo
 
         let worktree_scope = request.worktree_scope.clone();
         let _lock = Self::wait_for_turn(&request_id, &worktree_scope, &mut queue_file).await?;
-        request.state = BuildRequestState::Building;
-        request.started_at = Some(Utc::now().to_rfc3339());
-        request.last_progress = Some("testing".to_string());
-        request.save()?;
-        Self::append_output_line(&mut queue_file, format!("Test starting now: {}", reason)).await;
-        drop(queue_file);
-
-        let result = if Self::is_test_session() {
-            let mut file = tokio::fs::File::create(&output_path)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create output file: {}", e))?;
-            Self::append_output_line(
-                &mut file,
-                format!("[test mode] Simulated selfdev test: {}", command.display),
-            )
-            .await;
-            Self::append_output_line(&mut file, "--- Command finished with exit code: 0 ---").await;
-            TaskResult::completed(Some(0))
+        request = BuildRequest::load(&request_id)?
+            .ok_or_else(|| anyhow::anyhow!("Missing queued test request {}", request_id))?;
+        let superseded = if request.dedupe_key.is_some() {
+            let expected_source = request.requested_source.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Missing requested source state for eligible test {}",
+                    request_id
+                )
+            })?;
+            let actual_source = Self::requested_source_state(&repo_dir)?;
+            (actual_source.fingerprint != expected_source.fingerprint).then(|| {
+                    TaskResult::superseded(
+                        None,
+                        format!(
+                            "Test source changed while queued. Marking this request as superseded without launching the command (expected {}, now {}).",
+                            expected_source.fingerprint, actual_source.fingerprint
+                        ),
+                    )
+                })
         } else {
-            Self::stream_build_command(repo_dir, command, output_path.clone()).await?
+            None
+        };
+
+        let result = if let Some(result) = superseded {
+            if let Some(detail) = result.error.as_deref() {
+                Self::append_output_line(&mut queue_file, detail).await;
+            }
+            result
+        } else {
+            request.state = BuildRequestState::Building;
+            request.started_at = Some(Utc::now().to_rfc3339());
+            request.last_progress = Some("testing".to_string());
+            request.save()?;
+            Self::append_output_line(&mut queue_file, format!("Test starting now: {}", reason))
+                .await;
+            drop(queue_file);
+
+            if Self::is_test_session() {
+                let mut file = tokio::fs::File::create(&output_path)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create output file: {}", e))?;
+                Self::append_output_line(
+                    &mut file,
+                    format!("[test mode] Simulated selfdev test: {}", command.display),
+                )
+                .await;
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                Self::append_output_line(&mut file, "--- Command finished with exit code: 0 ---")
+                    .await;
+                TaskResult::completed(Some(0))
+            } else {
+                Self::stream_build_command(repo_dir, command, output_path.clone()).await?
+            }
         };
 
         let mut request = BuildRequest::load(&request_id)?
@@ -714,111 +747,12 @@ export -f cargo
         let command = SelfDevTool::build_command(&repo_dir, target);
         let dedupe_key = SelfDevTool::build_dedupe_key(&requested_source, &command);
         let blocker = SelfDevTool::newest_active_request(&requested_source.worktree_scope)?;
-        let duplicate =
-            BuildRequest::find_duplicate_pending(&requested_source.worktree_scope, &dedupe_key)?;
         let (session_short_name, session_title) = SelfDevTool::load_session_labels(&ctx.session_id);
         let request_id = SelfDevTool::next_request_id();
         let wake = wake.unwrap_or(true);
         let notify = notify.unwrap_or(true) || wake;
 
-        if let Some(existing) = duplicate {
-            let mut request = BuildRequest {
-                request_id: request_id.clone(),
-                background_task_id: None,
-                session_id: ctx.session_id.clone(),
-                session_short_name,
-                session_title,
-                reason: reason.clone(),
-                repo_dir: repo_dir.display().to_string(),
-                repo_scope: requested_source.repo_scope.clone(),
-                worktree_scope: requested_source.worktree_scope.clone(),
-                command: command.display.clone(),
-                requested_at: Utc::now().to_rfc3339(),
-                started_at: None,
-                completed_at: None,
-                state: BuildRequestState::Attached,
-                version: Some(requested_source.version_label.clone()),
-                dedupe_key: Some(dedupe_key.clone()),
-                requested_source: Some(requested_source.clone()),
-                built_source: None,
-                published_version: None,
-                last_progress: Some("attached to existing build".to_string()),
-                validated: false,
-                error: None,
-                output_file: None,
-                status_file: None,
-                attached_to_request_id: Some(existing.request_id.clone()),
-            };
-            request.save()?;
-
-            let request_id_for_task = request_id.clone();
-            let existing_request_id = existing.request_id.clone();
-            let info = background::global()
-                .spawn_with_notify(
-                    "selfdev-build-watch",
-                    Some("build watch".to_string()),
-                    &ctx.session_id,
-                    notify,
-                    wake,
-                    move |output_path| async move {
-                        SelfDevTool::follow_existing_build(
-                            request_id_for_task,
-                            existing_request_id,
-                            output_path,
-                        )
-                        .await
-                    },
-                )
-                .await;
-
-            request.background_task_id = Some(info.task_id.clone());
-            request.output_file = Some(info.output_file.display().to_string());
-            request.status_file = Some(info.status_file.display().to_string());
-            request.save()?;
-
-            let delivery = if wake {
-                "The requesting agent will be woken when the existing build finishes."
-            } else if notify {
-                "You will be notified when the existing build finishes."
-            } else {
-                "Completion delivery is disabled for this watcher."
-            };
-            let output = format!(
-                "Matching self-dev build already queued/running, so this request was attached instead of spawning a duplicate build.\n\n- Your request ID: `{}`\n- Watcher task ID: `{}`\n- Existing request: `{}`\n- Requested by: {}\n- Reason: {}\n- Target version: `{}`\n- Source fingerprint: `{}`\n\n{}",
-                request_id,
-                info.task_id,
-                existing.request_id,
-                existing.display_owner(),
-                existing.reason,
-                requested_source.version_label,
-                requested_source.fingerprint,
-                delivery
-            );
-
-            return Ok(ToolOutput::new(output).with_metadata(json!({
-                "background": true,
-                "deduped": true,
-                "request_id": request_id,
-                "task_id": info.task_id,
-                "output_file": info.output_file.to_string_lossy(),
-                "status_file": info.status_file.to_string_lossy(),
-                "duplicate_of": {
-                    "request_id": existing.request_id,
-                    "task_id": existing.background_task_id,
-                    "session_id": existing.session_id,
-                    "session_short_name": existing.session_short_name,
-                    "session_title": existing.session_title,
-                    "reason": existing.reason,
-                    "version": existing.version,
-                    "source_fingerprint": existing
-                        .requested_source
-                        .as_ref()
-                        .map(|source| source.fingerprint.clone()),
-                }
-            })));
-        }
-
-        let mut request = BuildRequest {
+        let request = BuildRequest {
             request_id: request_id.clone(),
             background_task_id: None,
             session_id: ctx.session_id.clone(),
@@ -845,7 +779,83 @@ export -f cargo
             status_file: None,
             attached_to_request_id: None,
         };
-        request.save()?;
+
+        let claim = BuildRequest::claim_leader_or_follower(request)?;
+        let mut request = match claim {
+            BuildRequestClaim::Follower { leader: existing } => {
+                let request_id_for_task = request_id.clone();
+                let existing_request_id = existing.request_id.clone();
+                let info = background::global()
+                    .spawn_with_notify(
+                        "selfdev-build-watch",
+                        Some("build watch".to_string()),
+                        &ctx.session_id,
+                        notify,
+                        wake,
+                        move |output_path| async move {
+                            SelfDevTool::follow_existing_build(
+                                request_id_for_task,
+                                existing_request_id,
+                                output_path,
+                            )
+                            .await
+                        },
+                    )
+                    .await;
+
+                BuildRequest::save_delivery_metadata(
+                    &request_id,
+                    &info.task_id,
+                    &info.output_file.display().to_string(),
+                    &info.status_file.display().to_string(),
+                )?;
+
+                let delivery = if wake {
+                    "The requesting agent will be woken when the existing build finishes."
+                } else if notify {
+                    "You will be notified when the existing build finishes."
+                } else {
+                    "Completion delivery is disabled for this watcher."
+                };
+                let output = format!(
+                    "Matching self-dev build already queued/running, so this request was attached instead of spawning a duplicate build.\n\n- Your request ID: `{}`\n- Watcher task ID: `{}`\n- Existing request: `{}`\n- Requested by: {}\n- Reason: {}\n- Target version: `{}`\n- Source fingerprint: `{}`\n\n{}",
+                    request_id,
+                    info.task_id,
+                    existing.request_id,
+                    existing.display_owner(),
+                    existing.reason,
+                    requested_source.version_label,
+                    requested_source.fingerprint,
+                    delivery
+                );
+
+                return Ok(ToolOutput::new(output).with_metadata(json!({
+                    "background": true,
+                    "deduped": true,
+                    "identity_version": COALESCING_IDENTITY_VERSION,
+                    "role": "follower",
+                    "coalesced": true,
+                    "request_id": request_id,
+                    "task_id": info.task_id,
+                    "output_file": info.output_file.to_string_lossy(),
+                    "status_file": info.status_file.to_string_lossy(),
+                    "duplicate_of": {
+                        "request_id": existing.request_id,
+                        "task_id": existing.background_task_id,
+                        "session_id": existing.session_id,
+                        "session_short_name": existing.session_short_name,
+                        "session_title": existing.session_title,
+                        "reason": existing.reason,
+                        "version": existing.version,
+                        "source_fingerprint": existing
+                            .requested_source
+                            .as_ref()
+                            .map(|source| source.fingerprint.clone()),
+                    }
+                })));
+            }
+            BuildRequestClaim::Leader(request) => request,
+        };
 
         let queue_position =
             SelfDevTool::current_queue_position(&request_id, &requested_source.worktree_scope)?
@@ -916,6 +926,10 @@ export -f cargo
 
         Ok(ToolOutput::new(output).with_metadata(json!({
             "background": true,
+            "identity_version": COALESCING_IDENTITY_VERSION,
+            "role": "leader",
+            "coalesced": false,
+            "duplicate_of": Value::Null,
             "request_id": request_id,
             "task_id": info.task_id,
             "output_file": info.output_file.to_string_lossy(),
@@ -1150,17 +1164,15 @@ export -f cargo
             ],
             display: command.clone(),
         };
-        let dedupe_key = format!(
-            "test:{}:{}:{}",
-            requested_source.worktree_scope, requested_source.fingerprint, shell_command.display
-        );
+        let dedupe_key =
+            SelfDevTool::eligible_test_dedupe_key(&requested_source, &shell_command.display);
         let blocker = SelfDevTool::newest_active_request(&requested_source.worktree_scope)?;
         let (session_short_name, session_title) = SelfDevTool::load_session_labels(&ctx.session_id);
         let request_id = SelfDevTool::next_request_id();
         let wake = wake.unwrap_or(true);
         let notify = notify.unwrap_or(true) || wake;
 
-        let mut request = BuildRequest {
+        let request = BuildRequest {
             request_id: request_id.clone(),
             background_task_id: None,
             session_id: ctx.session_id.clone(),
@@ -1176,7 +1188,7 @@ export -f cargo
             completed_at: None,
             state: BuildRequestState::Queued,
             version: Some(requested_source.version_label.clone()),
-            dedupe_key: Some(dedupe_key),
+            dedupe_key,
             requested_source: Some(requested_source.clone()),
             built_source: None,
             published_version: None,
@@ -1187,7 +1199,83 @@ export -f cargo
             status_file: None,
             attached_to_request_id: None,
         };
-        request.save()?;
+
+        let claim = BuildRequest::claim_leader_or_follower(request)?;
+        let mut request = match claim {
+            BuildRequestClaim::Follower { leader: existing } => {
+                let request_id_for_task = request_id.clone();
+                let existing_request_id = existing.request_id.clone();
+                let info = background::global()
+                    .spawn_with_notify(
+                        "selfdev-test-watch",
+                        Some("test watch".to_string()),
+                        &ctx.session_id,
+                        notify,
+                        wake,
+                        move |output_path| async move {
+                            SelfDevTool::follow_existing_build(
+                                request_id_for_task,
+                                existing_request_id,
+                                output_path,
+                            )
+                            .await
+                        },
+                    )
+                    .await;
+
+                BuildRequest::save_delivery_metadata(
+                    &request_id,
+                    &info.task_id,
+                    &info.output_file.display().to_string(),
+                    &info.status_file.display().to_string(),
+                )?;
+
+                let delivery = if wake {
+                    "The requesting agent will be woken when the existing test finishes."
+                } else if notify {
+                    "You will be notified when the existing test finishes."
+                } else {
+                    "Completion delivery is disabled for this watcher."
+                };
+                let output = format!(
+                    "Matching self-dev test already queued/running, so this request was attached instead of spawning a duplicate test.\n\n- Your request ID: `{}`\n- Watcher task ID: `{}`\n- Existing request: `{}`\n- Requested by: {}\n- Reason: {}\n- Command: `{}`\n\n{}",
+                    request_id,
+                    info.task_id,
+                    existing.request_id,
+                    existing.display_owner(),
+                    existing.reason,
+                    shell_command.display,
+                    delivery
+                );
+
+                return Ok(ToolOutput::new(output).with_metadata(json!({
+                    "background": true,
+                    "deduped": true,
+                    "identity_version": COALESCING_IDENTITY_VERSION,
+                    "role": "follower",
+                    "coalesced": true,
+                    "duplicate_of": {
+                        "request_id": existing.request_id,
+                        "task_id": existing.background_task_id,
+                        "session_id": existing.session_id,
+                        "session_short_name": existing.session_short_name,
+                        "session_title": existing.session_title,
+                        "reason": existing.reason,
+                        "version": existing.version,
+                        "source_fingerprint": existing
+                            .requested_source
+                            .as_ref()
+                            .map(|source| source.fingerprint.clone()),
+                    },
+                    "request_id": request_id,
+                    "task_id": info.task_id,
+                    "output_file": info.output_file.to_string_lossy(),
+                    "status_file": info.status_file.to_string_lossy(),
+                    "command": shell_command.display,
+                })));
+            }
+            BuildRequestClaim::Leader(request) => request,
+        };
         let queue_position =
             SelfDevTool::current_queue_position(&request_id, &requested_source.worktree_scope)?
                 .unwrap_or(1);
@@ -1252,6 +1340,10 @@ export -f cargo
 
         Ok(ToolOutput::new(output).with_metadata(json!({
             "background": true,
+            "identity_version": COALESCING_IDENTITY_VERSION,
+            "role": "leader",
+            "coalesced": false,
+            "duplicate_of": Value::Null,
             "request_id": request_id,
             "task_id": info.task_id,
             "output_file": info.output_file.to_string_lossy(),

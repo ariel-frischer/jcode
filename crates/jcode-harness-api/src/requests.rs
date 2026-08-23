@@ -61,6 +61,15 @@ pub enum ApiRequest {
         /// Persist the message as context without starting a model turn.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         no_reply: bool,
+        /// Maximum completed turns for this harness invocation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_turns: Option<u64>,
+        /// Maximum native token-usage delta for this harness invocation.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        token_budget: Option<u64>,
+        /// Absolute RFC3339 deadline with an explicit offset.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        deadline: Option<String>,
     },
 
     /// Cancel the in-flight generation.

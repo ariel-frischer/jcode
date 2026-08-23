@@ -621,9 +621,19 @@ impl Agent {
         if let Some(allowed) = self.allowed_tools.as_ref()
             && !crate::tool::tool_name_is_allowed(allowed, name)
         {
+            self.record_block_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied),
+            );
             return Err(anyhow::anyhow!("Tool '{}' is not allowed", name));
         }
         if crate::tool::tool_name_is_disabled(&self.disabled_tools, name) {
+            self.record_block_lifecycle(
+                crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
+                crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
+                Some(crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied),
+            );
             return Err(anyhow::anyhow!("Tool '{}' is disabled", name));
         }
         Ok(())

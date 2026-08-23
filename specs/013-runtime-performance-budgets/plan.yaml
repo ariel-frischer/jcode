@@ -1,0 +1,412 @@
+plan:
+  branch: "013-runtime-performance-budgets"
+  created: "2026-08-21"
+  spec_path: "specs/013-runtime-performance-budgets/spec.yaml"
+
+summary: |
+  Add one Python entry point that composes Jcode's existing startup PTY,
+  daemon-startup, process-resource, runtime-memory, and deterministic frame-work
+  measurement surfaces. The runner will validate the requested executable before
+  collecting samples, launch only private runtimes under temporary home/runtime
+  directories and unique sockets, retain ownership of every spawned process, and
+  emit the same versioned JSON report that drives its human-readable summary.
+
+  Keep machine-sensitive latency, CPU, RSS, scaling, and round-trip metrics as
+  same-environment baseline comparisons with explicit tolerances; retain the
+  80 ms daemon-readiness ceiling and exact frame-work invariants as automated
+  gates. Checked-in baseline JSON records environment, command, aggregation, and
+  executable provenance so ratchets are visible review changes. Focused Python
+  tests lock parsing, identity, comparison boundaries, timeout/failure handling,
+  and cleanup before the collectors are extended, while existing Rust runtime,
+  CLI, protocol, and shared-server defaults remain unchanged.
+
+technical_context:
+  language: "Python 3.11+ orchestration and tests over a Rust 2024 Jcode runtime"
+  framework: "Python standard library CLI/test tooling, pyte terminal emulation, and the existing Cargo workspace"
+  primary_dependencies:
+    - name: "pyte"
+      version: "0.8.2"
+      purpose: "Render PTY output into a terminal screen so first-visible and typed-probe readiness exclude control traffic and reflect visible content."
+    - name: "Python standard library"
+      version: ">=3.11"
+      purpose: "Provide argparse, dataclasses, JSON, statistics, PTY/socket/process control, hashing, temporary isolation, and unittest without a new benchmark framework."
+    - name: "Jcode Cargo workspace"
+      version: "0.78.0 with the repository stable Rust toolchain"
+      purpose: "Supply the candidate CLI/shared daemon, local protocol and tool behavior, runtime memory diagnostics, and deterministic desktop frame-work gate."
+  storage: "Versioned JSON baseline files under docs/runtime-performance-baselines; reports use caller-selected paths and isolated runtime state is temporary and removed only when owned by the runner."
+  testing:
+    framework: "Python unittest plus focused Cargo tests and repository guardrails"
+    approach: "Develop report parsing, nearest-rank p95, threshold classification, identity validation, timeout/failure propagation, partial-run rejection, and owned-process cleanup test-first; then run collector integration tests, the deterministic desktop frame gate, full guardrails, and a newly built isolated-runtime smoke."
+  target_platform: "Linux is canonical for PTY, Unix socket, procfs CPU/RSS/PSS, and executable-process identity; other existing platforms remain compatible and report unsupported metrics explicitly."
+  project_type: "cli"
+  performance_goals: "First-visible/input-ready use 1 warm-up plus 10 samples and max(15%, 20 ms) tolerance; daemon readiness uses 5 samples, 5 s per-run timeout, and 80 ms median gate; idle CPU/RSS use 5 post-settle samples; session scaling covers 1/4/8 sessions across 3 trials; local protocol/tool cases use 5 warm-ups plus 30 samples and max(15%, 1 ms) tolerance; unchanged frames perform zero transcript layout work."
+  constraints:
+    - "Preserve existing CLI, configuration, protocol, persistence, SDK, and shared-server behavior when the benchmark is not invoked."
+    - "Preserve one authoritative shared daemon serving multiple clients; do not add a benchmark-only runtime or duplicate protocol definition."
+    - "Reuse scripts/bench_startup_visible_ready.py, scripts/bench_startup.py, scripts/bench_memory_cli.py, scripts/analyze_runtime_memory_log.py, scripts/profile_spawn.py, and scripts/check_guardrails.sh as owning measurement surfaces."
+    - "Validate requested, resolved, and running executable identity before accepting samples, including revision/build age and SHA-256 fingerprint."
+    - "Never connect to, mutate, reload, or terminate the user's active shared daemon or sessions."
+    - "Incomplete samples, timeouts, subprocess errors, stale/mismatched binaries, and incompatible baselines are invalid nonzero outcomes."
+    - "Never update a baseline implicitly; out-of-tolerance noisy metrics require evidence and explicit maintainer approval."
+    - "Use TDD, focused checks before broad gates, and serialize Cargo-heavy validation."
+    - "Do not mutate Beads, merge, push, or remove this worktree during bounded implementation."
+  scale_scope: "One local candidate executable, one private daemon per scenario, 1 to 8 equivalent clients, seven metric groups, and tens of samples per metric on one stable comparison host."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan adds one canonical coordinator and baseline contract while extending only the existing metric collectors and their focused tests."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "The workflow is opt-in, adds no required runtime configuration, and does not change existing CLI defaults, protocol frames, persisted session data, or public paths."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "No product configuration is added; all benchmark parameters are explicit invocation arguments recorded in report provenance."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "The plan observes the existing single-server multi-client runtime through current CLI/socket/harness contracts and adds no Rust dependency edge or second server definition."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Parser, aggregation, classification, identity, timeout, subprocess, partial-run, isolation, and cleanup requirements each map to focused Python or existing Cargo checks."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Executable paths, baseline/report JSON, sockets, process identity, collector output, and platform support are validated at ingestion; failures remain explicit invalid outcomes."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Validation progresses from exact Python tests and collector smokes to the desktop frame gate, relevant build, scripts/check_guardrails.sh, and isolated built-runtime smoke."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The design composes Ariel's existing benchmark and self-development surfaces instead of importing a second benchmark suite or runtime architecture."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The runner owns only private temporary processes and state, refuses ambiguous cleanup, and produces an auditable classification for every requested metric."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Every accepted result records the resolved built executable and verifies the private daemon process before measuring maintained runtime budgets."
+
+research_findings:
+  decisions:
+    - topic: "Canonical workflow ownership"
+      decision: "Create scripts/bench_runtime_budgets.py as the sole full-report entry point and a small importable scripts/runtime_budget.py contract module; extend existing collectors rather than replacing them."
+      rationale: "Current measurements are split across specialized scripts with inconsistent identity, aggregation, and output behavior. A thin coordinator preserves their domain ownership while giving comparison and failure semantics one owner."
+      alternatives_considered:
+        - "Replace all existing benchmark scripts with a new suite"
+        - "Document a manual sequence without a machine-readable coordinator"
+        - "Add performance-reporting behavior to the production Rust CLI"
+    - topic: "Terminal-visible startup measurement"
+      decision: "Retain pyte Screen/Stream rendering in scripts/bench_startup_visible_ready.py, pin pyte 0.8.2 for reproducibility, and make the collector accept an explicit candidate binary and isolated environment from the coordinator."
+      rationale: "The existing screen model implements the required rendered-content boundary; raw ANSI stripping can mistake terminal queries or overwritten text for meaningful visible output."
+      alternatives_considered:
+        - "Use first PTY byte as first-visible"
+        - "Use regular-expression ANSI stripping from the memory benchmark"
+        - "Reimplement terminal emulation locally"
+    - topic: "Executable and daemon identity"
+      decision: "Centralize preflight and post-launch identity checks using requested and canonical paths, executable metadata, version/revision output, build-start or source-revision age, SHA-256, daemon PID, /proc executable resolution, and verified socket ownership."
+      rationale: "All collectors must reject an old shared daemon or a launcher resolving away from the declared candidate before samples can become acceptable evidence."
+      alternatives_considered:
+        - "Trust the command-line path without resolving it"
+        - "Record only jcode --version"
+        - "Infer the daemon binary from the socket path"
+    - topic: "Isolation and process cleanup"
+      decision: "Allocate a private temporary JCODE_HOME, JCODE_RUNTIME_DIR, and unique socket per runtime scenario; track process groups created by the runner and terminate only those groups in bounded TERM/KILL cleanup."
+      rationale: "This reuses the established isolated startup/memory pattern while making ownership and socket verification explicit enough to protect active sessions."
+      alternatives_considered:
+        - "Reload the shared development daemon for each trial"
+        - "Reuse one global benchmark socket"
+        - "Kill processes by executable name after measurement"
+    - topic: "Metric classification and aggregation"
+      decision: "Use raw samples plus median and deterministic nearest-rank p95 where specified; classify each result as pass, review_required, deterministic_failure, invalid, or unsupported, with only deterministic failures and invalid evidence forcing nonzero exit."
+      rationale: "Exact work counts and daemon readiness are stable gates, whereas PTY timings and operating-system resource readings need same-machine tolerances to avoid flaky universal limits."
+      alternatives_considered:
+        - "Make every numeric threshold a CI hard failure"
+        - "Report all metrics without enforcing any gate"
+        - "Use interpolated percentiles that vary across libraries"
+    - topic: "Idle and session resource collection"
+      decision: "Reuse procfs sampling from scripts/profile_spawn.py, process-tree PSS from scripts/bench_memory_cli.py, and attribution output from scripts/analyze_runtime_memory_log.py; add the prescribed settle/sample/trial loops and derive incremental MiB per session from 1/4/8 populations."
+      rationale: "These existing surfaces already distinguish process resources from session-attributed data and avoid inventing a new memory instrumentation path."
+      alternatives_considered:
+        - "Depend on ps output parsing"
+        - "Use daemon RSS alone as session attribution"
+        - "Add a new production telemetry endpoint"
+    - topic: "Local protocol and tool round trips"
+      decision: "Measure a versioned local socket handshake/control exchange and one deterministic local tool request through the private shared daemon using existing protocol or harness request types, with no provider or network dependency."
+      rationale: "This exercises actual cross-process serialization, dispatch, and response paths while excluding external provider latency and terminal-output parsing."
+      alternatives_considered:
+        - "Time an in-process Rust function"
+        - "Use a paid provider turn"
+        - "Parse interactive terminal text as the response contract"
+    - topic: "Baseline persistence and ratchets"
+      decision: "Store schema-versioned reference JSON under docs/runtime-performance-baselines and require an explicit baseline path plus environment compatibility check for comparison; baseline creation/update is a separate visible command and diff."
+      rationale: "A checked-in artifact makes provenance and ratchet changes reviewable while preventing the comparison command from silently accepting its own result."
+      alternatives_considered:
+        - "Keep baselines only in /tmp"
+        - "Auto-update the baseline whenever a comparison passes"
+        - "Apply one universal baseline across machines and architectures"
+
+data_model:
+  entities:
+    - name: "MetricDefinition"
+      description: "The maintained contract for one runtime measurement."
+      fields:
+        - name: "id"
+          type: "string"
+          description: "Stable metric identifier used by reports and baselines."
+          constraints: "Unique within the schema and unchanged across compatible baseline versions."
+        - name: "unit"
+          type: "enum"
+          description: "Milliseconds, CPU percentage points, MiB, MiB/session, or exact work count."
+          constraints: "Must match every raw sample and aggregate for the metric."
+        - name: "sampling"
+          type: "object"
+          description: "Warm-up count, recorded count, settle interval, timeout, and trial populations."
+          constraints: "Must equal the maintained command parameters before comparison."
+        - name: "aggregation"
+          type: "enum"
+          description: "Median, nearest-rank p95, slope, or exact count."
+          constraints: "No interpolation for nearest-rank p95."
+        - name: "policy"
+          type: "object"
+          description: "Deterministic ceiling/invariant or same-environment tolerance and review action."
+          constraints: "Every metric is exactly one of deterministic gate or noisy comparison."
+      relationships:
+        - target: "MetricResult"
+          type: "one-to-many"
+          description: "A definition governs candidate and baseline results across reports."
+    - name: "ExecutableIdentity"
+      description: "Auditable identity of the candidate and the private daemon that actually ran."
+      fields:
+        - name: "requested_path"
+          type: "path"
+          description: "Caller-supplied executable path."
+          constraints: "Must exist and be executable."
+        - name: "resolved_path"
+          type: "absolute path"
+          description: "Canonical path after symlink resolution."
+          constraints: "Must match the declared candidate policy and the running daemon executable."
+        - name: "version_revision"
+          type: "string"
+          description: "Reported product version and source/build revision identity."
+          constraints: "Must satisfy the expected revision or declared build-start freshness check."
+        - name: "sha256"
+          type: "64-character hexadecimal string"
+          description: "Content fingerprint of the measured executable."
+          constraints: "Computed before collection and unchanged after the run."
+      relationships:
+        - target: "RuntimeReport"
+          type: "many-to-one"
+          description: "Each report identifies its candidate and observed daemon executable."
+    - name: "EnvironmentProvenance"
+      description: "Stable comparison context for machine-sensitive results."
+      fields:
+        - name: "platform"
+          type: "object"
+          description: "Operating system, architecture, kernel, CPU identity, and logical CPU count."
+          constraints: "Required for baseline compatibility decisions."
+        - name: "toolchain_profile"
+          type: "object"
+          description: "Rust toolchain, Cargo profile, Python version, and collector versions."
+          constraints: "Recorded for every accepted report and baseline."
+        - name: "command_parameters"
+          type: "object"
+          description: "Canonical command, sample counts, timeouts, settle periods, and scenario settings."
+          constraints: "Must be comparison-compatible with the baseline."
+      relationships:
+        - target: "RuntimeBaseline"
+          type: "one-to-many"
+          description: "A stable environment may own multiple reviewed baseline revisions."
+    - name: "MetricResult"
+      description: "Raw and aggregated evidence plus one explicit delivery classification."
+      fields:
+        - name: "samples"
+          type: "array<number>"
+          description: "All recorded values in execution order."
+          constraints: "Required count must be complete before the result can pass or require review."
+        - name: "aggregates"
+          type: "object"
+          description: "Required median, nearest-rank p95, slope, or work counts."
+          constraints: "Computed only from complete valid samples."
+        - name: "classification"
+          type: "enum"
+          description: "pass, review_required, deterministic_failure, invalid, or unsupported."
+          constraints: "Deterministic failure and invalid force nonzero overall exit; unsupported cannot be represented as pass."
+        - name: "diagnostics"
+          type: "array<string>"
+          description: "Timeout, process, identity, comparison, or unsupported-platform details."
+          constraints: "Must be actionable and contain no secrets."
+      relationships:
+        - target: "RuntimeReport"
+          type: "many-to-one"
+          description: "Seven metric groups contribute results to one candidate report."
+    - name: "RuntimeBaseline"
+      description: "A reviewed, immutable-until-diffed reference for machine-sensitive metrics."
+      fields:
+        - name: "schema_version"
+          type: "semantic version string"
+          description: "Compatibility version for baseline and report parsing."
+          constraints: "Incompatible versions reject comparison."
+        - name: "collected_at"
+          type: "RFC 3339 timestamp"
+          description: "Time of baseline collection."
+          constraints: "Required and attributable."
+        - name: "reason"
+          type: "string"
+          description: "Review reason for creation or ratchet update."
+          constraints: "Non-empty for checked-in changes."
+        - name: "metrics"
+          type: "map<string, MetricResult>"
+          description: "Reference samples and aggregates for comparable metrics."
+          constraints: "Must retain raw samples and matching measurement parameters."
+      relationships:
+        - target: "RuntimeReport"
+          type: "one-to-many"
+          description: "Candidate reports reference baseline path and content fingerprint."
+    - name: "IsolatedRuntime"
+      description: "Private daemon and client population created for one measurement scenario."
+      fields:
+        - name: "state_paths"
+          type: "object"
+          description: "Temporary JCODE_HOME, JCODE_RUNTIME_DIR, and unique socket."
+          constraints: "Must not alias the normal shared runtime or pre-existing sockets."
+        - name: "owned_processes"
+          type: "array<object>"
+          description: "PID, process group, start identity, role, and executable for runner-created processes."
+          constraints: "Only verified owned processes may be signaled during cleanup."
+      relationships:
+        - target: "RuntimeReport"
+          type: "many-to-one"
+          description: "Each scenario records private runtime identity and cleanup outcome in its report."
+
+api_contracts:
+  endpoints: []
+  commands:
+    - name: "python3 scripts/bench_runtime_budgets.py collect"
+      description: "Validate a candidate, collect all supported metric groups on private runtimes, and write versioned JSON plus a human summary."
+      inputs: "Explicit --binary and --output; optional metric selection and documented sample overrides for diagnostics only."
+      outputs: "RuntimeReport JSON and summary classifications without changing a baseline."
+      exit_codes: "0 when all required metrics pass or are in tolerance; nonzero for deterministic failures, invalid evidence, or missing required platform support; a distinct review-required code is documented for noisy regressions."
+    - name: "python3 scripts/bench_runtime_budgets.py compare"
+      description: "Compare an existing candidate report with a compatible reviewed baseline without running Jcode or mutating either artifact."
+      inputs: "--report and --baseline JSON paths."
+      outputs: "Per-metric pass, review_required, deterministic_failure, invalid, or unsupported classifications."
+      exit_codes: "Nonzero for invalid or deterministic failure; review-required is distinguishable from both pass and invalid."
+    - name: "python3 scripts/bench_runtime_budgets.py baseline"
+      description: "Create a proposed baseline from a complete valid report only when an explicit reason and output path are supplied."
+      inputs: "--report, --output, and non-empty --reason."
+      outputs: "A new baseline file suitable for an explicit reviewed diff."
+      exit_codes: "Nonzero if the report is incomplete, invalid, unsupported for required metrics, or already targets the output path without explicit overwrite approval."
+  report_schema: "Versioned JSON containing executable and daemon identity, environment provenance, command parameters, all raw samples and aggregates, baseline provenance, per-metric classification, failures, and owned-runtime cleanup result."
+
+project_structure:
+  documentation:
+    - path: "docs/RUNTIME_PERFORMANCE_BUDGET.md"
+      description: "Canonical metric definitions, commands, sampling conditions, thresholds/tolerances, classification semantics, baseline review workflow, and developer-velocity regression policy."
+    - path: "docs/runtime-performance-baselines/linux-reference.json"
+      description: "Reviewed Linux same-environment baseline with raw samples, aggregates, executable/environment provenance, and ratchet reason."
+    - path: "specs/013-runtime-performance-budgets/plan.yaml"
+      description: "Architecture and implementation plan for the canonical runtime budget workflow."
+    - path: "specs/013-runtime-performance-budgets/tasks.yaml"
+      description: "Dependency-ordered TDD, collector, documentation, and validation work generated from this plan."
+  source_code:
+    - path: "scripts/runtime_budget.py"
+      description: "Importable report/baseline model, nearest-rank aggregation, tolerance classification, executable/process identity, environment provenance, and owned-runtime primitives."
+    - path: "scripts/bench_runtime_budgets.py"
+      description: "Canonical collect, compare, and explicit baseline CLI plus metric orchestration and human/JSON reporting."
+    - path: "scripts/bench_startup_visible_ready.py"
+      description: "Existing rendered PTY first-visible/input-ready collector extended for explicit binary, isolation, warm-up, strict completeness, and structured output."
+    - path: "scripts/bench_startup.py"
+      description: "Existing private daemon readiness collector extended for structured samples, fixed 5-second attempts, and coordinator integration."
+    - path: "scripts/bench_memory_cli.py"
+      description: "Existing private multi-session process-tree measurement extended for explicit candidate, 1/4/8 populations, three trials, and structured scaling output."
+    - path: "scripts/profile_spawn.py"
+      description: "Existing procfs CPU/RSS sampling reused for five post-settle idle resource readings."
+    - path: "scripts/analyze_runtime_memory_log.py"
+      description: "Existing runtime memory attribution parser reused to validate session population and attributed memory evidence."
+    - path: "scripts/check_guardrails.sh"
+      description: "Existing canonical repository and deterministic desktop frame-work gate; command behavior remains unchanged."
+    - path: "scripts/requirements-runtime-benchmarks.txt"
+      description: "Pinned pyte dependency for reproducible rendered-terminal collection."
+  tests:
+    - path: "scripts/test_runtime_budget.py"
+      description: "Focused unit fixtures for schema parsing, nearest-rank p95, exact tolerance boundaries, classifications, baseline compatibility, and report completeness."
+    - path: "scripts/test_bench_runtime_budgets.py"
+      description: "CLI and subprocess fixtures for missing/mismatched/stale binaries, daemon mismatch, socket ownership, timeouts, nonzero collectors, partial samples, cleanup, and baseline mutation refusal."
+    - path: "scripts/test_bench_startup_visible_ready.py"
+      description: "Rendered PTY detection, warm-up exclusion, explicit candidate invocation, and structured startup sample fixtures."
+    - path: "scripts/test_bench_startup.py"
+      description: "Daemon readiness sample count, timeout, failed launch, and structured result fixtures."
+    - path: "scripts/test_bench_memory_cli.py"
+      description: "Private shared-daemon population, process attribution, 1/4/8 trial, incremental slope, and owned cleanup fixtures."
+    - path: "scripts/test_analyze_runtime_memory_log.py"
+      description: "Existing runtime memory parser regressions retained and extended only where the budget needs attributable population evidence."
+    - path: "crates/jcode-desktop2/src/profile.rs"
+      description: "Existing state-space exact frame-work tests invoked through scripts/check_guardrails.sh."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze report, identity, and comparison contracts"
+    goal: "Establish failing focused tests and versioned data contracts before collector behavior changes."
+    deliverables:
+      - "Report and baseline fixtures covering all seven metric groups, provenance, classifications, and incomplete/unsupported states."
+      - "Nearest-rank p95 and strict-above-boundary tolerance tests."
+      - "Missing, non-executable, symlink-mismatch, stale, post-run-changed, and daemon-executable mismatch tests."
+      - "Owned temporary runtime and safe cleanup tests that preserve pre-existing sockets and unrelated processes."
+  - phase: 2
+    name: "Implement shared budget primitives and CLI"
+    goal: "Provide one tested owner for identity, isolation, aggregation, comparison, and report serialization."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "scripts/runtime_budget.py data and lifecycle primitives."
+      - "collect, compare, and explicit baseline subcommands with stable exit/classification semantics."
+      - "Human-readable output rendered from the same validated JSON report."
+      - "Pinned pyte runtime-benchmark dependency and actionable dependency preflight."
+  - phase: 3
+    name: "Integrate startup and deterministic gates"
+    goal: "Bring visible readiness, input readiness, daemon readiness, and frame work under the canonical report without duplicating collectors."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "One warm-up plus 10 complete PTY samples with median and nearest-rank p95."
+      - "Five private daemon readiness samples with per-attempt timeout and 80 ms median gate."
+      - "Deterministic desktop state-space frame result imported from the existing guardrail command."
+      - "Structured failure propagation for PTY, socket, subprocess, and incomplete-run errors."
+  - phase: 4
+    name: "Integrate resource, scaling, and local round-trip evidence"
+    goal: "Complete the remaining private shared-daemon metric groups with correct attribution and noisy-comparison policies."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Five idle CPU/RSS readings after a five-second settle period."
+      - "Three trials each for 1, 4, and 8 equivalent clients, including daemon RSS, attributed session memory, and incremental MiB/session."
+      - "Five warm-ups plus 30 recorded protocol and local-tool operations with median and nearest-rank p95."
+      - "Explicit unsupported-platform results and no external provider/network dependency."
+  - phase: 5
+    name: "Document, baseline, and validate delivery"
+    goal: "Publish the maintained budget contract and prove the full workflow against the intended built runtime."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Canonical documentation and an explicitly reviewed Linux reference baseline with all required provenance."
+      - "Focused Python suites and collector integration tests."
+      - "Existing desktop frame gate and scripts/check_guardrails.sh passing without silent ratchet changes."
+      - "Fresh selfdev build identity verification and isolated smoke covering daemon launch, one local round trip, and owned shutdown."
+      - "Focused implementation commit and exact evidence handoff without Bead mutation, merge, push, or worktree removal."
+
+open_questions:
+  - question: "Which stable Linux host and load/power conditions should own the first checked-in same-machine baseline values?"
+    context: "The spec fixes tolerances but intentionally does not provide trustworthy raw baseline samples; collecting them on an unstable or undocumented host would make the first ratchet misleading."
+    proposed_resolution: "During Phase 5, collect repeated healthy reports on Ariel's designated development host under documented idle/load and power conditions, review variance, then commit only the accepted report-derived baseline and its reason."
+    resolution: "Use Ariel's designated Linux development host on AC power with stable performance settings and no concurrent Cargo, rustc, build, or benchmark process at collection start. Review three sequential complete reports and retain the selected report plus all deterministic failures truthfully."
+  - question: "Should the benchmark dependency runner use the active Python 3.14 interpreter or a separately pinned supported interpreter?"
+    context: "pyte 0.8.2 declares Python >=3.8 but its published classifiers stop at Python 3.12, and pyte is absent from the current Python 3.14 environment."
+    proposed_resolution: "Pin pyte 0.8.2, run its focused screen fixture under the active interpreter first, and add a repository-local Python toolchain pin only if that compatibility check fails; do not introduce a second interpreter contract speculatively."
+    resolution: "Use the active Python 3.14 interpreter. The pinned pyte 0.8.2 dependency and all 77 focused runtime-budget tests passed under that interpreter, so no second interpreter contract is required."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-21T15:34:25Z"
+  artifact_type: "plan"

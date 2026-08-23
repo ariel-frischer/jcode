@@ -1451,6 +1451,22 @@ async fn one_shot_output_modes_close_sessions_and_clear_active_pid_markers() {
         .await
         .unwrap_or_else(|error| panic!("{mode} run failed: {error:#}"));
 
+        let lifecycle = crate::session::read_lifecycle_stream_in_dir(
+            temp.path(),
+            &session_id,
+            crate::config::config()
+                .lifecycle_observability
+                .effective_status(),
+        )
+        .unwrap_or_else(|error| panic!("read {mode} lifecycle stream: {error:#}"));
+        assert!(
+            lifecycle.events.iter().any(|event| matches!(
+                event.event,
+                crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. }
+            )),
+            "{mode} run should persist its effective lifecycle policy snapshot"
+        );
+
         assert!(
             !marker.exists(),
             "{mode} run left an active PID marker behind"
@@ -1574,4 +1590,74 @@ async fn one_shot_cleanup_preserves_the_original_command_error() {
             crate::session::SessionStatus::Closed
         ));
     }
+}
+
+#[test]
+fn lifecycle_renderer_uses_typed_stream_for_human_and_json_output() {
+    use crate::session::lifecycle_types::{
+        LIFECYCLE_SCHEMA_VERSION, LifecycleCompatibilityWarning, LifecycleDecisionType,
+        LifecycleEvent, LifecycleEventEnvelope, LifecycleObservabilityStatus,
+        LifecycleSemanticReason, SessionLifecycleStream,
+    };
+
+    let stream = SessionLifecycleStream {
+        session_id: "synthetic-session-001".to_string(),
+        status: LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+        events: vec![LifecycleEventEnvelope {
+            schema_version: LIFECYCLE_SCHEMA_VERSION,
+            session_id: "synthetic-session-001".to_string(),
+            sequence: 1,
+            recorded_at: chrono::DateTime::from_timestamp(1_700_000_000, 0)
+                .expect("valid timestamp"),
+            event: LifecycleEvent::Block {
+                decision_type: LifecycleDecisionType::Suppressed,
+                semantic_reason: LifecycleSemanticReason::Policy,
+                suppression_reason: None,
+                process_manifest_id: None,
+            },
+        }],
+        warnings: vec![LifecycleCompatibilityWarning::PersistenceUnavailable],
+    };
+
+    let human =
+        commands::render_session_lifecycle(&stream, false).expect("render human lifecycle stream");
+    assert!(human.contains("synthetic-session-001"));
+    assert!(human.contains("enabled=true, persistence=true, structured_logs=false"));
+    assert!(human.contains("block"));
+    assert!(human.contains("persistence is unavailable"));
+
+    let json =
+        commands::render_session_lifecycle(&stream, true).expect("render JSON lifecycle stream");
+    assert!(json.contains("\"status\""));
+    let decoded: SessionLifecycleStream =
+        serde_json::from_str(&json).expect("decode rendered lifecycle JSON");
+    assert_eq!(decoded, stream);
+    assert!(decoded.status.enabled);
+    assert!(decoded.status.persist_session_events);
+    assert!(!decoded.status.emit_structured_logs);
+
+    let disabled_stream = SessionLifecycleStream {
+        status: LifecycleObservabilityStatus::DISABLED,
+        events: Vec::new(),
+        warnings: Vec::new(),
+        ..stream
+    };
+    let disabled_human = commands::render_session_lifecycle(&disabled_stream, false)
+        .expect("render disabled lifecycle status");
+    assert!(disabled_human.contains("enabled=false, persistence=false, structured_logs=false"));
+    let disabled_json = commands::render_session_lifecycle(&disabled_stream, true)
+        .expect("render disabled lifecycle JSON");
+    assert!(disabled_human.contains("No lifecycle events."));
+    assert!(!disabled_human.contains("secret"));
+    let decoded_disabled: SessionLifecycleStream =
+        serde_json::from_str(&disabled_json).expect("decode disabled lifecycle JSON");
+    assert_eq!(
+        decoded_disabled.status,
+        LifecycleObservabilityStatus::DISABLED
+    );
+    assert!(!disabled_json.contains("secret"));
 }

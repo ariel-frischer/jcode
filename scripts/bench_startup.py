@@ -19,18 +19,44 @@ import shutil
 import socket
 import statistics
 import subprocess
-import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+try:
+    from runtime_budget import (
+        ExecutableIdentity,
+        IdentityError,
+        IsolationError,
+        OwnedProcess,
+        PrivateRuntime,
+        cleanup_owned_processes,
+        inspect_executable,
+        socket_owner_pid,
+        verify_daemon_executable,
+    )
+except ModuleNotFoundError:  # Imported as scripts.bench_startup by unittest.
+    from scripts.runtime_budget import (
+        ExecutableIdentity,
+        IdentityError,
+        IsolationError,
+        OwnedProcess,
+        PrivateRuntime,
+        cleanup_owned_processes,
+        inspect_executable,
+        socket_owner_pid,
+        verify_daemon_executable,
+    )
+
 PROFILE_TOTAL_RE = re.compile(r"Startup Profile \(([0-9.]+)ms total\)")
 PROFILE_LINE_RE = re.compile(
     r"\[INFO\]\s+([0-9.]+)ms\s+([0-9.]+)ms\s+[0-9.]+%\s+([a-zA-Z0-9_]+)"
 )
 REMOTE_HISTORY_RE = re.compile(r"remote bootstrap: history after ([0-9.]+)ms")
+SERVER_READINESS_RUNS = 5
+SERVER_READINESS_TIMEOUT_S = 5.0
 
 
 @dataclass
@@ -127,6 +153,166 @@ def wait_for_socket(path: str, timeout_s: float) -> bool:
                 pass
         time.sleep(0.005)
     return False
+
+
+def _invalid_attempt(
+    kind: str,
+    message: str,
+    *,
+    exit_code: int | None = None,
+) -> dict[str, object]:
+    return {
+        "status": "invalid",
+        "elapsed_ms": None,
+        "daemon": None,
+        "exit_code": exit_code,
+        "failure": {"kind": kind, "message": message},
+    }
+
+
+def resolve_socket_owner(path: Path, *, deadline: float) -> int:
+    """Wait for procfs to expose the just-bound Unix socket owner."""
+    last_error: IsolationError | None = None
+    while time.perf_counter() < deadline:
+        try:
+            return socket_owner_pid(path)
+        except IsolationError as error:
+            last_error = error
+            time.sleep(0.005)
+    if last_error is not None:
+        raise last_error
+    raise IsolationError(f"runtime socket owner was not observable: {path}")
+
+
+def measure_server_startup_attempt(
+    *,
+    candidate: ExecutableIdentity,
+    timeout_s: float,
+) -> dict[str, object]:
+    runtime = PrivateRuntime.create()
+    process: subprocess.Popen[bytes] | None = None
+    owned_processes: list[OwnedProcess] = []
+    result: dict[str, object]
+    start = time.perf_counter()
+
+    try:
+        try:
+            process = subprocess.Popen(
+                [candidate.resolved_path, "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=runtime.environment(),
+                start_new_session=True,
+            )
+            owned_processes.append(OwnedProcess.capture(process.pid))
+        except (OSError, IsolationError) as error:
+            result = _invalid_attempt("launch", str(error))
+        else:
+            deadline = start + timeout_s
+            while time.perf_counter() < deadline:
+                exit_code = process.poll()
+                if exit_code is not None:
+                    result = _invalid_attempt(
+                        "nonzero_exit" if exit_code else "launch",
+                        f"daemon exited before readiness with status {exit_code}",
+                        exit_code=exit_code,
+                    )
+                    break
+                if wait_for_socket(str(runtime.socket_path), 0.01):
+                    ready_elapsed_ms = (time.perf_counter() - start) * 1000.0
+                    try:
+                        daemon_pid = resolve_socket_owner(
+                            runtime.socket_path, deadline=deadline
+                        )
+                        verify_daemon_executable(candidate, daemon_pid)
+                        if daemon_pid != process.pid:
+                            owned_processes.append(OwnedProcess.capture(daemon_pid))
+                    except IdentityError as error:
+                        result = _invalid_attempt("daemon_identity", str(error))
+                    except IsolationError as error:
+                        result = _invalid_attempt("socket_owner", str(error))
+                    else:
+                        result = {
+                            "status": "valid",
+                            "elapsed_ms": ready_elapsed_ms,
+                            "daemon": {
+                                "pid": daemon_pid,
+                                "resolved_path": candidate.resolved_path,
+                                "socket": str(runtime.socket_path),
+                            },
+                            "exit_code": None,
+                            "failure": None,
+                        }
+                    break
+            else:
+                result = _invalid_attempt(
+                    "timeout",
+                    f"daemon did not become ready within {timeout_s:.1f}s",
+                )
+    finally:
+        cleanup = cleanup_owned_processes(owned_processes)
+        if process is not None:
+            try:
+                process.wait(timeout=0.1)
+            except subprocess.TimeoutExpired:
+                pass
+        runtime.cleanup()
+
+    result["cleanup"] = {
+        "all_stopped": cleanup.all_stopped,
+        "diagnostics": cleanup.diagnostics,
+    }
+    if not cleanup.all_stopped:
+        result.update(
+            _invalid_attempt(
+                "cleanup",
+                "; ".join(cleanup.diagnostics) or "owned daemon did not stop",
+            )
+        )
+    return result
+
+
+def collect_server_readiness(*, binary: Path) -> dict[str, object]:
+    candidate = inspect_executable(binary)
+    candidate_data = candidate.to_dict()
+    samples = [
+        measure_server_startup_attempt(
+            candidate=candidate,
+            timeout_s=SERVER_READINESS_TIMEOUT_S,
+        )
+        for _ in range(SERVER_READINESS_RUNS)
+    ]
+    failures: list[dict[str, object]] = []
+    for recorded_run, sample in enumerate(samples, start=1):
+        daemon = sample.get("daemon")
+        complete = (
+            sample.get("status") == "valid"
+            and isinstance(sample.get("elapsed_ms"), (int, float))
+            and isinstance(daemon, dict)
+            and isinstance(daemon.get("pid"), int)
+            and daemon.get("resolved_path") == candidate_data["resolved_path"]
+            and bool(daemon.get("socket"))
+        )
+        if complete:
+            continue
+        failure = sample.get("failure")
+        detail = dict(failure) if isinstance(failure, dict) else {"kind": "incomplete"}
+        detail.setdefault("kind", "incomplete")
+        detail["recorded_run"] = recorded_run
+        if sample.get("exit_code") is not None:
+            detail["exit_code"] = sample["exit_code"]
+        failures.append(detail)
+
+    return {
+        "status": "valid" if not failures else "invalid",
+        "candidate": candidate_data,
+        "sampling": {
+            "recorded_count": SERVER_READINESS_RUNS,
+            "timeout_s": SERVER_READINESS_TIMEOUT_S,
+        },
+        "samples": samples,
+        "failures": failures,
+    }
 
 
 def measure_server_startup(binary: str, runs: int) -> list[float]:

@@ -31,6 +31,79 @@ fn fresh_session_handoff_guidance_requires_structured_carryover() {
     }
 }
 
+#[tokio::test]
+async fn lifecycle_recording_does_not_change_manual_compaction_or_agent_surface() {
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::lifecycle_observability::LifecycleRecorder;
+    use crate::session::lifecycle_types::{
+        ContextUsage, LifecycleDecisionType, LifecycleSemanticReason, LifecycleSuppressionReason,
+    };
+
+    let baseline_provider: Arc<dyn Provider> = Arc::new(DelayedProvider {
+        open_delay: Duration::ZERO,
+        first_event_delay: Duration::ZERO,
+    });
+    let baseline_registry = Registry::new(baseline_provider.clone()).await;
+    let mut baseline_agent = Agent::new(baseline_provider, baseline_registry);
+    let baseline_tools = baseline_agent.tool_names().await;
+    let baseline_decision = baseline_agent.request_manual_compaction();
+
+    for config in [
+        LifecycleObservabilityConfig {
+            enabled: false,
+            persist_session_events: true,
+            emit_structured_logs: true,
+        },
+        LifecycleObservabilityConfig::default(),
+    ] {
+        let temp = tempfile::tempdir().expect("create lifecycle equivalence root");
+        let recorder = LifecycleRecorder::new_with_clock(
+            config,
+            temp.path().to_path_buf(),
+            16,
+            Arc::new(chrono::Utc::now),
+        );
+        let provider: Arc<dyn Provider> = Arc::new(DelayedProvider {
+            open_delay: Duration::ZERO,
+            first_event_delay: Duration::ZERO,
+        });
+        let registry = Registry::new(provider.clone()).await;
+        let mut agent = Agent::new(provider, registry);
+        agent.attach_lifecycle_recorder(recorder.clone());
+
+        agent.record_compaction_lifecycle(
+            LifecycleDecisionType::Accepted,
+            LifecycleSemanticReason::Automatic,
+            None,
+            Some(ContextUsage {
+                used_tokens: 1_000,
+                context_window_tokens: 2_000,
+                ratio: 0.5,
+            }),
+        );
+        agent.record_retry_lifecycle(
+            LifecycleDecisionType::Completed,
+            LifecycleSemanticReason::RetryableFailure,
+            None,
+            1,
+            2,
+        );
+        agent.record_strategy_switch_lifecycle(
+            LifecycleDecisionType::Completed,
+            LifecycleSemanticReason::ProviderFallback,
+        );
+        agent.record_block_lifecycle(
+            LifecycleDecisionType::Suppressed,
+            LifecycleSemanticReason::Policy,
+            Some(LifecycleSuppressionReason::PolicyDenied),
+        );
+
+        assert_eq!(agent.tool_names().await, baseline_tools);
+        assert_eq!(agent.request_manual_compaction(), baseline_decision);
+        let _ = recorder.flush().await;
+    }
+}
+
 #[test]
 fn soft_handoff_poke_guidance_distinguishes_milestone_boundaries() {
     let guidance =

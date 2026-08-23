@@ -65,6 +65,12 @@ The clearest examples of my custom delta include:
   instructions. Profiles can be selected from the CLI or TUI, inherited by
   child agents and swarm workers, inspected without exposing credentials, and
   restored from a credential-free snapshot that detects profile drift.
+- **Privacy-safe lifecycle observability:** typed per-session events for
+  compaction, handoff, retry, strategy-switch, and block decisions. Events are
+  persisted in bounded JSONL sidecars with rotation, retention, malformed-record
+  recovery, and cleanup isolation, and can be queried through the built-in
+  lifecycle protocol. Configure the local sinks under
+  `[lifecycle_observability]`; see the [lifecycle observability guide](docs/LIFECYCLE_OBSERVABILITY.md).
 - **Fresh-session handoff and continuation:** a special workflow for moving
   work into a new session while carrying forward the relevant context. It can
   be configured for automatic or agent-directed handoff, preserves summaries

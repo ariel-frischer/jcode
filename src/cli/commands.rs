@@ -1458,6 +1458,57 @@ pub async fn run_dictate_command(type_output: bool) -> Result<()> {
     }
 }
 
+pub(crate) fn render_session_lifecycle(
+    stream: &crate::session::lifecycle_types::SessionLifecycleStream,
+    json: bool,
+) -> Result<String> {
+    if json {
+        return serde_json::to_string_pretty(stream).map_err(Into::into);
+    }
+
+    let mut output = format!(
+        "Session {} lifecycle (enabled={}, persistence={}, structured_logs={})\n",
+        stream.session_id,
+        stream.status.enabled,
+        stream.status.persist_session_events,
+        stream.status.emit_structured_logs
+    );
+    if stream.events.is_empty() {
+        output.push_str("No lifecycle events.\n");
+    }
+    for envelope in &stream.events {
+        let category = match &envelope.event {
+            crate::session::lifecycle_types::LifecycleEvent::PolicySnapshot { .. } => {
+                "policy_snapshot"
+            }
+            crate::session::lifecycle_types::LifecycleEvent::Compaction { .. } => "compaction",
+            crate::session::lifecycle_types::LifecycleEvent::Handoff { .. } => "handoff",
+            crate::session::lifecycle_types::LifecycleEvent::Retry { .. } => "retry",
+            crate::session::lifecycle_types::LifecycleEvent::StrategySwitch { .. } => {
+                "strategy_switch"
+            }
+            crate::session::lifecycle_types::LifecycleEvent::Block { .. } => "block",
+        };
+        output.push_str(&format!(
+            "#{:<6} {} {}\n",
+            envelope.sequence,
+            envelope.recorded_at.to_rfc3339(),
+            category
+        ));
+    }
+    for warning in &stream.warnings {
+        output.push_str(&format!("warning: {}\n", warning.message()));
+    }
+    Ok(output)
+}
+
+pub async fn run_session_lifecycle_command(session_ref: &str, json: bool) -> Result<()> {
+    let mut client = crate::server::Client::connect().await?;
+    let stream = client.get_lifecycle_events(session_ref).await?;
+    print!("{}", render_session_lifecycle(&stream, json)?);
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct SessionRenameOutput {
     session_id: String,
@@ -2729,17 +2780,34 @@ pub(crate) async fn run_single_message_command(
     run_safety::install(&mut agent, safety_candidates)?;
     let message = prepare_run_message(message, agent.session_id());
 
+    run_single_message_with_agent(&mut agent, provider, &message, emit_json, emit_ndjson).await
+}
+
+pub(crate) async fn run_single_message_with_agent(
+    agent: &mut crate::agent::Agent,
+    provider: std::sync::Arc<dyn crate::provider::Provider>,
+    message: &str,
+    emit_json: bool,
+    emit_ndjson: bool,
+) -> Result<()> {
+    let lifecycle_base_dir =
+        crate::storage::jcode_dir().unwrap_or_else(|_| std::env::temp_dir().join("jcode"));
+    let lifecycle_recorder = crate::lifecycle_observability::LifecycleRecorder::new(
+        crate::config::config().lifecycle_observability.clone(),
+        lifecycle_base_dir,
+    );
+    agent.attach_lifecycle_recorder(std::sync::Arc::clone(&lifecycle_recorder));
+
     let result: Result<()> = async {
         if emit_json {
-            let text =
-                run_single_message_command_capture_with_auto_poke(&mut agent, &message).await?;
-            let report = run_safety::report(&agent, &provider, text);
+            let text = run_single_message_command_capture_with_auto_poke(agent, message).await?;
+            let report = run_safety::report(agent, &provider, text);
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else if emit_ndjson {
-            run_single_message_command_ndjson(&mut agent, provider.clone(), &message).await?;
+            run_single_message_command_ndjson(agent, provider.clone(), message).await?;
         } else {
-            run_single_message_command_plain_with_auto_poke(&mut agent, &message).await?;
-            run_safety::print_plain_stop(&agent);
+            run_single_message_command_plain_with_auto_poke(agent, message).await?;
+            run_safety::print_plain_stop(agent);
         }
         Ok(())
     }
@@ -2752,6 +2820,7 @@ pub(crate) async fn run_single_message_command(
     // one-shot exit from looking like a stale-PID crash on the next startup
     // (issue #988).
     agent.mark_closed();
+    let _ = lifecycle_recorder.flush().await;
     result
 }
 

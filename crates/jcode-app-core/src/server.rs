@@ -648,6 +648,7 @@ pub const EXIT_IDLE_TIMEOUT: i32 = 44;
 /// Server state
 pub struct Server {
     provider: Arc<dyn Provider>,
+    lifecycle_recorder: Arc<crate::lifecycle_observability::LifecycleRecorder>,
     socket_path: PathBuf,
     debug_socket_path: PathBuf,
     gateway_config_override: Option<crate::gateway::GatewayConfig>,
@@ -753,8 +754,16 @@ impl Server {
             swarms_by_id: restored_swarms_by_id,
         } = load_persisted_swarm_runtime_state();
 
+        let lifecycle_base_dir =
+            crate::storage::jcode_dir().unwrap_or_else(|_| std::env::temp_dir().join("jcode"));
+        let lifecycle_recorder = crate::lifecycle_observability::LifecycleRecorder::new(
+            crate::config::config().lifecycle_observability.clone(),
+            lifecycle_base_dir,
+        );
+
         Self {
             provider,
+            lifecycle_recorder,
             socket_path: socket_path(),
             debug_socket_path: debug_socket_path(),
             gateway_config_override: None,
@@ -809,6 +818,13 @@ impl Server {
     /// Get the server identity
     pub fn identity(&self) -> &ServerIdentity {
         &self.identity
+    }
+
+    #[cfg(test)]
+    pub(crate) fn lifecycle_recorder(
+        &self,
+    ) -> Arc<crate::lifecycle_observability::LifecycleRecorder> {
+        Arc::clone(&self.lifecycle_recorder)
     }
 
     fn runtime(&self) -> ServerRuntime {
@@ -924,9 +940,9 @@ impl Server {
                 )
                 .await;
 
-            let agent = Arc::new(Mutex::new(Agent::new_with_session(
-                provider, registry, session, None,
-            )));
+            let mut recovered_agent = Agent::new_with_session(provider, registry, session, None);
+            recovered_agent.attach_lifecycle_recorder(Arc::clone(&self.lifecycle_recorder));
+            let agent = Arc::new(Mutex::new(recovered_agent));
 
             {
                 let mut sessions = self.sessions.write().await;

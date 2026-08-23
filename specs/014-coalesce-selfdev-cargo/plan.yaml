@@ -1,0 +1,266 @@
+plan:
+  branch: "agent/jcode-l89.2-selfdev-coalesce"
+  created: "2026-08-22"
+  spec_path: "specs/014-coalesce-selfdev-cargo/spec.yaml"
+
+summary: |
+  Complete the smallest coherent extension of the existing server-owned SelfDevTool
+  queue. Preserve BuildRequest persistence, attached watcher delivery, source-state
+  fingerprints, the selfdev worktree lock, scripts/dev_cargo.sh, and every public
+  action. Add one atomic in-process claim around duplicate lookup plus leader or
+  follower persistence so concurrent sessions cannot both create producers. Reuse
+  that claim and the existing follower path for conservatively eligible exact Cargo
+  build, test, and check commands submitted through selfdev test. Opaque or compound
+  shell commands remain independent.
+
+  Existing build source revalidation, terminal reconciliation, follower background
+  task cancellation, build-reload source validation, request timestamps, source
+  fingerprints, and rust-actions gate/execution receipts remain the canonical safety
+  and observability contracts. Extend only additive request/tool metadata needed to
+  identify the versioned coalescing identity and leader/follower role. Add focused
+  race, near-miss, stale-source, cancellation, failure, recovery, and reload tests,
+  then validate the built binary on an isolated socket and record before/after
+  duplicate-count, gate-wait, latency, and runtime-budget evidence.
+
+technical_context:
+  language: "Rust 2024"
+  framework: "Tokio, Serde, Jcode background tasks, existing selfdev queue"
+  primary_dependencies:
+    - name: "jcode-app-core selfdev queue"
+      version: "workspace"
+      purpose: "Canonical server-owned request persistence, ordering, following, cancellation, and status."
+    - name: "jcode-build-support SourceState"
+      version: "workspace"
+      purpose: "Existing redacted repository, worktree, version, and dirty-source identity."
+    - name: "scripts/dev_cargo.sh"
+      version: "repository-local"
+      purpose: "Unchanged host-wide Cargo gate and rust-actions timing receipts."
+  storage: "Existing JCODE_HOME/selfdev-build-requests JSON files only; additive serde-compatible fields where required."
+  testing:
+    framework: "Rust test harness with Tokio tests plus isolated built-binary validation"
+    approach: "TDD with focused selfdev tests before implementation, then serialized Cargo checks and repository guardrails."
+  target_platform: "Existing supported selfdev hosts"
+  project_type: "cli"
+  performance_goals: "One producer for overlapping exact eligible requests, no duplicate broad Cargo action, and no jcode-l89.1 runtime-budget regression."
+  constraints:
+    - "Keep the existing single-server, multi-client runtime and SelfDevTool queue as sole authority."
+    - "Do not add a daemon, cache, dependency, new crate, general scheduler, or alternate Cargo gate."
+    - "Keep scripts/dev_cargo.sh and its flock behavior unchanged."
+    - "Coalesce selfdev test only for a conservative single Cargo or scripts/dev_cargo.sh build/test/check command; ambiguity is ineligible."
+    - "Exact command semantics remain part of identity; do not normalize quoting, shell expansion, environment assignments, pipelines, chaining, or redirection."
+    - "Use the existing SourceState fingerprint and rendered command, prefixed by a visible identity version; the server process environment is shared across sessions."
+    - "Preserve arbitrary selfdev test commands by executing them independently."
+    - "Preserve existing progress, notify/wake, build-reload, failure propagation, cancellation, status, and restart reconciliation."
+    - "Receipts expose only existing redacted source fingerprints, bounded identity version/role fields, timestamps, and structured rust-actions timing."
+    - "All Cargo-heavy validation is serialized."
+  scale_scope: "One long-lived local server with multiple sessions and a bounded persisted request history."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Implementation is limited to the existing request/queue seam, focused tests, and validation evidence."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Public actions and arbitrary test behavior remain unchanged; persisted additions are optional and defaulted."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "No configuration is added."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Runtime coordination stays private to jcode-app-core and reuses lower-layer SourceState."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Atomic claim, eligible tests, near misses, supersession, cancellation, failure, recovery, and reload map to focused tests."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Opaque commands do not coalesce and source drift remains visibly superseded."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Focused checks precede relevant build and canonical guardrails."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The change strengthens the custom existing selfdev queue without a new abstraction layer."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Follower cancellation remains independent and unrelated active work is never terminated."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Built-binary and before/after evidence use one actual producer count plus maintained runtime budgets."
+
+research_findings:
+  decisions:
+    - topic: "Atomic ownership"
+      decision: "Serialize duplicate lookup and initial request persistence with one process-wide claim mutex owned by BuildRequest."
+      rationale: "All sessions share one server process; persisted requests and existing reconciliation provide restart recovery. The mutex closes the current multi-threaded find-then-save race without changing the queue or global Cargo gate."
+      alternatives_considered:
+        - "A second daemon or database"
+        - "A new persisted shared-execution model"
+        - "Relying only on dev_cargo.sh flock after duplicate producers already exist"
+    - topic: "Follower reuse"
+      decision: "Generalize the existing Attached watcher helper just enough for both build and eligible test requests."
+      rationale: "It already preserves per-session background delivery, progress polling, terminal propagation, and follower cancellation."
+      alternatives_considered:
+        - "A new subscriber/execution subsystem"
+        - "Returning the leader task directly to every caller"
+    - topic: "Eligible test commands"
+      decision: "Recognize only one unambiguous cargo or scripts/dev_cargo.sh build/test/check invocation and keep the exact trimmed command in the identity."
+      rationale: "This captures the expensive compile-capable cases while proving arbitrary shell side-effect equivalence is out of scope."
+      alternatives_considered:
+        - "Whitespace-normalizing arbitrary shell"
+        - "Coalescing pipelines, environment-prefixed commands, or command chains"
+        - "Rejecting opaque commands"
+    - topic: "Identity"
+      decision: "Version the existing worktree scope + SourceState fingerprint + exact rendered command key."
+      rationale: "SourceState already includes clean revision or dirty tracked/untracked state; generated commands retain target/profile/features/package semantics; exact command preservation avoids unsafe normalization."
+      alternatives_considered:
+        - "New public identity types and a new dependency"
+        - "Raw source, path, diff, lockfile, toolchain, or environment values in receipts"
+    - topic: "Queued supersession"
+      decision: "Reuse build source revalidation and add the analogous test-source check after queue ownership and before command launch."
+      rationale: "This prevents stale eligible validation from reaching Cargo while leaving unrelated active work and dev_cargo.sh unchanged."
+      alternatives_considered:
+        - "Killing the active gate holder"
+        - "Revalidating only after Cargo completes"
+    - topic: "Observability"
+      decision: "Keep persisted request timestamps/source state and rust-actions gate/execution timings; add bounded identity-version and role/coalesced metadata only."
+      rationale: "The existing surfaces already own the required timing and source receipts. Duplicating them into a new schema would expand scope without changing the outcome."
+      alternatives_considered:
+        - "Changing scripts/dev_cargo.sh"
+        - "A new lifecycle receipt framework"
+
+data_model:
+  entities:
+    - name: "BuildRequest"
+      description: "Existing persisted request remains both producer record and attached watcher record."
+      fields:
+        - name: "dedupe_key"
+          type: "optional string"
+          description: "Version-prefixed redacted exact identity used only for eligible requests."
+          constraints: "Legacy missing keys and ineligible commands never coalesce."
+        - name: "attached_to_request_id"
+          type: "optional string"
+          description: "Existing follower-to-producer relationship."
+          constraints: "Attached requests never produce Cargo work."
+        - name: "requested_source"
+          type: "optional SourceState"
+          description: "Existing redacted source identity used for equality and pre-launch revalidation."
+          constraints: "No raw source or diff content."
+      relationships:
+        - target: "BackgroundTask"
+          type: "one-to-one"
+          description: "A leader owns execution; a follower owns only its watcher task."
+    - name: "AtomicRequestClaim"
+      description: "Short process-local critical section around lookup and initial persistence."
+      fields:
+        - name: "identity"
+          type: "optional versioned dedupe key"
+          description: "Eligible exact identity, or none for independent execution."
+          constraints: "The lock is never held across await or Cargo execution."
+        - name: "outcome"
+          type: "leader or attached"
+          description: "Exactly one caller persists the producer for an active identity."
+          constraints: "Restart safety falls back to persisted request reconciliation."
+      relationships:
+        - target: "BuildRequest"
+          type: "one-to-many"
+          description: "One leader may have multiple existing Attached watcher requests."
+
+api_contracts:
+  endpoints: []
+  commands:
+    - name: "selfdev build"
+      description: "Existing behavior with atomic exact duplicate claim."
+      inputs: "Unchanged reason, target, notify, wake."
+      outputs: "Existing leader or attached output plus additive bounded identity-version/role metadata."
+      exit_codes: "Unchanged."
+    - name: "selfdev test"
+      description: "Exact eligible Cargo build/test/check commands may attach; all other shell commands remain independent."
+      inputs: "Unchanged command, reason, notify, wake."
+      outputs: "Existing queue output or attached watcher output with additive eligibility/role metadata."
+      exit_codes: "Actual producer command result is propagated unchanged."
+    - name: "selfdev build-reload"
+      description: "Continues to use selfdev build result and existing source-validated reload path."
+      inputs: "Unchanged."
+      outputs: "Unchanged, including attached-build success/failure propagation."
+      exit_codes: "Unchanged."
+    - name: "selfdev cancel-build"
+      description: "Cancelling an Attached watcher cancels only that watcher; leader cancellation retains existing safe behavior."
+      inputs: "Unchanged request_id or task_id."
+      outputs: "Existing cancellation output."
+      exit_codes: "Unchanged."
+    - name: "selfdev status"
+      description: "Existing queue and Attached watcher status remains canonical."
+      inputs: "None."
+      outputs: "Existing status with source, timestamps, queue state, and watcher attribution."
+      exit_codes: "Unchanged."
+  receipt_schema: "Existing BuildRequest/status metadata and rust-actions JSONL, with additive identity_version, role, coalesced, and duplicate_of metadata where applicable."
+
+project_structure:
+  documentation:
+    - path: "specs/014-coalesce-selfdev-cargo/plan.yaml"
+      description: "Approved minimal implementation boundary."
+    - path: "specs/014-coalesce-selfdev-cargo/tasks.yaml"
+      description: "TDD and validation tasks for the minimal boundary."
+    - path: "specs/014-coalesce-selfdev-cargo/validation.md"
+      description: "Acceptance matrix and before/after evidence."
+  source_code:
+    - path: "crates/jcode-app-core/src/tool/selfdev/mod.rs"
+      description: "Atomic claim, versioned key helpers, and persisted compatibility."
+    - path: "crates/jcode-app-core/src/tool/selfdev/build_queue.rs"
+      description: "Shared attached follower path, eligible test classification, and stale test revalidation."
+  tests:
+    - path: "crates/jcode-app-core/src/tool/selfdev/tests.rs"
+      description: "Focused concurrency, near-miss, supersession, cancellation, failure, recovery, and reload coverage."
+    - path: "scripts/check_guardrails.sh"
+      description: "Canonical repository delivery gate."
+    - path: "scripts/bench_runtime_budgets.py"
+      description: "Existing maintained runtime-budget validation."
+
+implementation_phases:
+  - phase: 1
+    name: "Characterize and fail"
+    goal: "Add focused failing tests for the actual missing behavior."
+    deliverables:
+      - "Atomic concurrent claim test proves only one leader can be persisted."
+      - "Eligible exact selfdev test attachment test fails before implementation."
+      - "Near-miss and opaque-command tests preserve independent execution."
+      - "Follower cancellation, source drift, leader failure, stale recovery, and build-reload compatibility are characterized."
+  - phase: 2
+    name: "Implement the minimal queue seam"
+    goal: "Close the race and reuse Attached follower behavior without a new subsystem."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Versioned exact key and conservative eligible command classifier."
+      - "Atomic lookup plus leader/follower persistence."
+      - "Generalized existing follower helper used by builds and eligible tests."
+      - "Pre-launch source revalidation for tests."
+  - phase: 3
+    name: "Prove compatibility and recovery"
+    goal: "Pass all focused tests and existing selfdev regressions."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Identical build/test/check, near miss, dirty source, stale source, follower cancellation, leader failure, restart reconciliation, and build-reload tests pass."
+      - "Metadata remains redacted and additive."
+      - "Global Cargo gate and scripts/dev_cargo.sh remain unchanged."
+  - phase: 4
+    name: "Validate the built outcome"
+    goal: "Exercise the binary and report measured efficiency without disturbing the shared daemon."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Focused tests, relevant build/check, CodeGraph affected tests, one-pass review, and guardrails pass."
+      - "Private-socket multi-session validation shows one underlying action and truthful results."
+      - "Before/after duplicate count, summed gate wait, p50/p95 feedback latency, and runtime budgets are recorded."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T09:17:30Z"
+  artifact_type: "plan"

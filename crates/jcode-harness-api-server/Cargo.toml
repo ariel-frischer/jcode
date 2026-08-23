@@ -7,7 +7,9 @@ description = "Harness API endpoint: bridges versioned API clients onto the inte
 
 [dependencies]
 anyhow = "1"
+jcode-base = { path = "../jcode-base", default-features = false }
 jcode-harness-api = { path = "../jcode-harness-api" }
+jcode-protocol = { path = "../jcode-protocol" }
 jcode-transport = { path = "../jcode-transport" }
 serde = "1"
 serde_json = "1"
@@ -23,7 +25,6 @@ libc = "0.2"
 # of its output: a change to the wire prose then fails here instead of silently
 # turning every client's progress bar off. Dev-only, so the bridge binary stays
 # free of the application foundation.
-jcode-base = { path = "../jcode-base", default-features = false }
 jcode-background-types = { path = "../jcode-background-types" }
 
 [[bin]]

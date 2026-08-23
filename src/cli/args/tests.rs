@@ -301,6 +301,21 @@ fn session_rename_subcommand_parses() {
 }
 
 #[test]
+fn session_lifecycle_subcommand_parses_and_requires_session() {
+    let args = Args::try_parse_from(["jcode", "session", "lifecycle", "fox", "--json"])
+        .expect("parse lifecycle query");
+    match args.command {
+        Some(Command::Session(SessionCommand::Lifecycle { session, json })) => {
+            assert_eq!(session, "fox");
+            assert!(json);
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    assert!(Args::try_parse_from(["jcode", "session", "lifecycle"]).is_err());
+}
+
+#[test]
 fn cloud_sessions_subcommands_parse() {
     let args = Args::try_parse_from([
         "jcode",

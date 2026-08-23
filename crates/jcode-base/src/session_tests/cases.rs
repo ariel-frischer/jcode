@@ -29,6 +29,481 @@ fn test_session_exists_roundtrip() -> Result<()> {
     Ok(())
 }
 
+fn lifecycle_test_event(
+    session_id: &str,
+    sequence: u64,
+) -> jcode_session_types::lifecycle::LifecycleEventEnvelope {
+    use chrono::{TimeZone, Utc};
+    use jcode_session_types::lifecycle::{
+        CompactionPolicyMode, CompactionPolicySnapshot, EffectivePolicySnapshot,
+        HandoffPolicySnapshot, LifecycleEvent,
+    };
+
+    jcode_session_types::lifecycle::LifecycleEventEnvelope {
+        schema_version: jcode_session_types::lifecycle::LIFECYCLE_SCHEMA_VERSION,
+        session_id: session_id.to_string(),
+        sequence,
+        recorded_at: Utc
+            .timestamp_opt(1_700_000_000 + sequence as i64, 0)
+            .unwrap(),
+        event: LifecycleEvent::PolicySnapshot {
+            snapshot: EffectivePolicySnapshot {
+                policy_version: jcode_session_types::lifecycle::LIFECYCLE_POLICY_VERSION,
+                fingerprint: "x".repeat(400_000),
+                compaction: CompactionPolicySnapshot {
+                    mode: CompactionPolicyMode::Reactive,
+                    context_window_tokens: 128_000,
+                    threshold_ratio: 0.85,
+                    native_compaction: false,
+                },
+                handoff: HandoffPolicySnapshot {
+                    enabled: true,
+                    agent_enabled: true,
+                    confirmation_required: false,
+                    auto_start: true,
+                    max_chain_transitions: 8,
+                    copy_todos: true,
+                },
+            },
+        },
+    }
+}
+
+#[test]
+fn lifecycle_sidecar_paths_are_session_scoped_and_reject_traversal() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let active = crate::session::lifecycle_path_in_dir(temp_root.path(), "session-safe")?;
+    let rotation =
+        crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), "session-safe", 2)?;
+    assert_eq!(
+        active.file_name().and_then(|name| name.to_str()),
+        Some("session-safe.lifecycle.jsonl")
+    );
+    assert_eq!(
+        rotation.file_name().and_then(|name| name.to_str()),
+        Some("session-safe.lifecycle.2.jsonl")
+    );
+    assert!(crate::session::lifecycle_path_in_dir(temp_root.path(), "../escape").is_err());
+    assert!(crate::session::lifecycle_path_in_dir(temp_root.path(), "session/child").is_err());
+    Ok(())
+}
+
+#[test]
+fn lifecycle_append_rotates_complete_records_and_bounds_rotations() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-rotation";
+    let mut sequence = 0;
+
+    for _ in 0..5 {
+        let event = lifecycle_test_event(session_id, sequence);
+        crate::session::append_lifecycle_event_in_dir(temp_root.path(), &event)?;
+        sequence += 1;
+    }
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    assert!(paths.active.exists());
+    assert!(paths.rotations.len() <= crate::session::LIFECYCLE_MAX_ROTATIONS);
+    for path in &paths.rotations {
+        if !path.exists() {
+            continue;
+        }
+        let contents = std::fs::read_to_string(path)?;
+        assert!(
+            contents
+                .lines()
+                .all(|line| serde_json::from_str::<serde_json::Value>(line).is_ok())
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn lifecycle_retention_keeps_complete_records_with_bounded_rotations() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-boundary";
+
+    for sequence in 1..=11 {
+        crate::session::append_lifecycle_event_in_dir(
+            temp_root.path(),
+            &lifecycle_test_event(session_id, sequence),
+        )?;
+    }
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let retained_paths = std::iter::once(&paths.active)
+        .chain(paths.rotations.iter())
+        .filter(|path| path.exists())
+        .collect::<Vec<_>>();
+    assert!(!retained_paths.is_empty());
+    assert!(retained_paths.len() <= 1 + crate::session::LIFECYCLE_MAX_ROTATIONS);
+
+    let mut retained_sequences = Vec::new();
+    for path in retained_paths {
+        assert!(std::fs::metadata(path)?.len() <= crate::session::LIFECYCLE_MAX_FILE_BYTES);
+        for line in std::fs::read_to_string(path)?.lines() {
+            let event: jcode_session_types::lifecycle::LifecycleEventEnvelope =
+                serde_json::from_str(line)?;
+            retained_sequences.push(event.sequence);
+        }
+    }
+    retained_sequences.sort_unstable();
+    assert!(!retained_sequences.is_empty());
+    assert!(
+        retained_sequences
+            .windows(2)
+            .all(|window| window[0] < window[1])
+    );
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(
+        stream
+            .events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        retained_sequences
+    );
+    assert!(stream.warnings.is_empty());
+    Ok(())
+}
+
+#[test]
+fn lifecycle_retention_prunes_old_artifacts_before_size_rotation() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-age-boundary";
+
+    for sequence in 1..=3 {
+        crate::session::append_lifecycle_event_in_dir(
+            temp_root.path(),
+            &lifecycle_test_event(session_id, sequence),
+        )?;
+    }
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let old = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(31 * 24 * 60 * 60))
+        .expect("31 days before now is representable");
+    for path in std::iter::once(&paths.active).chain(paths.rotations.iter()) {
+        if path.exists() {
+            std::fs::File::open(path)?.set_modified(old)?;
+        }
+    }
+
+    // The active file is old and already near the size boundary. Age pruning
+    // wins deterministically, so the new event starts a fresh active stream
+    // instead of rotating an expired record into retained history.
+    crate::session::append_lifecycle_event_in_dir(
+        temp_root.path(),
+        &lifecycle_test_event(session_id, 4),
+    )?;
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    assert!(paths.active.exists());
+    assert!(paths.rotations.iter().all(|path| !path.exists()));
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(
+        stream
+            .events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        vec![4]
+    );
+    Ok(())
+}
+
+#[test]
+fn lifecycle_query_prunes_expired_artifacts_before_reading() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-query-retention";
+    let event = lifecycle_test_event(session_id, 1);
+    crate::session::append_lifecycle_event_in_dir(temp_root.path(), &event)?;
+
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    let active = &paths.active;
+    let old = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(31 * 24 * 60 * 60))
+        .expect("31 days before now is representable");
+    std::fs::File::open(active)?.set_modified(old)?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert!(stream.events.is_empty());
+    assert!(!active.exists());
+    Ok(())
+}
+
+#[test]
+fn lifecycle_read_recovers_torn_tail_and_reports_bounded_warnings() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-read";
+    let event = lifecycle_test_event(session_id, 1);
+    let active = crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?;
+    std::fs::create_dir_all(active.parent().unwrap())?;
+    std::fs::write(
+        &active,
+        format!(
+            "{}\n{{\"schema_version\":1,\"session_id\":\"{session_id}\",\"sequence\":2,\"recorded_at\":\"2023-11-14T22:13:20Z\",\"event\":{{\"category\":\"block\",\"decision_type\":\"suppressed\",\"semantic_reason\":\"policy\",\"suppression_reason\":\"policy_denied\",\"process_manifest_id\":null}}}}\n{{\"schema_version\":1",
+            serde_json::to_string(&event)?
+        ),
+    )?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(stream.events.len(), 2);
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::TornTail { .. }
+    )));
+    Ok(())
+}
+
+#[test]
+fn lifecycle_read_skips_malformed_middle_records_and_newer_versions() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-compatibility";
+    let first = lifecycle_test_event(session_id, 1);
+    let second = lifecycle_test_event(session_id, 3);
+    let mut newer = serde_json::to_value(lifecycle_test_event(session_id, 2))?;
+    newer["schema_version"] =
+        serde_json::json!(jcode_session_types::lifecycle::LIFECYCLE_SCHEMA_VERSION + 1);
+    let active = crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?;
+    std::fs::create_dir_all(active.parent().unwrap())?;
+    std::fs::write(
+        active,
+        format!(
+            "{}\n{{not-json}}\n{}\n{}\n",
+            serde_json::to_string(&first)?,
+            serde_json::to_string(&newer)?,
+            serde_json::to_string(&second)?,
+        ),
+    )?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(
+        stream
+            .events
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 3]
+    );
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::MalformedRecord { .. }
+    )));
+    assert!(
+        stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::UnsupportedSchemaVersion {
+            ..
+        }
+    ))
+    );
+    Ok(())
+}
+
+#[test]
+fn lifecycle_compatibility_warnings_are_bounded_and_never_include_raw_content() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-warning-privacy";
+    let sensitive = "secret-command-output-and-path";
+    let first = lifecycle_test_event(session_id, 1);
+    let mut newer = serde_json::to_value(lifecycle_test_event(session_id, 2))?;
+    newer["schema_version"] =
+        serde_json::json!(jcode_session_types::lifecycle::LIFECYCLE_SCHEMA_VERSION + 1);
+    let active = crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?;
+    std::fs::create_dir_all(active.parent().unwrap())?;
+
+    let mut contents = format!("{}\n", serde_json::to_string(&first)?);
+    contents.push_str(&format!("{{\"secret\":\"{sensitive}\"}}\n"));
+    contents.push_str(&format!("{}\n", serde_json::to_string(&newer)?));
+    for _ in 0..28 {
+        contents.push_str(&format!("not-json-{sensitive}\n"));
+    }
+    contents.push_str(&format!("{{\"schema_version\":1,"));
+    std::fs::write(active, contents)?;
+
+    let stream = crate::session::read_lifecycle_stream_in_dir(
+        temp_root.path(),
+        session_id,
+        jcode_session_types::lifecycle::LifecycleObservabilityStatus {
+            enabled: true,
+            persist_session_events: true,
+            emit_structured_logs: false,
+        },
+    )?;
+    assert_eq!(stream.events.len(), 1);
+    assert!(stream.warnings.len() <= 32);
+    let warnings = serde_json::to_string(&stream.warnings)?;
+    let messages = stream
+        .warnings
+        .iter()
+        .map(|warning| warning.message())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(!warnings.contains(sensitive));
+    assert!(!messages.contains(sensitive));
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::TornTail { .. }
+    )));
+    assert!(stream.warnings.iter().any(|warning| matches!(
+        warning,
+        jcode_session_types::lifecycle::LifecycleCompatibilityWarning::UnsupportedSchemaVersion { .. }
+    )));
+    Ok(())
+}
+
+#[test]
+fn lifecycle_rejects_oversized_records_and_prunes_expired_artifacts() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-retention";
+    let mut oversized = lifecycle_test_event(session_id, 1);
+    if let jcode_session_types::lifecycle::LifecycleEvent::PolicySnapshot { snapshot } =
+        &mut oversized.event
+    {
+        snapshot.fingerprint = "x".repeat(crate::session::LIFECYCLE_MAX_FILE_BYTES as usize);
+    }
+    assert!(crate::session::append_lifecycle_event_in_dir(temp_root.path(), &oversized).is_err());
+    let paths = crate::session::lifecycle_artifact_paths_in_dir(temp_root.path(), session_id)?;
+    assert!(!paths.active.exists());
+
+    let valid = lifecycle_test_event(session_id, 2);
+    crate::session::append_lifecycle_event_in_dir(temp_root.path(), &valid)?;
+    std::fs::write(&paths.rotations[0], serde_json::to_string(&valid)?)?;
+    let removed = crate::session::prune_lifecycle_artifacts_in_dir(
+        temp_root.path(),
+        session_id,
+        std::time::SystemTime::now() + std::time::Duration::from_secs(31 * 24 * 60 * 60),
+    )?;
+    assert_eq!(removed, 2);
+    assert!(!paths.active.exists());
+    assert!(!paths.rotations[0].exists());
+    Ok(())
+}
+
+#[test]
+fn canonical_lifecycle_cleanup_preserves_neighboring_sessions() -> Result<()> {
+    let temp_root = tempfile::tempdir()?;
+    let session_id = "session-cleanup";
+    let neighbor = "session-cleanup-other";
+    for id in [session_id, neighbor] {
+        let snapshot = session_path_in_dir(temp_root.path(), id);
+        std::fs::create_dir_all(snapshot.parent().unwrap())?;
+        std::fs::write(&snapshot, "{}")?;
+        std::fs::write(session_journal_path_from_snapshot(&snapshot), "{}\n")?;
+        std::fs::write(snapshot.with_extension("json.bak"), "backup")?;
+        std::fs::write(snapshot.with_extension("bak"), "alternate backup")?;
+        let active = crate::session::lifecycle_path_in_dir(temp_root.path(), id)?;
+        std::fs::write(active, "")?;
+        for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+            std::fs::write(
+                crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), id, rotation)?,
+                "",
+            )?;
+        }
+        std::fs::write(
+            snapshot.with_file_name(format!("{id}.json.pre-wipe-123.bak")),
+            "snapshot backup",
+        )?;
+        std::fs::write(
+            snapshot.with_file_name(format!("{id}.journal.jsonl.pre-wipe-123.bak")),
+            "journal backup",
+        )?;
+        std::fs::write(
+            snapshot.with_file_name(format!("{id}.journal.corrupt.jsonl")),
+            "corrupt journal",
+        )?;
+    }
+
+    crate::session::remove_session_artifacts_in_dir(temp_root.path(), session_id)?;
+
+    assert!(!session_path_in_dir(temp_root.path(), session_id).exists());
+    assert!(!crate::session::lifecycle_path_in_dir(temp_root.path(), session_id)?.exists());
+    for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+        assert!(
+            !crate::session::lifecycle_rotation_path_in_dir(
+                temp_root.path(),
+                session_id,
+                rotation,
+            )?
+            .exists()
+        );
+    }
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.json.pre-wipe-123.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.journal.jsonl.pre-wipe-123.bak")
+            .exists()
+    );
+    assert!(
+        !temp_root
+            .path()
+            .join("sessions/session-cleanup.journal.corrupt.jsonl")
+            .exists()
+    );
+    assert!(session_path_in_dir(temp_root.path(), neighbor).exists());
+    assert!(crate::session::lifecycle_path_in_dir(temp_root.path(), neighbor)?.exists());
+    for rotation in 1..=crate::session::LIFECYCLE_MAX_ROTATIONS {
+        assert!(
+            crate::session::lifecycle_rotation_path_in_dir(temp_root.path(), neighbor, rotation,)?
+                .exists()
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn derive_session_provider_key_prefers_runtime_identity_over_transport() {
     let _lock = lock_env();
@@ -826,6 +1301,65 @@ fn test_recover_crashed_sessions_by_ids_restores_only_selected_group() -> Result
     );
     let stale = Session::load("session_stale_unselected_crash")?;
     assert!(matches!(stale.status, SessionStatus::Crashed { .. }));
+    Ok(())
+}
+
+#[test]
+fn crash_recovery_ignores_lifecycle_sidecars_and_rotations() -> Result<()> {
+    let _env_lock = lock_env();
+    let temp_home = tempfile::tempdir()?;
+    let _home = EnvVarGuard::set("JCODE_HOME", temp_home.path().as_os_str());
+    let _test_flag = EnvVarGuard::set("JCODE_TEST_SESSION", "0");
+    let session_id = "session_crash_lifecycle_compat";
+
+    let mut crashed = Session::create_with_id(
+        session_id.to_string(),
+        None,
+        Some("crash lifecycle compatibility".to_string()),
+    );
+    crashed.mark_crashed(Some("compatibility fixture".to_string()));
+    crashed.add_message(
+        Role::User,
+        vec![ContentBlock::Text {
+            text: "recover this ordinary session".to_string(),
+            cache_control: None,
+        }],
+    );
+    crashed.save()?;
+
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        std::fs::write(
+            temp_home
+                .path()
+                .join("sessions")
+                .join(format!("{session_id}{suffix}")),
+            "torn lifecycle metadata",
+        )?;
+    }
+
+    let recovered_ids = recover_crashed_sessions_by_ids(&[session_id.to_string()])?;
+    assert_eq!(recovered_ids.len(), 1);
+    let recovered = Session::load(&recovered_ids[0])?;
+    assert_eq!(recovered.parent_id.as_deref(), Some(session_id));
+    for suffix in [
+        ".lifecycle.jsonl",
+        ".lifecycle.1.jsonl",
+        ".lifecycle.2.jsonl",
+        ".lifecycle.3.jsonl",
+    ] {
+        assert!(
+            temp_home
+                .path()
+                .join("sessions")
+                .join(format!("{session_id}{suffix}"))
+                .exists()
+        );
+    }
     Ok(())
 }
 

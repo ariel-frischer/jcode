@@ -135,6 +135,29 @@ fn command_palette_dispatches_shortcut_commands() {
 }
 
 #[test]
+fn command_palette_tab_dispatches_selected_shortcut() {
+    let mut app = create_test_app();
+    assert!(!app.queue_mode);
+    app.open_command_palette();
+    for c in "queue".chars() {
+        app.handle_key(
+            crossterm::event::KeyCode::Char(c),
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+
+    app.handle_key(
+        crossterm::event::KeyCode::Tab,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .unwrap();
+
+    assert!(app.queue_mode);
+    assert!(!app.command_palette_is_open());
+}
+
+#[test]
 fn command_palette_models_command_opens_model_picker() {
     let mut app = create_test_app();
     configure_test_remote_models(&mut app);
@@ -195,6 +218,22 @@ fn command_palette_model_selection_preserves_composer_draft_and_cursor() {
     )
     .unwrap();
     wait_for_model_picker_load(&mut app);
+
+    for _ in 0..3 {
+        if app.inline_interactive_state.is_none() {
+            break;
+        }
+        app.handle_key(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::empty(),
+        )
+        .unwrap();
+    }
+
+    assert!(
+        app.inline_interactive_state.is_none(),
+        "model selection should close the picker"
+    );
 
     assert_eq!(app.input(), "draft before model picker");
     assert_eq!(app.cursor_pos(), "draft before".len());

@@ -100,6 +100,20 @@ impl Agent {
         self.session.model = Some(self.provider_model());
         let event = crate::provider::ProviderStateEvent::selected_model(source, resolved_model);
         self.provider_runtime_state.apply(event);
+        self.record_strategy_switch_lifecycle(
+            crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+            match source {
+                crate::provider::ProviderModelSelectionSource::User => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::Manual
+                }
+                crate::provider::ProviderModelSelectionSource::Auth => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::ProviderFallback
+                }
+                crate::provider::ProviderModelSelectionSource::Startup => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::Startup
+                }
+            },
+        );
         self.persist_session_best_effort("route selection");
         self.log_env_snapshot("set_route_selection");
         Ok(())
@@ -128,6 +142,20 @@ impl Agent {
         self.session.model = Some(self.provider_model());
         let event = crate::provider::ProviderStateEvent::selected_model(source, resolved_model);
         self.provider_runtime_state.apply(event);
+        self.record_strategy_switch_lifecycle(
+            crate::session::lifecycle_types::LifecycleDecisionType::Completed,
+            match source {
+                crate::provider::ProviderModelSelectionSource::User => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::Manual
+                }
+                crate::provider::ProviderModelSelectionSource::Auth => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::ProviderFallback
+                }
+                crate::provider::ProviderModelSelectionSource::Startup => {
+                    crate::session::lifecycle_types::LifecycleSemanticReason::Startup
+                }
+            },
+        );
         self.persist_session_best_effort("model selection");
         self.log_env_snapshot("set_model");
         Ok(())

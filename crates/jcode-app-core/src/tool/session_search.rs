@@ -724,6 +724,8 @@ fn collect_session_files(
     }
     for entry in std::fs::read_dir(sessions_dir)?.flatten() {
         let path = entry.path();
+        // Search indexes user session snapshots only. Lifecycle JSONL sidecars
+        // remain an internal query source and must not become searchable text.
         if path.extension().is_none_or(|extension| extension != "json") {
             continue;
         }

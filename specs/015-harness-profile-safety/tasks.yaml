@@ -1,0 +1,230 @@
+tasks:
+  branch: "agent/jcode-8on"
+  created: "2026-08-23"
+  spec_path: "specs/015-harness-profile-safety/spec.yaml"
+  plan_path: "specs/015-harness-profile-safety/plan.yaml"
+
+summary:
+  total_tasks: 14
+  total_phases: 5
+  parallel_opportunities: 4
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Validate Autospec artifacts and freeze legacy public wire behavior."
+    tasks:
+      - id: "T001"
+        title: "Validate specification, plan, and tasks artifacts"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-harness-profile-safety/"
+        dependencies: []
+        acceptance_criteria:
+          - "autospec artifact passes for spec.yaml, plan.yaml, and tasks.yaml."
+      - id: "T002"
+        title: "Add legacy omitted-field and object-profile schema tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Existing object-shaped profile and omitted profile/safety requests preserve their exact JSON shape."
+  - number: 2
+    title: "Foundational wire contracts"
+    purpose: "Add optional stable request and daemon message fields with test-first compatibility coverage."
+    tasks:
+      - id: "T003"
+        title: "Add failing public send-message safety schema tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api/src/harness_api_tests/schema_snapshot.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests cover max_turns, token_budget, deadline, combined controls, null/omitted controls, and round trips."
+      - id: "T004"
+        title: "Add failing daemon message run-safety round-trip tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-protocol/src/protocol_tests/"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Legacy messages still decode and new optional RunSafetyConfig round-trips."
+      - id: "T005"
+        title: "Implement additive harness and protocol request fields"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api/src/requests.rs"
+        dependencies: ["T003", "T004"]
+        acceptance_criteria:
+          - "Stable harness fields and daemon RunSafetyConfig are optional, serde-defaulted, and skip when absent."
+  - number: 3
+    title: "User Story 1 - Start harness sessions with named profiles"
+    purpose: "Resolve SDK profile strings without breaking object-shaped protocol-v1 clients."
+    story_reference: "US-001"
+    independent_test: "Translate valid, unknown, empty, object, and omitted profile inputs and exercise the bridge connection after an error."
+    tasks:
+      - id: "T006"
+        title: "Add failing named-profile bridge translation tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Tests require string-name resolution, typed unknown/empty/type errors, no pending attach on error, object compatibility, and omission compatibility."
+      - id: "T007"
+        title: "Implement credential-free resolved-profile conversion"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-base/src/config/session_profile.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "The conversion reuses canonical tool selection and includes provider/model/reasoning/tool/skill/prompt fields without credentials."
+      - id: "T008"
+        title: "Resolve string profiles and return typed bridge errors"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-harness-api-server/src/translate.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Valid names become SessionProfileStartup objects; failures return InvalidRequest without daemon subscribe or disconnect; objects and omission remain compatible."
+  - number: 4
+    title: "User Story 2 - Bound harness turns"
+    purpose: "Forward and enforce released SDK safety controls at the daemon trust boundary."
+    story_reference: "US-002"
+    independent_test: "Use fake-provider daemon integration to verify each control, combined controls, omission, invalid values, zero provider work, and no cross-turn leakage."
+    tasks:
+      - id: "T009"
+        title: "Add failing bridge safety forwarding and validation-shape tests"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Each safety field and combined controls are forwarded; omitted values do not add run_safety; wrong JSON types return typed local errors."
+      - id: "T010"
+        title: "Forward public safety fields into daemon RunSafetyConfig"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-harness-api-server/src/translate.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "The bridge accepts released SDK numeric counters, converts them to canonical raw decimal strings for RunSafetyConfig, and emits no run_safety object when all controls are absent."
+      - id: "T011"
+        title: "Add failing daemon preflight and per-turn isolation tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Invalid values produce typed errors before provider work; valid values install invocation source; a later omitted turn is unbounded."
+      - id: "T012"
+        title: "Resolve and install per-message run safety before provider work"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T010", "T011"]
+        acceptance_criteria:
+          - "Daemon combines invocation with existing environment/persisted candidates, validates once, installs/replaces controller for the turn, and reports actionable errors without provider work."
+  - number: 5
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Close runtime, compatibility, quality, and handoff evidence."
+    tasks:
+      - id: "T013"
+        title: "Run focused tests, affected checks, built-binary private-socket smoke, and free-model smoke"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/015-harness-profile-safety/validation.md"
+        dependencies: ["T008", "T012"]
+        acceptance_criteria:
+          - "Receipts cover named profile marker, one enforced budget, each/combined/omitted/error controls, executable identity, and credential redaction."
+      - id: "T014"
+        title: "Run formatting, clippy/guardrails, diff review, and focused commit"
+        status: "Completed"
+        type: "refactor"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "Owned files are formatted, focused and broad required checks pass, no unrelated changes exist, and the branch has one or more focused commits."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: []
+    - story_id: "US-002"
+      depends_on: []
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2, 3]
+    - phase: 2
+      blocks: [4]
+    - phase: 3
+      blocks: [5]
+    - phase: 4
+      blocks: [5]
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T003", "T004"]
+        rationale: "Public harness and daemon protocol tests are in separate crates."
+  - phase: 3
+    parallel_groups: []
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T009", "T011"]
+        rationale: "Bridge forwarding and daemon preflight tests touch separate modules before integration."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4]
+    description: "Complete named profile resolution and per-turn safety enforcement with legacy compatibility."
+    validation: "Focused harness, protocol, bridge, and daemon tests all pass."
+  incremental_delivery:
+    - milestone: "Contracts Frozen"
+      phases: [1, 2]
+      deliverable: "Failing tests define additive public and daemon wire behavior."
+    - milestone: "Harness Compatibility Complete"
+      phases: [1, 2, 3, 4]
+      deliverable: "Named profiles and released safety fields work through the real daemon boundary."
+    - milestone: "Runtime Validated"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Built-binary and free-model public API evidence plus guardrails."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-23T11:10:55Z"
+  artifact_type: "tasks"
