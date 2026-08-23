@@ -1,6 +1,4 @@
-use super::delivery::{
-    TELEMETRY_ENDPOINT, TRANSCRIPT_ENDPOINT, spawn_background_worker, telemetry_status_is_permanent,
-};
+use super::delivery::{TELEMETRY_ENDPOINT, TRANSCRIPT_ENDPOINT, telemetry_status_is_permanent};
 use super::*;
 
 mod delivery_retry_tests;
