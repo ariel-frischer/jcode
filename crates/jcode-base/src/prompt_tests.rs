@@ -15,7 +15,10 @@ fn session_profile_overlay_is_trusted_system_prompt_content() {
     }
     .append_to_split(&mut split);
 
-    let guidance = split.static_part.find("global and project guidance").unwrap();
+    let guidance = split
+        .static_part
+        .find("global and project guidance")
+        .unwrap();
     let instructions = split.static_part.find("review carefully").unwrap();
     let first_skill = split.static_part.find("skill prompt one").unwrap();
     let second_skill = split.static_part.find("skill prompt two").unwrap();
