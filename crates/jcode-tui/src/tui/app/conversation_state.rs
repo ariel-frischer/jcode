@@ -19,7 +19,9 @@ impl App {
     }
 
     pub(super) fn ensure_provider_messages_hydrated(&mut self) {
-        if self.provider_messages_hydrated {
+        if (self.is_remote && self.provider_messages_hydrated)
+            || (!self.is_remote && self.local_provider_messages.is_some())
+        {
             return;
         }
 
@@ -35,8 +37,14 @@ impl App {
     }
 
     pub(super) fn materialized_provider_messages(&self) -> Vec<Message> {
-        if self.provider_messages_hydrated {
+        if self.is_remote && self.provider_messages_hydrated {
             self.messages.clone()
+        } else if !self.is_remote && !self.messages.is_empty() {
+            self.messages.clone()
+        } else if !self.is_remote {
+            self.local_provider_messages.clone().unwrap_or_else(|| {
+                self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
+            })
         } else {
             self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
         }
@@ -226,7 +234,11 @@ impl App {
 
     pub(super) fn add_provider_message(&mut self, message: Message) {
         self.ensure_provider_messages_hydrated();
-        self.messages.push(message.clone());
+        if self.is_remote {
+            self.messages.push(message.clone());
+        } else if let Some(provider_messages) = self.local_provider_messages.as_mut() {
+            provider_messages.push(message.clone());
+        }
         if self.is_remote || !self.provider.uses_jcode_compaction() {
             return;
         }
@@ -237,8 +249,12 @@ impl App {
     }
 
     pub(super) fn replace_provider_messages(&mut self, messages: Vec<Message>) {
-        self.messages = messages;
-        self.provider_messages_hydrated = true;
+        if self.is_remote {
+            self.messages = messages;
+            self.provider_messages_hydrated = true;
+        } else {
+            self.local_provider_messages = Some(messages);
+        }
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();
@@ -247,7 +263,11 @@ impl App {
 
     pub(super) fn clear_provider_messages(&mut self) {
         self.messages.clear();
-        self.provider_messages_hydrated = true;
+        if self.is_remote {
+            self.provider_messages_hydrated = true;
+        } else {
+            self.local_provider_messages = Some(Vec::new());
+        }
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();
@@ -810,7 +830,9 @@ impl App {
                 };
                 if self.is_remote || !self.messages.is_empty() {
                     self.messages
-                        .insert(index + 1 + inserted + offset, inserted_message);
+                        .insert(index + 1 + inserted + offset, inserted_message.clone());
+                } else if let Some(provider_messages) = self.local_provider_messages.as_mut() {
+                    provider_messages.insert(index + 1 + inserted + offset, inserted_message);
                 }
                 self.session
                     .insert_message(index + 1 + inserted + offset, stored_message);

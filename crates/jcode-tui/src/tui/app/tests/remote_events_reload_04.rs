@@ -1836,7 +1836,6 @@ fn test_debug_command_message_respects_queue_mode() {
 
     // Test 1: When not processing, should submit directly
     let initial_session_messages = app.session.messages.len();
-    let initial_provider_messages = app.materialized_provider_messages().len();
     app.is_processing = false;
     let result = app.handle_debug_command("message:hello");
     assert!(
@@ -1844,10 +1843,10 @@ fn test_debug_command_message_respects_queue_mode() {
         "Expected submitted, got: {}",
         result
     );
-    // The message should be processed for display/session storage and retained
-    // in the immutable local provider-facing projection.
+    // The message should be processed for display/session storage while local
+    // provider messages are not retained in `app.messages`.
     assert!(app.pending_turn);
-    assert_eq!(app.messages.len(), initial_provider_messages + 1);
+    assert_eq!(app.messages.len(), 0);
     assert_eq!(app.display_messages.len(), 1);
     assert_eq!(app.session.messages.len(), initial_session_messages + 1);
     let submitted_message = app
@@ -1858,16 +1857,6 @@ fn test_debug_command_message_respects_queue_mode() {
     assert_eq!(submitted_message.role, crate::message::Role::User);
     assert_eq!(submitted_message.display_role, None);
     assert_eq!(submitted_message.content_preview(), "hello");
-    let provider_message = app
-        .messages
-        .last()
-        .expect("submitted debug message should be materialized for the provider");
-    assert_eq!(provider_message.role, crate::message::Role::User);
-    assert!(matches!(
-        provider_message.content.as_slice(),
-        [crate::message::ContentBlock::Text { text, .. }] if text == "hello"
-    ));
-
     // Reset for next test
     app.pending_turn = false;
     app.messages.clear();

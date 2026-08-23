@@ -797,6 +797,7 @@ pub struct App {
     mcp_manager: Arc<RwLock<McpManager>>,
     messages: Vec<Message>,
     provider_messages_hydrated: bool,
+    local_provider_messages: Option<Vec<Message>>,
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,
