@@ -1,0 +1,342 @@
+plan:
+  branch: "016-cargo-disk-safety"
+  created: "2026-08-23"
+  spec_path: "specs/016-cargo-disk-safety/spec.yaml"
+
+summary: |
+  Keep disk-safety policy in one repository-local Python command that runs independently of Cargo. The command will report filesystem headroom and exactly one direct-target record for every Git-registered worktree, enforce a strict decimal configuration contract, and expose dry-run cleanup by default. scripts/check_guardrails.sh will invoke the same reserve check after argument parsing but before every Cargo path; available bytes less than or equal to the effective threshold block validation.
+
+  Cleanup will derive candidates only from current Git worktree registration and Jcode activity evidence, scan direct non-symlink target directories without following links, and label st_blocks-based allocated-byte totals as estimates. Explicit apply will use an all-candidates final validation gate after scanning, then recheck each direct target immediately before removal. Any malformed configuration, uncertain session/process evidence, failed registration or dirty-state check, containment change, symlink, unreadable path, or artifact at or inside the configured age boundary aborts before deletion. Apply acceptance tests will create only temporary repositories and registered worktrees.
+
+technical_context:
+  language: "Python 3 with Bash and GNU Make integration in a Rust 2024 workspace"
+  framework: "None"
+  primary_dependencies:
+    - name: "Python standard library"
+      version: "repository python3 runtime"
+      purpose: "Provides argparse, pathlib, os.statvfs/stat metadata, JSON parsing, subprocess execution, and temporary-fixture tests without starting Cargo or adding packages."
+    - name: "Git CLI"
+      version: "repository-supported Git"
+      purpose: "Provides canonical worktree registration, main-checkout identity, repository roots, and tracked/untracked dirty-state evidence."
+    - name: "Linux procfs"
+      version: "kernel-provided /proc"
+      purpose: "Provides relevant Cargo, rustc, rust-analyzer, and Jcode process activity evidence for cleanup apply."
+    - name: "Jcode session storage"
+      version: "current active_pids and sessions JSON contract"
+      purpose: "Maps live session PID markers to persisted working directories so active worktrees are excluded."
+  storage: "Read-only Git worktree metadata, filesystem allocation metadata, /proc process metadata, and JCODE_HOME session files; cleanup deletes only approved generated target directories and creates no persistent state."
+  testing:
+    framework: "Python unittest plus shell/Make contract checks"
+    approach: "Write focused unit and temporary-repository fixture tests first; instrument guardrails to prove zero Cargo starts at blocked/invalid boundaries; exercise apply only inside temporary registered worktrees; then run syntax, Make, documentation, and reserve-gated repository checks."
+  target_platform: "Linux developer worktrees for cleanup apply; report and reserve check remain usable wherever the required Python filesystem APIs are available."
+  project_type: "cli"
+  performance_goals: "Emit one filesystem summary and exactly one bounded record per registered worktree; inspect only registered worktree roots and their direct target trees; never traverse source, unregistered paths, or unrelated filesystems."
+  constraints:
+    - "Available bytes less than or equal to the configured reserve are inadequate; only strictly greater headroom permits Cargo."
+    - "The newest target artifact must be strictly older than the configured age; equality remains excluded."
+    - "Configuration accepts only documented unambiguous non-negative decimal values and fails before Cargo or cleanup on invalid input."
+    - "Cleanup defaults to dry-run and apply requires the explicit documented authorization form."
+    - "Uncertain registration, session, process, dirty-state, readability, containment, symlink, or recency evidence blocks the entire apply operation."
+    - "No apply validation may reference a real developer worktree or target directory."
+    - "No operation may remove source, branches, worktree roots, whole worktrees, symlinks, shared caches, or paths outside the repository."
+    - "No new Cargo crate or third-party Python dependency is introduced."
+  scale_scope: "One repository invocation over N Git-registered worktrees, producing one record per worktree and scanning only each readable direct target directory."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Scope is limited to the disk-safety script, guardrail preflight, Make entry points, focused tests, and one developer guide; Cargo cache architecture and worktree lifecycle remain unchanged."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "The feature is additive; above a valid reserve, existing guardrail ordering and commands continue unchanged, and no persisted Jcode or Git data shape is modified."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "One resolver owns CLI option, environment variable, and safe built-in default precedence and documents unset, invalid, boundary, and effective values."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Repository development policy stays in scripts and Make rather than entering Rust runtime crates; it reads existing Git and Jcode contracts without changing dependencies or protocols."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Threshold, configuration, registration, activity, process uncertainty, dirty state, containment, symlink, readability, recency, dry-run, all-or-nothing revalidation, and temporary-fixture apply each receive direct checks."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "External configuration and filesystem/process/session metadata are validated at ingestion and again before deletion, with actionable failures and no silent unsafe fallback."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Focused Python and contract checks run first; scripts/check_guardrails.sh runs only when its own new reserve preflight reports adequate headroom."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "One small script owns report, check, and cleanup policy for Ariel's worktree-heavy workflow, reusing existing Make, Git, guardrail, and session paths without a duplicate framework."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "Destructive cleanup is never automatic, requires explicit apply, aborts on uncertainty, and is validated only against disposable fixtures."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "The report uses filesystem allocation and free-space APIs rather than logical-size guesses, remains bounded to registered targets, and validates the actual script/Make/guardrail execution path."
+
+research_findings:
+  decisions:
+    - topic: "Canonical implementation owner"
+      decision: "Use one Python standard-library CLI for report, reserve check, and cleanup; keep Bash and Make as thin entry points."
+      rationale: "The preflight must execute before Cargo, the behavior is repository orchestration rather than product runtime, and Python supports deterministic temporary-fixture coverage without new dependencies."
+      alternatives_considered:
+        - "A Rust binary, which would require Cargo to build the tool intended to protect Cargo from inadequate headroom."
+        - "A shell-only implementation, which would make structured metadata parsing, allocated-byte accounting, and fail-closed fixture tests harder to review."
+    - topic: "Registered worktree and repository boundary"
+      decision: "Use git worktree list --porcelain as the sole registration source, its main-worktree record as the permanent exclusion, and the canonical main repository path as the containment boundary."
+      rationale: "Git metadata is authoritative for registration and avoids discovering or traversing unrelated directories. Every registered worktree receives one report record; no arbitrary display cap may silently omit one."
+      alternatives_considered:
+        - "Scan .worktrees directories, which includes stale or unregistered paths and misses differently located registered worktrees."
+        - "Report only a fixed number of worktrees, which conflicts with the requirement to represent every registered worktree."
+    - topic: "Allocated-byte estimate"
+      decision: "Sum st_blocks times 512 for non-symlink entries, deduplicate inode identities within a target scan, and fall back to st_size only where st_blocks is unavailable; use statvfs available blocks for filesystem headroom."
+      rationale: "Allocated blocks better approximate disk pressure than logical file sizes while remaining explicitly an estimate that does not promise reclaimable bytes."
+      alternatives_considered:
+        - "Logical byte totals, which overstate sparse files and do not describe allocation."
+        - "Parsing du/df output, which adds platform- and locale-sensitive command contracts."
+    - topic: "Configuration and boundary semantics"
+      decision: "Resolve explicit CLI value, then JCODE_DISK_* environment value, then documented default; accept decimal integers only. Block reserve when free bytes are less than or equal to the threshold, and admit cleanup only when newest artifact age is strictly greater than the age threshold."
+      rationale: "This implements the specification's inclusive stop boundary and strict older-than cleanup rule while rejecting negative, empty, suffixed, fractional, or otherwise ambiguous values."
+      alternatives_considered:
+        - "Human-size suffix parsing, which introduces ambiguous unit spelling and conversion rules."
+        - "Allow equality at either boundary, which contradicts the accepted safety contract."
+    - topic: "Live activity authority"
+      decision: "Combine live JCODE_HOME active PID markers plus session working_dir metadata with relevant Linux /proc process inspection; definite activity excludes a worktree and unreadable, malformed, incomplete, or unsupported evidence blocks apply."
+      rationale: "Neither persisted session data nor process inspection alone covers all active Cargo and Jcode work, and deletion must fail closed when inactivity cannot be proven."
+      alternatives_considered:
+        - "Treat unreadable /proc records as inactive, which can authorize deletion during a live build."
+        - "Use process-name output from ps, which is text-format and race sensitive and still lacks authoritative working-directory evidence."
+    - topic: "Apply revalidation and batch safety"
+      decision: "Build a dry-run candidate set, then on apply final-revalidate the complete candidate set after usage scans and abort before deletion if any candidate fails; immediately recheck each direct target invariant at its deletion boundary."
+      rationale: "A whole-batch validation gate prevents an induced failure in one candidate from allowing earlier candidate deletion, while the deletion-boundary check narrows time-of-check/time-of-use exposure."
+      alternatives_considered:
+        - "Delete while scanning, which can produce partial cleanup before a later unsafe candidate is discovered."
+        - "Trust the dry-run snapshot during apply, which ignores registration, activity, dirty-state, path, and recency changes."
+
+data_model:
+  entities:
+    - name: "DiskSafetyConfiguration"
+      description: "Effective operator policy for filesystem reserve, target recency, and explicit cleanup mode."
+      fields:
+        - name: "minimum_free_bytes"
+          type: "non-negative integer"
+          description: "Inclusive stop threshold checked before Cargo."
+          constraints: "Free bytes must be strictly greater to pass; malformed, negative, fractional, suffixed, or empty input is invalid."
+        - name: "minimum_age_days"
+          type: "non-negative integer"
+          description: "Newest-artifact age threshold for cleanup."
+          constraints: "Artifact age must be strictly greater; equality is excluded."
+        - name: "apply"
+          type: "boolean"
+          description: "Explicit authorization to enter deletion behavior."
+          constraints: "Defaults false and is true only through the documented apply form."
+      relationships:
+        - target: "FilesystemHeadroom"
+          type: "one-to-one"
+          description: "The reserve policy classifies the current headroom reading."
+    - name: "FilesystemHeadroom"
+      description: "Available allocation capacity for the filesystem containing the repository."
+      fields:
+        - name: "available_bytes"
+          type: "integer"
+          description: "statvfs available blocks converted to bytes."
+          constraints: "Must be readable; otherwise report/check fails."
+        - name: "reserve_status"
+          type: "adequate | inadequate"
+          description: "Result of the inclusive threshold comparison."
+          constraints: "Adequate only when available_bytes is greater than minimum_free_bytes."
+      relationships: []
+    - name: "RegisteredWorktree"
+      description: "A checkout currently listed by Git and evaluated exactly once for reporting and cleanup."
+      fields:
+        - name: "canonical_path"
+          type: "Path"
+          description: "Canonical registered checkout root."
+          constraints: "Cleanup requires containment within the main repository boundary."
+        - name: "role"
+          type: "main | linked"
+          description: "Whether the worktree is the main checkout."
+          constraints: "Main is always excluded from cleanup."
+        - name: "safety_state"
+          type: "clean | dirty | active | unreadable | uncertain"
+          description: "Combined Git, session, and process evidence."
+          constraints: "Only clean, inactive, fully readable linked worktrees can become candidates."
+      relationships:
+        - target: "TargetUsageRecord"
+          type: "one-to-one"
+          description: "Each registered worktree has at most one direct target observation."
+    - name: "TargetUsageRecord"
+      description: "Bounded observation of a worktree's immediate target directory."
+      fields:
+        - name: "target_path"
+          type: "Path"
+          description: "The exact worktree_path/target location."
+          constraints: "Must be a direct, real, non-symlink directory contained in the repository."
+        - name: "allocated_bytes_estimate"
+          type: "integer or unknown"
+          description: "Allocated-block estimate for readable entries."
+          constraints: "Always labeled estimate; no exact reclaimed-space promise."
+        - name: "newest_artifact_mtime"
+          type: "timestamp or unknown"
+          description: "Newest readable non-symlink entry used for recency."
+          constraints: "Unknown or boundary-equal age is not eligible."
+      relationships:
+        - target: "CleanupCandidate"
+          type: "one-to-one"
+          description: "A fully safe and old target record may produce one cleanup candidate."
+    - name: "CleanupCandidate"
+      description: "A direct target selected for dry-run output and possible explicit apply after fresh validation."
+      fields:
+        - name: "eligibility"
+          type: "eligible | excluded | uncertain"
+          description: "Deterministic selection result and actionable reason."
+          constraints: "Only eligible enters final validation; uncertainty aborts apply."
+        - name: "final_validation"
+          type: "pending | passed | failed"
+          description: "Fresh registration, activity, process, dirty, containment, symlink, readability, and recency decision."
+          constraints: "Every candidate must pass before any removal starts."
+      relationships:
+        - target: "RegisteredWorktree"
+          type: "many-to-one"
+          description: "Each candidate belongs to one currently registered linked worktree."
+
+api_contracts:
+  endpoints:
+    - method: "CLI"
+      path: "scripts/disk_safety.py report"
+      description: "Print one filesystem headroom summary and one target-usage record per registered worktree."
+      request:
+        content_type: "command-line arguments and environment"
+        body_schema: "{path?: absolute-or-current repository path}"
+      response:
+        success_code: 0
+        body_schema: "bounded human-readable filesystem summary plus N registered-worktree records with estimate or unknown state"
+      errors:
+        - code: 1
+          description: "Repository, registration, filesystem, or report metadata cannot be inspected safely."
+        - code: 2
+          description: "Configuration is malformed or unsupported."
+    - method: "CLI"
+      path: "scripts/disk_safety.py check"
+      description: "Check current filesystem headroom using the same policy invoked by guardrails before Cargo."
+      request:
+        content_type: "command-line arguments and environment"
+        body_schema: "{path?: filesystem path, min_free_bytes?: non-negative decimal integer}"
+      response:
+        success_code: 0
+        body_schema: "adequate headroom summary with configured and effective reserve"
+      errors:
+        - code: 1
+          description: "Free bytes are less than or equal to the effective threshold or filesystem state is unreadable."
+        - code: 2
+          description: "Threshold configuration is invalid."
+    - method: "CLI"
+      path: "scripts/disk_safety.py clean"
+      description: "Default dry-run that reports every eligibility/exclusion reason and aggregate allocated-byte estimate without deleting."
+      request:
+        content_type: "command-line arguments and environment"
+        body_schema: "{path?: repository path, min_age_days?: non-negative decimal integer, apply:false}"
+      response:
+        success_code: 0
+        body_schema: "deterministic candidate/exclusion records and aggregate selected allocated-byte estimate"
+      errors:
+        - code: 1
+          description: "Safety metadata or filesystem state cannot be trusted."
+        - code: 2
+          description: "Cleanup configuration is invalid."
+    - method: "CLI"
+      path: "scripts/disk_safety.py clean --apply"
+      description: "Explicitly remove only final-revalidated generated target directories."
+      request:
+        content_type: "command-line arguments and environment"
+        body_schema: "{path: registered temporary-fixture repository during acceptance tests, min_age_days?: non-negative decimal integer, apply:true}"
+      response:
+        success_code: 0
+        body_schema: "removed target records and aggregate allocated-byte estimate"
+      errors:
+        - code: 1
+          description: "Any selection or final-revalidation predicate is false or uncertain; no deletion begins."
+        - code: 2
+          description: "Apply configuration or authorization is invalid."
+
+project_structure:
+  documentation:
+    - path: "specs/016-cargo-disk-safety/"
+      description: "Autospec specification, plan, tasks, and later validation evidence for Bead jcode-6gp."
+    - path: "docs/DISK_SAFETY.md"
+      description: "Developer operations for report, reserve check, dry-run, explicit apply, precedence, threshold/age semantics, exclusions, estimates, and Cargo rebuild rollback."
+  source_code:
+    - path: "scripts/disk_safety.py"
+      description: "Canonical configuration, reporting, worktree/activity inspection, candidate selection, final revalidation, and target-only deletion logic."
+    - path: "scripts/check_guardrails.sh"
+      description: "Reserve preflight integration placed before the first possible Cargo command."
+    - path: "Makefile"
+      description: "Discoverable disk-report, disk-check, disk-clean dry-run, and disk-clean-apply entry points with explicit variables."
+  tests:
+    - path: "scripts/test_disk_safety.py"
+      description: "Focused unit, process/session uncertainty, post-scan mutation, command contract, and temporary registered-worktree apply fixtures."
+    - path: "specs/016-cargo-disk-safety/validation.md"
+      description: "Later command receipts proving requirement coverage, reserve-gated broad validation, and that apply paths used only temporary fixtures."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze safety contracts"
+    goal: "Turn every configuration, threshold, activity, filesystem, and destructive boundary into focused failing tests before production changes."
+    deliverables:
+      - "Inclusive reserve tests for below, equal, and above values with zero Cargo starts when blocked"
+      - "Strict newest-artifact age tests for newer, equal, older, empty, and unreadable targets"
+      - "Negative-path matrix for malformed config and uncertain registration/session/process/filesystem evidence"
+      - "Temporary registered-worktree fixtures for dry-run, apply, and post-scan mutations"
+  - phase: 2
+    name: "Bounded report and reserve preflight"
+    goal: "Provide truthful allocated-byte visibility and prevent guardrails from starting Cargo without adequate reserve."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "One headroom summary and one direct-target record for every registered worktree"
+      - "Allocated-block estimate accounting without symlink traversal"
+      - "Strict configuration resolver and actionable check failures"
+      - "Guardrail preflight before every Cargo invocation path"
+  - phase: 3
+    name: "Fail-closed cleanup selection"
+    goal: "Produce a deterministic dry-run candidate and exclusion inventory without deleting anything."
+    dependencies:
+      - "Phase 1"
+      - "Phase 2"
+    deliverables:
+      - "Registered in-repository non-main direct-target containment checks"
+      - "Cleanliness, readability, session, process, symlink, and strict recency exclusions"
+      - "Per-record reasons and aggregate allocated-byte estimate"
+      - "Dry-run as the default for direct CLI and Make entry points"
+  - phase: 4
+    name: "Explicit apply and deletion-boundary revalidation"
+    goal: "Remove only generated targets whose complete safety evidence remains valid after scanning."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Unambiguous apply authorization"
+      - "Whole-candidate-set final validation before deletion begins"
+      - "Immediate registration, activity/process, dirty, containment, direct-child, symlink, readability, and recency rechecks"
+      - "Temporary-fixture-only proof that eligible target content is removed while source, roots, branches, and external sentinels remain"
+  - phase: 5
+    name: "Operations, polish, and delivery validation"
+    goal: "Make the workflow discoverable and prove the repository command contracts without risking real artifacts."
+    dependencies:
+      - "Phase 2"
+      - "Phase 4"
+    deliverables:
+      - "Make targets for report, check, dry-run, and explicit apply"
+      - "Developer guide covering defaults, precedence, boundaries, exclusions, estimates, and Cargo rebuild rollback"
+      - "Focused Python, syntax, Make, documentation, and guardrail-order checks"
+      - "Reserve-gated repository guardrails with any unrelated baseline failures isolated"
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-23T20:41:05Z"
+  artifact_type: "plan"

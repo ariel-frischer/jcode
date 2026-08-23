@@ -18,7 +18,6 @@ from typing import Iterable, Sequence
 
 DEFAULT_MIN_FREE_BYTES = 10 * 1024**3
 DEFAULT_CLEAN_MIN_AGE_DAYS = 7
-DEFAULT_MAX_WORKTREES = 25
 BUILD_PROCESS_NAMES = {"cargo", "rustc", "rust-analyzer", "jcode"}
 
 
@@ -35,6 +34,8 @@ class WorktreeSnapshot:
     dirty: bool = False
     target_bytes: int = 0
     target_mtime: float | None = None
+    target_state: str = "unknown"
+    target_reason: str = "target has not been inspected"
     status_error: bool = False
 
 
@@ -46,11 +47,19 @@ class CleanupCandidate:
     target_bytes: int
 
 
+@dataclass(frozen=True)
+class CleanupDecision:
+    snapshot: WorktreeSnapshot
+    reason: str
+    candidate: CleanupCandidate | None = None
+
+
 def parse_non_negative_int(raw: str, name: str) -> int:
-    value = raw.strip()
-    if not value or not value.isdigit():
-        raise DiskSafetyError(f"{name} must be a non-negative integer, got {raw!r}")
-    return int(value)
+    if not raw or not raw.isascii() or not raw.isdecimal():
+        raise DiskSafetyError(
+            f"{name} must be an unambiguous non-negative decimal integer, got {raw!r}"
+        )
+    return int(raw)
 
 
 def parse_positive_int(raw: str, name: str) -> int:
@@ -61,7 +70,7 @@ def parse_positive_int(raw: str, name: str) -> int:
 
 
 def configured_value(
-    cli_value: int | None,
+    cli_value: int | str | None,
     env_name: str,
     default: int,
     parser=parse_non_negative_int,
@@ -75,7 +84,7 @@ def configured_value(
 
 
 def preflight_ok(free_bytes: int, min_free_bytes: int) -> bool:
-    return free_bytes >= min_free_bytes
+    return free_bytes > min_free_bytes
 
 
 def human_bytes(value: int) -> str:
@@ -126,7 +135,7 @@ def safe_target_path(repo_root: Path, worktree_path: Path, target_path: Path) ->
     return True, "safe"
 
 
-def directory_usage(path: Path) -> tuple[int, float]:
+def directory_usage(path: Path) -> tuple[int, float | None]:
     """Return allocated-byte estimate and newest mtime without following symlinks."""
     total = 0
     seen: set[tuple[int, int]] = set()
@@ -142,7 +151,7 @@ def directory_usage(path: Path) -> tuple[int, float]:
 
     root_stat = path.stat()
     include(root_stat)
-    newest_mtime = root_stat.st_mtime
+    newest_mtime: float | None = None
     walk_errors: list[OSError] = []
 
     def record_error(exc: OSError) -> None:
@@ -154,7 +163,6 @@ def directory_usage(path: Path) -> tuple[int, float]:
         root_path = Path(root)
         root_stat = root_path.stat()
         include(root_stat)
-        newest_mtime = max(newest_mtime, root_stat.st_mtime)
         kept_dirs = []
         for name in dirs:
             directory = root_path / name
@@ -162,7 +170,6 @@ def directory_usage(path: Path) -> tuple[int, float]:
                 continue
             directory_stat = directory.stat()
             include(directory_stat)
-            newest_mtime = max(newest_mtime, directory_stat.st_mtime)
             kept_dirs.append(name)
         dirs[:] = kept_dirs
         for name in files:
@@ -171,7 +178,11 @@ def directory_usage(path: Path) -> tuple[int, float]:
                 continue
             stat = file_path.stat()
             include(stat)
-            newest_mtime = max(newest_mtime, stat.st_mtime)
+            newest_mtime = (
+                stat.st_mtime
+                if newest_mtime is None
+                else max(newest_mtime, stat.st_mtime)
+            )
     if walk_errors:
         raise walk_errors[0]
     return total, newest_mtime
@@ -264,31 +275,57 @@ def active_session_paths(home: Path | None = None) -> tuple[set[Path], list[str]
     return active, warnings
 
 
-def active_process_for(path: Path) -> bool:
-    """Detect build/Jcode processes whose cwd or command line names this worktree."""
-    proc_root = Path("/proc")
+def active_process_state(
+    path: Path, *, proc_root: Path = Path("/proc")
+) -> tuple[bool, list[str]]:
+    """Return relevant process activity and any evidence that cannot be trusted."""
+    warnings: list[str] = []
     if not proc_root.is_dir():
-        return False
+        return False, [f"process metadata is unavailable at {proc_root}"]
     path = path.resolve(strict=False)
     own_pid = os.getpid()
-    for entry in proc_root.iterdir():
+    live_procfs = proc_root == Path("/proc")
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError as exc:
+        return False, [f"cannot inspect process metadata: {exc}"]
+    for entry in entries:
         if not entry.name.isdigit() or int(entry.name) == own_pid:
             continue
         try:
             comm = (entry / "comm").read_text().strip()
-            if comm not in BUILD_PROCESS_NAMES:
-                continue
-            cwd = (entry / "cwd").resolve(strict=False)
-            if path_within(cwd, path):
-                return True
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            warnings.append(f"cannot identify process {entry.name}: {exc}")
+            continue
+        if comm not in BUILD_PROCESS_NAMES:
+            continue
+        try:
             command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(
                 errors="replace"
             )
             if str(path) in command:
-                return True
-        except (OSError, PermissionError):
+                return True, []
+            cwd_text = os.readlink(entry / "cwd").removesuffix(" (deleted)")
+            if path_within(Path(cwd_text), path):
+                return True, []
+        except FileNotFoundError as exc:
+            if not live_procfs:
+                warnings.append(
+                    f"cannot trust {comm} process {entry.name} metadata: {exc}"
+                )
             continue
-    return False
+        except OSError as exc:
+            warnings.append(
+                f"cannot trust {comm} process {entry.name} metadata: {exc}"
+            )
+            continue
+    return False, warnings
+
+
+def active_process_for(path: Path) -> bool:
+    return active_process_state(path)[0]
 
 
 def _configured_active_paths() -> set[Path]:
@@ -320,28 +357,43 @@ def inspect_worktrees(
     snapshots: list[WorktreeSnapshot] = []
     for path in paths:
         target = path / "target"
-        safe, _ = safe_target_path(repo_root, path, target)
+        safe, target_reason = safe_target_path(repo_root, path, target)
         target_bytes = 0
         target_mtime: float | None = None
+        target_state = "unknown"
+        if not target.exists() and not target.is_symlink():
+            target_state = "absent"
+            target_reason = "direct target directory is absent"
         if safe:
             try:
                 target_bytes, target_mtime = directory_usage(target)
-            except OSError:
-                safe = False
+                target_state = "readable"
+                target_reason = "allocated-byte estimate available"
+            except OSError as exc:
+                target_reason = f"target scan is uncertain: {exc}"
         dirty, status_error = worktree_is_dirty(path) if path.is_dir() else (True, True)
+        process_active, process_warnings = (
+            active_process_state(path) if path.is_dir() else (False, [])
+        )
+        activity_warnings.extend(
+            f"{path}: {warning}" for warning in process_warnings
+        )
         snapshots.append(
             WorktreeSnapshot(
                 path=path,
                 target=target,
                 is_main=path.resolve(strict=False) == repo_root.resolve(strict=False),
                 active=(
-                    bool(activity_warnings) or worktree_is_active(path, active_paths)
+                    any(path_within(active_path, path) for active_path in active_paths)
+                    or process_active
                     if path.is_dir()
                     else False
                 ),
                 dirty=dirty,
                 target_bytes=target_bytes,
                 target_mtime=target_mtime,
+                target_state=target_state,
+                target_reason=target_reason,
                 status_error=status_error,
             )
         )
@@ -355,20 +407,60 @@ def select_cleanup_candidates(
     now: float | None = None,
     min_age_seconds: int,
 ) -> list[CleanupCandidate]:
-    now = time.time() if now is None else now
-    candidates: list[CleanupCandidate] = []
-    for snapshot in snapshots:
-        if snapshot.is_main or snapshot.active or snapshot.dirty or snapshot.status_error:
-            continue
-        if snapshot.target_mtime is None or now - snapshot.target_mtime < min_age_seconds:
-            continue
-        safe, _ = safe_target_path(repo_root, snapshot.path, snapshot.target)
-        if not safe:
-            continue
-        candidates.append(
-            CleanupCandidate(repo_root, snapshot.path, snapshot.target, snapshot.target_bytes)
+    return [
+        decision.candidate
+        for decision in cleanup_decisions(
+            snapshots, repo_root, now=now, min_age_seconds=min_age_seconds
         )
-    return candidates
+        if decision.candidate is not None
+    ]
+
+
+def cleanup_decisions(
+    snapshots: Iterable[WorktreeSnapshot],
+    repo_root: Path,
+    *,
+    now: float | None = None,
+    min_age_seconds: int,
+) -> list[CleanupDecision]:
+    now = time.time() if now is None else now
+    decisions: list[CleanupDecision] = []
+    for snapshot in snapshots:
+        if snapshot.is_main:
+            decisions.append(CleanupDecision(snapshot, "excluded: main checkout"))
+            continue
+        if snapshot.active:
+            decisions.append(CleanupDecision(snapshot, "excluded: active worktree"))
+            continue
+        if snapshot.status_error:
+            decisions.append(CleanupDecision(snapshot, "excluded: dirty state is uncertain"))
+            continue
+        if snapshot.dirty:
+            decisions.append(CleanupDecision(snapshot, "excluded: dirty worktree"))
+            continue
+        if snapshot.target_mtime is None:
+            decisions.append(CleanupDecision(snapshot, "excluded: artifact age is unknown"))
+            continue
+        if now - snapshot.target_mtime <= min_age_seconds:
+            decisions.append(
+                CleanupDecision(snapshot, "excluded: target is not strictly older")
+            )
+            continue
+        safe, reason = safe_target_path(repo_root, snapshot.path, snapshot.target)
+        if not safe:
+            decisions.append(CleanupDecision(snapshot, f"excluded: {reason}"))
+            continue
+        candidate = CleanupCandidate(
+            repo_root, snapshot.path, snapshot.target, snapshot.target_bytes
+        )
+        decisions.append(
+            CleanupDecision(
+                snapshot,
+                f"eligible: allocated-byte estimate={human_bytes(snapshot.target_bytes)}",
+                candidate,
+            )
+        )
+    return decisions
 
 
 def _validate_candidate_state(candidate: CleanupCandidate) -> None:
@@ -388,7 +480,12 @@ def _validate_candidate_state(candidate: CleanupCandidate) -> None:
             "active session state is uncertain: " + "; ".join(activity_warnings)
         )
     active_paths |= _configured_active_paths()
-    if worktree_is_active(candidate.worktree_path, active_paths):
+    process_active, process_warnings = active_process_state(candidate.worktree_path)
+    if process_warnings:
+        raise DiskSafetyError(
+            "process activity is uncertain: " + "; ".join(process_warnings)
+        )
+    if worktree_is_active(candidate.worktree_path, active_paths) or process_active:
         raise DiskSafetyError(f"worktree became active: {candidate.worktree_path}")
     dirty, status_error = worktree_is_dirty(candidate.worktree_path)
     if dirty or status_error:
@@ -408,7 +505,7 @@ def _revalidate_candidate(
 ) -> int:
     _validate_candidate_state(candidate)
     bytes_before, newest_mtime = directory_usage(candidate.target_path)
-    if now - newest_mtime < min_age_seconds:
+    if newest_mtime is None or now - newest_mtime <= min_age_seconds:
         raise DiskSafetyError(f"target became too recent: {candidate.target_path}")
     # directory_usage can take seconds on a large Cargo tree. Recheck volatile
     # registration, activity, dirty-state, and path invariants after that scan,
@@ -456,7 +553,8 @@ def _format_preflight(free_bytes: int, min_free_bytes: int, path: Path) -> str:
     state = "ok" if preflight_ok(free_bytes, min_free_bytes) else "blocked"
     return (
         f"disk preflight: {state}; path={path}; free={human_bytes(free_bytes)}; "
-        f"required reserve={human_bytes(min_free_bytes)}"
+        f"effective reserve bytes={min_free_bytes} ({human_bytes(min_free_bytes)}); "
+        "requires free bytes strictly greater than reserve"
     )
 
 
@@ -480,12 +578,10 @@ def run_check(min_free_bytes: int, path: Path) -> int:
     return 1
 
 
-def run_report(start: Path, max_worktrees: int) -> int:
+def run_report(start: Path) -> int:
     try:
         repo_root, all_paths = discover_worktrees(start)
-        snapshots, activity_warnings = inspect_worktrees(
-            repo_root, all_paths[:max_worktrees]
-        )
+        snapshots, activity_warnings = inspect_worktrees(repo_root, all_paths)
         free_bytes = filesystem_free_bytes(repo_root)
     except (OSError, subprocess.CalledProcessError, DiskSafetyError) as exc:
         print(f"disk report failed: {exc}", file=sys.stderr)
@@ -493,16 +589,16 @@ def run_report(start: Path, max_worktrees: int) -> int:
 
     print(f"repository: {repo_root}")
     print(f"filesystem free: {human_bytes(free_bytes)}")
-    shown = len(snapshots)
-    suffix = f"; {len(all_paths) - shown} omitted" if shown < len(all_paths) else ""
-    print(f"worktrees: {len(all_paths)} listed, {shown} shown{suffix}")
+    print(f"worktrees: {len(all_paths)} registered")
     for warning in activity_warnings:
         print(f"warning: cleanup disabled because {warning}")
     for snapshot in snapshots:
-        if snapshot.target_mtime is None:
-            target = "missing or unsafe"
+        if snapshot.target_state == "readable":
+            target = f"allocated-byte estimate={human_bytes(snapshot.target_bytes)}"
+        elif snapshot.target_state == "absent":
+            target = "absent"
         else:
-            target = human_bytes(snapshot.target_bytes)
+            target = f"unknown ({snapshot.target_reason})"
         flags = []
         if snapshot.is_main:
             flags.append("main")
@@ -514,25 +610,39 @@ def run_report(start: Path, max_worktrees: int) -> int:
     return 0
 
 
-def run_clean(start: Path, max_worktrees: int, min_age_days: int, apply: bool) -> int:
+def run_clean(start: Path, min_age_days: int, apply: bool) -> int:
     try:
         repo_root, all_paths = discover_worktrees(start)
-        shown_paths = all_paths[:max_worktrees]
-        snapshots, activity_warnings = inspect_worktrees(repo_root, shown_paths)
+        snapshots, activity_warnings = inspect_worktrees(repo_root, all_paths)
         if activity_warnings:
-            raise DiskSafetyError(
-                "active session state is uncertain: " + "; ".join(activity_warnings)
-            )
+            message = "uncertain activity: " + "; ".join(activity_warnings)
+            if apply:
+                raise DiskSafetyError(message)
+            print(f"disk cleanup: dry-run; {message}")
+            for snapshot in snapshots:
+                print(f"  {snapshot.path}: excluded: uncertain activity")
+            print("total reclaimable allocated-byte estimate: 0B")
+            print("dry-run only; resolve activity warnings before applying cleanup")
+            return 0
         min_age_seconds = min_age_days * 24 * 60 * 60
-        candidates = select_cleanup_candidates(
+        decisions = cleanup_decisions(
             snapshots,
             repo_root,
             min_age_seconds=min_age_seconds,
         )
-        reclaimed = remove_candidates(
-            candidates,
-            apply=apply,
-            min_age_seconds=min_age_seconds,
+        candidates = [
+            decision.candidate
+            for decision in decisions
+            if decision.candidate is not None
+        ]
+        reclaimed = (
+            remove_candidates(
+                candidates,
+                apply=True,
+                min_age_seconds=min_age_seconds,
+            )
+            if apply
+            else sum(candidate.target_bytes for candidate in candidates)
         )
     except (OSError, subprocess.CalledProcessError, DiskSafetyError) as exc:
         print(f"disk cleanup refused: {exc}", file=sys.stderr)
@@ -540,13 +650,13 @@ def run_clean(start: Path, max_worktrees: int, min_age_days: int, apply: bool) -
 
     mode = "apply" if apply else "dry-run"
     print(f"disk cleanup: {mode}; minimum target age={min_age_days}d")
-    for candidate in candidates:
-        verb = "removed" if apply else "would remove"
-        print(f"  {verb}: {candidate.target_path} ({human_bytes(candidate.target_bytes)})")
-    if len(all_paths) > len(shown_paths):
-        print(f"  not inspected: {len(all_paths) - len(shown_paths)} worktrees beyond report bound")
-    label = "reclaimed" if apply else "reclaimable"
-    print(f"total {label}: {human_bytes(reclaimed)}")
+    for decision in decisions:
+        reason = decision.reason
+        if apply and decision.candidate is not None:
+            reason = reason.replace("eligible:", "removed:", 1)
+        print(f"  {decision.snapshot.path}: {reason}")
+    label = "reclaimed" if apply else "selected"
+    print(f"total {label} allocated-byte estimate: {human_bytes(reclaimed)}")
     if not apply:
         print("dry-run only; use `make disk-clean-apply` after reviewing the list")
     return 0
@@ -559,17 +669,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     check = subparsers.add_parser("check", help="fail if filesystem reserve is below threshold")
-    check.add_argument("--min-free-bytes", type=int, help="required free bytes")
+    check.add_argument("--min-free-bytes", help="required free bytes")
     check.add_argument("--path", type=Path, default=Path.cwd(), help="filesystem path to inspect")
 
     report = subparsers.add_parser("report", help="show bounded filesystem and target usage report")
-    report.add_argument("--max-worktrees", type=int, help="maximum worktrees to inspect")
     report.add_argument("--path", type=Path, default=Path.cwd(), help="repository worktree")
 
     clean = subparsers.add_parser("clean", help="dry-run stale target cleanup unless --apply is given")
     clean.add_argument("--apply", action="store_true", help="actually remove selected target directories")
-    clean.add_argument("--min-age-days", type=int, help="minimum target age for cleanup")
-    clean.add_argument("--max-worktrees", type=int, help="maximum worktrees to inspect")
+    clean.add_argument("--min-age-days", help="minimum target age for cleanup")
     clean.add_argument("--path", type=Path, default=Path.cwd(), help="repository worktree")
     return parser
 
@@ -585,21 +693,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 DEFAULT_MIN_FREE_BYTES,
             )
             return run_check(minimum, args.path.resolve())
-        maximum = configured_value(
-            args.max_worktrees,
-            "JCODE_DISK_MAX_WORKTREES",
-            DEFAULT_MAX_WORKTREES,
-            parse_positive_int,
-        )
         if args.command == "report":
-            return run_report(args.path.resolve(), maximum)
+            return run_report(args.path.resolve())
         min_age_days = configured_value(
             args.min_age_days,
             "JCODE_DISK_CLEAN_MIN_AGE_DAYS",
             DEFAULT_CLEAN_MIN_AGE_DAYS,
             parse_non_negative_int,
         )
-        return run_clean(args.path.resolve(), maximum, min_age_days, args.apply)
+        return run_clean(args.path.resolve(), min_age_days, args.apply)
     except (DiskSafetyError, OSError) as exc:
         print(f"disk safety configuration error: {exc}", file=sys.stderr)
         return 2

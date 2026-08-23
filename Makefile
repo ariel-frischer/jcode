@@ -2,10 +2,8 @@ WORKTREE_SCRIPT ?= scripts/worktree-setup.sh
 BASE ?= $(shell git branch --show-current 2>/dev/null || echo HEAD)
 DISK_MIN_FREE_BYTES ?=
 DISK_CLEAN_MIN_AGE_DAYS ?=
-DISK_MAX_WORKTREES ?=
 
-disk_report_args = $(if $(DISK_MAX_WORKTREES),--max-worktrees $(DISK_MAX_WORKTREES),)
-disk_clean_args = $(if $(DISK_CLEAN_MIN_AGE_DAYS),--min-age-days $(DISK_CLEAN_MIN_AGE_DAYS),) $(if $(DISK_MAX_WORKTREES),--max-worktrees $(DISK_MAX_WORKTREES),)
+disk_clean_args = $(if $(DISK_CLEAN_MIN_AGE_DAYS),--min-age-days $(DISK_CLEAN_MIN_AGE_DAYS),)
 
 .PHONY: i install install-fast
 i: install
@@ -35,7 +33,7 @@ disk-help:
 	@python3 scripts/disk_safety.py --help
 
 disk-report:
-	@python3 scripts/disk_safety.py report $(disk_report_args)
+	@python3 scripts/disk_safety.py report
 
 disk-check:
 	@python3 scripts/disk_safety.py check $(if $(DISK_MIN_FREE_BYTES),--min-free-bytes $(DISK_MIN_FREE_BYTES),)
