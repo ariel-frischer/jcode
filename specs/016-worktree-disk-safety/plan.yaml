@@ -1,0 +1,70 @@
+plan:
+  branch: "agent/jcode-6gp-disk-safety"
+  created: "2026-08-23"
+  spec_path: "specs/016-worktree-disk-safety/spec.yaml"
+summary: >-
+  Add one Python standard-library disk-safety owner used by explicit Make targets
+  and the existing guardrail script. Report and selection begin from canonical Git
+  worktree metadata. Cleanup is dry-run by default, validates direct contained
+  non-symlink target paths, excludes main, active, dirty, unreadable, and recent
+  worktrees, and repeats all volatile checks immediately before an explicit apply.
+  Live-session metadata uncertainty disables cleanup rather than authorizing it.
+technical_context:
+  language: "Python 3, GNU Make, and Bash"
+  framework: "Python standard-library repository scripts"
+  primary_dependencies:
+    - name: "Git"
+      version: "repository-supported"
+      purpose: "Provides canonical registered worktree metadata and dirty-state checks."
+    - name: "Jcode session storage"
+      version: "current repository contract"
+      purpose: "Provides active PID markers and persisted working directories."
+  storage: "Existing Git metadata and read-only JCODE_HOME session files; no new persistence."
+  testing:
+    framework: "Python unittest with temporary filesystem fixtures"
+    approach: "Focused safety-boundary tests first, then non-destructive real repository command smoke."
+  target_platform: "Jcode-supported Unix development hosts; report/check remain portable where Python and Git are available."
+  project_type: "developer tooling"
+  performance_goals: "Bound worktree count by default and scan only direct registered target trees without following symlinks."
+  constraints:
+    - "No new dependencies."
+    - "No live apply during validation."
+    - "Uncertain state must disable deletion."
+  scale_scope: "At most the configured bounded number of registered Jcode worktrees per invocation."
+architecture:
+  owner: "Repository developer scripts and canonical Make targets"
+  invariant: "No source, branch, whole worktree, active work, dirty work, recent artifact, symlink target, unregistered path, or out-of-repository path can be selected for deletion."
+  compatibility: "Existing guardrails run unchanged above the reserve; only low-space broad Cargo runs gain an early actionable failure."
+  rejected_alternatives:
+    - "Automatic background deletion, because it removes the review and apply gate."
+    - "Deleting entire worktrees, because generated Cargo artifacts are the only owned reclaimable data."
+    - "A shared target/cache redesign, because it expands architecture and invalidation scope beyond the Bead."
+implementation:
+  - "Add failing focused tests for threshold, configuration, containment, exclusions, dry-run/apply, nested artifact recency, live-session uncertainty, and deletion-time revalidation."
+  - "Implement bounded report and check commands plus conservative Git worktree inspection."
+  - "Implement dry-run selection and explicit apply with immediate volatile-state revalidation."
+  - "Expose Make targets, insert preflight before Cargo guardrails, and document operation and rebuild expectations."
+  - "Run focused tests first, non-destructive real report/check/dry-run smoke, formatting and static checks, then only broad guardrails whose preflight passes."
+constitution_check:
+  PRIN-001: "PASS: changes are limited to one repository script, its focused tests, Make/guardrail wiring, docs, and required spec artifacts."
+  PRIN-002: "PASS: existing validation behavior is unchanged when the reserve is available; new commands are additive."
+  PRIN-003: "PASS: CLI option, environment variable, then built-in default precedence is explicit and tested."
+  PRIN-005: "PASS: each destructive-risk boundary has direct temporary-fixture coverage."
+  PRIN-006: "PASS: malformed configuration, unreadable Git state, uncertain session state, and unsafe paths fail closed visibly."
+  PRIN-007: "PASS: focused tests precede broad guardrails and broad Cargo work is reserve-gated."
+  PRIN-008: "PASS: one simple standard-library script owns report, check, selection, and apply behavior."
+  PRIN-009: "PASS: the workflow delivers reviewable reclamation without touching user-authored work."
+  PRIN-010: "PASS: real repository report/check/dry-run commands are exercised; destructive apply remains fixture-only."
+acceptance_matrix:
+  - requirement: "FR-001"
+    check: "make disk-report"
+  - requirement: "FR-002, FR-007"
+    check: "focused threshold/config tests plus guardrail-order test and make disk-check"
+  - requirement: "FR-003, FR-006"
+    check: "temporary-fixture dry-run/apply tests and real make disk-clean dry-run"
+  - requirement: "FR-004, FR-005"
+    check: "focused containment, active/dirty/recent, registration, newest-artifact, and deletion-time revalidation tests"
+  - requirement: "FR-008"
+    check: "Make target exposure test, make disk-help, and docs review"
+  - requirement: "Repository integration"
+    check: "python compilation, focused unit tests, format/static checks, and scripts/check_guardrails.sh only after disk-check passes"

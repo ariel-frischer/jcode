@@ -18,8 +18,9 @@ make disk-clean-apply                    # explicit deletion after reviewing dry
 ```
 
 `make disk-clean` is always a dry-run. `disk-clean-apply` is the only Make
-command that requests deletion. Cleanup reports logical bytes reclaimable or
-reclaimed, not source files removed.
+command that requests deletion. Cleanup reports an allocated-byte estimate
+reclaimable or reclaimed, not source files removed. Hard-linked files are
+counted once within each target scan.
 
 The report is bounded to 25 worktrees by default. Override the bound when
 needed:
@@ -50,7 +51,8 @@ report and reviewable cleanup commands.
 ## Cleanup safety rules
 
 A candidate must be a direct, non-symlink `target/` directory of a registered
-Git worktree inside the repository and must be older than the configured age.
+Git worktree inside the repository and its newest nested artifact must be older
+than the configured age.
 Cleanup skips:
 
 - the main checkout, source files, and Git branches;
@@ -60,18 +62,22 @@ Cleanup skips:
 - missing, symlinked, or path-traversal targets; and
 - worktrees or target paths outside the repository.
 
-The apply path revalidates containment and the non-symlink target invariant
-immediately before removal. If that invariant cannot be proven, it refuses to
-remove anything in question. Cargo will regenerate removed artifacts on the
-next build. A dry-run is the rollback point because generated artifacts are
-rebuildable, but cleanup does not restore the disk space used by source or
-branch data because those are never selected.
+Before each explicit removal, the apply path re-reads registered worktrees and
+active-session state, checks active build processes and Git status again, and
+revalidates containment, the non-symlink target invariant, and newest-artifact
+age. A live PID marker whose session metadata cannot be trusted disables
+cleanup instead of authorizing deletion. If any required invariant cannot be
+proven, cleanup refuses the affected operation. Cargo will regenerate removed
+artifacts on the next build. A dry-run is the rollback point because generated
+artifacts are rebuildable, but cleanup does not restore the disk space used by
+source or branch data because those are never selected.
 
 ## Focused validation
 
 The synthetic fixture tests cover threshold boundaries, malformed settings,
-containment, active/dirty/recent exclusions, dry-run versus apply, Make target
-exposure, and guardrail ordering:
+containment, active/dirty/recent exclusions, nested artifact recency, uncertain
+live-session metadata, deletion-time revalidation, dry-run versus apply, Make
+target exposure, and guardrail ordering:
 
 ```bash
 python3 scripts/test_disk_safety.py

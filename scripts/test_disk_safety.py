@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import importlib.util
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -104,12 +106,181 @@ class DiskSafetyTests(unittest.TestCase):
             target.mkdir(parents=True)
             artifact = target / "artifact"
             artifact.write_bytes(b"artifact-bytes")
-            candidate = DISK_SAFETY.CleanupCandidate(repo, worktree, target, artifact.stat().st_size)
+            expected_bytes = DISK_SAFETY.directory_usage(target)[0]
+            candidate = DISK_SAFETY.CleanupCandidate(
+                repo, worktree, target, expected_bytes
+            )
 
-            self.assertEqual(DISK_SAFETY.remove_candidates([candidate], apply=False), len(b"artifact-bytes"))
-            self.assertTrue(target.exists())
-            self.assertEqual(DISK_SAFETY.remove_candidates([candidate], apply=True), len(b"artifact-bytes"))
+            safety_state = (
+                patch.object(
+                    DISK_SAFETY,
+                    "discover_worktrees",
+                    return_value=(repo, [repo, worktree]),
+                ),
+                patch.object(
+                    DISK_SAFETY, "active_session_paths", return_value=(set(), [])
+                ),
+                patch.object(DISK_SAFETY, "worktree_is_active", return_value=False),
+                patch.object(
+                    DISK_SAFETY, "worktree_is_dirty", return_value=(False, False)
+                ),
+            )
+            with safety_state[0], safety_state[1], safety_state[2], safety_state[3]:
+                self.assertEqual(
+                    DISK_SAFETY.remove_candidates(
+                        [candidate], apply=False, min_age_seconds=0
+                    ),
+                    expected_bytes,
+                )
+                self.assertTrue(target.exists())
+                self.assertEqual(
+                    DISK_SAFETY.remove_candidates(
+                        [candidate], apply=True, min_age_seconds=0
+                    ),
+                    expected_bytes,
+                )
             self.assertFalse(target.exists())
+
+    def test_cleanup_apply_revalidates_dirty_active_and_recent_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            worktree = repo / ".worktrees" / "candidate"
+            target = worktree / "target"
+            target.mkdir(parents=True)
+            artifact = target / "artifact"
+            artifact.write_bytes(b"artifact-bytes")
+            candidate = DISK_SAFETY.CleanupCandidate(
+                repo, worktree, target, artifact.stat().st_size
+            )
+
+            cases = (
+                ("dirty", patch.object(DISK_SAFETY, "worktree_is_dirty", return_value=(True, False))),
+                ("active", patch.object(DISK_SAFETY, "worktree_is_active", return_value=True)),
+                (
+                    "recent",
+                    patch.object(
+                        DISK_SAFETY,
+                        "directory_usage",
+                        return_value=(artifact.stat().st_size, 999.0),
+                    ),
+                ),
+            )
+            for name, state_patch in cases:
+                with self.subTest(name=name):
+                    with patch.object(
+                        DISK_SAFETY,
+                        "active_session_paths",
+                        return_value=(set(), []),
+                    ), patch.object(
+                        DISK_SAFETY,
+                        "discover_worktrees",
+                        return_value=(repo, [repo, worktree]),
+                    ), patch.object(
+                        DISK_SAFETY, "worktree_is_active", return_value=False
+                    ), patch.object(
+                        DISK_SAFETY,
+                        "worktree_is_dirty",
+                        return_value=(False, False),
+                    ), state_patch:
+                        with self.assertRaises(DISK_SAFETY.DiskSafetyError):
+                            DISK_SAFETY.remove_candidates(
+                                [candidate],
+                                apply=True,
+                                min_age_seconds=100,
+                                now=1_000.0,
+                            )
+                    self.assertTrue(target.exists())
+
+    def test_cleanup_apply_refuses_an_unregistered_worktree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            worktree = repo / ".worktrees" / "unregistered"
+            target = worktree / "target"
+            target.mkdir(parents=True)
+            artifact = target / "artifact"
+            artifact.write_bytes(b"artifact")
+            candidate = DISK_SAFETY.CleanupCandidate(repo, worktree, target, 8)
+
+            with patch.object(
+                DISK_SAFETY, "discover_worktrees", return_value=(repo, [repo])
+            ):
+                with self.assertRaises(DISK_SAFETY.DiskSafetyError):
+                    DISK_SAFETY.remove_candidates(
+                        [candidate], apply=True, min_age_seconds=0
+                    )
+            self.assertTrue(target.exists())
+
+    def test_revalidation_rechecks_activity_after_the_usage_scan(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            worktree = repo / ".worktrees" / "candidate"
+            target = worktree / "target"
+            target.mkdir(parents=True)
+            (target / "artifact").write_bytes(b"artifact")
+            candidate = DISK_SAFETY.CleanupCandidate(repo, worktree, target, 0)
+
+            with patch.object(
+                DISK_SAFETY,
+                "discover_worktrees",
+                return_value=(repo, [repo, worktree]),
+            ), patch.object(
+                DISK_SAFETY, "active_session_paths", return_value=(set(), [])
+            ), patch.object(
+                DISK_SAFETY,
+                "worktree_is_active",
+                side_effect=(False, True),
+            ), patch.object(
+                DISK_SAFETY, "worktree_is_dirty", return_value=(False, False)
+            ):
+                with self.assertRaises(DISK_SAFETY.DiskSafetyError):
+                    DISK_SAFETY._revalidate_candidate(
+                        candidate, now=1_000.0, min_age_seconds=0
+                    )
+            self.assertTrue(target.exists())
+
+    def test_target_age_uses_newest_nested_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "target"
+            nested = target / "debug" / "deps"
+            nested.mkdir(parents=True)
+            artifact = nested / "recent.rlib"
+            artifact.write_bytes(b"artifact")
+            os.utime(target, (100.0, 100.0))
+            os.utime(nested.parent, (100.0, 100.0))
+            os.utime(nested, (100.0, 100.0))
+            os.utime(artifact, (900.0, 900.0))
+
+            size, newest_mtime = DISK_SAFETY.directory_usage(target)
+            self.assertGreater(size, 0)
+            self.assertEqual(newest_mtime, 900.0)
+
+    def test_live_session_with_unreadable_metadata_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            active_dir = home / "active_pids"
+            active_dir.mkdir()
+            (active_dir / "session-1").write_text(str(os.getpid()))
+
+            paths, warnings = DISK_SAFETY.active_session_paths(home)
+            self.assertEqual(paths, set())
+            self.assertTrue(warnings)
+
+    def test_live_session_path_is_discovered_from_persisted_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            worktree = home / "repo" / ".worktrees" / "active"
+            active_dir = home / "active_pids"
+            sessions_dir = home / "sessions"
+            active_dir.mkdir()
+            sessions_dir.mkdir()
+            (active_dir / "session-1").write_text(str(os.getpid()))
+            (sessions_dir / "session-1.json").write_text(
+                json.dumps({"status": "Active", "working_dir": str(worktree)})
+            )
+
+            paths, warnings = DISK_SAFETY.active_session_paths(home)
+            self.assertEqual(paths, {worktree})
+            self.assertEqual(warnings, [])
 
     def test_make_disk_help_and_dry_run_commands_are_exposed(self):
         makefile = Path(__file__).parents[1] / "Makefile"
@@ -117,11 +288,35 @@ class DiskSafetyTests(unittest.TestCase):
         for target in ("disk-report", "disk-check", "disk-clean", "disk-clean-apply", "disk-help"):
             self.assertIn(target, text)
 
-    def test_guardrails_runs_disk_preflight_before_cargo(self):
-        guardrails = Path(__file__).with_name("check_guardrails.sh").read_text()
-        preflight = guardrails.index("disk_safety.py check")
-        first_cargo = guardrails.index("cargo fmt")
-        self.assertLess(preflight, first_cargo)
+    def test_guardrails_low_space_exits_before_invoking_cargo(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fake_bin = Path(temp) / "bin"
+            fake_bin.mkdir()
+            cargo_marker = Path(temp) / "cargo-invoked"
+            fake_cargo = fake_bin / "cargo"
+            fake_cargo.write_text(
+                f"#!/usr/bin/env bash\ntouch {cargo_marker}\nexit 99\n"
+            )
+            fake_cargo.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = str(fake_bin) + os.pathsep + env["PATH"]
+            env["JCODE_DISK_MIN_FREE_BYTES"] = str(10**30)
+            guardrails = Path(__file__).with_name("check_guardrails.sh")
+
+            result = subprocess.run(
+                ["bash", str(guardrails), "--skip-slow"],
+                cwd=guardrails.parents[1],
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(cargo_marker.exists())
+            self.assertIn("Guardrails stopped before Cargo", result.stderr)
 
 
 if __name__ == "__main__":
