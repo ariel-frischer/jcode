@@ -1,5 +1,9 @@
 WORKTREE_SCRIPT ?= scripts/worktree-setup.sh
 BASE ?= $(shell git branch --show-current 2>/dev/null || echo HEAD)
+DISK_MIN_FREE_BYTES ?=
+DISK_CLEAN_MIN_AGE_DAYS ?=
+
+disk_clean_args = $(if $(DISK_CLEAN_MIN_AGE_DAYS),--min-age-days $(DISK_CLEAN_MIN_AGE_DAYS),)
 
 .PHONY: i install install-fast
 i: install
@@ -23,3 +27,19 @@ worktree-clean:
 			"$$repo_root"/.worktrees/*) echo "removing $$wt"; git worktree remove "$$wt" ;; \
 		esac; \
 	done
+
+.PHONY: disk-help disk-report disk-check disk-clean disk-clean-apply
+disk-help:
+	@python3 scripts/disk_safety.py --help
+
+disk-report:
+	@python3 scripts/disk_safety.py report
+
+disk-check:
+	@python3 scripts/disk_safety.py check $(if $(DISK_MIN_FREE_BYTES),--min-free-bytes $(DISK_MIN_FREE_BYTES),)
+
+disk-clean:
+	@python3 scripts/disk_safety.py clean $(disk_clean_args)
+
+disk-clean-apply:
+	@python3 scripts/disk_safety.py clean --apply $(disk_clean_args)

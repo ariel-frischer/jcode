@@ -29,6 +29,11 @@ for arg in "$@"; do
     esac
 done
 
+if ! python3 scripts/disk_safety.py check; then
+    echo "Guardrails stopped before Cargo: filesystem reserve is too low." >&2
+    exit 1
+fi
+
 FAILED=()
 JOBS="${CARGO_BUILD_JOBS:-2}"
 

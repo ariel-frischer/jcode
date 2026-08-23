@@ -1,0 +1,316 @@
+tasks:
+    branch: "016-cargo-disk-safety"
+    created: "2026-08-23"
+    spec_path: "specs/016-cargo-disk-safety/spec.yaml"
+    plan_path: "specs/016-cargo-disk-safety/plan.yaml"
+summary:
+    total_tasks: 17
+    total_phases: 7
+    parallel_opportunities: 4
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Create disposable Git-worktree fixtures and controllable filesystem/activity seams before specifying behavior."
+      tasks:
+        - id: "T001"
+          title: "Add temporary registered-worktree and safety-metadata fixture helpers"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: []
+          acceptance_criteria:
+            - "Helpers create an isolated Git main checkout plus registered linked worktrees under a temporary repository containment root."
+            - "Fixtures can control statvfs headroom, artifact mtimes, tracked/untracked dirtiness, JCODE_HOME session metadata, procfs observations, readability, symlinks, and post-scan mutations without reading or deleting a developer worktree."
+            - "Source, worktree-root, branch-registration, and out-of-repository sentinel assertions are reusable by every cleanup apply test."
+    - number: 2
+      title: "Foundational"
+      purpose: "Define shared strict configuration, Git registration, containment, and allocated-byte observation contracts."
+      tasks:
+        - id: "T002"
+          title: "Add failing shared configuration and target-observation contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Tests require CLI value over JCODE_DISK_* environment value over documented built-in default and reject empty, negative, fractional, suffixed, and otherwise non-decimal inputs with exit code 2."
+            - "Tests parse every record from git worktree list --porcelain, identify the main record, canonicalize paths, and reject unreadable, unregistered, or out-of-repository worktree evidence."
+            - "Tests require a direct non-symlink target, no symlink traversal, st_blocks times 512 allocation with inode deduplication and st_size fallback, and an unknown result on scan uncertainty."
+        - id: "T003"
+          title: "Implement shared disk-safety configuration and bounded observation primitives"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "scripts/disk_safety.py"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "One resolver implements CLI, environment, and built-in precedence for non-negative decimal thresholds and produces actionable configuration errors without fallback."
+            - "Git porcelain is the sole registration authority, the canonical main checkout is the containment boundary, and every registered worktree produces one internal observation."
+            - "Target scans are bounded to each immediate target tree, never follow symlinks, label totals as allocated-byte estimates, and preserve uncertainty rather than treating inspection failures as safe."
+    - number: 3
+      title: "User Story 2 - Protect guardrail reserve"
+      purpose: "Stop repository guardrails before any Cargo command when the effective inclusive reserve is invalid or inadequate."
+      story_reference: "US-002"
+      independent_test: "Instrument guardrails with synthetic free-space readings below, equal to, and above the threshold and assert zero Cargo starts for blocked or malformed cases."
+      tasks:
+        - id: "T004"
+          title: "Add failing reserve-boundary and zero-Cargo-start tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Threshold minus one allocation unit and exact equality fail, while threshold plus one allocation unit passes."
+            - "Malformed CLI or JCODE_DISK_MIN_FREE_BYTES values fail with the setting name, accepted decimal form, configured/effective context, and zero instrumented Cargo starts."
+            - "A valid above-threshold preflight permits the existing guardrail command order and flags to continue unchanged."
+        - id: "T005"
+          title: "Implement the filesystem-headroom check command"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "scripts/disk_safety.py"
+          dependencies: ["T004"]
+          acceptance_criteria:
+            - "The check command reads statvfs available blocks for the requested repository filesystem and passes only when available bytes are strictly greater than the effective threshold."
+            - "Success and failure output is concise, human-readable, and reports configured/effective non-secret values plus a safe next action."
+            - "Unreadable filesystem state exits 1 and invalid threshold configuration exits 2."
+        - id: "T006"
+          title: "Invoke reserve preflight before every guardrail Cargo path"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "scripts/check_guardrails.sh"
+          dependencies: ["T005"]
+          acceptance_criteria:
+            - "Argument parsing is followed by the disk-safety check before the first possible cargo invocation, including --fix and --skip-slow paths."
+            - "A failed or invalid preflight exits nonzero with an actionable message and no Cargo process starts."
+            - "Above the reserve, all pre-existing guardrail gates, flags, and ordering remain unchanged."
+    - number: 4
+      title: "User Story 1 - Inspect build-artifact disk use"
+      purpose: "Report truthful filesystem headroom and one bounded target-usage record for every registered worktree."
+      story_reference: "US-001"
+      independent_test: "Create registered worktrees with absent, readable, sparse/hard-linked, symlinked, and unreadable direct targets and verify one summary plus exactly one record per registration."
+      tasks:
+        - id: "T007"
+          title: "Add failing bounded report and allocated-estimate tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-001"
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "With N Git-registered worktrees, output contains one filesystem summary and exactly N worktree records, with no fixed display cap and no per-file listing."
+            - "Absent, readable, symlinked, and unreadable direct targets are distinct; uncertain records are never described as safe to clean."
+            - "Readable values match fixture allocation within the platform allocation unit and every total is explicitly called an allocated-byte estimate rather than guaranteed reclaimable space."
+        - id: "T008"
+          title: "Implement the registered-worktree disk report"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "scripts/disk_safety.py"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "The report command emits current filesystem available bytes and one deterministic record for every Git-registered worktree."
+            - "Only immediate target directories are scanned; source, unregistered worktrees, unrelated repository paths, and unrelated filesystems are not traversed."
+            - "Inspection failures are visible as unknown records with actionable reasons, and successful totals retain estimate terminology."
+    - number: 5
+      title: "User Story 3 - Reclaim stale target storage safely"
+      purpose: "Preview and explicitly remove only stale generated targets after complete fail-closed revalidation."
+      story_reference: "US-003"
+      independent_test: "Use only temporary registered-worktree repositories to prove dry-run deletes nothing and apply removes only an eligible direct target while every exclusion and post-scan mutation preserves the whole candidate set."
+      tasks:
+        - id: "T009"
+          title: "Add failing dry-run eligibility and exclusion matrix tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Default and explicit dry-run invocations delete nothing and deterministically report each eligible or excluded worktree plus the aggregate selected allocated-byte estimate."
+            - "Main, unregistered, out-of-repository, nested-target, symlinked, unreadable, tracked-dirty, untracked-dirty, active-session, and relevant-live-process fixtures are excluded."
+            - "Malformed, unreadable, incomplete, stale-looking, or unsupported session/procfs evidence makes apply fail closed, while definite activity remains a nonfatal exclusion in dry-run output."
+            - "Artifacts newer than or exactly equal to the configured age, empty targets, and unknown mtimes are excluded; only strictly older newest artifacts qualify."
+        - id: "T010"
+          title: "Implement fail-closed activity inspection and cleanup candidate selection"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/disk_safety.py"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "Selection combines live JCODE_HOME active PID markers, session working_dir metadata, and relevant Linux procfs cargo/rustc/rust-analyzer/jcode process evidence."
+            - "Only clean, inactive, readable, registered in-repository non-main worktrees with a direct real target and strictly old newest artifact become candidates."
+            - "The clean command defaults to dry-run, accepts only the documented age configuration, reports all reasons and estimates, and performs no deletion without --apply."
+        - id: "T011"
+          title: "Add failing all-or-nothing final-revalidation and temporary-apply tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Post-scan changes to registration, session activity, relevant processes, tracked/untracked dirtiness, containment, direct-child identity, symlink status, readability, or recency reject apply before deletion."
+            - "A multi-candidate fixture with one failed or uncertain final check preserves every candidate, proving the complete candidate set is validated before removal begins."
+            - "Apply tests reference only temporary repositories and prove the eligible target contents are removed while source, worktree roots, branch registrations, dirty/active/recent targets, and external sentinels remain unchanged."
+        - id: "T012"
+          title: "Implement explicit apply with batch and deletion-boundary revalidation"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "scripts/disk_safety.py"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Only the documented --apply form authorizes deletion; malformed authorization or configuration exits before mutation."
+            - "After all usage scans, every candidate freshly passes registration, activity/process, dirty-state, containment, direct-child, symlink, readability, and strict-recency checks before any deletion starts."
+            - "Each target invariant is checked again immediately at its deletion boundary, and any uncertainty aborts without continuing to other candidates."
+            - "Deletion is limited to the candidate's direct target directory and output reports an allocated-byte estimate without claiming exact reclaimed space."
+    - number: 6
+      title: "User Story 4 - Operate and recover confidently"
+      purpose: "Expose discoverable Make entry points and document configuration, exclusions, safe apply, and Cargo rebuild rollback."
+      story_reference: "US-004"
+      independent_test: "Resolve each documented Make entry point without real deletion and check the guide for all command, threshold, exclusion, estimate, authorization, and rollback contracts."
+      tasks:
+        - id: "T013"
+          title: "Add failing Make-entry-point and documentation contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "scripts/test_disk_safety.py"
+          dependencies: ["T006", "T008", "T012"]
+          acceptance_criteria:
+            - "Tests resolve disk-help, disk-report, disk-check, disk-clean, and disk-clean-apply to their documented CLI modes without invoking apply against a real worktree."
+            - "The default cleanup target is proven non-destructive and Make variables forward only the documented minimum-free-byte and minimum-age-day values."
+            - "A documentation checklist requires commands, defaults, CLI-over-environment precedence, inclusive reserve, strict age boundary, invalid forms, exclusions, estimate caveat, explicit apply, and Cargo rebuild rollback."
+        - id: "T014"
+          title: "Add canonical Make targets for disk-safety operations"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "Makefile"
+          dependencies: ["T013"]
+          acceptance_criteria:
+            - "Make exposes disk-help, disk-report, disk-check, disk-clean dry-run, and disk-clean-apply with explicit threshold variables."
+            - "disk-clean remains the default non-destructive cleanup path and disk-clean-apply visibly supplies the sole apply authorization."
+            - "No Make option can omit registered worktrees from the required report or broaden cleanup beyond direct targets."
+        - id: "T015"
+          title: "Document disk report, reserve checks, cleanup, exclusions, and rebuild rollback"
+          status: "Completed"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/DISK_SAFETY.md"
+          dependencies: ["T006", "T008", "T012"]
+          acceptance_criteria:
+            - "The guide documents direct CLI and Make commands for report, check, default dry-run, and explicit apply."
+            - "It states defaults and CLI-over-JCODE_DISK_* environment precedence, decimal validity, free<=threshold blocking, and strictly-older artifact eligibility."
+            - "It lists every main/active/process/dirty/unreadable/unregistered/outside/symlink/direct-child/recency exclusion and explains fail-closed uncertainty and allocated-byte estimate limitations."
+            - "Rollback guidance states only generated targets are removed and subsequent Cargo build or validation commands regenerate them."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Record requirement-level evidence, validate only disposable apply paths, and run repository delivery gates behind the new reserve check."
+      tasks:
+        - id: "T016"
+          title: "Run focused disk-safety, syntax, Make, and disposable-apply validation"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/016-cargo-disk-safety/validation.md"
+          dependencies: ["T014", "T015"]
+          acceptance_criteria:
+            - "Receipts show python3 -m unittest scripts/test_disk_safety.py, Python compilation, Bash syntax, Make command resolution, and documentation checks pass."
+            - "The acceptance matrix maps FR-001 through FR-019 and NFR-001 through NFR-005 to direct checks, including zero-Cargo blocked cases and every destructive predicate."
+            - "Every recorded apply command uses a temporary repository/worktree root; no real developer target, worktree, source path, or branch is mutated."
+        - id: "T017"
+          title: "Run artifact validation, reserve-gated guardrails, and scoped delivery review"
+          status: "Completed"
+          type: "refactor"
+          parallel: false
+          story_id: null
+          file_path: "specs/016-cargo-disk-safety/validation.md"
+          dependencies: ["T016"]
+          acceptance_criteria:
+            - "autospec artifact passes for spec.yaml, plan.yaml, and tasks.yaml, and the owned diff remains limited to the planned script, guardrail, Make, tests, guide, and validation evidence."
+            - "scripts/check_guardrails.sh runs only after its own disk check reports free bytes strictly above the effective reserve; any unrelated baseline failure is isolated without weakening or rebaselining a gate."
+            - "Inline deletion-safety review finds no path that can remove source, symlinks, branches, worktree roots, whole worktrees, active/dirty work, shared caches, or paths outside the repository."
+dependencies:
+    user_story_order:
+        - story_id: "US-002"
+          depends_on: []
+          blocks: ["US-004"]
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-003", "US-004"]
+        - story_id: "US-003"
+          depends_on: ["US-001"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-001", "US-002", "US-003"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3, 4]
+        - phase: 3
+          blocks: [6]
+        - phase: 4
+          blocks: [5, 6]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+parallel_execution:
+    - phase: 2
+      parallel_groups: []
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T006", "T007"]
+          rationale: "After the check command is complete, guardrail shell integration and report tests have separate file ownership and independent behavior."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T014", "T015"]
+          rationale: "After Make contract tests are frozen, Makefile implementation and developer documentation have separate file ownership."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5]
+        description: "Shared safety primitives plus the P0 reserve and cleanup workflows, including the report prerequisite for safe candidate selection."
+        validation: "Focused tests prove inclusive reserve blocking with zero Cargo starts, one record per registered worktree, dry-run non-deletion, and temporary-fixture-only fail-closed apply."
+    incremental_delivery:
+        - milestone: "Safety Contracts Frozen"
+          phases: [1, 2]
+          deliverable: "Disposable fixtures and failing tests define configuration, registration, containment, and allocation boundaries."
+        - milestone: "Cargo Reserve Protected"
+          phases: [1, 2, 3]
+          deliverable: "Guardrails stop before Cargo at or below the effective reserve and continue above it."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Developers can inspect all registered targets and safely preview or explicitly reclaim only final-revalidated stale generated targets."
+        - milestone: "Operations Validated"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "Make/docs are discoverable and focused plus reserve-gated repository validation evidence is recorded."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-08-23T20:45:08Z"
+    artifact_type: "tasks"
