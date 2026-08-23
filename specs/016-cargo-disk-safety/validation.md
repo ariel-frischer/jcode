@@ -4,7 +4,7 @@ Validated on 2026-08-23 in the isolated `016-cargo-disk-safety` worktree.
 
 ## Focused receipts
 
-- PASS — `python3 -m unittest scripts/test_disk_safety.py`: 31 tests in 0.591s after the focused CLI lexical-boundary repair.
+- PASS — `python3 -m unittest scripts/test_disk_safety.py`: 33 tests in 1.523s after the CLI lexical-boundary repair and independent-review fail-closed repair.
 - PASS — `python3 -m py_compile scripts/disk_safety.py scripts/test_disk_safety.py`.
 - PASS — `bash -n scripts/check_guardrails.sh`.
 - PASS — `make -n disk-help disk-report disk-check disk-clean disk-clean-apply`; the dry-run target has no `--apply`, and only `disk-clean-apply` supplies it.
@@ -30,9 +30,9 @@ No developer-worktree cleanup apply command was run. The only apply execution is
 | FR-008 | `test_target_must_be_contained_direct_non_symlink_directory`, report state tests, and disposable registered-worktree apply. |
 | FR-009 | `test_cleanup_excludes_main_active_dirty_and_recent_worktrees` and the disposable apply preservation assertions. |
 | FR-010 | Live-session discovery and `test_relevant_process_metadata_is_active_or_fail_closed`. |
-| FR-011 | `test_live_session_with_unreadable_metadata_fails_closed`, uncertain dry-run reporting, and relevant-process incomplete-metadata coverage. |
+| FR-011 | `test_live_session_with_unreadable_metadata_fails_closed`, `test_malformed_active_session_marker_root_fails_closed`, uncertain dry-run reporting, and relevant-process incomplete-metadata coverage. |
 | FR-012 | Strict equality coverage in `test_cleanup_age_requires_strictly_older_newest_artifact`, nested newest-artifact coverage, and empty-target unknown-age coverage. |
-| FR-013 | Dirty/active/recent, unregistered, post-scan activity, path/symlink, and batch revalidation tests exercise the final boundary. |
+| FR-013 | Dirty/active/recent, unregistered, post-scan activity, single process-state scan, path/symlink, and batch revalidation tests exercise the final boundary. |
 | FR-014 | `test_batch_revalidation_failure_preserves_every_candidate` proves complete-set validation precedes deletion. |
 | FR-015 | Disposable Git apply proves only the eligible direct target is removed while source, roots, registrations, dirty target, and external sentinel remain. |
 | FR-016 | `test_cleanup_dry_run_reports_every_exclusion_and_selected_estimate`. |
@@ -46,5 +46,7 @@ No developer-worktree cleanup apply command was run. The only apply execution is
 | NFR-005 | FR-006 through FR-015 each map above to focused negative-path coverage. |
 
 ## Safety review
+
+The merge-wt independent review found and blocked two fail-closed gaps before landing: a malformed `active_pids` root was treated as absent, and a redundant second process scan discarded uncertainty. The bounded repair now requires `active_pids` to be a real directory when present and uses exactly one uncertainty-bearing process scan per validation. Regression tests cover both findings. Independent re-review found no remaining blocker in either repair.
 
 Deletion authority remains in one path: explicit `clean --apply` creates candidates only from Git porcelain registrations, then validates the entire candidate batch and revalidates registration, session/process activity, dirty state, repository containment, direct-child identity, non-symlink status, readability, and strict recency immediately before each `shutil.rmtree(target)` call. The removed path is always the candidate worktree's direct `target` directory. Source files, worktree roots, branches, the main checkout, shared caches, symlinks, and paths outside the repository are never passed to deletion.

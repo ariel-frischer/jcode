@@ -602,6 +602,31 @@ class DiskSafetyTests(unittest.TestCase):
                     )
             self.assertTrue(target.exists())
 
+    def test_candidate_validation_reads_process_state_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp) / "repo"
+            worktree = repo / ".worktrees" / "candidate"
+            target = worktree / "target"
+            target.mkdir(parents=True)
+            candidate = DISK_SAFETY.CleanupCandidate(repo, worktree, target, 0)
+
+            with patch.object(
+                DISK_SAFETY,
+                "discover_worktrees",
+                return_value=(repo, [repo, worktree]),
+            ), patch.object(
+                DISK_SAFETY, "active_session_paths", return_value=(set(), [])
+            ), patch.object(
+                DISK_SAFETY,
+                "active_process_state",
+                side_effect=((False, []), (False, ["process metadata became unreadable"])),
+            ) as process_state, patch.object(
+                DISK_SAFETY, "worktree_is_dirty", return_value=(False, False)
+            ):
+                DISK_SAFETY._validate_candidate_state(candidate)
+
+            self.assertEqual(process_state.call_count, 1)
+
     def test_apply_uses_only_disposable_git_worktrees_and_preserves_exclusions(self):
         fixture = GitWorktreeFixture()
         self.addCleanup(fixture.close)
@@ -675,6 +700,17 @@ class DiskSafetyTests(unittest.TestCase):
             paths, warnings = DISK_SAFETY.active_session_paths(home)
             self.assertEqual(paths, set())
             self.assertTrue(warnings)
+
+    def test_malformed_active_session_marker_root_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            (home / "active_pids").write_text("not a directory")
+
+            paths, warnings = DISK_SAFETY.active_session_paths(home)
+
+            self.assertEqual(paths, set())
+            self.assertTrue(warnings)
+            self.assertIn("active session marker path", warnings[0])
 
     def test_live_session_path_is_discovered_from_persisted_metadata(self):
         with tempfile.TemporaryDirectory() as temp:
