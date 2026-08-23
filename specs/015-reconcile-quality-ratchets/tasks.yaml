@@ -441,7 +441,7 @@ phases:
     tasks:
       - id: "T030"
         title: "Run the serialized stable all-feature delivery gate with scripts/check_guardrails.sh"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
@@ -453,7 +453,7 @@ phases:
           - "The provenance gate runs before the three reconciled ratchets and any failure remains visible and non-zero."
       - id: "T031"
         title: "Build the distributable selfdev binary from the reconciled worktree"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
@@ -465,7 +465,7 @@ phases:
           - "The build does not restart or repoint the shared daemon."
       - id: "T032"
         title: "Validate built-binary public and integration scenarios on a private socket using target/selfdev/jcode"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
@@ -477,7 +477,7 @@ phases:
           - "Evidence resolves the tested binary path and confirms the shared long-lived daemon was not measured or disturbed."
       - id: "T033"
         title: "Record the final internally consistent acceptance run in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"
@@ -494,7 +494,7 @@ phases:
     tasks:
       - id: "T034"
         title: "Perform the final branch-base size, scope-to-diff, and provenance consistency review in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
@@ -506,7 +506,7 @@ phases:
           - "Every changed baseline scope matches one complete ledger record, and every applicable independent review concern has a final evidence-backed disposition."
       - id: "T035"
         title: "Finalize implementation and validation notes in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: null

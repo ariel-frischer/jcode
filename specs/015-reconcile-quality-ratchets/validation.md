@@ -468,3 +468,56 @@ Receipts are appended or updated by later tasks. Each receipt must include the c
 ## Final consistency gate
 
 T033 may declare the acceptance run complete only when R01 through R07 are current and passing, every FR-001 through FR-014 and SC-001 through SC-005 row resolves to its assigned passing check, no failed receipt is left ambiguous, and the final diff remains within the approved reconciliation scope.
+
+## Final T030-T035 acceptance receipts
+
+### T030 canonical stable guardrails
+
+- **Authoritative source state:** commit `c8f20d70d58d351c8d06309c97651647ba172796` in `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.5-restore-guardrails`.
+- **Command:** `export JCODE_DEV_CARGO_SCRIPT="$PWD/scripts/dev_cargo.sh" JCODE_IN_DEV_CARGO=1 RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR="$PWD/target" && scripts/check_guardrails.sh`.
+- **Timing and serialization:** background receipt `6639683n2q`, started `2026-08-23T20:24:23Z`, completed `2026-08-23T20:25:36Z`, duration 72.74 seconds, exit 0. No other Cargo-heavy command overlapped this run.
+- **Result:** module declarations, `cargo fmt --all --check`, all-target/all-feature `cargo check`, Clippy with warnings denied, lockfile freshness, warning budget, mandatory provenance, code-size, test-size, panic, swallowed-error, dependency-boundary, wildcard re-export, desktop2 frame-budget, and onboarding state-space gates all passed. `cargo machete` remained the canonical optional skip because it is not installed.
+- **Ordering and scope:** `scripts/check_guardrails.sh` still invokes provenance before the three reconciled ratchets. No unrelated threshold, update path, bypass, warning allowance, dependency boundary, or enforcement algorithm changed. The earlier passing task `845123ck44` is superseded only because the final source commit removed two trailing blank lines before this authoritative rerun.
+
+### T031 exact-source selfdev build
+
+- **Command:** `export JCODE_DEV_CARGO_SCRIPT="$PWD/scripts/dev_cargo.sh" JCODE_IN_DEV_CARGO=1 RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR="$PWD/target" && ./scripts/dev_cargo.sh build --profile selfdev -p jcode --bin jcode`.
+- **Receipt:** background task `744441djbn`, started `2026-08-23T20:25:44Z`, completed `2026-08-23T20:26:01Z`, duration 17.06 seconds, exit 0, after the authoritative T030 pass.
+- **Artifact identity:** resolved path `/home/ari/repos/jcode/.worktrees/agent/jcode-l89.5-restore-guardrails/target/selfdev/jcode`; version `jcode v0.79.647-dev (c8f20d70d)`; SHA-256 `95850a628334795f266c8570674a120e4e6b786d0d3d2e1068aa016604bd74b8`.
+- **Isolation:** the explicit worktree-local `CARGO_TARGET_DIR` prevents shared-workspace target reuse. The shared daemon target remained `/home/ari/.jcode/builds/versions/29d7ec132/jcode`; the build did not reload, restart, or repoint it. The earlier build task `004421lxx8` is superseded because it identified source commit `9a03ad9c1` before the final whitespace-only cleanup.
+
+### T032 built-binary public and integration scenarios
+
+- **Authoritative receipt:** background task `786578y8dg`, `2026-08-23T20:26:26Z` through `2026-08-23T20:26:27Z`, exit 0. It invoked the resolved T031 artifact directly, used a temporary `JCODE_HOME` and `JCODE_RUNTIME_DIR`, disabled telemetry and memory sidecars, and created a distinct private Unix socket for each scenario.
+- **Public/server/provider-mock scenario:** `target/selfdev/jcode run --json --no-update --no-selfdev --provider-profile mock --model mock-model --tool-profile none --socket <private>/simple.sock 'SIMPLE_SCENARIO reply deterministically'` returned exit 0 and JSON text `simple-ok` through a bounded localhost OpenAI-compatible mock endpoint.
+- **Tool scenario:** the same built artifact with `--tools read --max-tool-steps 2 --socket <private>/tool.sock` received a deterministic `read` tool call for a scratch fixture containing `deterministic-tool-fixture`, executed the public registry tool path, sent the tool result back to the mock provider, and returned exit 0 with JSON text `tool-ok`.
+- **Explicit error scenario:** the same artifact with `--tool-profile none --socket <private>/error.sock` received a deterministic mock `401 Unauthorized`, returned exit 1, and preserved the actionable HTTP status instead of succeeding, swallowing the failure, or timing out.
+- **Isolation proof:** the artifact version resolved to source commit `c8f20d70d`; four mock `/v1/chat/completions` requests covered simple, tool-request, tool-result, and error turns. `~/.jcode/builds/shared-server/jcode` resolved to `/home/ari/.jcode/builds/versions/29d7ec132/jcode` before and after. The shared long-lived daemon was not the measured artifact and was not disturbed.
+- **Superseded attempts:** `340379cahw` failed before runtime because the scratch config used a scalar `[provider]` shape; `386852ukkw` failed before runtime because the localhost profile omitted `auth = "none"`; `4175732xt2` proved simple and tool outcomes but used a retryable mock 503 that reached its timeout. Those harness-only attempts changed no repository files and are superseded by the bounded non-retryable 401 receipt above.
+
+### T033 final consistency resolution
+
+- R01 passes through the 143-record, 30-review provenance receipt and exact ledger-to-budget scope equality: code-size 71, test-size 31, swallowed-error 41.
+- R02 passes through the final C02 audit below with 19 modified already-oversized files and zero positive deltas.
+- R03 passes through the T026-T029 focused app-core, harness, telemetry, TUI, ACP, provider, coverage, and explicit-failure matrix.
+- R04 passes through authoritative task `6639683n2q` on the final source commit.
+- R05 passes through exact-source build `744441djbn` and private-socket runtime receipt `786578y8dg`.
+- R06 passes through all 15 deterministic standard-library negative-fixture tests, including production LOC, test LOC, swallowed-error per-pattern, per-file, and aggregate rejection.
+- R07 passes through the 30 stable review dispositions represented by the ledger, the PR #1 and PR #2 conformance matrices, and the final review inventory with zero unresolved applicable correctness concerns.
+- Therefore FR-001 through FR-014 and SC-001 through SC-005 each resolve to their assigned passing direct check without contradictory evidence. Historical RED tests, zero-test command mistakes, inherited integration-checkout Cargo routing, scratch profile errors, and the retryable 503 harness attempt are explicitly superseded and are not acceptance evidence.
+
+### T034 final branch-base, scope, and provenance audit
+
+- **Command and receipt:** at `2026-08-23T20:26:45Z` on source commit `c8f20d70d58d351c8d06309c97651647ba172796`, a standard-library Python inventory enumerated every changed Rust file whose blocker-base or current physical size was at least 1,000 lines, then ran `python3 scripts/check_quality_ratchet_provenance.py`, all three focused ratchets, and `git diff --check 85f9f5e3b...HEAD`.
+- **Size result:** all 19 files from the T016 inventory remained flat or smaller: deltas were `-2, -56, -1, -24, -1, -27, -182, -20, -58, -382, -36, -328, -25, -7, 0, -1, -44, -28, -1`; `positive_delta_count=0`. No growth was shifted into another already-oversized production or test file.
+- **Provenance result:** `records=143 reviews=30 code_size=71 swallowed_error=41 test_size=31`; all three reconciled ratchets passed; `git diff --check` passed after removing two trailing blank lines; the branch-base scope contains 55 changed files.
+- **Scope-to-diff result:** the diff is limited to blocker-owned no-growth source/test extraction, the reviewed PR #1 and PR #2 correctness remediations plus the remaining path-format repair, telemetry retry repair, provenance validator/ledger, exactly traced budget values, focused regression tests, and Autospec validation artifacts. Every changed baseline scope has exactly one complete ledger record. No untraced, reverted, superseded, disputed, or unexplained growth was approved.
+
+### T035 final implementation and landing handoff
+
+- **Reconciled categories:** 71 production code-size scopes, 31 test-size scopes, and 41 swallowed-error scopes, backed by 143 unique provenance records and 30 stable review dispositions.
+- **Rejected/unapproved deltas:** incomplete, duplicate, mismatched, fabricated, non-ancestor, unresolved-review, positive future-growth, and newly swallowed-error fixtures remain rejected. The 11 initially untraced T003 rows were resolved as stale-at-creation budgets at baseline commit `535d55f4c`, not accepted as unexplained later growth.
+- **Blocker-source repairs:** all modified already-oversized files are flat or smaller; behavior was preserved through focused module extraction and direct tests; telemetry initialization retries after transient failure while successful initialization remains cached; handled failures remain explicit and observable.
+- **Review dispositions:** all applicable PR #1, PR #2, historical, and Bead-comment concerns have stable final evidence. Applicable correctness concerns are implemented; bounded design suggestions retain evidence-backed `out_of_scope` or `rejected_with_evidence` dispositions.
+- **Non-goals preserved:** no user-facing contract, runtime storage format, dependency, unrelated threshold, automatic update path, exemption, warning allowance, or future no-growth enforcement changed. The private runtime harness used only scratch artifacts and a localhost mock provider; no credential or secret was recorded.
+- **Landing boundary:** source acceptance is anchored at `c8f20d70d58d351c8d06309c97651647ba172796`; later documentation-only commits do not alter the validated binary. The branch is ready for independent final review and `/merge-wt` integration. Merge, installation, shared-server reload, push, and worktree cleanup remain owned by the landing workflow.
