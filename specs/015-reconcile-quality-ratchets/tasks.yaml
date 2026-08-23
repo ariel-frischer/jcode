@@ -129,7 +129,7 @@ phases:
           - "Preserve existing assertions and record the narrow focused test command."
       - id: "T009"
         title: "Remove the positive blocker-branch growth from crates/jcode-app-core/src/tool/bash.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"

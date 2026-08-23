@@ -21,7 +21,7 @@ use std::path::Path;
 #[cfg(unix)]
 use std::process::Command as StdCommand;
 use std::process::Stdio;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, PoisonError};
 use std::time::Duration;
 #[cfg(unix)]
 use std::time::Instant;
@@ -512,13 +512,8 @@ async fn apply_progress_update(task_id: &str, update: ProgressLineUpdate) {
     };
 }
 
-/// Progress state for a foreground command that may be promoted to a
-/// background task if it exceeds the foreground timeout.
-///
-/// Before promotion there is no task to attach progress to, so only the most
-/// recent update is kept. When the command is promoted, `attach_task` flushes
-/// that pending update so the task row starts at the real percentage instead
-/// of 0%, and later updates stream directly to the background manager.
+/// Buffers the latest foreground progress until promotion creates a task, then flushes it so
+/// the task starts at the real percentage and later updates stream directly.
 #[derive(Default)]
 struct PromotedCommandProgress {
     task_id: std::sync::OnceLock<String>,
@@ -528,10 +523,7 @@ struct PromotedCommandProgress {
 impl PromotedCommandProgress {
     async fn record(&self, update: ProgressLineUpdate) {
         let direct = {
-            let mut pending = self
-                .pending
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut pending = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
             if self.task_id.get().is_none() {
                 *pending = Some(update);
                 None
@@ -551,7 +543,7 @@ impl PromotedCommandProgress {
         let pending = self
             .pending
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .unwrap_or_else(PoisonError::into_inner)
             .take();
         if let Some(update) = pending {
             apply_progress_update(task_id, update).await;
