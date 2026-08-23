@@ -22,12 +22,12 @@ async fn prompt_overlays_are_agent_local() {
 
     let split_a = agent_a.build_system_prompt_split(None);
     let split_b = agent_b.build_system_prompt_split(None);
-    let prompt_a = format!("{}\n\n{}", split_a.static_part, split_a.dynamic_part);
-    let prompt_b = format!("{}\n\n{}", split_b.static_part, split_b.dynamic_part);
-    assert!(prompt_a.contains("profile alpha instructions"));
-    assert!(prompt_a.contains("alpha skill prompt"));
-    assert!(!prompt_a.contains("profile beta instructions"));
-    assert!(prompt_b.contains("profile beta instructions"));
-    assert!(prompt_b.contains("beta skill prompt"));
-    assert!(!prompt_b.contains("profile alpha instructions"));
+    assert!(split_a.static_part.contains("profile alpha instructions"));
+    assert!(split_a.static_part.contains("alpha skill prompt"));
+    assert!(!split_a.static_part.contains("profile beta instructions"));
+    assert!(split_b.static_part.contains("profile beta instructions"));
+    assert!(split_b.static_part.contains("beta skill prompt"));
+    assert!(!split_b.static_part.contains("profile alpha instructions"));
+    assert!(!split_a.dynamic_part.contains("profile alpha instructions"));
+    assert!(!split_b.dynamic_part.contains("profile beta instructions"));
 }

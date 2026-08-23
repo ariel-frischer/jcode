@@ -175,28 +175,38 @@ skills = ["beta-skill"]
     beta.prompt_overlay.append_to_split(&mut beta_prompt);
     assert!(
         alpha_prompt
-            .dynamic_part
+            .static_part
             .find("alpha profile instructions")
             .unwrap()
             < alpha_prompt
-                .dynamic_part
+                .static_part
                 .find("alpha selected skill content")
                 .unwrap()
     );
     assert!(
         !alpha_prompt
-            .dynamic_part
+            .static_part
             .contains("beta profile instructions")
     );
     assert!(
         beta_prompt
-            .dynamic_part
+            .static_part
             .contains("beta profile instructions")
     );
     assert!(
         !beta_prompt
+            .static_part
+            .contains("alpha profile instructions")
+    );
+    assert!(
+        !alpha_prompt
             .dynamic_part
             .contains("alpha profile instructions")
+    );
+    assert!(
+        !beta_prompt
+            .dynamic_part
+            .contains("beta profile instructions")
     );
     assert_eq!(std::fs::read(&config_path)?, config_bytes);
     Ok(())

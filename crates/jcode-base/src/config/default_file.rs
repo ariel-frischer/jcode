@@ -314,8 +314,8 @@ bing_market = "en-US"
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
 
-# Named session profiles apply to the interactive TUI, `jcode run`, `jcode repl`,
-# and `jcode serve`.
+# Named session profiles apply to interactive sessions, `jcode run`, `jcode repl`,
+# and explicitly started `jcode serve` sessions.
 # Resolution is field-by-field: explicit invocation > environment > selected
 # profile > unprofiled config > built-in default. Static values are checked when
 # strict run config loads; installed provider/model/profile/tool/skill references
@@ -753,8 +753,8 @@ mod tests {
     #[test]
     fn default_config_template_documents_session_profile_scope_and_valid_example() {
         let template = Config::default_config_file_contents();
-        assert!(template.contains("interactive TUI, `jcode run`, `jcode repl`,"));
-        assert!(template.contains("# and `jcode serve`."));
+        assert!(template.contains("interactive sessions, `jcode run`, `jcode repl`,"));
+        assert!(template.contains("# and explicitly started `jcode serve` sessions."));
 
         let config = toml::from_str::<Config>(&template).expect("template must parse");
         let review = config

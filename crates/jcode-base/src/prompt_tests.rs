@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn session_profile_overlay_orders_instructions_before_selected_skills() {
+fn session_profile_overlay_is_trusted_system_prompt_content() {
     let mut split = SplitSystemPrompt {
         static_part: "global and project guidance".to_string(),
         dynamic_part: "memory context".to_string(),
@@ -15,14 +15,17 @@ fn session_profile_overlay_orders_instructions_before_selected_skills() {
     }
     .append_to_split(&mut split);
 
-    let combined = format!("{}\n\n{}", split.static_part, split.dynamic_part);
-    let guidance = combined.find("global and project guidance").unwrap();
-    let instructions = combined.find("review carefully").unwrap();
-    let first_skill = combined.find("skill prompt one").unwrap();
-    let second_skill = combined.find("skill prompt two").unwrap();
+    let guidance = split
+        .static_part
+        .find("global and project guidance")
+        .unwrap();
+    let instructions = split.static_part.find("review carefully").unwrap();
+    let first_skill = split.static_part.find("skill prompt one").unwrap();
+    let second_skill = split.static_part.find("skill prompt two").unwrap();
     assert!(guidance < instructions);
     assert!(instructions < first_skill);
     assert!(first_skill < second_skill);
+    assert_eq!(split.dynamic_part, "memory context");
 }
 
 #[test]

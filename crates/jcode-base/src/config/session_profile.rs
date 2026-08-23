@@ -1,4 +1,4 @@
-//! Named session-profile loading and resolution for headless `jcode run`.
+//! Named session-profile loading and resolution for local agent sessions.
 //!
 //! This module owns strict, source-aware profile validation and resolution while
 //! composing tool policy through the existing [`super::ToolConfig`] semantics.
