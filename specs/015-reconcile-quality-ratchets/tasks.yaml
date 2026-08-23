@@ -269,7 +269,7 @@ phases:
     tasks:
       - id: "T017"
         title: "Create provenance validator tests in scripts/tests/test_quality_ratchet_provenance.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
@@ -281,7 +281,7 @@ phases:
           - "Tests use only Python's standard library and deterministic temporary Git or fixture state."
       - id: "T018"
         title: "Add controlled future-growth rejection tests in scripts/tests/test_quality_ratchets.py"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
