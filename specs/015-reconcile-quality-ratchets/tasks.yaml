@@ -385,7 +385,7 @@ phases:
     tasks:
       - id: "T026"
         title: "Run focused app-core and harness behavior tests and record receipts in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
@@ -397,7 +397,7 @@ phases:
           - "The evidence identifies any consolidated or moved tests and demonstrates equivalent or stronger coverage."
       - id: "T027"
         title: "Run focused telemetry, TUI, and ACP error-path tests and record receipts in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"
@@ -410,7 +410,7 @@ phases:
           - "The swallowed-error checker reports no newly introduced occurrence in the changed source surface."
       - id: "T028"
         title: "Run affected public provider regressions in tests/e2e/provider_behavior.rs"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"
@@ -422,7 +422,7 @@ phases:
           - "Any failure is diagnosed and repaired before broad validation rather than accepted as a baseline change."
       - id: "T029"
         title: "Complete behavior, coverage, and explicit-error traceability in specs/015-reconcile-quality-ratchets/validation.md"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-003"

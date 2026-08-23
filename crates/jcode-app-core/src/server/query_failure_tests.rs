@@ -1,5 +1,3 @@
-use super::*;
-
 #[tokio::test]
 async fn lifecycle_query_flushes_recorder_before_reading_typed_stream() {
     let root = tempfile::tempdir().expect("create lifecycle query root");
