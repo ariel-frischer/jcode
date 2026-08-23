@@ -198,8 +198,16 @@ skills = ["beta-skill"]
             .static_part
             .contains("alpha profile instructions")
     );
-    assert!(!alpha_prompt.dynamic_part.contains("alpha profile instructions"));
-    assert!(!beta_prompt.dynamic_part.contains("beta profile instructions"));
+    assert!(
+        !alpha_prompt
+            .dynamic_part
+            .contains("alpha profile instructions")
+    );
+    assert!(
+        !beta_prompt
+            .dynamic_part
+            .contains("beta profile instructions")
+    );
     assert_eq!(std::fs::read(&config_path)?, config_bytes);
     Ok(())
 }
