@@ -254,10 +254,12 @@ fn create_openrouter_spec_capture_test_app() -> (App, StdArc<StdMutex<Vec<String
 }
 
 #[test]
-fn local_add_provider_message_does_not_retain_local_provider_copy() {
+fn local_add_provider_message_retains_materialized_provider_copy() {
     let mut app = create_test_app();
+    app.ensure_provider_messages_hydrated();
+    let before = app.messages.len();
     app.add_provider_message(Message::user("hello"));
-    assert!(app.messages.is_empty());
+    assert_eq!(app.messages.len(), before + 1);
 }
 
 #[test]

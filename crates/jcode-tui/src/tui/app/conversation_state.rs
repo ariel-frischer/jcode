@@ -3,23 +3,8 @@ use super::*;
 impl App {
     fn expand_persisted_file_mentions(&self, mut messages: Vec<Message>) -> Vec<Message> {
         let enabled = crate::config::config().file_mentions.enabled;
-        let remote_root = if self.is_remote {
-            match std::env::current_dir() {
-                Ok(path) => Some(path),
-                Err(error) => {
-                    crate::logging::warn(&format!(
-                        "Failed to resolve remote client working directory: {error}"
-                    ));
-                    None
-                }
-            }
-        } else {
-            None
-        }
-        .and_then(|path| path.to_str().map(str::to_owned));
-        let working_dir = remote_root
-            .as_deref()
-            .or(self.session.working_dir.as_deref());
+        let root = self.file_mention_root();
+        let working_dir = root.to_str();
         for message in &mut messages {
             if !matches!(&message.role, Role::User) {
                 continue;
@@ -34,7 +19,7 @@ impl App {
     }
 
     pub(super) fn ensure_provider_messages_hydrated(&mut self) {
-        if !self.is_remote || !self.messages.is_empty() || self.session.messages.is_empty() {
+        if self.provider_messages_hydrated {
             return;
         }
 
@@ -43,8 +28,14 @@ impl App {
         self.replace_provider_messages(provider_messages);
     }
 
+    pub(super) fn replace_provider_messages_from_session(&mut self) {
+        let provider_messages =
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached());
+        self.replace_provider_messages(provider_messages);
+    }
+
     pub(super) fn materialized_provider_messages(&self) -> Vec<Message> {
-        if self.is_remote || !self.messages.is_empty() {
+        if self.provider_messages_hydrated {
             self.messages.clone()
         } else {
             self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
@@ -234,10 +225,8 @@ impl App {
     }
 
     pub(super) fn add_provider_message(&mut self, message: Message) {
-        if self.is_remote {
-            self.ensure_provider_messages_hydrated();
-            self.messages.push(message.clone());
-        }
+        self.ensure_provider_messages_hydrated();
+        self.messages.push(message.clone());
         if self.is_remote || !self.provider.uses_jcode_compaction() {
             return;
         }
@@ -249,6 +238,7 @@ impl App {
 
     pub(super) fn replace_provider_messages(&mut self, messages: Vec<Message>) {
         self.messages = messages;
+        self.provider_messages_hydrated = true;
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();
@@ -257,6 +247,7 @@ impl App {
 
     pub(super) fn clear_provider_messages(&mut self) {
         self.messages.clear();
+        self.provider_messages_hydrated = true;
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();

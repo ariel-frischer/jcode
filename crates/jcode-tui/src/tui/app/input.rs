@@ -1418,17 +1418,10 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
 pub(super) use super::file_mentions::expand_file_mentions;
 
 pub(super) fn expand_file_mentions_for_submit(app: &App, input: &str) -> Result<String, String> {
-    let remote_root = app
-        .is_remote
-        .then(|| std::env::current_dir().ok())
-        .flatten()
-        .and_then(|path| path.to_str().map(str::to_owned));
-    let working_dir = remote_root
-        .as_deref()
-        .or(app.session.working_dir.as_deref());
+    let root = app.file_mention_root();
     let expanded = expand_file_mentions(
         input,
-        working_dir,
+        root.to_str(),
         crate::config::config().file_mentions.enabled,
     );
     if let Some(notice) = input_exceeds_submit_limit(&expanded) {

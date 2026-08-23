@@ -796,6 +796,7 @@ pub struct App {
     skills: Arc<SkillRegistry>,
     mcp_manager: Arc<RwLock<McpManager>>,
     messages: Vec<Message>,
+    provider_messages_hydrated: bool,
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,

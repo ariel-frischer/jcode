@@ -121,6 +121,94 @@ fn file_mention_discovery_falls_back_to_the_launch_cwd() {
 }
 
 #[test]
+fn remote_file_mention_picker_and_expansion_share_the_client_root() {
+    with_file_mentions_enabled(|| {
+        let session_root = tempfile::tempdir().expect("session root");
+        std::fs::write(session_root.path().join("Cargo.toml"), "wrong root")
+            .expect("session fixture");
+
+        let mut app = create_test_app();
+        app.is_remote = true;
+        app.session.working_dir = Some(session_root.path().to_string_lossy().into_owned());
+        app.input = "@Cargo.toml".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let _ = app.command_suggestions();
+        let request = app
+            .file_mention_discovery
+            .borrow()
+            .as_ref()
+            .expect("file mention discovery")
+            .request
+            .clone();
+        let client_root = std::env::current_dir().expect("client cwd");
+        assert_eq!(request.root, client_root);
+
+        let expanded = super::input::expand_file_mentions_for_submit(&app, "@Cargo.toml")
+            .expect("expand remote file mention");
+        let expected = super::file_mentions::expand_file_mentions(
+            "@Cargo.toml",
+            client_root.to_str(),
+            true,
+        );
+        assert_eq!(expanded, expected);
+        assert!(!expanded.contains("wrong root"));
+    });
+}
+
+#[test]
+fn file_mention_suggestions_rank_candidates_globally_across_batches() {
+    let mut app = create_test_app();
+    app.input = "@rank".to_owned();
+    app.cursor_pos = app.input.len();
+    let root = std::env::current_dir().expect("cwd");
+    let request = super::file_mentions::FileMentionRequest {
+        root,
+        query: "rank".to_owned(),
+        ignore_patterns: Vec::new(),
+    };
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let generation = 99;
+    *app.file_mention_discovery.borrow_mut() = Some(super::file_mentions::FileMentionDiscovery {
+        request,
+        generation,
+        receiver,
+        cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        candidates: Vec::new(),
+    });
+    sender
+        .send(super::file_mentions::FileMentionBatch {
+            generation,
+            candidates: (0..100)
+                .map(|index| super::file_mentions::FileMentionCandidate {
+                    score: 1,
+                    path: format!("rank-low-{index:03}.txt"),
+                    is_dir: false,
+                })
+                .collect(),
+            done: false,
+        })
+        .expect("first batch");
+    sender
+        .send(super::file_mentions::FileMentionBatch {
+            generation,
+            candidates: vec![super::file_mentions::FileMentionCandidate {
+                score: 100,
+                path: "rank-best.txt".to_owned(),
+                is_dir: false,
+            }],
+            done: true,
+        })
+        .expect("second batch");
+
+    assert!(app.poll_file_mention_discovery());
+    let suggestions = app.file_mention_suggestions(&app.input);
+
+    assert_eq!(suggestions.len(), 100);
+    assert_eq!(suggestions[0].0, "@rank-best.txt");
+}
+
+#[test]
 fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
     let _env_lock = crate::storage::lock_test_env();
     let temp = tempfile::tempdir().expect("tempdir");
@@ -215,6 +303,49 @@ fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
             [ContentBlock::Text { text, .. }]
                 if text == "Explain <file path=\"docs/context.md\">\nfull context\n\n</file>"
         ));
+    });
+}
+
+#[test]
+fn historical_file_mention_provider_context_is_materialized_once() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let context_path = temp.path().join("context.md");
+        std::fs::write(&context_path, "original context").expect("original context");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.session.add_message(
+            Role::User,
+            vec![ContentBlock::Text {
+                text: "Explain @context.md".to_owned(),
+                cache_control: None,
+            }],
+        );
+
+        let (first, _) = app.messages_for_provider();
+        let first_text = first
+            .last()
+            .and_then(|message| message.content.last())
+            .and_then(|block| match block {
+                ContentBlock::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("first provider text");
+        std::fs::write(&context_path, "mutated context").expect("mutated context");
+        let (second, _) = app.messages_for_provider();
+
+        let text = second
+            .last()
+            .and_then(|message| message.content.last())
+            .and_then(|block| match block {
+                ContentBlock::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .expect("provider text");
+        assert_eq!(text, first_text);
+        assert!(text.contains("original context"));
+        assert!(!text.contains("mutated context"));
     });
 }
 

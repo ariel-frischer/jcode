@@ -5,6 +5,7 @@ use std::sync::{Arc, mpsc};
 
 const FILE_MENTION_BATCH_SIZE: usize = 32;
 const FILE_MENTION_MAX_MATCHES: usize = 5000;
+const FILE_MENTION_MAX_SUGGESTIONS: usize = 100;
 const FILE_MENTION_POLL_BATCHES: usize = 8;
 const BUILTIN_IGNORE_PATTERNS: &[&str] = &[
     "node_modules/",
@@ -319,6 +320,16 @@ fn send_file_mention_batch(
         .is_ok()
 }
 
+fn retain_top_file_mention_candidates(candidates: &mut Vec<FileMentionCandidate>) {
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| left.path.cmp(&right.path))
+    });
+    candidates.truncate(FILE_MENTION_MAX_SUGGESTIONS);
+}
+
 impl App {
     pub(super) fn poll_file_mention_discovery(&mut self) -> bool {
         let mut changed = false;
@@ -340,6 +351,7 @@ impl App {
                 continue;
             }
             discovery.candidates.extend(batch.candidates);
+            retain_top_file_mention_candidates(&mut discovery.candidates);
             changed = true;
             if batch.done {
                 break;
@@ -400,6 +412,27 @@ fn effective_file_mention_ignores() -> Vec<String> {
 }
 
 impl App {
+    pub(super) fn file_mention_root(&self) -> PathBuf {
+        if self.is_remote {
+            return std::env::current_dir().unwrap_or_else(|error| {
+                crate::logging::warn(&format!(
+                    "Failed to resolve remote client working directory: {error}"
+                ));
+                self.session
+                    .working_dir
+                    .as_deref()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."))
+            });
+        }
+
+        self.session
+            .working_dir
+            .as_deref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+
     pub(super) fn file_mention_suggestions(&self, input: &str) -> Vec<(String, &'static str)> {
         let cursor = self.cursor_pos.min(input.len());
         let before_cursor = &input[..cursor];
@@ -412,15 +445,9 @@ impl App {
             return Vec::new();
         }
         let query = &before_cursor[at + 1..];
-        let launch_cwd;
-        let root = if let Some(working_dir) = self.session.working_dir.as_deref() {
-            Path::new(working_dir)
-        } else {
-            launch_cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            &launch_cwd
-        };
+        let root = self.file_mention_root();
         let request = FileMentionRequest {
-            root: root.to_path_buf(),
+            root,
             query: query.to_owned(),
             ignore_patterns: effective_file_mention_ignores(),
         };
@@ -435,7 +462,7 @@ impl App {
         discovery
             .candidates
             .iter()
-            .take(100)
+            .take(FILE_MENTION_MAX_SUGGESTIONS)
             .map(|candidate| {
                 let path = &candidate.path;
                 let dir = candidate.is_dir;
