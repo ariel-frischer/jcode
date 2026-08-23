@@ -8,6 +8,7 @@ import errno
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -246,8 +247,14 @@ def active_session_paths(home: Path | None = None) -> tuple[set[Path], list[str]
     sessions_dir = home / "sessions"
     active: set[Path] = set()
     warnings: list[str] = []
-    if not active_dir.is_dir():
+    try:
+        active_dir_mode = active_dir.lstat().st_mode
+    except FileNotFoundError:
         return active, warnings
+    except OSError as exc:
+        return active, [f"cannot inspect active session marker path: {exc}"]
+    if not stat.S_ISDIR(active_dir_mode):
+        return active, [f"active session marker path is not a directory: {active_dir}"]
     try:
         markers = list(active_dir.iterdir())
     except OSError as exc:
@@ -324,19 +331,13 @@ def active_process_state(
     return False, warnings
 
 
-def active_process_for(path: Path) -> bool:
-    return active_process_state(path)[0]
-
-
 def _configured_active_paths() -> set[Path]:
     raw = os.environ.get("JCODE_DISK_SAFETY_ACTIVE_PATHS", "")
     return {Path(value).resolve(strict=False) for value in raw.split(os.pathsep) if value}
 
 
 def worktree_is_active(path: Path, active_paths: set[Path]) -> bool:
-    if any(path_within(active_path, path) for active_path in active_paths):
-        return True
-    return active_process_for(path)
+    return any(path_within(active_path, path) for active_path in active_paths)
 
 
 def worktree_is_dirty(path: Path) -> tuple[bool, bool]:
