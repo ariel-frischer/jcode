@@ -20,7 +20,7 @@ Reference documentation for the jcode codebase.
 - Refactoring and quality: `REFACTORING.md`, `plans/CODE_QUALITY_10_10_PLAN.md`
 - Desktop app: `DESKTOP_APP_ARCHITECTURE.md`, `DESKTOP_CODEBASE_ARCHITECTURE.md`
 - Providers: `PROVIDER_DOCTOR.md`, `AWS_BEDROCK_PROVIDER.md`
-- Go SDK: `GO_SDK.md`, `GO_SDK_ARCHITECTURE.md`, `GO_SDK_RELEASE_PLAN.md`
+- Go SDK: `GO_SDK.md`, `GO_SDK_ARCHITECTURE.md`, `GO_SDK_RELEASE_PLAN.md` (external `jcode-go/dev` ownership, read-only wire compatibility, and tagged releases)
 
 ## Conventions
 

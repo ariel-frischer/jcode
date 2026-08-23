@@ -1,0 +1,340 @@
+plan:
+  branch: "016-centralize-go-sdk"
+  created: "2026-08-23"
+  spec_path: "specs/016-centralize-go-sdk/spec.yaml"
+
+summary: |
+  Remove the duplicated Go SDK implementation and publication machinery from
+  Jcode, making github.com/ariel-frischer/jcode-go branch dev the sole active
+  development source. Jcode will continue to own protocol v1 on the Rust side
+  through crates/jcode-harness-api, but it will no longer contain Go module
+  metadata, Go implementation or tests, Go CI, or a copy/sync/apply path.
+
+  Replace the embedded validation workflow with one dependency-light Jcode
+  entry point that requires an explicit jcode-go checkout, resolves both roots,
+  and runs that checkout's protocol package tests with JCODE_REPO_ROOT pointing
+  at the current Jcode checkout. The runner uses read-only Go module mode and
+  performs no fetch, checkout, generation, copying, or repository mutation.
+  Focused fixture tests and before/after repository-state evidence cover valid,
+  invalid, dirty, symlinked, successful, and failing cases. Active ownership and
+  release guidance in both repositories will identify dev as development, tags
+  as releases, and historical specifications as unchanged records.
+
+technical_context:
+  language: "Bash 3.2+ orchestration with Go 1.23+ compatibility tests and Markdown/YAML documentation"
+  framework: "None"
+  primary_dependencies:
+    - name: "Go toolchain"
+      version: "1.23 or newer; jcode-go CI matrix remains 1.23.x and 1.24.x"
+      purpose: "Runs the explicitly supplied jcode-go checkout's protocol parity package without hosting Go source in Jcode."
+    - name: "Go standard library testing package"
+      version: "Go 1.23 module contract"
+      purpose: "Owns jcode-go protocol, schema-parity, typed-event coverage, and public API tests without third-party modules."
+    - name: "Bash"
+      version: "3.2+"
+      purpose: "Implements the small explicit-checkout compatibility entry point and its repository-local fixture test in the existing scripts convention."
+    - name: "Git CLI"
+      version: "2.x"
+      purpose: "Identifies checkout roots and provides non-mutating before/after state evidence in tests and validation receipts."
+  storage: "None; validation reads two caller-owned Git checkouts and writes only normal Go caches outside those checkouts"
+  testing:
+    framework: "Bash fixture tests, Go testing package, repository scans, and Jcode guardrails"
+    approach: "Test the validator contract first with temporary repositories and a controlled Go shim, then run the real jcode-go protocol package and complete jcode-go quality suite from dev, compare exact checkout state before and after success and failure, scan active Jcode and jcode-go surfaces for obsolete ownership, and finish with Jcode guardrails."
+  target_platform: "Linux and macOS developer checkouts; jcode-go CI remains authoritative for Linux Go 1.23/1.24 tests and the Windows amd64 compile boundary"
+  project_type: "cli"
+  performance_goals: "A stable checkout pair returns the same result across 10 consecutive runs, each conclusive run completes within 10 minutes, and validation introduces zero tracked, staged, untracked, ref, branch, tag, or commit changes in either checkout"
+  constraints:
+    - "github.com/ariel-frischer/jcode-go branch dev is the only active Go SDK development source; version tags are release boundaries."
+    - "crates/jcode-harness-api remains the authoritative Rust protocol-v1 wire definition."
+    - "No Go SDK implementation, module metadata, tests, examples, or Go CI remain under Jcode sdk/go."
+    - "No preview, apply, copy, mirror, synchronization, generated SDK, vendored SDK, or submodule path replaces the removed workflow."
+    - "The compatibility validator requires an explicit local jcode-go checkout and never fetches, switches, cleans, stages, commits, or writes either checkout."
+    - "GOWORK is disabled and Go module resolution is read-only during cross-repository compatibility validation."
+    - "Protocol v1 wire behavior and every existing public Go API remain unchanged."
+    - "jcode-go owns formatting, module integrity, vet, build, test, race, and supported-platform validation."
+    - "Historical specifications and completed planning records remain byte-for-byte unchanged and are excluded from active-guidance scans."
+    - "No release, tag, push, protocol change, public API change, live runtime, provider, credential, or paid validation is part of this migration."
+  scale_scope: "One removed embedded Go module, three removed Jcode SDK scripts/tests, one removed Jcode CI job, one new compatibility runner with one fixture suite, and focused active documentation in Jcode and jcode-go"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "The plan is limited to removing the duplicate implementation/publication path, adding one compatibility entry point and focused tests, and correcting directly conflicting active guidance."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Protocol v1, serialized shapes, crates/jcode-harness-api ownership, public Go imports, exported APIs, and accepted jcode-go dev behavior are preserved and revalidated."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "N/A"
+      notes: "No product configuration is added; the jcode-go checkout is a required command argument and JCODE_REPO_ROOT is set internally to the invoking Jcode checkout for the child test process."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "crates/jcode-harness-api remains the wire authority, the external SDK owns Go behavior, and compatibility crosses repositories through an explicit test environment contract rather than duplicated types or terminal parsing."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Fixture tests cover argument validation, checkout identity, path handling, command/environment delegation, result propagation, and no-mutation behavior before real parity and full jcode-go checks."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Missing paths, non-checkouts, wrong modules, unavailable tools, and parity failures return actionable non-zero results without exposing secrets or changing caller-owned state."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Delivery requires the focused validator suite, real cross-repository parity, complete jcode-go validation, repository scans, diff checks, and scripts/check_guardrails.sh."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "The migration establishes one Go owner and one compatibility path while deleting the duplicate implementation and general publication-sync mechanism instead of replacing them."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "The plan proves the actual sole-source outcome in both repositories and explicitly excludes release, push, live runtime, credential, provider, and destructive checkout operations."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Compatibility is exercised by the maintained jcode-go test binary against the selected Rust checkout, with repeatability, a 10-minute ceiling, and zero checkout mutation as measured acceptance targets."
+
+research_findings:
+  decisions:
+    - topic: "Canonical Go SDK ownership"
+      decision: "Make github.com/ariel-frischer/jcode-go branch dev the sole implementation and test owner; keep version tags as consumer release boundaries and crates/jcode-harness-api as the Rust wire authority."
+      rationale: "The dependency Bead already landed the accepted event and run-safety behavior on clean jcode-go dev, whose repository owns the module, examples, tests, and complete CI matrix. Retaining sdk/go would preserve the drift the feature exists to remove."
+      alternatives_considered:
+        - "Keep sdk/go canonical and treat jcode-go as a projection."
+        - "Use main rather than dev as the development branch."
+        - "Add jcode-go as a submodule or vendored tree in Jcode."
+    - topic: "Cross-repository compatibility contract"
+      decision: "Add scripts/validate_jcode_go_compat.sh with a required --jcode-go-dir argument; resolve the script's Jcode root and supplied module root, then run the supplied checkout's complete protocol package tests with JCODE_REPO_ROOT set to Jcode."
+      rationale: "jcode-go/protocol/parity_test.go already treats JCODE_REPO_ROOT as the explicit boundary and reads crates/jcode-harness-api directly. Running the complete protocol package avoids duplicating a fragile list of parity test names in Jcode."
+      alternatives_considered:
+        - "Copy parity fixtures or generated schema into Jcode."
+        - "Hard-code the current parity test names in the Jcode runner."
+        - "Parse jcode CLI output as compatibility evidence."
+    - topic: "Validator implementation language"
+      decision: "Use a small Bash entry point and fixture test instead of adding a Go or Rust helper binary."
+      rationale: "The Jcode scripts directory already owns developer validators, and adding Go source to host a validator would weaken the sole-source message while a Rust binary would add workspace and build surface for simple path validation and process delegation."
+      alternatives_considered:
+        - "Add a Go validator under Jcode."
+        - "Add a Rust workspace binary or xtask."
+        - "Use Make recipes alone without a directly testable entry point."
+    - topic: "Read-only execution boundary"
+      decision: "Validate explicit checkout identity without branch switching, use resolved quoted paths, set GOWORK=off, pass -mod=readonly and -count=1 to Go tests, and perform no Git or filesystem mutation."
+      rationale: "These controls avoid workspace leakage, module-file updates, cached test results, and path ambiguity while permitting clean or pre-existing dirty caller state to be tested exactly as supplied."
+      alternatives_considered:
+        - "Require a clean jcode-go checkout, which would reject a required edge case."
+        - "Copy both repositories to temporary directories before testing."
+        - "Run go mod tidy or generate fixtures before parity."
+    - topic: "Repository-state proof"
+      decision: "Use controlled clean and dirty Git fixtures plus exact before/after evidence for HEAD, symbolic branch, refs/tags, index, tracked content, and untracked content across successful and failing runs."
+      rationale: "A plain git status comparison can miss changes to content that was already dirty. The acceptance contract requires zero changes to every caller-owned state class."
+      alternatives_considered:
+        - "Compare only git status output."
+        - "Require clean repositories and skip dirty-state evidence."
+        - "Let the validator repair changes after tests."
+    - topic: "Publication and validation workflow removal"
+      decision: "Delete sdk/go, scripts/sync-jcode-go.sh, scripts/test_sync_jcode_go.sh, scripts/validate_go_sdk.sh, scripts/test_validate_go_sdk.sh, and the embedded Go CI job; do not retain deprecated wrappers or aliases."
+      rationale: "Compatibility wrappers would leave an active sync or embedded-validation path and conflict with the requirement for one owner and one compatibility path. jcode-go CI already owns the complete Go quality suite."
+      alternatives_considered:
+        - "Keep deprecated no-op sync commands."
+        - "Retarget the old full-SDK validator to the external checkout."
+        - "Keep embedded Go CI as an optional job."
+    - topic: "Active versus historical documentation"
+      decision: "Rewrite active Jcode and jcode-go ownership, architecture, validation, contribution, and release guidance while leaving prior specs and completed planning artifacts unchanged."
+      rationale: "Current top-level docs and repository instructions still describe sdk/go as canonical and the public repository as a projection, whereas the specification explicitly preserves those same statements only as historical records."
+      alternatives_considered:
+        - "Edit historical specs to remove old terminology."
+        - "Add a new doc while leaving current conflicting docs active."
+        - "Delete all Jcode Go SDK documentation after removing the source."
+
+data_model:
+  entities:
+    - name: "Compatibility Invocation"
+      description: "One explicit validation request pairing the current Jcode checkout with a caller-supplied jcode-go checkout."
+      fields:
+        - name: "jcode_root"
+          type: "absolute resolved path"
+          description: "Jcode checkout containing the validator and authoritative Rust wire sources."
+          constraints: "Derived from the validator location; must contain Cargo.toml and crates/jcode-harness-api."
+        - name: "jcode_go_root"
+          type: "absolute resolved path"
+          description: "Explicit caller-supplied Go SDK checkout."
+          constraints: "Required; must be a Git worktree whose root go.mod declares github.com/ariel-frischer/jcode-go."
+        - name: "jcode_repo_root_env"
+          type: "environment path"
+          description: "JCODE_REPO_ROOT passed only to the jcode-go test process."
+          constraints: "Must equal jcode_root regardless of the caller's existing environment."
+        - name: "result"
+          type: "exit status and diagnostic stream"
+          description: "Unambiguous compatibility success, parity failure, or input/tooling error."
+          constraints: "Zero only when protocol tests pass; non-zero diagnostics name the failed condition."
+      relationships:
+        - target: "Wire Contract"
+          type: "many-to-one"
+          description: "Every invocation checks one Jcode protocol-v1 wire authority revision."
+        - target: "Checkout State Evidence"
+          type: "one-to-many"
+          description: "Each repository has before/after evidence proving the invocation did not alter it."
+    - name: "Wire Contract"
+      description: "The protocol-v1 request, event, serialization, and publication contract owned by crates/jcode-harness-api."
+      fields:
+        - name: "protocol_major"
+          type: "integer"
+          description: "Supported harness protocol major version."
+          constraints: "Remains 1 with no serialized contract changes."
+        - name: "rust_authority"
+          type: "repository path set"
+          description: "requests.rs, events.rs, and their schema/publication tests in crates/jcode-harness-api."
+          constraints: "Read-only for this migration."
+        - name: "go_parity_suite"
+          type: "Go package test suite"
+          description: "The supplied jcode-go protocol package that compares Go inventory and behavior with Rust source."
+          constraints: "Runs from jcode-go and receives JCODE_REPO_ROOT explicitly."
+      relationships:
+        - target: "Release Boundary"
+          type: "one-to-many"
+          description: "Each tagged SDK release states compatibility with the maintained protocol-v1 authority."
+    - name: "Checkout State Evidence"
+      description: "Non-persisted before/after proof that validation preserved caller-owned Git and file state."
+      fields:
+        - name: "repository_identity"
+          type: "resolved root and module identity"
+          description: "Distinguishes the Jcode and jcode-go checkouts."
+          constraints: "Paths may contain spaces or arrive through symlinks but must resolve to distinct intended roots."
+        - name: "git_state"
+          type: "HEAD, symbolic branch, refs, tags, and index fingerprint"
+          description: "Captures version-control state relevant to mutation safety."
+          constraints: "Before and after values must be identical."
+        - name: "content_state"
+          type: "tracked and untracked path, mode, and content fingerprints"
+          description: "Captures clean and pre-existing dirty filesystem state."
+          constraints: "Before and after values must be identical on success and failure."
+      relationships: []
+    - name: "Release Boundary"
+      description: "The documented jcode-go lifecycle separating active development from consumer-ready releases."
+      fields:
+        - name: "development_branch"
+          type: "Git branch"
+          description: "The sole branch on which active Go SDK development is integrated."
+          constraints: "Exactly dev."
+        - name: "release_ref"
+          type: "semantic version tag"
+          description: "Immutable consumer release point used by go get."
+          constraints: "A reviewed version tag; this migration creates no tag."
+        - name: "quality_owner"
+          type: "repository automation"
+          description: "jcode-go CI and contributor workflow for format, module, build, vet, test, race, and supported-platform checks."
+          constraints: "Must not depend on an embedded Jcode Go tree or sync workflow."
+      relationships: []
+
+api_contracts:
+  endpoints:
+    - method: "CLI"
+      path: "scripts/validate_jcode_go_compat.sh --jcode-go-dir PATH"
+      description: "Validate an explicitly supplied jcode-go checkout against the current Jcode checkout without changing either repository."
+      request:
+        content_type: "command-line arguments and process environment"
+        body_schema: "Required --jcode-go-dir PATH; no implicit default, remote URL, branch mutation, or caller-provided JCODE_REPO_ROOT override"
+      response:
+        success_code: 0
+        body_schema: "Visible compatibility success after the supplied checkout's protocol package tests pass"
+      errors:
+        - code: 2
+          description: "Missing/unknown arguments, inaccessible paths, wrong repository/module identity, missing Go toolchain, or invalid checkout structure."
+        - code: 1
+          description: "The maintained jcode-go protocol/parity suite reports incompatible Rust/Go evidence or another test failure."
+
+project_structure:
+  documentation:
+    - path: "AGENTS.md"
+      description: "Replace the obsolete sdk/go publication instruction with sole-source ownership and explicit cross-repository compatibility guidance."
+    - path: "README.md"
+      description: "Identify jcode-go dev as the SDK development source, tags as releases, and Jcode as the Rust wire owner."
+    - path: "docs/GO_SDK.md"
+      description: "Document external source usage, the explicit compatibility command, and the separation between jcode-go quality validation and Jcode wire validation."
+    - path: "docs/GO_SDK_ARCHITECTURE.md"
+      description: "Describe jcode-go implementation ownership, crates/jcode-harness-api wire ownership, and the single read-only cross-repository boundary."
+    - path: "docs/GO_SDK_RELEASE_PLAN.md"
+      description: "Replace the copy/publication runbook with concise dev-to-tag release ownership and compatibility evidence responsibilities."
+    - path: "docs/README.md"
+      description: "Keep the Go SDK documentation index aligned with the rewritten ownership and release documents."
+    - path: "/home/ari/repos/jcode-go/AGENTS.md"
+      description: "State dev ownership and the repository-authoritative full validation contract for contributors."
+    - path: "/home/ari/repos/jcode-go/README.md"
+      description: "Replace projection/sync instructions with dev development, tagged installation, local validation, and explicit Jcode compatibility guidance."
+    - path: "/home/ari/repos/jcode-go/docs/architecture.md"
+      description: "Record jcode-go as Go implementation owner and crates/jcode-harness-api as the separate Rust wire authority."
+    - path: "specs/006-sdk-go-reconcile/** and other completed specs"
+      description: "Historical ownership and publication records intentionally preserved unchanged and excluded from active-guidance assertions."
+  source_code:
+    - path: "sdk/go/**"
+      description: "Removed duplicate Go implementation, module metadata, examples, and tests."
+    - path: "scripts/validate_jcode_go_compat.sh"
+      description: "New explicit-checkout, non-mutating compatibility entry point."
+    - path: "scripts/sync-jcode-go.sh"
+      description: "Removed preview/apply/copy publication implementation."
+    - path: "scripts/validate_go_sdk.sh"
+      description: "Removed embedded-module full quality runner; the jcode-go repository owns this validation."
+    - path: ".github/workflows/ci.yml"
+      description: "Remove the embedded Go SDK job and retain Jcode's existing Rust and platform jobs unchanged."
+    - path: "/home/ari/repos/jcode-go/.github/workflows/ci.yml"
+      description: "Existing authoritative Go 1.23/1.24 formatting, module, build, vet, test, race, and Windows compile workflow; verify rather than duplicate in Jcode."
+  tests:
+    - path: "scripts/test_validate_jcode_go_compat.sh"
+      description: "New clean/dirty, success/failure, invalid-input, symlink/space-path, environment, exact-command, and no-mutation fixtures."
+    - path: "scripts/test_sync_jcode_go.sh"
+      description: "Removed fixture suite for the obsolete sync preview/apply path."
+    - path: "scripts/test_validate_go_sdk.sh"
+      description: "Removed fixture suite for the obsolete embedded-module quality runner."
+    - path: "/home/ari/repos/jcode-go/protocol/parity_test.go"
+      description: "Existing maintained cross-repository schema and owned-event parity tests; preserve public API and wire behavior while validating via JCODE_REPO_ROOT."
+    - path: "/home/ari/repos/jcode-go/**/*_test.go"
+      description: "Existing public API, lifecycle, protocol, transport, process, race, and behavior coverage owned and run by jcode-go."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze compatibility and mutation-safety contracts"
+    goal: "Turn every validator, ownership, compatibility, and no-mutation requirement into focused failing evidence before removing the old source."
+    deliverables:
+      - "Active-surface inventory separating Jcode, jcode-go, and immutable historical artifacts"
+      - "Fixture acceptance matrix for explicit paths, checkout identity, spaces, symlinks, caller environment, success, failure, clean state, and pre-existing dirty state"
+      - "Exact before/after Git, index, ref, tracked-content, and untracked-content evidence helpers"
+      - "Failing validator contract tests for invalid input, correct JCODE_REPO_ROOT delegation, read-only Go flags, diagnostics, and exit propagation"
+  - phase: 2
+    name: "Establish the sole-source validation boundary"
+    goal: "Replace embedded Go development and publication with one read-only compatibility path."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "scripts/validate_jcode_go_compat.sh with required explicit jcode-go checkout validation"
+      - "Passing focused compatibility-runner fixtures"
+      - "Removal of sdk/go, sync preview/apply scripts and tests, embedded full-SDK validator and tests, and Jcode's Go CI job"
+      - "No replacement copy, mirror, generation, submodule, vendor, publication, or deprecated alias path"
+  - phase: 3
+    name: "Align active ownership and release guidance"
+    goal: "Make both repositories describe one development owner, one wire authority, one compatibility path, and tag-based releases without rewriting history."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Updated Jcode AGENTS, README, Go SDK overview, architecture, release-boundary, and documentation index guidance"
+      - "Updated jcode-go AGENTS, README, and architecture guidance on dev development, tag releases, full validation, and Rust wire authority"
+      - "Repository scans proving zero conflicting active sdk/go canonical-source or sync/publication instructions"
+      - "Historical specifications and completed planning records verified unchanged"
+  - phase: 4
+    name: "Cross-repository acceptance and delivery gates"
+    goal: "Prove the sole-source migration against real dev behavior, caller-owned state, repository policy, and the supported quality matrix."
+    dependencies:
+      - "Phase 2"
+      - "Phase 3"
+    deliverables:
+      - "Successful real compatibility validation against the explicit clean jcode-go dev checkout"
+      - "Controlled incompatible-checkout failure with actionable preserved parity diagnostics"
+      - "Ten repeat compatibility runs within the 10-minute per-run ceiling and identical results"
+      - "Zero before/after changes in both checkouts for success, failure, clean, and pre-existing dirty cases"
+      - "Complete jcode-go format, module, build, vet, test, race, and Windows amd64 compile evidence"
+      - "Protocol-v1 and public Go API compatibility evidence with zero approved contract differences"
+      - "Focused script tests, repository scans, git diff checks, and scripts/check_guardrails.sh passing"
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-23T20:00:49Z"
+  artifact_type: "plan"

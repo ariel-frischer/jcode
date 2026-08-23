@@ -132,9 +132,18 @@ not conflict with intentional upstream changes.
 ### Go SDK
 
 This fork uses and maintains the companion Go SDK at
-[ariel-frischer/jcode-go](https://github.com/ariel-frischer/jcode-go). The SDK
-provides a typed client for creating, attaching to, and streaming events from
-Jcode sessions.
+[ariel-frischer/jcode-go](https://github.com/ariel-frischer/jcode-go). Its
+`dev` branch is the sole SDK development source, and version tags are the
+release boundaries consumed by Go modules. Jcode retains the authoritative
+Rust protocol-v1 wire contract in `crates/jcode-harness-api` and validates an
+explicit SDK checkout without copying it:
+
+```bash
+scripts/validate_jcode_go_compat.sh --jcode-go-dir /absolute/path/to/jcode-go
+```
+
+The SDK provides a typed client for creating, attaching to, and streaming
+events from Jcode sessions.
 
 ---
 

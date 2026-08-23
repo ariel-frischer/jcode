@@ -33,11 +33,12 @@
 - On Windows, the equivalents are `%LOCALAPPDATA%\\jcode\\bin\\jcode.exe` for the launcher, `%LOCALAPPDATA%\\jcode\\builds\\stable\\jcode.exe` for stable, and `%LOCALAPPDATA%\\jcode\\builds\\versions\\<version>\\jcode.exe` for immutable installs; `scripts/install.ps1` currently installs the stable channel.
 - Ensure `~/.local/bin` is **before** `~/.cargo/bin` in `PATH`.
 
-## Go SDK Synchronization
+## Go SDK Ownership
 
-- When a Bead affecting the Go SDK is completed, update the published SDK repository at `github.com/ariel-frischer/jcode-go` from the corresponding `sdk/go/` source. Work from that repository's `main` branch: fetch `origin`, merge or fast-forward the relevant changes into `main`, and inspect the resulting diff before publishing.
-- Before pushing the SDK update, run the repository's complete validation (`scripts/validate_go_sdk.sh`, or the equivalent formatting, vet, build, test, race, and module checks), and do not publish if validation fails.
-- Push the validated result to `origin/main`. Confirm the remote branch and commit after pushing, and record the SDK commit and validation commands in the completed Bead.
+- `github.com/ariel-frischer/jcode-go` branch `dev` is the sole Go SDK development source. Version tags in that repository are the release boundaries consumed by Go modules.
+- `crates/jcode-harness-api` remains Jcode's authoritative Rust protocol-v1 wire contract. Do not add a second Go implementation, vendored copy, generated projection, submodule, or synchronization path under this repository.
+- For wire compatibility, run `scripts/validate_jcode_go_compat.sh --jcode-go-dir /absolute/path/to/jcode-go`. The validator is read-only and requires an explicit checkout.
+- Run the complete formatting, module, vet, build, test, race, and Windows compile matrix in `jcode-go` itself before integrating or tagging SDK changes.
 
 ## Swarm and Agent Limits
 
