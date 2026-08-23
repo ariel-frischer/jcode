@@ -1,6 +1,6 @@
 use super::*;
 use crate::tui::core;
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
@@ -84,7 +84,7 @@ fn start_file_mention_discovery(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "Entry processing keeps the bounded discovery state explicit"
+    reason = "Bounded discovery state is explicit"
 )]
 fn process_file_mention_entry(
     root: &Path,
@@ -107,9 +107,7 @@ fn process_file_mention_entry(
     let Ok(relative) = path.strip_prefix(root) else {
         return true;
     };
-    let text = relative
-        .to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "/");
+    let text = relative.to_string_lossy().replace(MAIN_SEPARATOR, "/");
     if ignored_patterns.iter().any(|pattern| {
         let pattern = pattern.trim().trim_start_matches("./");
         let pattern = pattern.trim_end_matches('/');

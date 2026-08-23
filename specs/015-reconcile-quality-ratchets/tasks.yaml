@@ -166,7 +166,7 @@ phases:
           - "Any test consolidation documents equivalent or stronger coverage and does not delete behavior solely to meet the ratchet."
       - id: "T012"
         title: "Keep translation repairs flat or smaller in crates/jcode-harness-api-server/src/translate.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"
@@ -178,7 +178,7 @@ phases:
           - "No public schema, fallback, or error contract is weakened."
       - id: "T013"
         title: "Keep remote TUI repairs flat or smaller in crates/jcode-tui/src/tui/app/remote.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"
@@ -190,7 +190,7 @@ phases:
           - "No warning suppression, hidden failure, or unrelated cleanup is introduced."
       - id: "T014"
         title: "Remove positive growth from crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
-        status: "Pending"
+        status: "Completed"
         type: "refactor"
         parallel: true
         story_id: "US-002"
