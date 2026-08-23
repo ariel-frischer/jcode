@@ -48,4 +48,3 @@ fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
     assert_eq!(app.input(), "Inspect @notes.md");
     assert!(!app.input().contains("private file contents"));
 }
-

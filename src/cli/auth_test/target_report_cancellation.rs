@@ -51,4 +51,3 @@ pub(super) async fn populate_auth_test_target_report_with_cancellation(
     .await?;
     Ok(report)
 }
-
