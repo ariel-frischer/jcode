@@ -1,7 +1,15 @@
+use super::delivery::{
+    RetryCell, TELEMETRY_ENDPOINT, TRANSCRIPT_ENDPOINT, cached_optional, spawn_background_worker,
+    telemetry_status_is_permanent,
+};
 use super::*;
 use std::{
     ffi::OsString,
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::{
+        Mutex, MutexGuard, OnceLock,
+        atomic::Ordering,
+        mpsc::{SyncSender, sync_channel},
+    },
 };
 
 // All of these tests mutate process-global state: the env-var opt-out tests
@@ -98,7 +106,7 @@ fn background_delivery_queue_is_bounded() {
 
 #[test]
 fn successful_initialization_is_cached() {
-    let slot = OnceLock::new();
+    let slot = RetryCell::new();
     let attempts = std::sync::atomic::AtomicUsize::new(0);
 
     assert_eq!(
@@ -121,7 +129,7 @@ fn successful_initialization_is_cached() {
 
 #[test]
 fn successful_initialization_is_cached_across_concurrent_callers() {
-    let slot = std::sync::Arc::new(OnceLock::new());
+    let slot = std::sync::Arc::new(RetryCell::new());
     let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     for value in call_initializer_concurrently(std::sync::Arc::clone(&slot), &attempts) {
         assert_eq!(value, Some(7));
@@ -130,7 +138,7 @@ fn successful_initialization_is_cached_across_concurrent_callers() {
 }
 
 fn call_initializer_concurrently(
-    slot: std::sync::Arc<OnceLock<Option<u8>>>,
+    slot: std::sync::Arc<RetryCell<u8>>,
     attempts: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
 ) -> Vec<Option<u8>> {
     const CALLERS: usize = 8;
@@ -162,7 +170,7 @@ fn call_initializer_concurrently(
 
 #[test]
 fn transient_failure_retries_once_across_concurrent_callers() {
-    let slot = std::sync::Arc::new(OnceLock::new());
+    let slot = std::sync::Arc::new(RetryCell::new());
     let reported = std::sync::atomic::AtomicUsize::new(0);
     assert!(
         cached_optional(
@@ -185,7 +193,7 @@ fn transient_failure_retries_once_across_concurrent_callers() {
 
 #[test]
 fn transient_http_client_initialization_failure_can_recover() {
-    let slot = OnceLock::new();
+    let slot = RetryCell::new();
     let reported = std::sync::atomic::AtomicUsize::new(0);
 
     assert!(
@@ -207,7 +215,7 @@ fn transient_http_client_initialization_failure_can_recover() {
 
 #[test]
 fn transient_background_worker_failure_is_observable_and_can_recover() {
-    let slot = OnceLock::new();
+    let slot = RetryCell::new();
     let reported = std::sync::atomic::AtomicUsize::new(0);
 
     let first_attempt = std::panic::catch_unwind(|| {
