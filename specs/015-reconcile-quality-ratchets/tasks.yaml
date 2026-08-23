@@ -105,7 +105,7 @@ phases:
           - "Keep the complete lib.rs branch delta flat or smaller after adding or consolidating tests, with equivalent or stronger coverage documented."
       - id: "T007"
         title: "Add focused harness translation compatibility tests in crates/jcode-harness-api-server/src/translate_tests.rs"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
