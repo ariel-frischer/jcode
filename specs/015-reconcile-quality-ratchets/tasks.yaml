@@ -117,7 +117,7 @@ phases:
           - "Record the exact focused package and test-name command used for verification."
       - id: "T008"
         title: "Add focused remote TUI regression coverage in crates/jcode-tui/src/tui/app/remote_tests.rs"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-002"
