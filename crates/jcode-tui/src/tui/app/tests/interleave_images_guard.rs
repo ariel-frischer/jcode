@@ -17,12 +17,12 @@
 /// the mismatch (2 paths consume the message, only 1 takes the images).
 #[test]
 fn every_interleave_send_path_carries_the_staged_images() {
-    let source = include_str!("../remote.rs");
+    let source = include_str!("../remote/followups.rs");
 
     let takes = source.matches("interleave_message.take()").count();
     assert!(
         takes > 0,
-        "expected at least one interleave send path in remote.rs; if this moved, \
+        "expected at least one interleave send path in remote/followups.rs; if this moved, \
          move this guard with it rather than deleting it"
     );
 
