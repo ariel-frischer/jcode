@@ -556,3 +556,47 @@ This section supersedes the T030-T035 source identity and validation receipts ab
 - **Result:** PASS on all four prior landing blockers. The reviewer confirmed provenance precedes dependent ratchets in CI and local guardrails, `--fix` cannot mutate provenance-bound budgets, owners are checked for exact metric changes rather than ancestry alone, and the superseding acceptance artifacts consistently identify the repair candidate and landing boundary.
 - **Independent checks:** exact implementation HEAD confirmed; provenance validator passed with 143 records and 30 reviews; all 18 scoped unit tests passed; provenance and all three dependent ratchets passed; the scoped checks did not mutate their inputs.
 - **Remaining boundary:** no blocker remains in the four repaired claims. Fresh-base reconciliation and Medium-risk approval remain intentionally outside the review scope.
+
+## Acceptance feedback-loop closure
+
+This section supersedes the earlier candidate identity after representative project testing exposed and repaired one unused telemetry test import. The final implementation candidate is `a80c11a273cbcbae6ff166943ac38af0439420b9` (`test: keep telemetry acceptance warning-clean`).
+
+### Representative project observations
+
+- **T026 actual app-core and harness workflows:** task `775490f448` ran the final project test harness against the worktree target. Lifecycle sanitization/bounded warnings passed (1 test), promoted Bash progress passed (1 test), and the complete harness translation module passed all 62 selected tests, including attach/session, compact metadata, traversal/symlink rejection, owner-only writes, public event translation, and explicit request-error paths. A post-repair exact rerun of `server::client_lifecycle::tests::query_failure_tests::` passed all 3 persistence-success, observable persistence-failure, and sidecar-read-failure cases.
+- **T027 actual telemetry, TUI, and ACP workflows:** the first complete telemetry suite passed 46 tests but emitted an unused-import warning, proving the previous “without warnings” claim was overstated. Commit `a80c11a27` removed the stale import. Task `9862856jjr` then reran the actual crate suite warning-clean: telemetry 46/46, file-mention submission/discovery 22/22, URL/path detection 13/13, inline preview 6/6, remote catch-up success 1/1, remote transport failure 1/1, and both ACP response-shape cases 1/1 each. The remote failure case observed a visible send failure without stranded pending/in-flight state; telemetry observed transient initialization recovery, bounded queue behavior, and successful cache reuse.
+- **T028 public provider contract:** task `9862856jjr` ran the repository E2E target `provider_behavior::token_usage_tests::test_token_usage`; it passed through the typed public provider event/usage contract rather than terminal formatting.
+- **Packaging boundary:** `./scripts/dev_cargo.sh package --list -p jcode --allow-dirty --offline` completed successfully in task `9862856jjr` and enumerated the package file set, including the CLI, crates, telemetry worker assets, E2E tests, fixtures, and provider behavior tests.
+- **Changed-surface failure policy:** `python3 scripts/check_swallowed_error_budget.py` passed after the representative workflows. No newly ignored error was accepted.
+
+### Final broad and built-product observations
+
+- **Canonical delivery path:** task `173893alpg` ran the stable, worktree-bound canonical `scripts/check_guardrails.sh` after the warning repair. Formatting, all-target/all-feature check, Clippy with warnings denied, lockfile, provenance, all ratchets, dependency boundaries, re-export, frame-budget, and onboarding gates all passed with exit 0.
+- **Fresh exact-head artifact:** task `337125akk9` built from a new isolated `CARGO_TARGET_DIR`; artifact `/home/ari/.jcode/scratch/jcode-l89.5-acceptance-a80c11a273cbcbae6ff166943ac38af0439420b9/selfdev/jcode`, version `jcode v0.79.651-dev (a80c11a27)`, SHA-256 `051a11003b63cec22150b5c8c03f5e36237cb3386879f6e325ac94cae789ddc1`.
+- **Public CLI and integration behavior:** task `798212mtlq` observed the exact artifact's real `--help` and `--version` surfaces, a private server/socket simple response (`simple-ok`, exit 0), a public registry `read` tool round trip (`tool-ok`, exit 0), an actionable provider HTTP failure (`401 Unauthorized`, exit 1), and an actionable real configuration failure (`Unknown provider profile 'missing-profile'`, exit 1). The shared daemon symlink remained `/home/ari/.jcode/builds/versions/29d7ec132/jcode` before and after.
+- **External live-provider constraint:** a credentialed OpenAI/OpenRouter/other live-provider turn was not executed. It would consume external service quota and is prohibited without explicit approval. The repository's accepted T032 contract explicitly permits deterministic provider-mock scenarios; therefore the local command/server/provider/tool/error integration boundary is verified, while live third-party delivery remains honestly `acceptance_blocked` rather than inferred from the mock.
+
+### Explicit requirement-to-observation map
+
+| Requirement | Direct final observation |
+|---|---|
+| FR-001 | Provenance validator passed on `a80c11a27`; unrelated ancestors and untraced ownership are rejected by the 18-test negative suite. |
+| FR-002 | Validator reported all 71 adjusted production scopes complete and metric-causal. |
+| FR-003 | Validator reported all 31 adjusted test scopes complete and metric-causal. |
+| FR-004 | Validator reported all 41 adjusted swallowed-error scopes complete and metric-causal. |
+| FR-005 | Validator reported 30 resolved review dispositions; bounded independent repair review passed all four final blockers. |
+| FR-006 | Final branch-base audit enumerated 19 modified already-oversized files and observed `positive_delta_count=0`; telemetry tests improved from -20 to -22 lines after the warning repair. |
+| FR-007 | Actual app-core, harness, telemetry, TUI, ACP, provider E2E, CLI, server, and tool workflows produced their accepted outcomes. Live third-party delivery is separately blocked as recorded above. |
+| FR-008 | Extracted lifecycle, telemetry, remote, file-mention, URL, and preview modules executed 159 selected project tests with zero failures; no acceptance claim relies on deleting a test for size. |
+| FR-009 | Persistence, sidecar read, remote send, telemetry initialization, provider HTTP, and provider-profile configuration failures remained non-zero and actionable; swallowed-error guardrail passed. |
+| FR-010 | All sampled production LOC, test LOC, swallowed-error per-pattern, per-file, and aggregate positive fixtures were rejected in the 18-test suite. |
+| FR-011 | Provenance plus code-size, test-size, and swallowed-error ratchets all passed directly on the final candidate. |
+| FR-012 | Canonical task `173893alpg` passed every enabled stable all-feature gate without unrelated threshold changes. |
+| FR-013 | T026-T028 exact/narrow project tests above passed success and explicit-error workflows; the warning-clean rerun corrected the only observed acceptance defect. |
+| FR-014 | Exact artifact `a80c11a27` passed CLI, private server, provider, tool, HTTP-error, and configuration-error scenarios; live credentialed delivery remains approval-blocked. |
+| NFR-001 / SC-001 | 143/143 adjusted deltas have validator-enforced complete provenance; undocumented or non-causal ownership fails. |
+| NFR-002 | Focused workflows, negative enforcement, canonical gates, packaging inventory, exact build, and built-product paths all pass without contradictory current receipts. The live-provider boundary is explicitly excluded rather than represented as passing. |
+| NFR-003 / SC-002 | 0 of 19 modified already-oversized files grew from `85f9f5e3b`. |
+| SC-003 | 100% of locally executable required behavior and built-product scenarios passed. Credentialed third-party delivery is `acceptance_blocked` pending explicit cost approval. |
+| SC-004 | 100% of the sampled controlled future-growth dimensions were rejected. |
+| SC-005 | 100% of the 30 applicable review dispositions are recorded, and the bounded final repair review reports no blocker in its four claims. |
