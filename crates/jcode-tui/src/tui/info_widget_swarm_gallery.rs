@@ -411,9 +411,8 @@ fn render_swarm_tree_row(
     }
     let gallery_member = members_to_gallery(std::slice::from_ref(member))
         .into_iter()
-        .next()
-        .expect("single swarm member maps to one gallery member");
-    if let Some(runtime) = runtime_metadata(&gallery_member) {
+        .next();
+    if let Some(runtime) = gallery_member.as_ref().and_then(runtime_metadata) {
         spans.push(Span::styled(
             format!(" · {runtime}"),
             Style::default().fg(Color::Rgb(135, 135, 148)),

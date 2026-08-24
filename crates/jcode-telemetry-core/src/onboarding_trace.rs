@@ -82,7 +82,7 @@ pub fn bucket_dt_ms(raw_ms: u64) -> u64 {
 /// Accumulates one onboarding traversal.
 ///
 /// Construct at first-run, call [`TraceRecorder::step`] on each transition, and
-/// [`TraceRecorder::finish`] when the flow settles. Dropping without finishing
+/// [`TraceRecorder::build`] when the flow settles. Dropping without building
 /// sends nothing, which is the right default: a crashed process should not be
 /// reported as an abandonment by a half-built payload.
 pub struct TraceRecorder {

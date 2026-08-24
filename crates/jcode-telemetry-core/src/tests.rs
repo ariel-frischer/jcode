@@ -1,4 +1,7 @@
+use super::delivery::{TELEMETRY_ENDPOINT, TRANSCRIPT_ENDPOINT, telemetry_status_is_permanent};
 use super::*;
+
+mod delivery_retry_tests;
 use std::{
     ffi::OsString,
     sync::{Mutex, MutexGuard, OnceLock},
@@ -69,31 +72,6 @@ fn permanent_telemetry_statuses_trip_the_process_breaker() {
     assert!(!telemetry_status_is_permanent(425));
     assert!(!telemetry_status_is_permanent(429));
     assert!(!telemetry_status_is_permanent(500));
-}
-
-#[test]
-fn background_delivery_queue_is_bounded() {
-    let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
-    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
-    let sender = spawn_background_worker(1, move |_| {
-        let _ = started_tx.send(());
-        let _ = release_rx.recv();
-    })
-    .expect("start test telemetry worker");
-
-    sender
-        .send(serde_json::json!({"event": "first"}))
-        .expect("enqueue first payload");
-    started_rx.recv().expect("worker started first payload");
-    sender
-        .try_send(serde_json::json!({"event": "second"}))
-        .expect("bounded queue accepts one waiting payload");
-    assert!(matches!(
-        sender.try_send(serde_json::json!({"event": "third"})),
-        Err(std::sync::mpsc::TrySendError::Full(_))
-    ));
-
-    release_tx.send(()).expect("release telemetry worker");
 }
 
 #[test]

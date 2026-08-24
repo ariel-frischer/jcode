@@ -70,6 +70,8 @@ use futures::stream;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+mod query_failure_tests;
+
 struct IsolatedRuntimeDir {
     _prev_runtime: Option<std::ffi::OsString>,
     _temp: tempfile::TempDir,
@@ -168,64 +170,6 @@ impl Provider for CountingProvider {
     fn fork(&self) -> Arc<dyn Provider> {
         Arc::new(self.clone())
     }
-}
-
-#[tokio::test]
-async fn lifecycle_query_flushes_recorder_before_reading_typed_stream() {
-    let root = tempfile::tempdir().expect("create lifecycle query root");
-    let recorder = crate::lifecycle_observability::LifecycleRecorder::new_with_clock(
-        crate::config::LifecycleObservabilityConfig::default(),
-        root.path().to_path_buf(),
-        8,
-        std::sync::Arc::new(chrono::Utc::now),
-    );
-    let session_id = "query-session-typed";
-    assert_eq!(
-        recorder.submit(
-            session_id,
-            crate::session::lifecycle_types::LifecycleEvent::Retry {
-                decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Started,
-                semantic_reason:
-                    crate::session::lifecycle_types::LifecycleSemanticReason::ContextLimit,
-                suppression_reason: None,
-                attempt: 1,
-                max_attempts: 3,
-                process_manifest_id: None,
-            },
-        ),
-        crate::lifecycle_observability::LifecycleSubmitOutcome::Accepted
-    );
-    assert_eq!(
-        recorder.submit(
-            session_id,
-            crate::session::lifecycle_types::LifecycleEvent::Block {
-                decision_type: crate::session::lifecycle_types::LifecycleDecisionType::Suppressed,
-                semantic_reason: crate::session::lifecycle_types::LifecycleSemanticReason::Policy,
-                suppression_reason: Some(
-                    crate::session::lifecycle_types::LifecycleSuppressionReason::PolicyDenied,
-                ),
-                process_manifest_id: None,
-            },
-        ),
-        crate::lifecycle_observability::LifecycleSubmitOutcome::Accepted
-    );
-
-    let stream = super::read_lifecycle_query_stream(&recorder, session_id, root.path())
-        .await
-        .expect("read flushed lifecycle stream");
-    assert_eq!(stream.session_id, session_id);
-    assert_eq!(stream.events.len(), 2);
-    assert_eq!(stream.events[0].sequence, 1);
-    assert_eq!(stream.events[1].sequence, 2);
-    assert!(matches!(
-        stream.events[0].event,
-        crate::session::lifecycle_types::LifecycleEvent::Retry { .. }
-    ));
-    assert!(matches!(
-        stream.events[1].event,
-        crate::session::lifecycle_types::LifecycleEvent::Block { .. }
-    ));
-    assert!(stream.warnings.is_empty());
 }
 
 #[tokio::test]

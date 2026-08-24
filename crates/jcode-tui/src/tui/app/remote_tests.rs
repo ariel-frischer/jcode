@@ -12,6 +12,8 @@ use crate::tui::info_widget::{MemoryState, StepStatus};
 use anyhow::Result;
 use std::sync::Arc;
 
+mod catchup_resume_tests;
+
 struct MockProvider;
 
 #[async_trait::async_trait]
@@ -73,44 +75,6 @@ fn ensure_test_jcode_home_if_unset() {
         path
     });
     crate::env::set_var("JCODE_HOME", path);
-}
-
-#[test]
-fn session_handoff_ready_restores_destination_startup_context_before_resume() {
-    ensure_test_jcode_home_if_unset();
-    let destination = "session_handoff_context_test";
-    crate::client_input::save_startup_queued_message_for_session(
-        destination,
-        "continue from the handoff summary".to_string(),
-    );
-
-    let mut app = create_test_app();
-    let rt = tokio::runtime::Runtime::new().expect("runtime");
-    let _guard = rt.enter();
-    let mut remote = crate::tui::backend::RemoteConnection::dummy();
-
-    app.handle_server_event(
-        ServerEvent::SessionHandoffReady {
-            id: 1,
-            source_session_id: app.session.id.clone(),
-            new_session_id: destination.to_string(),
-            new_session_name: "oak".to_string(),
-            auto_start: true,
-        },
-        &mut remote,
-    );
-
-    assert!(app.input.is_empty());
-    assert!(!app.submit_input_on_startup);
-    assert_eq!(app.queued_messages, ["continue from the handoff summary"]);
-    assert!(
-        remote.resume_in_flight(),
-        "SessionHandoffReady must arm the resume barrier before the next tick consumes the target"
-    );
-    assert!(
-        app.display_messages().is_empty(),
-        "handoff reminder should wait for destination history rather than appearing in the source transcript"
-    );
 }
 
 #[test]

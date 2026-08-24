@@ -1,0 +1,440 @@
+plan:
+  branch: "agent/jcode-l89.5-restore-guardrails"
+  created: "2026-08-22"
+  spec_path: "specs/015-reconcile-quality-ratchets/spec.yaml"
+
+summary: |
+  Restore the code-size, test-size, and swallowed-error guardrails through a
+  traced reconciliation rather than a repository-wide refactor or an automatic
+  `--update`. First make the blocker branch flat or smaller in every modified
+  already-oversized file, preserving explicit error propagation and the focused
+  behavior fixes already reviewed. Then build a complete inventory from each
+  committed baseline to the current merged state, classify every delta by owning
+  commit and Bead, and record every independent PR-review concern with a stable
+  disposition. Untraced, reverted, superseded, or questionable growth remains a
+  failure and is not included in a reconciled baseline.
+
+  Keep the existing Python ratchet scripts and JSON budgets as the enforcement
+  authority. Add one repository-local JSON provenance ledger and a standard-library
+  Python validator that cross-checks ledger records, baseline values, owning Git
+  commits, reconciliation ownership, bounded historical-Bead search results, and
+  review dispositions before the three ratchets run.
+  Reconcile only the approved ledger entries into the existing budgets, retain the
+  current per-file, per-pattern, and total no-growth checks, add controlled negative
+  tests proving future growth is rejected, and finish with focused behavior tests,
+  serialized all-feature guardrails, and isolated built-binary public and integration
+  validation.
+
+  Current-base review repair amendment (2026-08-24): keep the existing file-mention
+  architecture, but enforce canonical working-directory containment, distinguish
+  user-authored text from synthetic continuations at queue dispatch, retain failed
+  work in its original state owner, cache persisted expansion by transcript/context,
+  mark discovery completion explicitly, prune ignored directories in WalkBuilder,
+  and make the provenance fixture branch-agnostic. Each repair is tests-first and
+  must pass the complete original acceptance set before merge-wt is retried.
+
+technical_context:
+  language: "Rust 2024 application with Python 3 quality guardrails and Bash orchestration"
+  framework: "Cargo workspace, Rust test harness, Tokio tests, repository-local Python ratchets"
+  primary_dependencies:
+    - name: "Cargo and stable Rust toolchain"
+      version: "stable, workspace edition 2024"
+      purpose: "Compile all targets and features, run focused tests, Clippy, and build the distributable binary."
+    - name: "Python standard library"
+      version: "Python 3"
+      purpose: "Run and extend JSON-backed code-size, test-size, swallowed-error, and provenance validators without adding a dependency."
+    - name: "Git"
+      version: "repository-local"
+      purpose: "Verify baseline snapshots, owning commits, merged ancestry, branch-base file deltas, and unchanged unrelated budgets."
+    - name: "Beads bd CLI"
+      version: "repository-local"
+      purpose: "Resolve durable ownership and acceptance context for each intentional historical delta."
+    - name: "scripts/check_guardrails.sh"
+      version: "repository-local"
+      purpose: "Canonical all-feature formatting, build, Clippy, ratchet, dependency, and state-space delivery gate."
+  storage: "Committed JSON budgets plus scripts/quality_ratchet_provenance.json and specs/015-reconcile-quality-ratchets/validation.md; no runtime or user-data storage changes."
+  testing:
+    framework: "Python unittest or subprocess fixtures, Rust test harness with Tokio where applicable, and isolated built-binary smoke tests"
+    approach: "Validate inventory and branch deltas first, add focused provenance and negative ratchet tests, run affected behavior/error-path tests, then one serialized canonical guardrail run and private-socket built-binary validation."
+  target_platform: "Supported Jcode development and release hosts, with primary validation on Linux x86_64 and existing cross-platform Cargo checks"
+  project_type: "cli"
+  performance_goals: "No runtime behavior or maintained performance-budget regression; provenance validation remains deterministic and fast enough for every guardrail run."
+  constraints:
+    - "Do not use automatic ratchet update output as ownership evidence."
+    - "Only deltas traced to intentional commits that are ancestors of the accepted merged state may be reconciled."
+    - "Every reconciled delta must include previous and new values, causal source commit, reconciliation Bead, bounded source-Bead search result, and PR-review disposition; never fabricate missing historical ownership."
+    - "Untraced, reverted, superseded, or disputed deltas remain rejected."
+    - "The blocker branch must be flat or smaller against 85f9f5e3b in every modified already-oversized file, including current positive deltas in bash.rs, telemetry-core/lib.rs, and state_ui_input_helpers.rs."
+    - "Preserve existing observable behavior, test coverage, explicit error handling, and unrelated budget values."
+    - "Keep existing per-file, aggregate, and per-pattern no-growth enforcement after reconciliation."
+    - "Serialize Cargo-heavy validation and use a private socket for runtime checks so the shared daemon is not disturbed."
+    - "Independent review dispositions must be complete before any baseline mutation is accepted."
+    - "File expansion must never canonicalize outside the active working directory or follow a repository symlink to external content."
+    - "Synthetic poke and todo-continuation text is provider input, not user authorization to read an @path."
+    - "Failure recovery must preserve composer, queue, reminder, interleave, image, and visible-turn ownership."
+    - "Normal discovery completion must remain distinguishable from a disconnected worker, and ignored directories must be pruned before descent."
+  scale_scope: "One repository-wide historical reconciliation covering the currently reported 74 production-size, 31 test-size, and 36 swallowed-error path deltas, plus the blocker branch changed surface."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan limits source edits to blocker-owned no-growth repairs and limits historical work to evidence-backed budget and provenance reconciliation."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "No CLI, protocol, config, persistence, or SDK contract changes are planned; focused and built-binary checks prove unchanged behavior."
+    - name: "Explicit Configuration Precedence"
+      status: "N/A"
+      notes: "No configuration surface or precedence rule changes."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Runtime source repairs remain in their existing owning crates; guardrail metadata remains under scripts and does not add workspace dependencies."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Each changed error path and affected public workflow maps to focused tests before broad validation."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Swallowed-error findings are either repaired with explicit handling or accepted only with traced provenance; no new silent failures are allowed."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Focused ratchets, negative enforcement tests, stable all-feature guardrails, and built-product validation are mandatory deliverables."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The existing guardrail scripts remain canonical; the plan adds one small provenance contract instead of a parallel quality framework."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Every baseline delta and review concern receives an explicit owner and disposition, while unowned growth remains blocked."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The plan requires built-binary validation against the actual new binary and preserves maintained runtime budgets."
+
+research_findings:
+  decisions:
+    - topic: "Reconciliation versus repository-wide source repair"
+      decision: "Repair only blocker-branch growth, then reconcile fully traced intentional historical merged growth."
+      rationale: "The active Bead clarification explicitly rejects a refactor across 74 production and 31 test files. This restores meaningful no-growth enforcement while keeping the change reviewable."
+      alternatives_considered:
+        - "Refactor every oversized production and test file below its old baseline"
+        - "Run scripts/check_guardrails.sh --fix and accept all current values"
+        - "Disable or exempt stale paths"
+    - topic: "Durable provenance location"
+      decision: "Add scripts/quality_ratchet_provenance.json as the canonical ledger and validate it from scripts/check_guardrails.sh."
+      rationale: "JSON matches the existing budget format, needs no new parser dependency, is reviewable beside the guardrails, and can represent cross-category ownership and review records without overloading enforcement budgets."
+      alternatives_considered:
+        - "Put prose only in a Bead comment or temporary scratch artifact"
+        - "Embed large provenance objects independently in all three budget files"
+        - "Use YAML and add a Python YAML dependency"
+    - topic: "Provenance validation"
+      decision: "Cross-check required fields, unique category/scope records, previous and reconciled values, current budget membership, causal source commit existence and accepted ancestry, reconciliation Bead syntax, bounded source-Bead search results, and stable review dispositions."
+      rationale: "A ledger that is not mechanically tied to the budgets can drift and conceal unexplained growth. Git and JSON checks provide deterministic local evidence."
+      alternatives_considered:
+        - "Human review only"
+        - "Trust commit subjects without ancestry checks"
+        - "Accept one aggregate record per category"
+    - topic: "Independent PR-review handling"
+      decision: "Inventory each applicable comment by stable identifier and record implemented, rejected-with-evidence, or out-of-scope dispositions before reconciliation."
+      rationale: "The spec requires transparent outcomes for all applicable independent feedback, and the existing review already identified branch no-growth and exceptional-behavior concerns."
+      alternatives_considered:
+        - "Record only accepted comments"
+        - "Summarize the review without per-comment identifiers"
+    - topic: "No-growth proof after reconciliation"
+      decision: "Retain the existing ratchet algorithms and add fixture-based controlled positive-delta tests for code size, test size, per-pattern swallowed errors, per-file swallowed errors, and aggregate swallowed errors."
+      rationale: "A passing reconciled snapshot alone does not prove that future growth is still rejected. Negative tests directly cover FR-010 and SC-004."
+      alternatives_considered:
+        - "Rely only on the current repository passing"
+        - "Loosen aggregate checks while keeping per-file checks"
+    - topic: "Acceptance ordering"
+      decision: "Run inventory and focused checks before the single serialized canonical guardrail run, then validate the built binary on an isolated socket."
+      rationale: "This follows repository feedback-loop rules, avoids repeated expensive Cargo runs, and ensures runtime evidence measures the built change rather than the shared daemon."
+      alternatives_considered:
+        - "Run the full guardrail suite after every ledger edit"
+        - "Test through the long-lived shared-server binary"
+
+data_model:
+  entities:
+    - name: "Baseline Delta Provenance"
+      description: "One independently reviewable historical transition for one quality category and measured scope."
+      fields:
+        - name: "id"
+          type: "string"
+          description: "Stable ledger identifier."
+          constraints: "Unique and immutable."
+        - name: "category"
+          type: "enum"
+          description: "Quality ratchet owning the delta."
+          constraints: "code_size, test_size, or swallowed_error."
+        - name: "scope"
+          type: "string"
+          description: "Repository path and, for swallowed errors, optional pattern dimension."
+          constraints: "Must resolve to the corresponding budget entry."
+        - name: "previous_value"
+          type: "integer or pattern-count object"
+          description: "Accepted value in the referenced historical baseline."
+          constraints: "Must match the baseline snapshot or be explicitly marked new."
+        - name: "reconciled_value"
+          type: "integer or pattern-count object"
+          description: "Approved value in the reconciled budget."
+          constraints: "Must match the committed budget and may not include untraced growth."
+        - name: "baseline_commit"
+          type: "Git object ID"
+          description: "Commit containing the prior accepted budget."
+          constraints: "Must exist."
+        - name: "owning_commits"
+          type: "list of Git object IDs"
+          description: "Intentional merged commits accounting for the measured delta."
+          constraints: "Non-empty; every commit must exist and be in accepted ancestry."
+        - name: "reconciliation_bead"
+          type: "Bead ID"
+          description: "Durable ownership for the reconciliation decision."
+          constraints: "Required and resolvable during review."
+        - name: "source_bead_search"
+          type: "object"
+          description: "Bounded search evidence for historical Beads associated with the causal commits."
+          constraints: "Records queries and either matching Bead IDs or an explicit not_found result; historical ownership is never fabricated."
+        - name: "source_beads"
+          type: "list of Bead IDs"
+          description: "Historical work ownership found by the bounded search."
+          constraints: "May be empty only when source_bead_search records not_found; every listed Bead must be resolvable."
+        - name: "review_disposition_ids"
+          type: "list of strings"
+          description: "Links the delta to independent review outcomes."
+          constraints: "Every identifier must resolve to a ledger disposition."
+        - name: "merged_state_evidence"
+          type: "string"
+          description: "Bounded explanation of why the current state is intentional and active."
+          constraints: "Must not rely only on a commit subject or temporary scratch file."
+      relationships:
+        - target: "Quality Ratchet"
+          type: "many-to-one"
+          description: "Each provenance record justifies one reconciled ratchet scope."
+        - target: "PR Review Disposition"
+          type: "many-to-many"
+          description: "One review concern may affect several deltas and one delta may address several concerns."
+        - target: "Validation Evidence"
+          type: "many-to-many"
+          description: "Focused and final checks prove the reconciled record is enforced and behavior-preserving."
+    - name: "PR Review Disposition"
+      description: "Durable outcome for one applicable independent review concern."
+      fields:
+        - name: "id"
+          type: "string"
+          description: "Stable comment, review, or Bead-comment identifier."
+          constraints: "Unique and non-empty."
+        - name: "source"
+          type: "string"
+          description: "PR URL, review identifier, or durable Bead comment identifier."
+          constraints: "Must be reviewable without temporary local state."
+        - name: "concern"
+          type: "string"
+          description: "Bounded statement of the reviewed issue."
+          constraints: "Non-empty."
+        - name: "disposition"
+          type: "enum"
+          description: "Final outcome."
+          constraints: "implemented, rejected_with_evidence, or out_of_scope."
+        - name: "evidence"
+          type: "string"
+          description: "Commit, test, diff, or policy evidence supporting the outcome."
+          constraints: "Required for every disposition."
+      relationships:
+        - target: "Baseline Delta Provenance"
+          type: "many-to-many"
+          description: "Review outcomes govern one or more reconciled deltas."
+    - name: "Quality Ratchet"
+      description: "The existing enforceable JSON budget plus its Python checker."
+      fields:
+        - name: "category"
+          type: "enum"
+          description: "Code size, test size, or swallowed errors."
+          constraints: "Exactly one existing canonical checker."
+        - name: "baseline"
+          type: "JSON object"
+          description: "Accepted per-scope and aggregate values."
+          constraints: "Unrelated values unchanged; reconciled values backed by provenance."
+        - name: "violation_condition"
+          type: "predicate"
+          description: "Future positive growth rejected."
+          constraints: "Existing behavior retained and covered by negative tests."
+      relationships:
+        - target: "Baseline Delta Provenance"
+          type: "one-to-many"
+          description: "Each adjusted scope has one or more complete ownership records."
+    - name: "Validation Evidence"
+      description: "Committed acceptance matrix and command results for focused, broad, behavior, and built-product checks."
+      fields:
+        - name: "requirement_ids"
+          type: "list of strings"
+          description: "Spec requirements proven by the evidence."
+          constraints: "Every FR and measurable outcome must map to a direct check."
+        - name: "command"
+          type: "string"
+          description: "Exact non-secret validation command."
+          constraints: "Uses the intended worktree and binary."
+        - name: "result"
+          type: "enum"
+          description: "Observed outcome."
+          constraints: "pass, fail, or explicitly approved blocked."
+        - name: "artifact"
+          type: "string"
+          description: "Relevant diff, log, built binary, socket, or fixture reference."
+          constraints: "Durable or reproducible."
+      relationships:
+        - target: "Quality Ratchet"
+          type: "many-to-many"
+          description: "Evidence proves focused enforcement and complete guardrail stability."
+
+api_contracts:
+  endpoints: []
+  commands:
+    - name: "python3 scripts/check_quality_ratchet_provenance.py"
+      description: "Validate complete provenance and review dispositions against the reconciled budgets and Git history."
+      inputs: "Committed provenance ledger, three existing budget JSON files, and local Git metadata."
+      outputs: "Deterministic success summary or actionable per-record failures."
+      exit_codes: "0 when complete and consistent; non-zero for missing, malformed, untraced, non-merged, or mismatched records."
+    - name: "python3 scripts/check_code_size_budget.py"
+      description: "Existing production Rust LOC ratchet, unchanged except any narrowly required testability seam."
+      inputs: "scripts/code_size_budget.json and current production Rust files."
+      outputs: "Improvements or explicit per-file regressions."
+      exit_codes: "Existing behavior retained."
+    - name: "python3 scripts/check_test_size_budget.py"
+      description: "Existing test Rust LOC ratchet, unchanged except any narrowly required testability seam."
+      inputs: "scripts/test_size_budget.json and current test Rust files."
+      outputs: "Improvements or explicit per-file regressions."
+      exit_codes: "Existing behavior retained."
+    - name: "python3 scripts/check_swallowed_error_budget.py"
+      description: "Existing per-pattern, per-file, and aggregate swallowed-error ratchet."
+      inputs: "scripts/swallowed_error_budget.json and current production Rust files."
+      outputs: "Improvements or explicit pattern, file, and aggregate regressions."
+      exit_codes: "Existing behavior retained."
+    - name: "scripts/check_guardrails.sh"
+      description: "Canonical repository delivery gate, extended to run provenance validation before ratchet acceptance."
+      inputs: "Current worktree on stable Rust with Cargo-heavy work serialized."
+      outputs: "Existing gate summary plus provenance gate result."
+      exit_codes: "Non-zero if any required guardrail fails."
+    - name: "target/selfdev/jcode run --no-update --socket <private-socket> <prompt>"
+      description: "Built-binary public and integration validation without measuring the shared daemon."
+      inputs: "Fresh selfdev binary, isolated socket, deterministic public command and integration scenarios."
+      outputs: "Expected unchanged command, server, provider-mock, tool, and error-path behavior."
+      exit_codes: "Existing public contract retained."
+
+project_structure:
+  documentation:
+    - path: "specs/015-reconcile-quality-ratchets/plan.yaml"
+      description: "Approved reconciliation architecture and validation sequence."
+    - path: "specs/015-reconcile-quality-ratchets/tasks.yaml"
+      description: "Requirement-traced implementation, review, and acceptance tasks."
+    - path: "specs/015-reconcile-quality-ratchets/validation.md"
+      description: "Acceptance matrix, review dispositions summary, exact commands, branch-base size audit, and final evidence."
+    - path: "scripts/quality_ratchet_provenance.json"
+      description: "Canonical machine-validated ownership and review ledger for every reconciled delta."
+  source_code:
+    - path: "scripts/check_quality_ratchet_provenance.py"
+      description: "Standard-library validator for provenance completeness, budget consistency, and Git ancestry."
+    - path: "scripts/check_code_size_budget.py"
+      description: "Existing production LOC enforcement; preserve no-growth behavior."
+    - path: "scripts/check_test_size_budget.py"
+      description: "Existing test LOC enforcement; preserve no-growth behavior."
+    - path: "scripts/check_swallowed_error_budget.py"
+      description: "Existing swallowed-error enforcement; preserve per-pattern, per-file, and aggregate behavior."
+    - path: "scripts/check_guardrails.sh"
+      description: "Register provenance validation in the canonical delivery gate."
+    - path: "scripts/code_size_budget.json"
+      description: "Reconciled production-size values for traced intentional state only."
+    - path: "scripts/test_size_budget.json"
+      description: "Reconciled test-size values for traced intentional state only."
+    - path: "scripts/swallowed_error_budget.json"
+      description: "Reconciled swallowed-error values for traced intentional state only."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+      description: "Blocker-owned changed oversized file; remain flat or smaller while preserving lifecycle behavior."
+    - path: "crates/jcode-app-core/src/tool/bash.rs"
+      description: "Remove blocker-owned positive LOC growth while preserving explicit bash error handling."
+    - path: "crates/jcode-harness-api-server/src/translate.rs"
+      description: "Keep blocker-owned translation repair flat or smaller and behavior-compatible."
+    - path: "crates/jcode-telemetry-core/src/lib.rs"
+      description: "Remove blocker-owned positive LOC growth while retaining explicit telemetry failure behavior."
+    - path: "crates/jcode-tui/src/tui/app/remote.rs"
+      description: "Preserve flat blocker-owned TUI behavior and focused regressions."
+    - path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
+      description: "Remove blocker-owned positive LOC growth without restoring warnings or hidden failures."
+    - path: "src/cli/acp.rs"
+      description: "Preserve blocker-owned ACP error-path repair and public behavior."
+  tests:
+    - path: "scripts/tests/test_quality_ratchet_provenance.py"
+      description: "Ledger schema, mismatch, missing owner, invalid ancestry, duplicate scope, and review-disposition tests."
+    - path: "scripts/tests/test_quality_ratchets.py"
+      description: "Fixture-based positive-growth rejection for production LOC, test LOC, and swallowed-error dimensions."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+      description: "Focused lifecycle behavior and failure-path preservation."
+    - path: "crates/jcode-app-core/src/tool/bash_tests.rs"
+      description: "Focused bash failure observability and command behavior."
+    - path: "crates/jcode-harness-api-server/src/translate_tests.rs"
+      description: "Harness translation compatibility and missing-field behavior."
+    - path: "crates/jcode-telemetry-core/src/lib.rs"
+      description: "Existing colocated telemetry success and error-path tests."
+    - path: "crates/jcode-tui/src/tui/app/remote_tests.rs"
+      description: "Focused remote TUI behavior preservation."
+    - path: "tests/e2e/provider_behavior.rs"
+      description: "Public provider behavior regression coverage."
+    - path: "tests/e2e"
+      description: "Built-binary public and integration scenarios in an isolated runtime."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze inventory and acceptance matrix"
+    goal: "Turn the scratch attribution and independent review into complete durable, reviewable inputs before changing any baseline."
+    deliverables:
+      - "Record the baseline commits, current values, owning commit candidates, owning Beads, and merged-state evidence for all 74 production-size, 31 test-size, and 36 swallowed-error path deltas."
+      - "Split mixed or aggregate deltas so intentional and unexplained portions are independently measurable."
+      - "Inventory every applicable independent review comment by stable identifier and assign an initial disposition."
+      - "Map FR-001 through FR-014 and SC-001 through SC-005 to direct checks in validation.md."
+  - phase: 2
+    name: "Restore blocker-branch no-growth"
+    goal: "Make every changed already-oversized file flat or smaller than branch base 85f9f5e3b without altering accepted behavior."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Eliminate the positive blocker-branch LOC deltas in bash.rs, telemetry-core/lib.rs, and state_ui_input_helpers.rs."
+      - "Verify all other changed oversized production and test files are flat or smaller independently."
+      - "Preserve compile, Clippy, warning, panic, explicit-error, and focused behavior repairs."
+      - "Run focused tests and changed-surface ratchets before continuing."
+  - phase: 3
+    name: "Implement provenance and review gates"
+    goal: "Make ownership and review completeness mechanically enforceable before baseline reconciliation."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Add the canonical JSON provenance ledger with complete delta and review-disposition records."
+      - "Add the standard-library provenance validator and focused failure fixtures."
+      - "Register the validator in scripts/check_guardrails.sh before the three affected ratchets."
+      - "Reject missing owners, mismatched values, invalid commit ancestry, unresolved review concerns, and duplicate or incomplete records."
+  - phase: 4
+    name: "Reconcile traced intentional state"
+    goal: "Update only approved scopes while leaving every untraced or questionable delta failing."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Reconcile code-size, test-size, and swallowed-error budgets only for ledger entries accepted by review."
+      - "Keep unrelated budget entries byte-for-byte unchanged where practical and explain any deterministic serialization-only differences."
+      - "Record implemented, rejected-with-evidence, or out-of-scope outcomes for every independent review comment."
+      - "Run focused ratchets and prove a controlled positive delta is rejected for every affected enforcement dimension."
+  - phase: 5
+    name: "Validate behavior, guardrails, and built product"
+    goal: "Produce one internally consistent acceptance run across focused, broad, and distributable-product boundaries."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Focused behavior and error-path tests pass with no coverage removed merely to satisfy size limits."
+      - "Provenance validator and all three focused ratchets pass."
+      - "scripts/check_guardrails.sh passes on stable with all targets and features and unrelated thresholds unchanged."
+      - "The selfdev binary is built and public plus integration scenarios pass on an isolated socket."
+      - "Final branch-base file-size audit, scope-to-diff review, independent review dispositions, and validation receipts are recorded in validation.md and the Bead."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-22T20:28:33Z"
+  artifact_type: "plan"

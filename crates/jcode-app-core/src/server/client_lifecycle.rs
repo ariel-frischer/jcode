@@ -113,24 +113,22 @@ async fn read_lifecycle_query_stream(
             crate::lifecycle_observability::LifecycleRecorderDiagnostic::QueueFull
                 | crate::lifecycle_observability::LifecycleRecorderDiagnostic::WorkerUnavailable
         )
-    }) {
-        if stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS {
-            stream
-                .warnings
-                .push(crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent);
-        }
+    }) && stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS
+    {
+        stream
+            .warnings
+            .push(crate::session::lifecycle_types::LifecycleCompatibilityWarning::DroppedEvent);
     }
     if diagnostics.iter().any(|diagnostic| {
         matches!(
             diagnostic,
             crate::lifecycle_observability::LifecycleRecorderDiagnostic::PersistenceFailure
         )
-    }) {
-        if stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS {
-            stream.warnings.push(
-                crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
-            );
-        }
+    }) && stream.warnings.len() < MAX_LIFECYCLE_QUERY_WARNINGS
+    {
+        stream.warnings.push(
+            crate::session::lifecycle_types::LifecycleCompatibilityWarning::PersistenceUnavailable,
+        );
     }
     Ok(stream)
 }

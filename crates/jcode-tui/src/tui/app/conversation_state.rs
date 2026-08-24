@@ -1,12 +1,44 @@
 use super::*;
 
+#[derive(Clone)]
+pub(super) struct PersistedFileMentionCache {
+    working_dir: Option<String>,
+    enabled: bool,
+    messages_by_hash: std::collections::HashMap<u64, Message>,
+}
+
 impl App {
+    fn expand_persisted_file_mention(&self, mut message: Message) -> Message {
+        let enabled = crate::config::config().file_mentions.enabled;
+        let working_dir = super::input::file_mentions::file_mention_working_dir(self);
+        if matches!(&message.role, Role::User) {
+            for block in &mut message.content {
+                if let ContentBlock::Text { text, .. } = block {
+                    if super::commands::is_poke_message(text) {
+                        continue;
+                    }
+                    *text =
+                        super::input::expand_file_mentions(text, working_dir.as_deref(), enabled);
+                }
+            }
+        }
+        message
+    }
+
+    fn expand_persisted_file_mentions(&self, messages: Vec<Message>) -> Vec<Message> {
+        messages
+            .into_iter()
+            .map(|message| self.expand_persisted_file_mention(message))
+            .collect()
+    }
+
     pub(super) fn ensure_provider_messages_hydrated(&mut self) {
         if !self.is_remote || !self.messages.is_empty() || self.session.messages.is_empty() {
             return;
         }
 
-        let provider_messages = self.session.messages_for_provider_uncached();
+        let provider_messages =
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached());
         self.replace_provider_messages(provider_messages);
     }
 
@@ -14,7 +46,33 @@ impl App {
         if self.is_remote || !self.messages.is_empty() {
             self.messages.clone()
         } else {
-            self.session.messages_for_provider_uncached()
+            let messages = self.session.messages_for_provider_uncached();
+            let message_hashes = super::message_hashes(&messages);
+            let working_dir = super::input::file_mentions::file_mention_working_dir(self);
+            let enabled = crate::config::config().file_mentions.enabled;
+            let cached = self.persisted_file_mentions_cache.borrow();
+            let reusable = cached
+                .as_ref()
+                .filter(|cache| cache.working_dir == working_dir && cache.enabled == enabled);
+            let expanded: Vec<_> = messages
+                .into_iter()
+                .zip(message_hashes.iter().copied())
+                .map(|(message, hash)| {
+                    reusable
+                        .and_then(|cache| cache.messages_by_hash.get(&hash).cloned())
+                        .unwrap_or_else(|| self.expand_persisted_file_mention(message))
+                })
+                .collect();
+            drop(cached);
+            *self.persisted_file_mentions_cache.borrow_mut() = Some(PersistedFileMentionCache {
+                working_dir,
+                enabled,
+                messages_by_hash: message_hashes
+                    .into_iter()
+                    .zip(expanded.iter().cloned())
+                    .collect(),
+            });
+            expanded
         }
     }
 

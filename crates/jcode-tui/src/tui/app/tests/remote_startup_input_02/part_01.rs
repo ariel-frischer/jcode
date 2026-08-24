@@ -1630,36 +1630,6 @@ fn test_retrieve_pending_message_with_alt_and_super_up() {
 }
 
 #[test]
-fn test_retrieve_pending_message_prefers_pending_interleave_for_editing() {
-    let mut app = create_test_app();
-    app.is_processing = true;
-    app.queue_mode = false; // Enter=interleave, Ctrl+Enter=queue
-
-    for c in "urgent".chars() {
-        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
-            .unwrap();
-    }
-    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
-        .unwrap();
-
-    for c in "later".chars() {
-        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
-            .unwrap();
-    }
-    app.handle_key(KeyCode::Enter, KeyModifiers::CONTROL)
-        .unwrap();
-
-    assert_eq!(app.interleave_message.as_deref(), Some("urgent"));
-    assert_eq!(app.queued_count(), 1);
-
-    app.retrieve_pending_message_for_edit();
-
-    assert_eq!(app.input(), "urgent\n\nlater");
-    assert_eq!(app.interleave_message.as_deref(), None);
-    assert_eq!(app.queued_count(), 0);
-}
-
-#[test]
 fn test_send_action_modes() {
     let mut app = create_test_app();
     app.is_processing = true;
@@ -2084,4 +2054,9 @@ fn test_catalog_update_rebuilds_open_model_picker_with_real_routes() {
             "rebuilt picker should expose the real route"
         );
     });
+}
+
+mod queued_file_mention_tests {
+    use super::*;
+    include!("queued_file_mention_tests.rs");
 }

@@ -1,5 +1,7 @@
 use super::*;
 
+mod metadata_guardrail_tests;
+
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -77,35 +79,6 @@ fn write_session_record_with_titles(
     )
     .expect("write session record");
     path
-}
-
-#[test]
-fn persisted_metadata_reads_large_transcripts_from_bounded_windows() {
-    let home = ScopedJcodeHome::new("bounded-metadata");
-    let sessions = home.path.join("sessions");
-    std::fs::create_dir_all(&sessions).expect("create sessions directory");
-    let path = sessions.join("session_large.json");
-    let mut file = std::fs::File::create(&path).expect("create large session");
-    write!(
-        file,
-        "{{\"id\":\"session_large\",\"title\":\"Generated title\",\"messages\":[\""
-    )
-    .unwrap();
-    for _ in 0..(2 * 1024) {
-        file.write_all(&[b'x'; 1024]).unwrap();
-    }
-    write!(
-        file,
-        "\"],\"working_dir\":\"/workspace/large\",\"custom_title\":\"Pinned title\"}}"
-    )
-    .unwrap();
-    drop(file);
-
-    let metadata = BridgeState::resolve_session_metadata("session_large").expect("metadata");
-    assert_eq!(metadata.working_dir.as_deref(), Some("/workspace/large"));
-    assert_eq!(metadata.title.as_deref(), Some("Generated title"));
-    assert_eq!(metadata.custom_title.as_deref(), Some("Pinned title"));
-    assert_eq!(metadata.display_title().as_deref(), Some("Pinned title"));
 }
 
 fn only_reply_event(outbound: Vec<Outbound>) -> ApiEvent {
