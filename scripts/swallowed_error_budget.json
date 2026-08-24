@@ -1,7 +1,7 @@
 {
   "total": 3408,
   "totals_by_pattern": {
-    "dot_ok": 1274,
+    "dot_ok": 1273,
     "let_underscore": 1264,
     "unwrap_or_default": 871
   },
