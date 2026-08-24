@@ -217,10 +217,22 @@ pub(super) fn send_transcript_payload(payload: Value) -> bool {
     }
 }
 
-pub(super) fn send_payload(payload: Value, mode: DeliveryMode) -> bool {
-    #[cfg(test)]
+#[cfg(test)]
+fn record_test_payload(payload: &Value) -> bool {
     if let Ok(mut emitted) = super::TEST_EMITTED_PAYLOADS.lock() {
         emitted.push(payload.clone());
+    }
+    true
+}
+
+#[cfg(not(test))]
+fn record_test_payload(_payload: &Value) -> bool {
+    false
+}
+
+pub(super) fn send_payload(payload: Value, mode: DeliveryMode) -> bool {
+    if record_test_payload(&payload) {
+        return true;
     }
     match mode {
         DeliveryMode::Background => {

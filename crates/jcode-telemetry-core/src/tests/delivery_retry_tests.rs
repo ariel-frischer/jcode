@@ -7,6 +7,28 @@ use std::sync::{
 };
 
 #[test]
+fn test_delivery_records_payload_without_entering_runtime_delivery() {
+    let before = TEST_EMITTED_PAYLOADS
+        .lock()
+        .expect("telemetry test payloads")
+        .len();
+
+    assert!(crate::delivery::send_payload(
+        serde_json::json!({"event": "test-only"}),
+        crate::DeliveryMode::Blocking(Duration::from_millis(1)),
+    ));
+
+    let emitted = TEST_EMITTED_PAYLOADS
+        .lock()
+        .expect("telemetry test payloads");
+    assert_eq!(emitted.len(), before + 1);
+    assert_eq!(
+        emitted.last(),
+        Some(&serde_json::json!({"event": "test-only"}))
+    );
+}
+
+#[test]
 fn background_delivery_queue_is_bounded() {
     let (started_tx, started_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);

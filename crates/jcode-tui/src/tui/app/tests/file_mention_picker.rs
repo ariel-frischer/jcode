@@ -345,6 +345,13 @@ fn persisted_file_mention_materialization_reuses_the_first_expansion() {
         );
         let third = app.materialized_provider_messages();
         assert!(matches!(
+            third
+                .iter()
+                .find_map(|message| message.content.last()),
+            Some(ContentBlock::Text { text, .. })
+                if text == &first_text && text.contains("cached context")
+        ));
+        assert!(matches!(
             third.last().and_then(|message| message.content.last()),
             Some(ContentBlock::Text { text, .. }) if text.contains("refreshed context")
         ));
