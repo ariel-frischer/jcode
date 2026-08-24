@@ -14,6 +14,20 @@
 
 ## Development Workflow
 
+- **Keep the root checkout on `dev`.** `/home/ari/repos/jcode` is the integration
+  checkout, not a disposable review checkout. Agents must not create a local
+  review branch for use in this checkout or switch it to a feature, pull-request,
+  review, or temporary branch unless Ariel explicitly asks to change the root
+  branch. At the start and end of work performed from the root checkout, verify
+  `git branch --show-current` is `dev`. If it is not, stop mutation, preserve any
+  dirty state, and restore `dev` only after confirming the switch is safe.
+- **Inspect pull requests without changing the root checkout.** For read-only
+  review, prefer `gh pr view`, `gh pr diff`, and `git show <oid>:<path>`. If a PR
+  must be checked out, use `scripts/worktree-setup.sh` to create a dedicated
+  worktree and branch under `.worktrees/`. Never fetch a pull-request head into a
+  local branch and then check that branch out in the root checkout. Fetch exact PR
+  heads into a remote-tracking ref such as `refs/remotes/github/pr/<n>` when
+  checkout is unnecessary.
 - **Stay on your own branch** - Do not take, cherry-pick, merge, or copy code from other
   people's or other agents' branches unless the source branch belongs to a repository
   maintainer and the user explicitly asks you to integrate it. Only work from your branch
