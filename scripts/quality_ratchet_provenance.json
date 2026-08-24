@@ -1,5 +1,5 @@
 {
-  "accepted_merged_state": "5e046442893c53bfec52a5d1fe0023d047e9bf6e",
+  "accepted_merged_state": "f73e07cd5c6cecebe384ee30101ef644555cfe55",
   "reconciliation_bead": "jcode-l89.5",
   "records": [
     {
@@ -23,10 +23,11 @@
         "59a6e81de57bdd3fac3fd3944a0777e5c32f9cff",
         "f83eb091d4cf3d7430524c2dc57035662df68914",
         "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
-        "7015b21b332ba93afbc849fa22852ceabb5895c7"
+        "7015b21b332ba93afbc849fa22852ceabb5895c7",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
       ],
       "previous_value": 1416,
-      "reconciled_value": 1756,
+      "reconciled_value": 1761,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -175,10 +176,12 @@
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "e8f8d077ef2fd8a67730ca552b901a6e7a524125",
         "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
-        "8f5891a8c6b6d0c9767741646c7759ecea04b325"
+        "8f5891a8c6b6d0c9767741646c7759ecea04b325",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 3416,
-      "reconciled_value": 3582,
+      "reconciled_value": 3643,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -868,10 +871,12 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "f76c9a573861112b2ebe25cd9cecd3c2f2659182",
         "bc1d99536a755b2dfab730d671353948c3379a04",
-        "f6d5da78004e866df8dce7cbae2f74747325e7af"
+        "f6d5da78004e866df8dce7cbae2f74747325e7af",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 1854,
-      "reconciled_value": 2232,
+      "reconciled_value": 2338,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -893,10 +898,11 @@
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-protocol/src/wire.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "1396b383e8dd464cafb89e9c0f231325a0c6824d"
+        "1396b383e8dd464cafb89e9c0f231325a0c6824d",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
       ],
       "previous_value": 1531,
-      "reconciled_value": 1550,
+      "reconciled_value": 1553,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -1022,10 +1028,11 @@
         "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
         "135f915f0ef3e8b21ed402e5f18972d3ced98b93",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
-        "bc1d99536a755b2dfab730d671353948c3379a04"
+        "bc1d99536a755b2dfab730d671353948c3379a04",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
       ],
       "previous_value": 1380,
-      "reconciled_value": 1427,
+      "reconciled_value": 1430,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -1245,7 +1252,8 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
         "a8636a16bd2343bca0bf3a4acab43dc04b3578b7",
-        "62de1469718bfccab1125f11934adca72b9e2399"
+        "62de1469718bfccab1125f11934adca72b9e2399",
+        "dd96b6ee815994811198ed6b0bdcdb741890b429"
       ],
       "previous_value": 4073,
       "reconciled_value": 4248,
@@ -1511,10 +1519,11 @@
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/backend.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
-        "8775cf6851a074b54bb74d8e3748a41f5f89bea7"
+        "8775cf6851a074b54bb74d8e3748a41f5f89bea7",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
       ],
       "previous_value": 1882,
-      "reconciled_value": 1927,
+      "reconciled_value": 1928,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -1768,10 +1777,12 @@
       "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/acp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
         "f411ffc18614a38ad614f0903c2afa78431b3b87",
-        "6459bd52605305cf61e33d244a02a8692ff14887"
+        "6459bd52605305cf61e33d244a02a8692ff14887",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 2078,
-      "reconciled_value": 2188,
+      "reconciled_value": 2189,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2028,10 +2039,12 @@
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "535d55f4cd7dfac35357648d442653e16d020eac",
         "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 1534,
-      "reconciled_value": 1618,
+      "reconciled_value": 1682,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2087,10 +2100,11 @@
         "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
         "ec15f387310a68db4680f0156c893f8d6c279f03",
         "4acfbc1f3e62036ca9a1ffd6b22406611702bf8f",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
       ],
       "previous_value": 1806,
-      "reconciled_value": 1829,
+      "reconciled_value": 1830,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2329,10 +2343,12 @@
         "c0019f0827a007bf4db5104d0802470f6da685bd",
         "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
         "6adcb00d2649e5cdeb2fd334dfe357ef9fc0d2fe",
-        "b86833ba2e91f422afc83fc0cb3ca0f038456e37"
+        "b86833ba2e91f422afc83fc0cb3ca0f038456e37",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 1415,
-      "reconciled_value": 1763,
+      "reconciled_value": 1863,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2451,10 +2467,11 @@
         "c29503fbac1b6d759443be269cad028e8d8aea87",
         "15af648ca99b7f706f9acaf7dfd1391d93b63471",
         "489b0fc7072e21cda45183746ae40198ed8a1bb0",
-        "9989d4e2446acff6dc1992fd95341e804f9d9b60"
+        "9989d4e2446acff6dc1992fd95341e804f9d9b60",
+        "05e637a86508e469dc043b65e76572fe7b1e49f8"
       ],
       "previous_value": 2223,
-      "reconciled_value": 2294,
+      "reconciled_value": 2317,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2829,7 +2846,7 @@
         "c0dc6f192fe5d4ea8d8b48b32c2137e28e0858fa"
       ],
       "previous_value": 1427,
-      "reconciled_value": 1428,
+      "reconciled_value": 1429,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -2958,7 +2975,9 @@
         "02275eef5d7ef9b2f3831e1af7b72fc878150c1e",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "535d55f4cd7dfac35357648d442653e16d020eac",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -2967,7 +2986,7 @@
       },
       "reconciled_value": {
         "dot_ok": 0,
-        "let_underscore": 38,
+        "let_underscore": 41,
         "unwrap_or_default": 3
       },
       "reconciliation_bead": "jcode-l89.5",
@@ -3680,7 +3699,8 @@
       "id": "QR-128",
       "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-tui/src/tui/app/conversation_state.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
       "owning_commits": [
-        "13442162841617fee2f874879c105aa75dc27847"
+        "13442162841617fee2f874879c105aa75dc27847",
+        "dd96b6ee815994811198ed6b0bdcdb741890b429"
       ],
       "previous_value": {
         "dot_ok": 0,
@@ -4114,7 +4134,8 @@
         "b6422f7af9b985db67ea74a78d0d29e8a71588d3",
         "bc0e25de668724ee90f45d6934ca0256d8310f6e",
         "be8bf6e87ae5bf91ffd81d3e27a86eae5d9b10c5",
-        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8"
+        "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
+        "dd96b6ee815994811198ed6b0bdcdb741890b429"
       ],
       "previous_value": 1226,
       "reconciled_value": 1274,
@@ -4168,10 +4189,12 @@
         "e1825580a766a2490525c178cbceb0bdf940b18e",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 1203,
-      "reconciled_value": 1261,
+      "reconciled_value": 1264,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -4212,7 +4235,8 @@
         "d110cdc375ee924f57c5f77588f2a57d75b5dd0d",
         "e87cad161582162f46af57a1b01898e63f623285",
         "f296d8287baee603adee934b048c913cd13c25f6",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b"
       ],
       "previous_value": 840,
       "reconciled_value": 871,
@@ -4285,10 +4309,14 @@
         "e87cad161582162f46af57a1b01898e63f623285",
         "f296d8287baee603adee934b048c913cd13c25f6",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
-        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa"
+        "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "dd96b6ee815994811198ed6b0bdcdb741890b429",
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
       ],
       "previous_value": 3269,
-      "reconciled_value": 3406,
+      "reconciled_value": 3408,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
@@ -4302,6 +4330,39 @@
         "status": "all"
       },
       "source_beads": []
+    },
+    {
+      "id": "QR-144",
+      "category": "swallowed_error",
+      "scope": "file:crates/jcode-tui/src/tui/app/remote.rs",
+      "previous_value": {
+        "dot_ok": 0,
+        "let_underscore": 11,
+        "unwrap_or_default": 0
+      },
+      "reconciled_value": {
+        "dot_ok": 0,
+        "let_underscore": 11,
+        "unwrap_or_default": 1
+      },
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
+      "owning_commits": [
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
+      ],
+      "reconciliation_bead": "jcode-l89.5",
+      "source_bead_search": {
+        "query": "crates/jcode-tui/src/tui/app/remote.rs",
+        "status": "all",
+        "limit": 5,
+        "result": "not_found",
+        "matched_beads": []
+      },
+      "source_beads": [],
+      "review_disposition_ids": [
+        "T003-HIST-NO-APPLICABLE-REVIEW"
+      ],
+      "merged_state_evidence": "Fresh-base reconciliation at f73e07cd5c6cecebe384ee30101ef644555cfe55 traces metric-causal commits for file:crates/jcode-tui/src/tui/app/remote.rs and preserves only measured growth."
     }
   ],
   "review_dispositions": [

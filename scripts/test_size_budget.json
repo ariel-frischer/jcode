@@ -3,12 +3,12 @@
   "tracked_files": {
     "crates/jcode-app-core/src/agent_tests.rs": 2837,
     "crates/jcode-app-core/src/server/client_actions_tests.rs": 1210,
-    "crates/jcode-app-core/src/server/client_lifecycle_tests.rs": 1618,
+    "crates/jcode-app-core/src/server/client_lifecycle_tests.rs": 1682,
     "crates/jcode-app-core/src/server/comm_control_tests/dag_e2e.rs": 1335,
     "crates/jcode-app-core/src/server/provider_control_tests.rs": 1393,
     "crates/jcode-app-core/src/server/swarm_persistence_tests.rs": 1241,
     "crates/jcode-app-core/src/tool/bash_tests.rs": 1325,
-    "crates/jcode-app-core/src/tool/communicate_tests.rs": 1829,
+    "crates/jcode-app-core/src/tool/communicate_tests.rs": 1830,
     "crates/jcode-app-core/src/tool/selfdev/tests.rs": 2185,
     "crates/jcode-app-core/src/tool/tests.rs": 1647,
     "crates/jcode-base/src/background/tests.rs": 1229,
@@ -19,12 +19,12 @@
     "crates/jcode-base/src/session_tests/cases.rs": 3135,
     "crates/jcode-desktop2/src/tests/actions.rs": 1794,
     "crates/jcode-desktop2/src/tests/visual.rs": 1289,
-    "crates/jcode-harness-api-server/src/translate_tests.rs": 1763,
+    "crates/jcode-harness-api-server/src/translate_tests.rs": 1863,
     "crates/jcode-plan/src/dag/tests.rs": 1392,
     "crates/jcode-provider-anthropic-runtime/src/anthropic_tests.rs": 2105,
     "crates/jcode-provider-openrouter-runtime/src/openrouter_tests.rs": 3209,
     "crates/jcode-tui/src/tui/app/remote_tests.rs": 1600,
-    "crates/jcode-tui/src/tui/app/tests.rs": 2294,
+    "crates/jcode-tui/src/tui/app/tests.rs": 2317,
     "crates/jcode-tui/src/tui/app/tests/commands_accounts_01/part_01.rs": 1677,
     "crates/jcode-tui/src/tui/app/tests/onboarding_eval.rs": 3303,
     "crates/jcode-tui/src/tui/app/tests/onboarding_flow.rs": 1818,
@@ -47,7 +47,7 @@
     "crates/jcode-tui/src/tui/ui_tests/prepare.rs": 1285,
     "crates/jcode-tui/src/tui/ui_tests/tools.rs": 1354,
     "src/cli/commands_tests.rs": 1663,
-    "tests/e2e/test_support/mod.rs": 1428
+    "tests/e2e/test_support/mod.rs": 1429
   },
   "version": 1
 }
