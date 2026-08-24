@@ -355,11 +355,13 @@ impl App {
                                         let expanded_interleave = match super::input::expand_file_mentions_for_submit(self, &interleave_msg) {
                                             Ok(expanded) => expanded,
                                             Err(notice) => {
-                                                self.input = interleave_msg;
-                                                self.cursor_pos = self.input.len();
-                                                self.pending_images.append(&mut self.interleave_images);
-                                                self.set_status_notice(notice.clone());
-                                                self.push_display_message(DisplayMessage::system(notice));
+                                                let images = std::mem::take(&mut self.interleave_images);
+                                                super::input::file_mentions::restore_interleave_file_mention_failure(
+                                                    self,
+                                                    interleave_msg,
+                                                    images,
+                                                    notice,
+                                                );
                                                 continue;
                                             }
                                         };

@@ -27,6 +27,8 @@ async fn test_token_usage() -> Result<()> {
 
     let response = agent.run_once_capture("Test").await?;
     assert_eq!(response, "Response");
+    assert_eq!(agent.last_usage().input_tokens, 10);
+    assert_eq!(agent.last_usage().output_tokens, 20);
 
     Ok(())
 }

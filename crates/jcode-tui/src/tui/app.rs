@@ -896,10 +896,10 @@ pub struct App {
     command_suggestions_cache: RefCell<Option<CommandSuggestionsCache>>,
     /// Background filesystem discovery for the `@` file mention picker.
     file_mention_discovery: RefCell<Option<state_ui_input_helpers::FileMentionDiscovery>>,
+    persisted_file_mentions_cache: RefCell<Option<conversation_state::PersistedFileMentionCache>>,
     /// Monotonic request generation used to reject stale worker batches.
     file_mention_generation: std::cell::Cell<u64>,
-    /// Monotonic frame counter bounding the lifetime of
-    /// `command_suggestions_cache` to a single frame.
+    /// Monotonic frame counter limiting `command_suggestions_cache` to one frame.
     command_suggestions_epoch: std::cell::Cell<u64>,
     cursor_pos: usize,
     scroll_offset: usize,

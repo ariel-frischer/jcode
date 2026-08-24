@@ -265,15 +265,17 @@ pub(in crate::tui::app) async fn process_remote_followups(
         {
             let interleave_images = std::mem::take(&mut app.interleave_images);
             let msg_clone = interleave_msg.clone();
+            let images_clone = interleave_images.clone();
             let expanded =
                 match super::super::input::expand_file_mentions_for_submit(app, &interleave_msg) {
                     Ok(expanded) => expanded,
                     Err(notice) => {
-                        app.input = interleave_msg;
-                        app.cursor_pos = app.input.len();
-                        app.pending_images.extend(interleave_images);
-                        app.set_status_notice(notice.clone());
-                        app.push_display_message(DisplayMessage::system(notice));
+                        super::super::input::file_mentions::restore_interleave_file_mention_failure(
+                            app,
+                            interleave_msg,
+                            interleave_images,
+                            notice,
+                        );
                         return;
                     }
                 };
@@ -282,10 +284,12 @@ pub(in crate::tui::app) async fn process_remote_followups(
                 .await
             {
                 Err(e) => {
-                    app.push_display_message(DisplayMessage::error(format!(
-                        "Failed to queue soft interrupt: {}",
-                        e
-                    )));
+                    super::super::input::file_mentions::restore_interleave_file_mention_failure(
+                        app,
+                        interleave_msg,
+                        images_clone,
+                        format!("Failed to queue soft interrupt: {}", e),
+                    );
                 }
                 Ok(request_id) => {
                     app.track_pending_soft_interrupt(request_id, msg_clone);
@@ -301,26 +305,20 @@ pub(in crate::tui::app) async fn process_remote_followups(
         // send while still compiling, so the comment marks why the take matters.
         let interleave_images = std::mem::take(&mut app.interleave_images);
         if !interleave_msg.trim().is_empty() {
+            let images_clone = interleave_images.clone();
             let expanded =
                 match super::super::input::expand_file_mentions_for_submit(app, &interleave_msg) {
                     Ok(expanded) => expanded,
                     Err(notice) => {
-                        app.input = interleave_msg;
-                        app.cursor_pos = app.input.len();
-                        app.pending_images.extend(interleave_images);
-                        app.set_status_notice(notice.clone());
-                        app.push_display_message(DisplayMessage::system(notice));
+                        super::super::input::file_mentions::restore_interleave_file_mention_failure(
+                            app,
+                            interleave_msg,
+                            interleave_images,
+                            notice,
+                        );
                         return;
                     }
                 };
-            app.push_display_message(DisplayMessage {
-                role: "user".to_string(),
-                content: interleave_msg.clone(),
-                tool_calls: vec![],
-                duration_secs: None,
-                title: None,
-                tool_data: None,
-            });
             if let Err(e) = begin_remote_send(
                 app,
                 remote,
@@ -333,10 +331,21 @@ pub(in crate::tui::app) async fn process_remote_followups(
             )
             .await
             {
-                app.push_display_message(DisplayMessage::error(format!(
-                    "Failed to send message: {}",
-                    e
-                )));
+                super::super::input::file_mentions::restore_interleave_file_mention_failure(
+                    app,
+                    interleave_msg,
+                    images_clone,
+                    format!("Failed to send message: {}", e),
+                );
+            } else {
+                app.push_display_message(DisplayMessage {
+                    role: "user".to_string(),
+                    content: interleave_msg,
+                    tool_calls: vec![],
+                    duration_secs: None,
+                    title: None,
+                    tool_data: None,
+                });
             }
         }
     } else if !app.queued_messages.is_empty() {
@@ -348,6 +357,43 @@ pub(in crate::tui::app) async fn process_remote_followups(
         let preserve_visible_turn =
             super::super::commands::queued_messages_are_only_pokes(&messages);
         let auto_retry = reminder.is_some() && messages.is_empty();
+        let expanded =
+            match super::super::input::file_mentions::expand_queued_file_mentions_for_submit(
+                app, &messages,
+            ) {
+                Ok(expanded) => expanded,
+                Err(notice) => {
+                    super::super::input::file_mentions::restore_queued_file_mention_failure(
+                        app, messages, reminder, notice,
+                    );
+                    return;
+                }
+            };
+        if let Err(error) = begin_remote_send(
+            app,
+            remote,
+            expanded,
+            vec![],
+            true,
+            reminder.clone(),
+            auto_retry,
+            0,
+        )
+        .await
+        {
+            // Do not drop a dequeued follow-up whose send never reached the
+            // server (issue #391); restore it for redispatch after reconnect.
+            crate::logging::error(&format!(
+                "Failed to send queued continuation message; restoring it to the queue: {error}"
+            ));
+            super::super::input::file_mentions::restore_queued_file_mention_failure(
+                app,
+                messages,
+                reminder,
+                "Queued message send failed; restored for retry".to_string(),
+            );
+            return;
+        }
         for msg in display_system_messages {
             app.push_display_message(DisplayMessage::system(msg));
         }
@@ -361,44 +407,6 @@ pub(in crate::tui::app) async fn process_remote_followups(
                 app.visible_turn_started.get_or_insert_with(Instant::now);
             } else {
                 app.visible_turn_started = Some(Instant::now());
-            }
-        }
-        let expanded = match super::super::input::expand_file_mentions_for_submit(app, &combined) {
-            Ok(expanded) => expanded,
-            Err(notice) => {
-                if let Some(reminder) = reminder {
-                    app.hidden_queued_system_messages.insert(0, reminder);
-                }
-                app.input = combined;
-                app.cursor_pos = app.input.len();
-                app.set_status_notice(notice.clone());
-                app.push_display_message(DisplayMessage::system(notice));
-                return;
-            }
-        };
-        if begin_remote_send(
-            app,
-            remote,
-            expanded,
-            vec![],
-            true,
-            reminder.clone(),
-            auto_retry,
-            0,
-        )
-        .await
-        .is_err()
-        {
-            // Do not drop a dequeued follow-up whose send never reached the
-            // server (issue #391); restore it for redispatch after reconnect.
-            crate::logging::error(
-                "Failed to send queued continuation message; restoring it to the queue",
-            );
-            if let Some(reminder) = reminder {
-                app.hidden_queued_system_messages.insert(0, reminder);
-            }
-            if !combined.is_empty() {
-                app.queued_messages.insert(0, combined);
             }
         }
     } else if !app.hidden_queued_system_messages.is_empty() {

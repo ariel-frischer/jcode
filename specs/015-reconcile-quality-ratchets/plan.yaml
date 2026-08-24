@@ -25,6 +25,14 @@ summary: |
   serialized all-feature guardrails, and isolated built-binary public and integration
   validation.
 
+  Current-base review repair amendment (2026-08-24): keep the existing file-mention
+  architecture, but enforce canonical working-directory containment, distinguish
+  user-authored text from synthetic continuations at queue dispatch, retain failed
+  work in its original state owner, cache persisted expansion by transcript/context,
+  mark discovery completion explicitly, prune ignored directories in WalkBuilder,
+  and make the provenance fixture branch-agnostic. Each repair is tests-first and
+  must pass the complete original acceptance set before merge-wt is retried.
+
 technical_context:
   language: "Rust 2024 application with Python 3 quality guardrails and Bash orchestration"
   framework: "Cargo workspace, Rust test harness, Tokio tests, repository-local Python ratchets"
@@ -61,6 +69,10 @@ technical_context:
     - "Keep existing per-file, aggregate, and per-pattern no-growth enforcement after reconciliation."
     - "Serialize Cargo-heavy validation and use a private socket for runtime checks so the shared daemon is not disturbed."
     - "Independent review dispositions must be complete before any baseline mutation is accepted."
+    - "File expansion must never canonicalize outside the active working directory or follow a repository symlink to external content."
+    - "Synthetic poke and todo-continuation text is provider input, not user authorization to read an @path."
+    - "Failure recovery must preserve composer, queue, reminder, interleave, image, and visible-turn ownership."
+    - "Normal discovery completion must remain distinguishable from a disconnected worker, and ignored directories must be pruned before descent."
   scale_scope: "One repository-wide historical reconciliation covering the currently reported 74 production-size, 31 test-size, and 36 swallowed-error path deltas, plus the blocker branch changed surface."
 
 constitution_check:

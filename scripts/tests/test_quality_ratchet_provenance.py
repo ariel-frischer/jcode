@@ -22,7 +22,7 @@ class ProvenanceFixture:
         self.root = Path(self.tempdir.name)
         (self.root / "scripts").mkdir()
         shutil.copy2(VALIDATOR, self.root / "scripts" / VALIDATOR.name)
-        self.git("init", "-q")
+        self.git("init", "-q", "-b", "fixture-main")
         self.git("config", "user.email", "fixture@example.com")
         self.git("config", "user.name", "Fixture")
 
@@ -63,6 +63,7 @@ class ProvenanceFixture:
         self.git("add", "scripts", "src", "tests")
         self.git("commit", "-qm", "baseline")
         self.baseline = self.git("rev-parse", "HEAD").stdout.strip()
+        self.default_branch = self.git("branch", "--show-current").stdout.strip()
 
         with (self.root / "src/lib.rs").open("a", encoding="utf-8") as source:
             source.write("fn added() { work().ok(); let _ = work(); value.unwrap_or_default(); }\n// owner\n")
@@ -234,7 +235,7 @@ class QualityRatchetProvenanceTests(unittest.TestCase):
         self.fixture.git("add", "side.txt")
         self.fixture.git("commit", "-qm", "side commit")
         side_commit = self.fixture.git("rev-parse", "HEAD").stdout.strip()
-        self.fixture.git("checkout", "-q", "master")
+        self.fixture.git("checkout", "-q", self.fixture.default_branch)
         ledger = copy.deepcopy(self.fixture.ledger)
         ledger["records"][0]["owning_commits"] = [side_commit]
         self.assert_rejected(ledger, "owning commit is not an ancestor")

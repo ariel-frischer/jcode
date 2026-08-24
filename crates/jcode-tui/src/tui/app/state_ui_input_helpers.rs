@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
 
-mod file_mentions;
+pub(super) mod file_mentions;
 pub(super) use file_mentions::{FileMentionDiscovery, FileMentionRequest};
 #[cfg(test)]
 pub(super) use file_mentions::{discover_file_mentions, start_file_mention_discovery_for_test};

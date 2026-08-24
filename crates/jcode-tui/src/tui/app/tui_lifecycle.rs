@@ -74,9 +74,7 @@ impl App {
             } else {
                 self.is_processing = true;
                 self.status = ProcessingStatus::Sending;
-                if self.processing_started.is_none() {
-                    self.processing_started = Some(Instant::now());
-                }
+                self.processing_started.get_or_insert_with(Instant::now);
                 self.pending_turn = true;
             }
         }
@@ -419,6 +417,7 @@ impl App {
             command_candidates_cache: RefCell::new(None),
             command_suggestions_cache: RefCell::new(None),
             file_mention_discovery: RefCell::new(None),
+            persisted_file_mentions_cache: RefCell::new(None),
             file_mention_generation: std::cell::Cell::new(0),
             command_suggestions_epoch: std::cell::Cell::new(0),
             cursor_pos: 0,
@@ -874,6 +873,7 @@ impl App {
             command_candidates_cache: RefCell::new(None),
             command_suggestions_cache: RefCell::new(None),
             file_mention_discovery: RefCell::new(None),
+            persisted_file_mentions_cache: RefCell::new(None),
             file_mention_generation: std::cell::Cell::new(0),
             command_suggestions_epoch: std::cell::Cell::new(0),
             cursor_pos: 0,

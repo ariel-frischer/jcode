@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
-mod file_mentions;
+pub(super) mod file_mentions;
 /// Streaming reasoning region, split out to keep this file under the
 /// code-size budget. See the module docs for the byte-offset invariant.
 mod reasoning_region;
@@ -3928,7 +3928,7 @@ impl App {
         input = match expand_file_mentions_for_submit(self, &input) {
             Ok(expanded) => expanded,
             Err(notice) => {
-                self.input = display_input;
+                self.input = raw_input;
                 self.cursor_pos = self.input.len();
                 self.set_status_notice(notice.clone());
                 self.push_display_message(DisplayMessage::system(notice));
@@ -4052,6 +4052,17 @@ impl App {
 
             self.commit_pending_streaming_assistant_message();
 
+            let expanded =
+                match file_mentions::expand_queued_file_mentions_for_submit(self, &messages) {
+                    Ok(expanded) => expanded,
+                    Err(notice) => {
+                        file_mentions::restore_queued_file_mention_failure(
+                            self, messages, reminder, notice,
+                        );
+                        break;
+                    }
+                };
+
             for msg in display_system_messages {
                 self.push_display_message(DisplayMessage::system(msg));
             }
@@ -4063,21 +4074,9 @@ impl App {
             }
 
             self.current_turn_system_reminder =
-                merge_turn_reminders(reminder, mission_turn_reminder(&self.session.id));
+                merge_turn_reminders(reminder.clone(), mission_turn_reminder(&self.session.id));
 
             if has_combined {
-                let expanded = match expand_file_mentions_for_submit(self, &combined) {
-                    Ok(expanded) => expanded,
-                    Err(notice) => {
-                        self.input = combined;
-                        self.cursor_pos = self.input.len();
-                        self.set_status_notice(notice.clone());
-                        self.push_display_message(DisplayMessage::system(notice));
-                        self.is_processing = false;
-                        self.status = ProcessingStatus::Idle;
-                        break;
-                    }
-                };
                 self.add_provider_message(Message::user(&expanded));
                 self.session.add_message(
                     Role::User,

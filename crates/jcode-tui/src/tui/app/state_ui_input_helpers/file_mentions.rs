@@ -57,6 +57,7 @@ pub(crate) struct FileMentionDiscovery {
     pub receiver: mpsc::Receiver<FileMentionBatch>,
     pub cancel: Arc<AtomicBool>,
     pub candidates: Vec<FileMentionCandidate>,
+    pub completed: bool,
 }
 
 #[cfg(test)]
@@ -156,6 +157,23 @@ fn process_file_mention_entry(
     true
 }
 
+fn should_walk_file_mention_entry(
+    root: &Path,
+    ignored_paths: &ignore::gitignore::Gitignore,
+    entry: &ignore::DirEntry,
+) -> bool {
+    let path = entry.path();
+    if path == root {
+        return true;
+    }
+    let is_dir = entry
+        .file_type()
+        .is_some_and(|file_type| file_type.is_dir());
+    !ignored_paths
+        .matched_path_or_any_parents(path, is_dir)
+        .is_ignore()
+}
+
 /// Test-only entry point for deterministic batch and responsiveness checks.
 #[cfg(test)]
 pub(in crate::tui::app) fn start_file_mention_discovery_for_test(
@@ -165,6 +183,42 @@ pub(in crate::tui::app) fn start_file_mention_discovery_for_test(
     generation: u64,
 ) -> (mpsc::Receiver<FileMentionBatch>, Arc<AtomicBool>) {
     start_file_mention_discovery(root, query, ignore_patterns, generation)
+}
+
+#[cfg(test)]
+pub(in crate::tui::app) fn completed_file_mention_discovery_for_test(
+    root: PathBuf,
+    generation: u64,
+    path: &str,
+) -> FileMentionDiscovery {
+    let (sender, receiver) = mpsc::channel();
+    assert!(
+        sender
+            .send(FileMentionBatch {
+                generation,
+                candidates: vec![FileMentionCandidate {
+                    score: 0,
+                    path: path.to_string(),
+                    is_dir: false,
+                }],
+                done: true,
+            })
+            .is_ok(),
+        "send completed file mention batch"
+    );
+    drop(sender);
+    FileMentionDiscovery {
+        request: FileMentionRequest {
+            root,
+            query: String::new(),
+            ignore_patterns: Vec::new(),
+        },
+        generation,
+        receiver,
+        cancel: Arc::new(AtomicBool::new(true)),
+        candidates: Vec::new(),
+        completed: false,
+    }
 }
 
 fn discover_file_mentions_batched(
@@ -188,7 +242,7 @@ fn discover_file_mentions_batched(
         }
     }
     let ignored_paths = match ignore_builder.build() {
-        Ok(ignored_paths) => ignored_paths,
+        Ok(ignored_paths) => Arc::new(ignored_paths),
         Err(error) => {
             crate::logging::warn(&format!(
                 "Failed to build file mention exclusion matcher: {error}"
@@ -215,6 +269,11 @@ fn discover_file_mentions_batched(
         .git_global(false)
         .git_exclude(false)
         .max_depth(Some(1));
+    let direct_root = root.to_path_buf();
+    let direct_ignored_paths = Arc::clone(&ignored_paths);
+    direct_builder.filter_entry(move |entry| {
+        should_walk_file_mention_entry(&direct_root, &direct_ignored_paths, entry)
+    });
     for entry in direct_builder.build().filter_map(Result::ok) {
         if !process_file_mention_entry(
             root,
@@ -242,6 +301,11 @@ fn discover_file_mentions_batched(
             .git_ignore(false)
             .git_global(false)
             .git_exclude(false);
+        let recursive_root = root.to_path_buf();
+        let recursive_ignored_paths = Arc::clone(&ignored_paths);
+        recursive_builder.filter_entry(move |entry| {
+            should_walk_file_mention_entry(&recursive_root, &recursive_ignored_paths, entry)
+        });
         for entry in recursive_builder.build().filter_map(Result::ok) {
             if entry.depth() <= 1 {
                 continue;
@@ -310,6 +374,9 @@ impl App {
         let Some(discovery) = pending.as_mut() else {
             return false;
         };
+        if discovery.completed {
+            return false;
+        }
         for _ in 0..FILE_MENTION_POLL_BATCHES {
             let batch = match discovery.receiver.try_recv() {
                 Ok(batch) => batch,
@@ -325,6 +392,7 @@ impl App {
             discovery.candidates.extend(batch.candidates);
             changed = true;
             if batch.done {
+                discovery.completed = true;
                 break;
             }
         }
@@ -374,6 +442,7 @@ impl App {
             receiver,
             cancel,
             candidates: Vec::new(),
+            completed: false,
         });
     }
 }

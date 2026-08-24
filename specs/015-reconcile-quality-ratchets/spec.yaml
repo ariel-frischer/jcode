@@ -1,7 +1,7 @@
 feature:
   branch: "015-reconcile-quality-ratchets"
   created: "2026-08-22"
-  status: "Completed"
+  status: "In Progress"
   input: "Reconcile stale repository quality ratchets after fixing branch-owned growth. Incorporate independent PR review comments. Preserve current behavior and test coverage. Make every blocker-branch change flat or smaller in already-oversized files, retain explicit error handling, add durable provenance mapping historical code-size, test-size, and swallowed-error baseline deltas to owning commits, Beads, and PR review dispositions, reconcile only traced intentional merged state, preserve future no-growth enforcement, and require focused ratchets, stable all-feature guardrails, focused behavior tests, and built-binary public/integration validation."
 
 user_stories:
@@ -63,6 +63,28 @@ user_stories:
         when: "the full acceptance set is run"
         then: "all focused ratchets, all-feature guardrails, focused behavior tests, and built-binary public and integration checks pass"
 
+  - id: "US-005"
+    title: "Resolve current-base review blockers"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "file mentions and queued follow-ups to preserve repository boundaries and retry state"
+    so_that: "a failed or synthetic follow-up cannot read unrelated files or overwrite work in my composer"
+    why_this_priority: "The fresh-base review found one security-critical boundary violation and multiple state-loss and lifecycle defects that block landing."
+    independent_test: "Exercise repository containment, synthetic continuation handling, local and remote recovery, discovery completion/pruning, persisted expansion reuse, and non-master provenance fixtures."
+    acceptance_scenarios:
+      - given: "a mention resolves outside the active working directory, including through .., an absolute path, or a symlink"
+        when: "the prompt is prepared"
+        then: "the mention remains literal and the external file is not read"
+      - given: "a machine-authored poke or todo continuation contains an @path token"
+        when: "the continuation is dispatched"
+        then: "the token remains literal while user-authored queued text still expands safely"
+      - given: "file expansion fails for a direct, queued, or interleaved user submission"
+        when: "the failure is surfaced"
+        then: "the original draft, queue, reminder, images, and visible-turn state are restored to their owning locations"
+      - given: "file discovery finishes normally or enters an ignored subtree"
+        when: "the picker polls or traverses again"
+        then: "normal completion is retained without a disconnect warning and ignored directories are pruned before descent"
+
 requirements:
   functional:
     - id: "FR-001"
@@ -121,6 +143,30 @@ requirements:
       description: "A built distributable binary MUST pass public-interface and integration validation."
       testable: true
       acceptance_criteria: "The built binary successfully completes the defined public command and integration scenarios in an isolated runtime environment."
+    - id: "FR-015"
+      description: "File mention expansion MUST read only canonical files contained by the active working-directory boundary."
+      testable: true
+      acceptance_criteria: "Relative parent traversal, absolute external paths, and symlinks escaping the working directory remain literal and never expose external contents."
+    - id: "FR-016"
+      description: "Machine-authored queued continuations MUST bypass file mention expansion while user-authored direct, queued, and interleaved submissions retain safe expansion."
+      testable: true
+      acceptance_criteria: "Poke and todo continuation text containing @path is sent literally; user-authored repository-local mentions still expand."
+    - id: "FR-017"
+      description: "File mention expansion failures MUST restore state to the original direct, queue, reminder, interleave, image, and visible-turn owners."
+      testable: true
+      acceptance_criteria: "Focused local and remote tests prove no composer overwrite, queue loss, reminder loss, image migration, or stranded visible-turn timer."
+    - id: "FR-018"
+      description: "Persisted file mention materialization MUST reuse one expansion result until the session transcript or expansion context changes."
+      testable: true
+      acceptance_criteria: "Repeated provider-materialization calls avoid repeated file reads and a transcript or working-directory change invalidates the cached view."
+    - id: "FR-019"
+      description: "File mention discovery MUST distinguish normal completion from worker failure and prune ignored directories before recursive descent."
+      testable: true
+      acceptance_criteria: "Polling after a final batch preserves candidates without an error notice, and ignored directory entries are rejected by the walker filter."
+    - id: "FR-020"
+      description: "Provenance tests MUST run correctly regardless of the repository's initial branch name."
+      testable: true
+      acceptance_criteria: "The non-ancestor fixture restores the branch captured from Git instead of assuming master."
 
   non_functional:
     - id: "NFR-001"

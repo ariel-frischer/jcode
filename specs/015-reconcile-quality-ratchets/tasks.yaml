@@ -5,8 +5,8 @@ tasks:
   plan_path: "specs/015-reconcile-quality-ratchets/plan.yaml"
 
 summary:
-  total_tasks: 38
-  total_phases: 7
+  total_tasks: 44
+  total_phases: 8
   parallel_opportunities: 15
   estimated_complexity: "high"
 
@@ -517,6 +517,81 @@ phases:
           - "Document that no user-facing contract, runtime storage, dependency, unrelated threshold, or future no-growth enforcement was changed."
           - "Record the final Bead handoff evidence required for landing without duplicating transient logs or secrets."
 
+  - number: 8
+    title: "Current-Base CodeRabbit Repairs"
+    purpose: "Resolve all nine current-base review findings before merge-wt is retried."
+    story_reference: "US-005"
+    tasks:
+      - id: "T039"
+        title: "Add failing containment, synthetic-continuation, and persisted-materialization tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T035"]
+        acceptance_criteria:
+          - "Tests reject parent, absolute, and symlink escapes without reading external contents."
+          - "Tests prove synthetic continuations stay literal and repeated persisted materialization reuses its expansion until invalidated."
+      - id: "T040"
+        title: "Repair file mention containment, authorship routing, and persisted expansion caching"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/src/tui/app/input/file_mentions.rs"
+        dependencies: ["T039"]
+        acceptance_criteria:
+          - "Canonical containment blocks external reads while repository-local direct, queued, interleaved, and persisted user mentions retain behavior."
+          - "Machine-authored poke and todo continuation paths bypass expansion."
+          - "Persisted provider materialization is cached and invalidated by transcript or context changes."
+      - id: "T041"
+        title: "Add failing local and remote failure-state restoration tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/queued_file_mention_tests.rs"
+        dependencies: ["T040"]
+        acceptance_criteria:
+          - "Direct failure restores raw input, queued failure requeues original messages and reminders, and interleave failure preserves staged message and images without touching the composer."
+          - "Both local and remote queued failures clear visible-turn state."
+      - id: "T042"
+        title: "Repair direct, queued, and interleave expansion failure recovery"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/src/tui/app/input.rs"
+        dependencies: ["T041"]
+        acceptance_criteria:
+          - "Every failure returns content, images, reminders, and timers to their original owner without overwriting an active draft."
+      - id: "T043"
+        title: "Add and satisfy discovery completion, traversal-pruning, and branch-portability regressions"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers/file_mentions.rs"
+        dependencies: ["T042"]
+        acceptance_criteria:
+          - "Polling after normal completion retains candidates and emits no disconnect warning."
+          - "WalkBuilder rejects ignored directories before descent while preserving the match bound."
+          - "The provenance fixture restores its captured initial branch instead of master."
+      - id: "T044"
+        title: "Run focused repairs, canonical guardrails, exact-head built-binary acceptance, and refresh handoff evidence"
+        status: "In Progress"
+        type: "test"
+        parallel: false
+        story_id: "US-005"
+        file_path: "specs/015-reconcile-quality-ratchets/validation.md"
+        dependencies: ["T043"]
+        acceptance_criteria:
+          - "All focused CodeRabbit regression tests pass."
+          - "The serialized canonical guardrail suite passes on the complete repair result."
+          - "A fresh isolated exact-head binary passes public command, private-server, provider-mock, tool, and explicit error scenarios without disturbing the shared daemon."
+          - "All nine review findings receive final evidence-backed dispositions and the Bead is ready for merge-wt retry."
+
 dependencies:
   user_story_order:
     - story_id: "US-002"
@@ -545,6 +620,8 @@ dependencies:
     - phase: 6
       blocks: [7]
     - phase: 7
+      blocks: [8]
+    - phase: 8
       blocks: []
 
 parallel_execution:

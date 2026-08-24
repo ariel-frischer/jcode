@@ -128,12 +128,35 @@ fn disconnected_file_mention_worker_is_visible_and_clears_pending_state() {
             receiver,
             cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             candidates: Vec::new(),
+            completed: false,
         },
     );
 
     assert!(app.poll_file_mention_discovery());
     assert!(app.file_mention_discovery.borrow().is_none());
     assert_eq!(
+        app.status_notice.as_ref().map(|(text, _)| text.as_str()),
+        Some("File mention scan stopped unexpectedly")
+    );
+}
+
+#[test]
+fn completed_file_mention_worker_stays_complete_without_disconnect_warning() {
+    let mut app = create_test_app();
+    *app.file_mention_discovery.borrow_mut() = Some(
+        super::state_ui_input_helpers::file_mentions::completed_file_mention_discovery_for_test(
+            std::env::current_dir().expect("launch cwd"),
+            1,
+            "README.md",
+        ),
+    );
+
+    assert!(app.poll_file_mention_discovery());
+    assert!(!app.poll_file_mention_discovery());
+    let pending = app.file_mention_discovery.borrow();
+    let discovery = pending.as_ref().expect("completed discovery retained");
+    assert_eq!(discovery.candidates.len(), 1);
+    assert_ne!(
         app.status_notice.as_ref().map(|(text, _)| text.as_str()),
         Some("File mention scan stopped unexpectedly")
     );
@@ -230,6 +253,100 @@ fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
             submitted.content.as_slice(),
             [ContentBlock::Text { text, .. }]
                 if text == "Explain <file path=\"docs/context.md\">\nfull context\n\n</file>"
+        ));
+    });
+}
+
+#[test]
+fn file_mentions_never_read_outside_the_working_directory() {
+    let root = tempfile::tempdir().expect("root tempdir");
+    let outside = tempfile::tempdir().expect("outside tempdir");
+    let secret = outside.path().join("secret.txt");
+    std::fs::write(&secret, "outside-secret").expect("outside secret");
+    let parent_escape = format!(
+        "Inspect @../{}/secret.txt",
+        outside.path().file_name().unwrap().to_string_lossy()
+    );
+
+    assert_eq!(
+        super::input::expand_file_mentions(&parent_escape, root.path().to_str(), true),
+        parent_escape
+    );
+    let absolute_escape = format!("Inspect @{}", secret.display());
+    assert_eq!(
+        super::input::expand_file_mentions(&absolute_escape, root.path().to_str(), true),
+        absolute_escape
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn file_mentions_never_follow_symlinks_outside_the_working_directory() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().expect("root tempdir");
+    let outside = tempfile::tempdir().expect("outside tempdir");
+    let secret = outside.path().join("secret.txt");
+    std::fs::write(&secret, "outside-secret").expect("outside secret");
+    symlink(&secret, root.path().join("linked-secret.txt")).expect("external symlink");
+
+    assert_eq!(
+        super::input::expand_file_mentions(
+            "Inspect @linked-secret.txt",
+            root.path().to_str(),
+            true,
+        ),
+        "Inspect @linked-secret.txt"
+    );
+}
+
+#[test]
+fn persisted_file_mention_materialization_reuses_the_first_expansion() {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let context = temp.path().join("context.md");
+        std::fs::write(&context, "cached context\n").expect("context file");
+
+        let mut app = create_test_app();
+        app.messages.clear();
+        app.session.messages.clear();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.session.add_message(
+            Role::User,
+            vec![ContentBlock::Text {
+                text: "Explain @context.md".to_string(),
+                cache_control: None,
+            }],
+        );
+
+        let first = app.materialized_provider_messages();
+        let first_text = match first.last().and_then(|message| message.content.last()) {
+            Some(ContentBlock::Text { text, .. }) => text.clone(),
+            other => panic!("expected materialized text, got {other:?}"),
+        };
+        std::fs::remove_file(&context).expect("remove context after first materialization");
+        let second = app.materialized_provider_messages();
+
+        assert!(matches!(
+            second.last().and_then(|message| message.content.last()),
+            Some(ContentBlock::Text { text, .. }) if text == &first_text && text.contains("cached context")
+        ));
+
+        std::fs::write(&context, "refreshed context\n").expect("restore changed context file");
+        app.session.add_message(
+            Role::User,
+            vec![ContentBlock::Text {
+                text: "Re-read @context.md".to_string(),
+                cache_control: None,
+            }],
+        );
+        let third = app.materialized_provider_messages();
+        assert!(matches!(
+            third.last().and_then(|message| message.content.last()),
+            Some(ContentBlock::Text { text, .. }) if text.contains("refreshed context")
         ));
     });
 }

@@ -1,23 +1,28 @@
 use super::*;
 
+#[derive(Clone)]
+pub(super) struct PersistedFileMentionCache {
+    message_hashes: Vec<u64>,
+    working_dir: Option<String>,
+    enabled: bool,
+    messages: Vec<Message>,
+}
+
 impl App {
     fn expand_persisted_file_mentions(&self, mut messages: Vec<Message>) -> Vec<Message> {
         let enabled = crate::config::config().file_mentions.enabled;
-        let remote_root = self
-            .is_remote
-            .then(|| std::env::current_dir().ok())
-            .flatten()
-            .and_then(|path| path.to_str().map(str::to_owned));
-        let working_dir = remote_root
-            .as_deref()
-            .or(self.session.working_dir.as_deref());
+        let working_dir = super::input::file_mentions::file_mention_working_dir(self);
         for message in &mut messages {
             if !matches!(&message.role, Role::User) {
                 continue;
             }
             for block in &mut message.content {
                 if let ContentBlock::Text { text, .. } = block {
-                    *text = super::input::expand_file_mentions(text, working_dir, enabled);
+                    if super::commands::is_poke_message(text) {
+                        continue;
+                    }
+                    *text =
+                        super::input::expand_file_mentions(text, working_dir.as_deref(), enabled);
                 }
             }
         }
@@ -38,7 +43,25 @@ impl App {
         if self.is_remote || !self.messages.is_empty() {
             self.messages.clone()
         } else {
-            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
+            let messages = self.session.messages_for_provider_uncached();
+            let message_hashes = super::message_hashes(&messages);
+            let working_dir = super::input::file_mentions::file_mention_working_dir(self);
+            let enabled = crate::config::config().file_mentions.enabled;
+            if let Some(cache) = self.persisted_file_mentions_cache.borrow().as_ref()
+                && cache.message_hashes == message_hashes
+                && cache.working_dir == working_dir
+                && cache.enabled == enabled
+            {
+                return cache.messages.clone();
+            }
+            let expanded = self.expand_persisted_file_mentions(messages);
+            *self.persisted_file_mentions_cache.borrow_mut() = Some(PersistedFileMentionCache {
+                message_hashes,
+                working_dir,
+                enabled,
+                messages: expanded.clone(),
+            });
+            expanded
         }
     }
 
