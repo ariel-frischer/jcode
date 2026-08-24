@@ -87,6 +87,12 @@ Each row maps to one direct check. Supporting evidence may be referenced by that
 | FR-012 | broad | C07 | The serialized stable all-feature guardrail suite passes with unrelated thresholds unchanged. |
 | FR-013 | behavior | C06 | Every identified affected workflow and explicit error path has a passing exact-name or narrow-module test receipt. |
 | FR-014 | built-product | C08 | The resolved worktree selfdev binary passes isolated public-interface and integration scenarios on a private socket. |
+| FR-015 | behavior | C06 | Parent traversal, absolute external paths, and escaping symlinks remain literal without exposing external contents, while contained files still expand. |
+| FR-016 | behavior | C06 | Synthetic poke and todo continuations remain literal while isolated direct, queued, and interleaved user mentions retain safe expansion. |
+| FR-017 | behavior | C06 | Local and remote failure tests restore raw input, queue entries, reminders, interleaves, images, and visible-turn state to their original owners. |
+| FR-018 | behavior | C06 | Persisted materialization reuses the first expansion and invalidates it after transcript or working-directory changes. |
+| FR-019 | behavior | C06 | Normal discovery completion preserves candidates without a disconnect warning, and ignored directories are pruned before descent. |
+| FR-020 | focused | C04 | The provenance non-ancestor fixture captures and restores the repository's actual initial branch rather than assuming `master`. |
 | SC-001 | focused | C01 | Provenance completeness is 100% for all adjusted historical quality deltas without undocumented ownership assumptions. |
 | SC-002 | focused | C02 | Modified already-oversized files with positive branch-base growth equal `0`. |
 | SC-003 | built-product | C08 | Required built-product public and integration scenarios pass at 100% with unchanged outcomes. |
@@ -467,7 +473,7 @@ Receipts are appended or updated by later tasks. Each receipt must include the c
 
 ## Final consistency gate
 
-T033 may declare the acceptance run complete only when R01 through R07 are current and passing, every FR-001 through FR-014 and SC-001 through SC-005 row resolves to its assigned passing check, no failed receipt is left ambiguous, and the final diff remains within the approved reconciliation scope.
+T033 may declare the acceptance run complete only when R01 through R07 are current and passing, every FR-001 through FR-020 and SC-001 through SC-005 row resolves to its assigned passing check, no failed receipt is left ambiguous, and the final diff remains within the approved reconciliation scope.
 
 ## Final T030-T035 acceptance receipts
 
@@ -595,9 +601,40 @@ This section supersedes the earlier candidate identity after representative proj
 | FR-012 | Canonical task `173893alpg` passed every enabled stable all-feature gate without unrelated threshold changes. |
 | FR-013 | T026-T028 exact/narrow project tests above passed success and explicit-error workflows; the warning-clean rerun corrected the only observed acceptance defect. |
 | FR-014 | Exact artifact `a80c11a27` passed CLI, private server, provider, tool, HTTP-error, and configuration-error scenarios; live credentialed delivery remains approval-blocked. |
+| FR-015 | The final 30-test file-mention suite rejected parent, absolute, and escaping-symlink reads while preserving contained expansion. |
+| FR-016 | The isolated synthetic-continuation regression kept machine-authored `@path` text literal and expanded the user-authored message. |
+| FR-017 | Direct, queued, local/remote interleave, reminder, image, composer, and visible-turn restoration assertions all passed in the final file-mention suite. |
+| FR-018 | Persisted provider materialization reused its first expansion and invalidated after transcript/context changes in the final suite. |
+| FR-019 | Normal worker completion retained candidates without a disconnect warning, and both direct and recursive walkers applied pre-descent ignore filters. |
+| FR-020 | All 11 provenance validator tests passed with the non-ancestor fixture capturing and restoring its actual initial branch. |
 | NFR-001 / SC-001 | 143/143 adjusted deltas have validator-enforced complete provenance; undocumented or non-causal ownership fails. |
 | NFR-002 | Focused workflows, negative enforcement, canonical gates, packaging inventory, exact build, and built-product paths all pass without contradictory current receipts. The live-provider boundary is explicitly excluded rather than represented as passing. |
 | NFR-003 / SC-002 | 0 of 19 modified already-oversized files grew from `85f9f5e3b`. |
 | SC-003 | 100% of locally executable required behavior and built-product scenarios passed. Credentialed third-party delivery is `acceptance_blocked` pending explicit cost approval. |
 | SC-004 | 100% of the sampled controlled future-growth dimensions were rejected. |
 | SC-005 | 100% of the 30 applicable review dispositions are recorded, and the bounded final repair review reports no blocker in its four claims. |
+
+## Current-base CodeRabbit repair acceptance
+
+This section supersedes the earlier landing candidate only for the CodeRabbit repair scope. The exact implementation commit is `dd96b6ee815994811198ed6b0bdcdb741890b429` (`fix: resolve coderabbit delivery findings`); the final evidence-only commit records the two last review clarifications below.
+
+### Review dispositions
+
+- The initial nine current-base findings are resolved: persisted materialization is cached; direct, queued, local/remote interleave, reminder, image, composer, and visible-turn state is transactional; canonical containment blocks parent, absolute, and escaping-symlink reads; synthetic continuations bypass expansion; normal discovery completion is distinct from disconnect; ignored directories are pruned before descent; and the provenance fixture is branch-agnostic.
+- A follow-up review's five stale claims were rejected against current source. Its three valid claims were implemented: local turn interleave restoration, the T009-T016 documentation correction, and concrete token-usage assertions.
+- Final review task `037907mcon` found two minor gaps. The synthetic-continuation test now runs under an isolated `JCODE_HOME` with file mentions explicitly enabled, and the acceptance matrix plus consistency gate now trace FR-015 through FR-020.
+- Final CodeRabbit task `444980njww` reviewed the complete branch against `github/dev` and returned `findings=0`.
+
+### Focused, broad, and built-product receipts
+
+- **Focused repair behavior:** task `443591ig3w` passed all 30 file-mention tests, including containment, synthetic routing, persisted cache invalidation, failure restoration, discovery completion, and traversal pruning. Task `619856b91d` and the final 11-test rerun passed provenance ownership and branch-portability fixtures. Task `963926ly81` passed the public token-usage E2E assertion with input `10` and output `20` tokens.
+- **Final isolated test correction:** task `376095s44c` reran the complete 30-test file-mention suite after isolating the synthetic-continuation configuration; all 30 passed. The test-size ratchet and complete canonical guardrail suite then passed.
+- **Canonical guardrails:** task `523312uc53` passed formatting, all-target/all-feature check, Clippy with warnings denied, lockfile, warning, provenance, code-size, test-size, panic, swallowed-error, dependency, re-export, frame-budget, and onboarding gates. After the final test-only review correction, task `376095s44c` repeated the complete suite with the same all-pass result.
+- **Exact build:** task `740543yesy` built commit `dd96b6ee815994811198ed6b0bdcdb741890b429` in isolated target `/home/ari/.jcode/scratch/jcode-l89.5-coderabbit-dd96b6ee815994811198ed6b0bdcdb741890b429`. Artifact version is `jcode v0.79.654-dev (dd96b6ee8)` with SHA-256 `0022834d55f3525c7f30e382163cbb7acb80ecb692ebcab5a44a32ed7d008d62`.
+- **Public and integration behavior:** task `998164cef5` observed real `--help` and `--version`, `simple-ok` exit 0, a public `read` tool round trip returning `tool-ok` exit 0, actionable `401 Unauthorized` exit 1, and actionable unknown-profile exit 1. Four deterministic localhost provider requests covered simple, tool request, tool result, and error turns. The shared daemon target remained `/home/ari/.jcode/builds/versions/a17bd5438/jcode` before and after.
+- **External constraint:** no live credentialed provider turn was run because it would consume external quota without explicit approval. The accepted deterministic provider-mock boundary is fully exercised; live third-party delivery remains explicitly `acceptance_blocked` rather than inferred.
+
+### Landing handoff
+
+- The repair is Medium risk because it changes cross-cutting TUI delivery and recovery paths, but all locally executable focused, broad, review, package-adjacent, and built-product checks now pass.
+- Merge, installation, shared-server reload, push, and worktree cleanup remain owned by `merge-wt`, which must reconcile the current `github/dev` base and repeat integrated acceptance before landing.

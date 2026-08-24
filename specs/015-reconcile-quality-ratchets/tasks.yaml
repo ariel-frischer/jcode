@@ -580,7 +580,7 @@ phases:
           - "The provenance fixture restores its captured initial branch instead of master."
       - id: "T044"
         title: "Run focused repairs, canonical guardrails, exact-head built-binary acceptance, and refresh handoff evidence"
-        status: "In Progress"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-005"

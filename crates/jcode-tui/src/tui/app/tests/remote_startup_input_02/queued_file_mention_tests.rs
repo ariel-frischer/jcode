@@ -78,21 +78,27 @@ fn failed_skill_prompt_expansion_restores_the_typed_invocation() {
 
 #[test]
 fn synthetic_queued_continuations_stay_literal_while_user_mentions_expand() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("notes.md"), "user context").unwrap();
-    let mut app = create_test_app();
-    app.session.working_dir = Some(dir.path().to_string_lossy().into_owned());
-    let synthetic = format!(
-        "{}\n- Validate @notes.md without treating this machine continuation as user input.",
-        crate::todo::TODO_COMPLETION_CONTINUATION_MESSAGE
-    );
-    let messages = vec![synthetic.clone(), "Inspect @notes.md".to_string()];
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("notes.md"), "user context").unwrap();
+        let mut app = create_test_app();
+        app.session.working_dir = Some(dir.path().to_string_lossy().into_owned());
+        let synthetic = format!(
+            "{}\n- Validate @notes.md without treating this machine continuation as user input.",
+            crate::todo::TODO_COMPLETION_CONTINUATION_MESSAGE
+        );
+        let messages = vec![synthetic.clone(), "Inspect @notes.md".to_string()];
 
-    let expanded = super::input::file_mentions::expand_queued_file_mentions_for_submit(&app, &messages)
+        let expanded = super::input::file_mentions::expand_queued_file_mentions_for_submit(
+            &app, &messages,
+        )
         .expect("queued expansion");
 
-    assert!(expanded.contains(&synthetic));
-    assert!(expanded.contains("<file path=\"notes.md\">\nuser context\n</file>"));
+        assert!(expanded.contains(&synthetic));
+        assert!(expanded.contains("<file path=\"notes.md\">\nuser context\n</file>"));
+    });
 }
 
 #[test]
