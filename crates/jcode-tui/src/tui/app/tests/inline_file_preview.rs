@@ -14,45 +14,18 @@ fn wait_for_inline_file_preview_loads(app: &mut App) {
 struct InlinePreviewFixture {
     _root: tempfile::TempDir,
     session_repository: std::path::PathBuf,
-    directory_marker_sibling: std::path::PathBuf,
-    worktree_marker_sibling: std::path::PathBuf,
-    non_repository_sibling: std::path::PathBuf,
-    nested_repository: std::path::PathBuf,
 }
 
 impl InlinePreviewFixture {
     fn new() -> Self {
         let root = tempfile::tempdir().expect("inline preview fixture root");
         let session_repository = root.path().join("session-repository");
-        let directory_marker_sibling = root.path().join("directory-marker-sibling");
-        let worktree_marker_sibling = root.path().join("worktree-marker-sibling");
-        let non_repository_sibling = root.path().join("non-repository-sibling");
-        let nested_repository = root.path().join("container/nested-repository");
-
-        for repository in [
-            &session_repository,
-            &directory_marker_sibling,
-            &nested_repository,
-        ] {
-            std::fs::create_dir_all(repository.join(".git"))
-                .expect("create repository with .git directory");
-        }
-        std::fs::create_dir_all(&worktree_marker_sibling)
-            .expect("create worktree-style sibling repository");
-        std::fs::write(
-            worktree_marker_sibling.join(".git"),
-            "gitdir: ../.git/worktrees/worktree-marker-sibling\n",
-        )
-        .expect("create worktree .git file");
-        std::fs::create_dir_all(&non_repository_sibling).expect("create non-repository sibling");
+        std::fs::create_dir_all(session_repository.join(".git"))
+            .expect("create session repository");
 
         Self {
             _root: root,
             session_repository,
-            directory_marker_sibling,
-            worktree_marker_sibling,
-            non_repository_sibling,
-            nested_repository,
         }
     }
 
@@ -68,22 +41,6 @@ impl InlinePreviewFixture {
         }
         std::fs::write(&path, content).expect("write inline preview fixture file");
         path
-    }
-
-    fn write_same_relative_path(&self, relative_path: &str) -> [std::path::PathBuf; 3] {
-        [
-            self.write_bytes(&self.session_repository, relative_path, "session copy"),
-            self.write_bytes(
-                &self.directory_marker_sibling,
-                relative_path,
-                "directory marker sibling copy",
-            ),
-            self.write_bytes(
-                &self.worktree_marker_sibling,
-                relative_path,
-                "worktree marker sibling copy",
-            ),
-        ]
     }
 
     fn write_content_samples(&self) {
@@ -187,25 +144,9 @@ fn click_left(app: &mut App, column: u16, row: u16) {
 #[test]
 fn inline_preview_fixture_materializes_repository_and_content_variants() {
     let fixture = InlinePreviewFixture::new();
-    let copies = fixture.write_same_relative_path("docs/shared.md");
     fixture.write_content_samples();
-    fixture.write_bytes(
-        &fixture.nested_repository,
-        "docs/nested-only.md",
-        "nested repository copy",
-    );
-    fixture.write_bytes(
-        &fixture.non_repository_sibling,
-        "docs/non-repository.md",
-        "non-repository copy",
-    );
 
     assert!(fixture.session_repository.join(".git").is_dir());
-    assert!(fixture.directory_marker_sibling.join(".git").is_dir());
-    assert!(fixture.worktree_marker_sibling.join(".git").is_file());
-    assert!(fixture.nested_repository.join(".git").is_dir());
-    assert!(!fixture.non_repository_sibling.join(".git").exists());
-    assert!(copies.iter().all(|path| path.is_file()));
     assert_eq!(
         std::fs::metadata(fixture.session_repository.join("samples/at-limit.txt"))
             .expect("at-limit metadata")
@@ -264,12 +205,12 @@ fn inline_preview_fixture_materializes_repository_and_content_variants() {
 }
 
 #[test]
-fn relative_markdown_path_previews_unique_sibling_repository_file() {
+fn relative_markdown_path_previews_from_session_working_directory() {
     let fixture = InlinePreviewFixture::new();
     fixture.write_bytes(
-        &fixture.directory_marker_sibling,
+        &fixture.session_repository,
         "docs/locus-cloud-architecture.md",
-        "# Locus Cloud Architecture\n\nSibling repository content.\n",
+        "# Locus Cloud Architecture\n\nSession working directory content.\n",
     );
 
     let mut app = create_test_app();
@@ -289,36 +230,22 @@ fn relative_markdown_path_previews_unique_sibling_repository_file() {
         .inline_file_preview_state.loaded
         .values()
         .next()
-        .expect("unique sibling preview");
+        .expect("session working directory preview");
     assert_eq!(preview.display_path, "docs/locus-cloud-architecture.md");
     assert!(preview.markdown);
-    assert!(preview.content.contains("Sibling repository content"));
+    assert!(preview.content.contains("Session working directory content"));
 }
 
 #[test]
-fn local_relative_file_wins_over_sibling_and_ambiguous_siblings_are_rejected() {
+fn missing_relative_path_does_not_search_sibling_directories() {
     let fixture = InlinePreviewFixture::new();
-    fixture.write_bytes(&fixture.session_repository, "docs/shared.md", "local");
-    fixture.write_bytes(&fixture.directory_marker_sibling, "docs/shared.md", "sibling");
-    fixture.write_bytes(&fixture.worktree_marker_sibling, "docs/shared.md", "other sibling");
+    let sibling = fixture._root.path().join("sibling-repository");
+    fixture.write_bytes(&sibling, "docs/shared.md", "sibling content must not be used");
 
     let mut app = create_test_app();
     app.session.working_dir = Some(fixture.session_repository.display().to_string());
     app.display_messages = vec![DisplayMessage::assistant("docs/shared.md")];
     app.bump_display_messages_version();
-    assert!(app.try_toggle_inline_file_preview("docs/shared.md", 0));
-    wait_for_inline_file_preview_loads(&mut app);
-    assert_eq!(
-        app.inline_file_preview_state.loaded
-            .values()
-            .next()
-            .map(|preview| preview.content.as_str()),
-        Some("local")
-    );
-
-    app.inline_file_preview_state.loaded.clear();
-    std::fs::remove_file(fixture.session_repository.join("docs/shared.md"))
-        .expect("remove local fixture");
     assert!(app.try_toggle_inline_file_preview("docs/shared.md", 0));
     wait_for_inline_file_preview_loads(&mut app);
     assert!(app.inline_file_preview_state.loaded.is_empty());

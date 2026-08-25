@@ -14,12 +14,12 @@ Ordinary dotted prose such as `self.input`, `foo.bar`, and `example.com` is not 
 
 ## Resolution and safety
 
-Relative paths resolve against the session working directory first. If the file is absent, Jcode checks the identical relative path in immediate sibling Git repositories and accepts the result only when exactly one sibling matches. It does not recursively search, search by basename, or choose arbitrarily between multiple matches.
+Relative paths resolve only against the session working directory. Jcode does not search parent directories, sibling repositories, or other workspaces for a missing relative path. To reference a file elsewhere, use an explicit parent-relative, absolute, or home-relative path.
 
 When a session has no working directory, relative paths use the process working directory. `~/` resolves against the user home directory. Anchors and numeric line or column suffixes are removed before reading the underlying file.
 
 Preview loading is local-only and does not send or mutate file contents. User-clicked absolute and home-relative paths may point outside the repository. Resolution and bounded reads run in background work so slow filesystems do not block TUI input. Completed reads are discarded when their originating message changed.
 
-Files larger than 512 KiB, binary or non-UTF-8 files, missing files, ambiguous sibling matches, URLs, and mail links are rejected without opening a preview. Clearing the transcript releases loaded and pending preview state.
+Files larger than 512 KiB, binary or non-UTF-8 files, missing files, URLs, and mail links are rejected without opening a preview. Clearing the transcript releases loaded and pending preview state.
 
 HTML files continue to follow the configured `display.html_file_open` mode.

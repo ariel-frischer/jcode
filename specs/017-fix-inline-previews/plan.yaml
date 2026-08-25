@@ -3,6 +3,11 @@ plan:
   created: "2026-08-25"
   spec_path: "specs/017-fix-inline-previews/spec.yaml"
 
+correction:
+  date: "2026-08-25"
+  reason: "Sibling discovery is an unwanted behavior introduced from a mistaken problem statement."
+  binding_override: "Relative paths resolve only against the session working directory. Do not enumerate parents, siblings, or unrelated repositories. Explicit ../, absolute, and home-relative paths keep their established behavior. This override supersedes every sibling-fallback design item below, which remains only as historical planning context."
+
 summary: |
   Keep inline file previews owned by the jcode-tui client and extend the existing click-to-preview path with one canonical parser, resolver, bounded reader, and asynchronous result lifecycle. Relative paths resolve against the session working directory first. Only when that file is absent will resolution inspect immediate sibling repository directories at the identical relative path, accept exactly one safe file, and reject missing, ambiguous, nested, traversal, and symlink-escape outcomes.
 

@@ -4,6 +4,10 @@ tasks:
   spec_path: "specs/017-fix-inline-previews/spec.yaml"
   plan_path: "specs/017-fix-inline-previews/plan.yaml"
 
+correction:
+  date: "2026-08-25"
+  binding_override: "Remove sibling-repository discovery. Relative paths must resolve only from the session working directory; missing relative paths remain unavailable. Sibling-fallback tasks below are superseded historical entries."
+
 summary:
   total_tasks: 20
   total_phases: 7
