@@ -17,7 +17,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Prepare reusable inline-preview filesystem and interaction fixtures"
-        status: "Pending"
+        status: "Completed"
         type: "setup"
         parallel: false
         story_id: null

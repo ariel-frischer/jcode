@@ -1,3 +1,257 @@
+const INLINE_PREVIEW_BYTE_LIMIT: usize = 512 * 1024;
+
+struct InlinePreviewFixture {
+    _root: tempfile::TempDir,
+    session_repository: std::path::PathBuf,
+    directory_marker_sibling: std::path::PathBuf,
+    worktree_marker_sibling: std::path::PathBuf,
+    non_repository_sibling: std::path::PathBuf,
+    nested_repository: std::path::PathBuf,
+}
+
+impl InlinePreviewFixture {
+    fn new() -> Self {
+        let root = tempfile::tempdir().expect("inline preview fixture root");
+        let session_repository = root.path().join("session-repository");
+        let directory_marker_sibling = root.path().join("directory-marker-sibling");
+        let worktree_marker_sibling = root.path().join("worktree-marker-sibling");
+        let non_repository_sibling = root.path().join("non-repository-sibling");
+        let nested_repository = root.path().join("container/nested-repository");
+
+        for repository in [
+            &session_repository,
+            &directory_marker_sibling,
+            &nested_repository,
+        ] {
+            std::fs::create_dir_all(repository.join(".git"))
+                .expect("create repository with .git directory");
+        }
+        std::fs::create_dir_all(&worktree_marker_sibling)
+            .expect("create worktree-style sibling repository");
+        std::fs::write(
+            worktree_marker_sibling.join(".git"),
+            "gitdir: ../.git/worktrees/worktree-marker-sibling\n",
+        )
+        .expect("create worktree .git file");
+        std::fs::create_dir_all(&non_repository_sibling).expect("create non-repository sibling");
+
+        Self {
+            _root: root,
+            session_repository,
+            directory_marker_sibling,
+            worktree_marker_sibling,
+            non_repository_sibling,
+            nested_repository,
+        }
+    }
+
+    fn write_bytes(
+        &self,
+        repository: &std::path::Path,
+        relative_path: &str,
+        content: impl AsRef<[u8]>,
+    ) -> std::path::PathBuf {
+        let path = repository.join(relative_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create fixture file parent");
+        }
+        std::fs::write(&path, content).expect("write inline preview fixture file");
+        path
+    }
+
+    fn write_same_relative_path(&self, relative_path: &str) -> [std::path::PathBuf; 3] {
+        [
+            self.write_bytes(&self.session_repository, relative_path, "session copy"),
+            self.write_bytes(
+                &self.directory_marker_sibling,
+                relative_path,
+                "directory marker sibling copy",
+            ),
+            self.write_bytes(
+                &self.worktree_marker_sibling,
+                relative_path,
+                "worktree marker sibling copy",
+            ),
+        ]
+    }
+
+    fn write_content_samples(&self) {
+        self.write_bytes(
+            &self.session_repository,
+            "samples/markdown.md",
+            "# Markdown\n",
+        );
+        self.write_bytes(
+            &self.session_repository,
+            "samples/utf8.txt",
+            "ordinary UTF-8: café\n",
+        );
+        self.write_bytes(
+            &self.session_repository,
+            "samples/invalid-utf8.bin",
+            [0xff, 0xfe, 0xfd],
+        );
+        self.write_bytes(
+            &self.session_repository,
+            "samples/nul-bearing.txt",
+            b"before\0after",
+        );
+        self.write_bytes(&self.session_repository, "samples/empty.txt", []);
+        self.write_bytes(
+            &self.session_repository,
+            "samples/at-limit.txt",
+            vec![b'x'; INLINE_PREVIEW_BYTE_LIMIT],
+        );
+        self.write_bytes(
+            &self.session_repository,
+            "samples/over-limit.txt",
+            vec![b'x'; INLINE_PREVIEW_BYTE_LIMIT + 1],
+        );
+    }
+
+    #[cfg(unix)]
+    fn symlink_file(
+        &self,
+        repository: &std::path::Path,
+        relative_path: &str,
+        target: &std::path::Path,
+    ) -> std::io::Result<std::path::PathBuf> {
+        let link = repository.join(relative_path);
+        if let Some(parent) = link.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::os::unix::fs::symlink(target, &link)?;
+        Ok(link)
+    }
+
+    #[cfg(windows)]
+    fn symlink_file(
+        &self,
+        repository: &std::path::Path,
+        relative_path: &str,
+        target: &std::path::Path,
+    ) -> std::io::Result<std::path::PathBuf> {
+        let link = repository.join(relative_path);
+        if let Some(parent) = link.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::os::windows::fs::symlink_file(target, &link)?;
+        Ok(link)
+    }
+}
+
+fn rendered_text_position(
+    terminal: &ratatui::Terminal<ratatui::backend::TestBackend>,
+    needle: &str,
+    character_offset: u16,
+) -> Option<(u16, u16)> {
+    let buffer = terminal.backend().buffer();
+    let area = *buffer.area();
+    for row in 0..area.height {
+        let mut line = String::new();
+        for column in 0..area.width {
+            line.push_str(buffer[(column, row)].symbol());
+        }
+        if let Some(byte) = line.find(needle) {
+            return Some((line[..byte].chars().count() as u16 + character_offset, row));
+        }
+    }
+    None
+}
+
+fn click_left(app: &mut App, column: u16, row: u16) {
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_mouse_event(MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::empty(),
+        });
+    }
+}
+
+#[test]
+fn inline_preview_fixture_materializes_repository_and_content_variants() {
+    let fixture = InlinePreviewFixture::new();
+    let copies = fixture.write_same_relative_path("docs/shared.md");
+    fixture.write_content_samples();
+    fixture.write_bytes(
+        &fixture.nested_repository,
+        "docs/nested-only.md",
+        "nested repository copy",
+    );
+    fixture.write_bytes(
+        &fixture.non_repository_sibling,
+        "docs/non-repository.md",
+        "non-repository copy",
+    );
+
+    assert!(fixture.session_repository.join(".git").is_dir());
+    assert!(fixture.directory_marker_sibling.join(".git").is_dir());
+    assert!(fixture.worktree_marker_sibling.join(".git").is_file());
+    assert!(fixture.nested_repository.join(".git").is_dir());
+    assert!(!fixture.non_repository_sibling.join(".git").exists());
+    assert!(copies.iter().all(|path| path.is_file()));
+    assert_eq!(
+        std::fs::metadata(fixture.session_repository.join("samples/at-limit.txt"))
+            .expect("at-limit metadata")
+            .len(),
+        INLINE_PREVIEW_BYTE_LIMIT as u64
+    );
+    assert_eq!(
+        std::fs::metadata(fixture.session_repository.join("samples/over-limit.txt"))
+            .expect("over-limit metadata")
+            .len(),
+        INLINE_PREVIEW_BYTE_LIMIT as u64 + 1
+    );
+    assert!(
+        std::fs::read(fixture.session_repository.join("samples/empty.txt"))
+            .expect("read empty sample")
+            .is_empty()
+    );
+    assert!(
+        std::str::from_utf8(
+            &std::fs::read(fixture.session_repository.join("samples/invalid-utf8.bin"))
+                .expect("read invalid UTF-8 sample")
+        )
+        .is_err()
+    );
+    assert!(
+        std::fs::read(fixture.session_repository.join("samples/nul-bearing.txt"))
+            .expect("read NUL-bearing sample")
+            .contains(&0)
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.session_repository.join("samples/markdown.md"))
+            .expect("read Markdown sample"),
+        "# Markdown\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.session_repository.join("samples/utf8.txt"))
+            .expect("read UTF-8 sample"),
+        "ordinary UTF-8: café\n"
+    );
+
+    #[cfg(unix)]
+    {
+        let outside = fixture.write_bytes(
+            fixture._root.path(),
+            "outside.txt",
+            "outside repository boundary",
+        );
+        let link = fixture
+            .symlink_file(&fixture.session_repository, "docs/escape.txt", &outside)
+            .expect("create fixture symlink");
+        assert_eq!(
+            std::fs::canonicalize(link).expect("canonicalize symlink"),
+            outside
+        );
+    }
+}
+
 #[test]
 fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     let _render_lock = scroll_render_test_lock();
@@ -29,37 +283,9 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     assert!(collapsed.contains("docs/guide.md"));
     assert!(!collapsed.contains("Preview Heading"));
 
-    let locate_path = |terminal: &ratatui::Terminal<ratatui::backend::TestBackend>| {
-        let buf = terminal.backend().buffer();
-        let area = *buf.area();
-        for row in 0..area.height {
-            let mut line = String::new();
-            for col in 0..area.width {
-                line.push_str(buf[(col, row)].symbol());
-            }
-            if let Some(byte) = line.find("docs/guide.md") {
-                return Some((line[..byte].chars().count() as u16 + 3, row));
-            }
-        }
-        None
-    };
-    let click = |app: &mut App, col: u16, row: u16| {
-        app.handle_mouse_event(MouseEvent {
-            kind: MouseEventKind::Down(MouseButton::Left),
-            column: col,
-            row,
-            modifiers: KeyModifiers::empty(),
-        });
-        app.handle_mouse_event(MouseEvent {
-            kind: MouseEventKind::Up(MouseButton::Left),
-            column: col,
-            row,
-            modifiers: KeyModifiers::empty(),
-        });
-    };
-
-    let (path_col, path_row) = locate_path(&terminal).expect("path must be visible");
-    click(&mut app, path_col, path_row);
+    let (path_col, path_row) = rendered_text_position(&terminal, "docs/guide.md", 3)
+        .expect("path must be visible");
+    click_left(&mut app, path_col, path_row);
 
     let expanded = render_and_snap(&app, &mut terminal);
     assert!(
@@ -72,8 +298,9 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     );
     assert!(expanded.contains("• first item"));
 
-    let (path_col, path_row) = locate_path(&terminal).expect("path remains visible when expanded");
-    click(&mut app, path_col, path_row);
+    let (path_col, path_row) = rendered_text_position(&terminal, "docs/guide.md", 3)
+        .expect("path remains visible when expanded");
+    click_left(&mut app, path_col, path_row);
     let collapsed_again = render_and_snap(&app, &mut terminal);
     assert!(!collapsed_again.contains("Inline file · docs/guide.md"));
     assert!(!collapsed_again.contains("Preview Heading"));
