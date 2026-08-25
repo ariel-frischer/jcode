@@ -102,6 +102,30 @@ fn test_relative_file_preview_falls_back_to_process_working_directory() {
 }
 
 #[test]
+fn relative_file_preview_does_not_search_sibling_directories() {
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    let session_dir = workspace.path().join("session");
+    let sibling_dir = workspace.path().join("sibling");
+    std::fs::create_dir_all(&session_dir).expect("create session directory");
+    std::fs::create_dir_all(sibling_dir.join("docs")).expect("create sibling docs");
+    std::fs::write(sibling_dir.join("docs/guide.md"), "sibling content")
+        .expect("write sibling file");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(session_dir.display().to_string());
+    app.display_messages = vec![DisplayMessage::assistant("`docs/guide.md`")];
+    app.bump_display_messages_version();
+
+    assert!(app.try_toggle_inline_file_preview("docs/guide.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.inline_file_previews.is_empty());
+    assert_eq!(
+        app.status_notice(),
+        Some("File is not available: docs/guide.md".to_string())
+    );
+}
+
+#[test]
 fn test_click_on_relative_file_uses_process_working_directory_without_session_cwd() {
     let _render_lock = scroll_render_test_lock();
     let mut app = create_test_app();

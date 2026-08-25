@@ -47,6 +47,7 @@ pub(super) async fn run_replay(
             _ = redraw_interval.tick() => {
                 let ops = app.stream_buffer.flush();
                 app.apply_stream_ops(ops);
+                app.poll_inline_file_preview_loads();
             }
             event = event_stream.next() => {
                 if let Some(Ok(event)) = event {
