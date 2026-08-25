@@ -1,8 +1,20 @@
 feature:
   branch: "017-fix-inline-previews"
   created: "2026-08-25"
-  status: "Draft"
-  input: "Fix cross-repository inline file previews and integrate applicable hardening and async loading from ariel-frischer/jcode PR 2 while preserving current dev plain-Markdown inline previews. Bead jcode-2hl defines scope and acceptance."
+  status: "Corrected"
+  input: "Resolve inline file previews from the actual Jcode session working directory and integrate applicable hardening and async loading from ariel-frischer/jcode PR 2 while preserving current dev plain-Markdown inline previews."
+
+correction:
+  date: "2026-08-25"
+  reason: "The original sibling-repository fallback was based on a mistaken understanding of the failure and is intentionally removed."
+  contract: "Relative paths resolve only from the session working directory. Jcode must not search parent directories, sibling repositories, or other workspaces unless the user explicitly supplies a parent-relative or absolute path."
+  supersedes:
+    - "US-001 sibling fallback scenarios"
+    - "US-002 sibling ambiguity scenarios"
+    - "FR-003"
+    - "FR-004"
+    - "FR-013"
+    - "Sibling Repository Match entity and related edge cases"
 
 user_stories:
   - id: "US-001"

@@ -51,37 +51,9 @@ fn canonical_file_within(
     (candidate.starts_with(&root) && candidate.is_file()).then_some(candidate)
 }
 
-fn sibling_repository_file(
-    relative: &std::path::Path,
-    working_dir: &std::path::Path,
-) -> Option<std::path::PathBuf> {
-    let Ok(working_dir) = working_dir.canonicalize() else {
-        return None;
-    };
-    let parent = working_dir.parent()?;
-    let mut matched = None;
-    let Ok(entries) = std::fs::read_dir(parent) else {
-        return None;
-    };
-    for entry in entries.flatten() {
-        let sibling = entry.path();
-        if sibling == working_dir || !sibling.is_dir() || !sibling.join(".git").exists() {
-            continue;
-        }
-        let Some(candidate) = canonical_file_within(&sibling, &sibling.join(relative)) else {
-            continue;
-        };
-        if matched.is_some() {
-            return None;
-        }
-        matched = Some(candidate);
-    }
-    matched
-}
-
 // Inline previews intentionally allow explicitly clicked absolute and home-relative
-// local paths outside the repository. Relative paths remain bounded to the session
-// repository or one unique immediate sibling repository at the identical path.
+// local paths outside the repository. Relative paths resolve only from the session
+// working directory, except when the user explicitly supplies parent-relative components.
 pub(super) fn resolve_local_file_target(
     target: &str,
     working_dir: Option<&std::path::Path>,
@@ -130,10 +102,7 @@ pub(super) fn resolve_local_file_target(
         };
         return local.is_file().then_some(local);
     }
-    if let Some(local) = canonical_file_within(&working_dir, &local) {
-        return Some(local);
-    }
-    sibling_repository_file(candidate, &working_dir)
+    canonical_file_within(&working_dir, &local)
 }
 
 impl App {
@@ -384,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_resolution_uses_one_unique_sibling_repository_match() {
+    fn relative_resolution_does_not_search_sibling_directories() {
         let root = tempfile::tempdir().expect("workspace");
         let current = root.path().join("current");
         let sibling = root.path().join("sibling");
@@ -393,28 +362,6 @@ mod tests {
         std::fs::create_dir_all(sibling.join("docs")).expect("docs");
         std::fs::write(sibling.join("docs/guide.md"), "# Guide").expect("guide");
 
-        assert_eq!(
-            resolve_local_file_target("docs/guide.md", Some(&current)),
-            Some(
-                sibling
-                    .join("docs/guide.md")
-                    .canonicalize()
-                    .expect("canonical sibling guide")
-            )
-        );
-    }
-
-    #[test]
-    fn relative_resolution_rejects_ambiguous_sibling_matches() {
-        let root = tempfile::tempdir().expect("workspace");
-        let current = root.path().join("current");
-        std::fs::create_dir_all(current.join(".git")).expect("current repo");
-        for name in ["one", "two"] {
-            let sibling = root.path().join(name);
-            std::fs::create_dir_all(sibling.join(".git")).expect("sibling repo");
-            std::fs::create_dir_all(sibling.join("docs")).expect("docs");
-            std::fs::write(sibling.join("docs/guide.md"), name).expect("guide");
-        }
         assert_eq!(
             resolve_local_file_target("docs/guide.md", Some(&current)),
             None
