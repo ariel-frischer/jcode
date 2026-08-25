@@ -14,22 +14,13 @@ pub use keybindings::{
 };
 
 /// File mention completion behavior for the TUI composer.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct FileMentionsConfig {
     /// Whether typing `@` enables filesystem-backed file suggestions.
     pub enabled: bool,
     /// Additional gitignore-style path patterns excluded from `@` completion.
     pub ignore: Vec<String>,
-}
-
-impl Default for FileMentionsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            ignore: Vec::new(),
-        }
-    }
 }
 
 /// Compaction mode

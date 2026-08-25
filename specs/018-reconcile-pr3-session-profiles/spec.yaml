@@ -1,0 +1,111 @@
+feature:
+  branch: "018-reconcile-pr3-session-profiles"
+  created: "2026-08-25"
+  status: "Draft"
+  input: "Reconcile fork PR 3 at 781511c6d37412410c6d49c44f663f1ee06b25c8 into current dev. Preserve the newer current-dev session-profile architecture and port only demonstrably superior provider/provider_profile precedence and runtime provider-family behavior. PR 2 is explicitly excluded. Acceptance is owned by Bead jcode-anw."
+
+user_stories:
+  - id: "US-001"
+    title: "Resolve session profile provider routing predictably"
+    priority: "P1"
+    as_a: "Jcode user selecting a session profile"
+    i_want: "explicit provider selectors and named provider profiles to resolve with documented precedence and the correct runtime provider family"
+    so_that: "the selected route is deterministic and invalid combinations fail before provider setup"
+    why_this_priority: "Provider misrouting can use the wrong protocol or credential boundary."
+    independent_test: "Run focused CLI profile tests, build the exact worktree binary, and verify conflicts fail before network/provider initialization."
+    acceptance_scenarios:
+      - given: "an explicit --provider and a lower-precedence profile provider_profile"
+        when: "run options are resolved"
+        then: "the explicit provider wins and the lower provider_profile is cleared"
+      - given: "an explicit --provider-profile and a lower-precedence profile provider"
+        when: "run options are resolved"
+        then: "the named provider profile selects its runtime provider family and the lower provider is cleared"
+      - given: "both explicit provider selectors are supplied"
+        when: "run options are resolved"
+        then: "resolution fails with both selector names before provider setup, even when their runtime families match"
+      - given: "a named provider profile is anthropic-compatible"
+        when: "dispatch activates it"
+        then: "dispatch uses the Anthropic-compatible runtime instead of forcing the OpenAI-compatible runtime"
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "MUST preserve current dev as the authoritative session-profile architecture."
+      acceptance_criteria: "Static prompt placement, interactive profile switching, handoff, protocol, harness, and startup metadata behavior remain unchanged and their focused tests pass."
+    - id: "FR-002"
+      description: "MUST make explicit invocation provider selectors override lower-precedence profile selectors."
+      acceptance_criteria: "Focused tests prove --provider clears lower provider_profile and --provider-profile clears lower provider."
+    - id: "FR-003"
+      description: "MUST select the runtime provider family from the configured named provider type."
+      acceptance_criteria: "Anthropic-compatible named profiles resolve to anthropic-api and other named profiles resolve to openai-compatible."
+    - id: "FR-004"
+      description: "MUST enforce mutual exclusion between explicit provider and provider-profile selectors before provider initialization."
+      acceptance_criteria: "Matching and mismatching explicit pairs both fail, the error identifies both flags, and no provider request is attempted."
+    - id: "FR-005"
+      description: "MUST preserve unknown-profile and malformed-profile early failures."
+      acceptance_criteria: "Existing focused tests remain passing and built-binary checks fail before provider setup."
+    - id: "FR-006"
+      description: "MUST exclude PR 2 and unrelated PR 3 architecture replacement."
+      acceptance_criteria: "The final diff contains only matrix-justified profile routing, tests, and reconciliation artifacts."
+  non_functional:
+    - id: "NFR-001"
+      category: "reliability"
+      description: "Provider precedence must be deterministic at the provider trust boundary."
+      measurable_target: "All direct precedence cases have focused tests and zero unexplained failures."
+    - id: "NFR-002"
+      category: "code_quality"
+      description: "The port must remain surgical and reuse existing owners."
+      measurable_target: "Routing product changes remain in src/cli/profile.rs and src/cli/dispatch.rs; extracted tests live in src/cli/profile/tests.rs, and any additional file is limited to a documented delivery-gate repair."
+
+success_criteria:
+  - id: "SC-001"
+    description: "Every in-scope PR 3 behavior has a port, preserve, reject, or no-op disposition."
+    metric: "Behavior-matrix rows with evidence and disposition"
+    target: "100%"
+  - id: "SC-002"
+    description: "Provider selection and named-provider runtime mapping are correct."
+    metric: "Focused unit and built-binary checks"
+    target: "100% pass"
+  - id: "SC-003"
+    description: "Current dev profile architecture remains intact."
+    metric: "Focused preservation tests and guardrails"
+    target: "Zero regressions"
+
+key_entities:
+  - name: "Provider selector"
+    description: "A provider choice supplied by invocation, environment, selected profile, base config, or defaults."
+    attributes: ["source precedence", "runtime provider family", "diagnostic name"]
+  - name: "Named provider profile"
+    description: "A configured providers.<name> entry activated for one run."
+    attributes: ["name", "provider type", "base URL", "credential mode"]
+
+edge_cases:
+  - scenario: "The named provider profile does not exist."
+    expected_behavior: "Fail with the missing providers.<name> entry before provider initialization."
+  - scenario: "Both a profile provider and profile provider_profile are compatible under existing dev validation."
+    expected_behavior: "Preserve current dev compatibility semantics; this port changes cross-precedence resolution, not the broader persisted profile schema."
+  - scenario: "A lower-precedence environment provider_profile exists while --provider is explicit."
+    expected_behavior: "The explicit provider wins and the named provider environment is not activated."
+
+assumptions:
+  - "Current dev supersedes most of PR 3 and remains the architecture authority."
+  - "PR 3 is evidence for focused hardening, not authority for a wholesale merge."
+  - "Named provider types map to the existing OpenAI-compatible or Anthropic-compatible runtime paths."
+
+constraints:
+  - "Do not integrate PR 2."
+  - "Do not replace current dev profile switching, handoff, prompt, protocol, or harness code."
+  - "Use exact-worktree isolated Cargo targets for validation."
+
+out_of_scope:
+  - "PR 2 inline previews."
+  - "A new session-profile subsystem."
+  - "Credential storage changes or live provider calls."
+  - "Unrelated refactors or formatting."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T21:27:00Z"
+  artifact_type: "spec"

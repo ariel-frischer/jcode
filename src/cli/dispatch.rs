@@ -78,7 +78,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     crate::config::Config::migrate_legacy_swarm_spawn_mode_once();
     // Preserve explicit user re-enablement while fixing the old default.
     crate::config::Config::migrate_idle_animation_off_once();
-    let explicit_provider_profile = args.provider_profile.is_some();
+    let explicit_provider_profile = profile::validate_initial_provider_selectors(&args)?;
     let profile_run_options = profile::apply_run_options(&mut args)?;
     let interactive_profile_options = profile::apply_interactive_options(&mut args)?;
 
@@ -89,10 +89,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
         .filter(|value| !value.is_empty())
         && (explicit_provider_profile || interactive_profile_options.is_none())
     {
-        provider_catalog::apply_named_provider_profile_env(profile_name)?;
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", profile_name);
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
-        args.provider = ProviderChoice::OpenaiCompatible;
+        args.provider = profile::activate_named_provider_profile(profile_name)?;
     }
 
     if let Some(tool_profile) = args.tool_profile.as_deref() {

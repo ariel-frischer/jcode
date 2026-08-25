@@ -1,0 +1,144 @@
+plan:
+  branch: "agent/jcode-anw-pr3-integration"
+  created: "2026-08-25"
+  spec_path: "specs/018-reconcile-pr3-session-profiles/spec.yaml"
+
+summary: |
+  Preserve current dev's broader session-profile implementation and port only PR 3's
+  provider precedence hardening. The existing CLI profile resolver remains the owner
+  of per-run precedence. Named provider activation remains in dispatch, but dispatch
+  derives the runtime provider family from the strict Config instead of forcing the
+  OpenAI-compatible path. Focused tests cover both override directions, incompatible
+  explicit selectors, environment masking, unknown profiles, and static prompt order.
+  Validation uses an isolated Cargo target and no live provider request.
+
+technical_context:
+  language: "Rust"
+  framework: "Cargo workspace and clap CLI"
+  primary_dependencies:
+    - name: "jcode-base config"
+      version: "workspace"
+      purpose: "Own strict config, named providers, and resolved session profiles."
+    - name: "CLI profile resolver"
+      version: "workspace"
+      purpose: "Compose invocation, environment, profile, base, and default values."
+    - name: "provider catalog"
+      version: "workspace"
+      purpose: "Activate named provider environment only after validation."
+  storage: "Existing config.toml only; no schema or persistence change"
+  testing:
+    framework: "Rust unit tests, exact-worktree build, offline CLI checks, and repository guardrails"
+    approach: "Focused tests first, then exact binary build and offline error-path checks, then guardrails and fresh-base integration validation."
+  target_platform: "Jcode CLI/TUI supported platforms"
+  project_type: "CLI/TUI modular monolith"
+  performance_goals: "No added provider request, network lookup, or repeated profile mutation."
+  constraints:
+    - "Current dev is authoritative."
+    - "PR 2 is excluded."
+    - "No live or costly provider validation."
+    - "Every product edit maps to a port row in behavior-matrix.md."
+  scale_scope: "Two Rust source files, focused tests, and acceptance artifacts"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "Only missing provider precedence and runtime-family behavior is ported."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "No config schema, persistence, protocol, or no-profile behavior changes."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Invocation remains above environment, profile, base config, and defaults."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "Config remains the named-provider owner and CLI profile/dispatch remain composition owners."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Every port has a direct CLI profile test and preserved paths retain focused tests."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Unknown and conflicting selectors fail before provider setup with corrective diagnostics."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Formatting, focused tests, build, guardrails, and fresh-base checks are required."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "The newer custom dev profile system is preserved as a superset."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "No credentials, live providers, shared-session mutation, or PR2 work is included."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Exact-worktree isolated targets and the built binary provide runtime evidence."
+
+research_findings:
+  decisions:
+    - topic: "Architecture authority"
+      decision: "Keep current dev's static prompt, switching, handoff, protocol, and harness implementation."
+      rationale: "Current dev is a broader tested successor to PR 3."
+      alternatives_considered: ["Merge PR 3 wholesale", "Replace current profile modules"]
+    - topic: "Selected port"
+      decision: "Port cross-precedence selector clearing and named-provider runtime-family mapping."
+      rationale: "Current dev can otherwise retain contradictory metadata or force anthropic-compatible profiles through the OpenAI-compatible runtime."
+      alternatives_considered: ["Document the mismatch only", "Always force openai-compatible"]
+    - topic: "Conflict policy"
+      decision: "Reject every invocation that supplies both explicit selectors while preserving current dev's compatible persisted-profile semantics."
+      rationale: "Invocation flags are same-precedence alternate selectors, so mutual exclusion is clearer and prevents ambiguous activation without changing the persisted profile schema."
+      alternatives_considered: ["Reject every compatible pair", "Silently let provider_profile win"]
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/018-reconcile-pr3-session-profiles/behavior-matrix.md"
+      description: "Evidence, disposition, risk, and validation for every PR3 behavior."
+  source_code:
+    - path: "src/cli/profile.rs"
+      description: "Resolve provider/provider_profile precedence and map named provider type."
+    - path: "src/cli/dispatch.rs"
+      description: "Activate the selected named provider using its resolved runtime family."
+  tests:
+    - path: "src/cli/profile.rs"
+      description: "Focused resolver tests colocated with the owning code."
+    - path: "src/cli/profile/tests.rs"
+      description: "Extracted existing profile tests plus focused precedence regressions, keeping the production owner below its size budget."
+    - path: "scripts/check_guardrails.sh"
+      description: "Repository delivery gates."
+
+implementation_phases:
+  - phase: 1
+    name: "Comparison and acceptance"
+    goal: "Classify all PR3 behavior against current dev before selecting edits."
+    deliverables: ["Behavior matrix", "PR2 exclusion", "Selected surgical port"]
+  - phase: 2
+    name: "Focused implementation"
+    goal: "Add direct tests and implement only the selected precedence and provider-family changes."
+    deliverables: ["Resolver tests", "Profile resolver port", "Dispatch runtime-family port"]
+  - phase: 3
+    name: "Validation and landing"
+    goal: "Prove exact-source behavior and land through fresh-base integration."
+    deliverables: ["Focused test evidence", "Built-binary offline checks", "Guardrails", "Fresh-base merge and install"]
+
+risks:
+  - risk: "A named provider activates the wrong protocol family."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Derive ProviderChoice from NamedProviderType, keep activation in the profile owner, and test anthropic-compatible mapping directly."
+  - risk: "Precedence changes regress existing profile behavior."
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Keep changes in the existing resolver and run all serial profile tests plus preservation tests."
+  - risk: "Validation measures the root checkout instead of this worktree."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Set JCODE_IN_DEV_CARGO=1 and an isolated CARGO_TARGET_DIR for every exact-source Cargo command."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T21:27:00Z"
+  artifact_type: "plan"

@@ -1,0 +1,158 @@
+tasks:
+  branch: "agent/jcode-anw-pr3-integration"
+  created: "2026-08-25"
+  spec_path: "specs/018-reconcile-pr3-session-profiles/spec.yaml"
+  plan_path: "specs/018-reconcile-pr3-session-profiles/plan.yaml"
+
+summary:
+  total_tasks: 9
+  total_phases: 4
+  parallel_opportunities: 0
+  estimated_complexity: "medium"
+
+phases:
+  - number: 1
+    title: "Comparison"
+    purpose: "Freeze behavior dispositions before product edits."
+    tasks:
+      - id: "T001"
+        title: "Compare PR3 tip and hardening commits with current dev"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/018-reconcile-pr3-session-profiles/behavior-matrix.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Classify prompt order, precedence, named-provider routing, switching, handoff, protocol, harness, docs, and PR2 exclusion."
+          - "Use current dev as architecture authority."
+      - id: "T002"
+        title: "Select only missing compatible PR3 improvements"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/018-reconcile-pr3-session-profiles/behavior-matrix.md"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Only provider selector precedence and named-provider runtime-family mapping have port dispositions."
+          - "All broader PR3 behavior is preserve, reject, or no-op."
+
+  - number: 2
+    title: "Implementation"
+    purpose: "Implement direct tests and the surgical routing port."
+    tasks:
+      - id: "T003"
+        title: "Add focused provider precedence tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "src/cli/profile/tests.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Explicit provider clears a lower provider_profile."
+          - "Explicit provider_profile clears a lower provider and selects its runtime family."
+          - "Incompatible explicit selectors fail with both flag names."
+      - id: "T004"
+        title: "Implement provider precedence and named-provider mapping"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "src/cli/profile.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Existing resolver remains the single owner."
+          - "No config or protocol schema changes are introduced."
+      - id: "T005"
+        title: "Use the mapped runtime provider during named-profile dispatch"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "src/cli/dispatch.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Anthropic-compatible profiles no longer force the OpenAI-compatible runtime."
+          - "Strict config validation completes before named-provider environment activation."
+
+  - number: 3
+    title: "Validation"
+    purpose: "Prove exact-source behavior without a live provider call."
+    tasks:
+      - id: "T006"
+        title: "Run focused exact-worktree profile and preservation tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "src/cli/profile.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "All CLI profile tests pass serially with an isolated Cargo target."
+          - "Static prompt, session profile, and shared-state preservation tests pass."
+      - id: "T007"
+        title: "Build exact worktree and run offline CLI error-path checks"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "target/selfdev/jcode"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "The exact-worktree selfdev binary builds."
+          - "Conflicting or unknown selectors fail before provider initialization."
+      - id: "T008"
+        title: "Run formatting, guardrails, and final scope review"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Formatting and repository guardrails pass."
+          - "The diff is limited to matrix-justified files and contains no PR2 code."
+
+  - number: 4
+    title: "Landing"
+    purpose: "Validate on a fresh dev base, land, install, and clean up."
+    tasks:
+      - id: "T009"
+        title: "Commit, fresh-base validate, merge to dev, install, reload, and close jcode-anw"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/018-reconcile-pr3-session-profiles/behavior-matrix.md"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Fresh-base focused tests pass."
+          - "github/dev is an ancestor before push and root remains on dev."
+          - "The installed current/shared runtime points to the landed revision."
+          - "Owned worktrees and branches are cleaned and Bead jcode-anw is closed with evidence."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: []
+
+parallel_execution: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T21:27:00Z"
+  artifact_type: "tasks"
