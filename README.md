@@ -848,12 +848,12 @@ skill policy unless an explicit child override is supplied. Session metadata sto
 selected name and a credential-free resolved snapshot. Restore uses that snapshot and
 warns when the named profile is missing or changed; it never silently falls back.
 
-The TUI `@` file picker is enabled by default and discovers suggestions in bounded
-background batches so typing remains responsive. Sending an existing `@path` includes the
+The TUI `@` file picker is opt-in and discovers suggestions in bounded background batches
+so typing remains responsive. When enabled, sending an existing `@path` includes the
 full UTF-8 file contents in the model-facing message while keeping the compact `@path` in
 the visible transcript. Missing, binary, or oversized paths remain literal so the agent can
-handle them normally. Set `enabled = false` to keep ordinary `@` input without filesystem-backed
-suggestions or submit-time expansion. It skips common generated and dependency directories by
+handle them normally. Set `enabled = true` to enable filesystem-backed suggestions and
+submit-time expansion. It skips common generated and dependency directories by
 default. Add custom global patterns under `[file_mentions]`, or add profile-specific patterns under
 `[profiles.<name>]`:
 
