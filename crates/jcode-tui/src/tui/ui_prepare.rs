@@ -1,6 +1,5 @@
 use super::*;
 use crate::tui::ui::{self, WrappedLineMap};
-
 /// Auxiliary render data for an assistant message that is otherwise recomputed
 /// by re-parsing markdown on every body rebuild. Building the body misses its
 /// cache whenever `display_messages_version` changes (e.g. an in-place edit to
@@ -1739,12 +1738,11 @@ fn render_message_into(
         _ => {}
     }
 
-    if let Some(preview) = app.inline_file_preview(msg.stable_cache_hash()) {
+    if let Some(preview) = app.inline_file_preview((msg_global_idx, msg.stable_cache_hash())) {
         for line in super::inline_file_preview_ui::render(preview) {
             acc.push_auto(line);
         }
     }
-
     acc.segments.push((
         msg.stable_cache_hash(),
         acc.lines.len(),

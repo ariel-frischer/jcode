@@ -1,9 +1,8 @@
 use super::*;
-use crate::tui::TuiState as _;
+use crate::tui::{InlineFilePreview, TuiState as _};
 use std::cell::RefCell;
 use std::sync::Mutex;
 use std::time::Duration;
-
 const REMOTE_STARTUP_HEADER_DEBOUNCE: Duration = Duration::from_millis(400);
 
 /// How long a routine `LoadingSession` phase may keep showing the known model
@@ -606,12 +605,12 @@ impl crate::tui::TuiState for App {
         self.display_messages_version
     }
 
-    fn inline_file_preview(&self, message_hash: u64) -> Option<&crate::tui::InlineFilePreview> {
-        self.inline_file_previews.get(&message_hash)
+    fn inline_file_preview(&self, message_key: (usize, u64)) -> Option<&InlineFilePreview> {
+        self.inline_file_preview_state.loaded.get(&message_key)
     }
 
     fn inline_file_previews_version(&self) -> u64 {
-        self.inline_file_previews_version
+        self.inline_file_preview_state.version
     }
 
     fn streaming_text(&self) -> &str {

@@ -1,0 +1,365 @@
+tasks:
+  branch: "017-fix-inline-previews"
+  created: "2026-08-25"
+  spec_path: "specs/017-fix-inline-previews/spec.yaml"
+  plan_path: "specs/017-fix-inline-previews/plan.yaml"
+
+summary:
+  total_tasks: 20
+  total_phases: 7
+  parallel_opportunities: 3
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Prepare deterministic preview fixtures and characterize the current dev behavior before changing shared TUI state."
+    tasks:
+      - id: "T001"
+        title: "Prepare reusable inline-preview filesystem and interaction fixtures"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "Tempfile helpers can create a session repository, immediate sibling repositories recognized by .git directories or worktree .git files, nested non-sibling directories, symlinks where supported, and same-relative-path files."
+          - "Fixtures can create Markdown, ordinary UTF-8, invalid UTF-8, NUL-bearing, empty, and 512 KiB boundary files without using the network or the shared daemon."
+          - "Existing plain-path, Markdown-link, external HTML, collapse, copy, and scroll behavior is characterized before source behavior changes."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Establish canonical file-reference parsing and exact transcript-message identity required by every preview story."
+    tasks:
+      - id: "T002"
+        title: "Write parser and exact message-key contract tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests cover quoted plain paths, plain Markdown targets, relative, home-relative, Unix absolute, and Windows drive-prefixed paths."
+          - "Right-to-left parsing strips supported :line and :line:column numeric suffixes while preserving colons that belong to the path and rejecting URL or mailto targets."
+          - "Two transcript messages with identical content and path text receive distinct keys based on message position plus stable message hash."
+      - id: "T003"
+        title: "Implement canonical FileReference parsing and InlineFilePreviewKey"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/mod.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "One reusable parser returns the display path, Relative/HomeRelative/Absolute kind, optional line, optional column, and exact message key without performing filesystem I/O."
+          - "Numeric navigation suffixes are excluded from filesystem lookup and extension checks, including for paths containing other colons."
+          - "InlineFilePreviewKey contains message index and stable message hash and is suitable for loaded and pending preview maps."
+      - id: "T004"
+        title: "Migrate App and renderer-facing preview state to exact message keys"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app.rs, crates/jcode-tui/src/tui/app/tui_lifecycle.rs, crates/jcode-tui/src/tui/app/state_ui_messages.rs, crates/jcode-tui/src/tui/app/tui_state.rs, crates/jcode-tui/src/tui/ui_prepare.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "All constructors initialize exact-key loaded preview state and transcript reset paths clear it."
+          - "TuiState and ui_prepare request previews by the exact message key rather than hash-only identity."
+          - "Existing single-message open and collapse behavior continues to work before asynchronous pending state is introduced."
+
+  - number: 3
+    title: "User Story 1 - Preview local and sibling-repository files inline"
+    purpose: "Resolve local files first and fall back only to one safe same-relative-path match in an immediate sibling repository."
+    story_reference: "US-001"
+    independent_test: "Render a quoted relative path, prove the session-working-directory file wins, remove it, and prove exactly one immediate sibling repository match opens beneath the owning message with Markdown rendering."
+    tasks:
+      - id: "T005"
+        title: "Add local-precedence and unique-sibling resolver tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Tests cover a local relative file, a local-and-sibling collision where local wins, and exactly one eligible sibling repository containing the identical relative path."
+          - "A direct sibling is eligible with either a .git directory or worktree .git file, while nested descendants and non-repository siblings are ignored."
+          - "Relative references with supported line and column suffixes resolve the same underlying file as the unsuffixed reference."
+      - id: "T006"
+        title: "Implement deterministic local-first and unique-sibling resolution"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Relative resolution canonicalizes and checks the session working directory candidate before enumerating any siblings."
+          - "Fallback inspects only direct child repository directories of the session repository parent at the unchanged relative path and accepts exactly one safe regular file."
+          - "Resolution does not recursively search, search by basename, inspect ancestors, or choose the first result from multiple matches."
+      - id: "T007"
+        title: "Integrate resolved local and sibling Markdown previews beneath the owning message"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/navigation.rs, crates/jcode-tui/src/tui/ui_prepare.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Quoted plain paths and plain Markdown link targets reach the canonical resolver without requiring an @ prefix."
+          - "A uniquely resolved sibling .md, .mdx, or .markdown file sets Markdown presentation and renders beneath the exact owning message."
+          - "Clicking the same resolved reference again collapses only that message's preview."
+
+  - number: 4
+    title: "User Story 2 - Receive safe and unambiguous preview results"
+    purpose: "Reject ambiguous, missing, escaped, non-text, binary, oversized, and non-regular targets with deterministic bounded outcomes."
+    story_reference: "US-002"
+    independent_test: "Exercise ambiguous sibling matches, no match, traversal and symlink escapes, directories, invalid UTF-8, NUL-bearing bytes, and files around the 512 KiB limit, then verify no unintended content is exposed."
+    tasks:
+      - id: "T008"
+        title: "Add resolver safety, ambiguity, and bounded-reader tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Tests cover zero and multiple sibling matches, non-repository and nested matches, traversal, symlink escape where supported, directories, and canonicalization failures."
+          - "Reader tests cover exactly 512 KiB, 512 KiB plus one byte, invalid UTF-8, NUL-bearing bytes, empty files, and metadata/read races without unbounded allocation."
+          - "Ambiguous and unsafe cases expose none of the candidate contents and return the established unavailable outcome."
+      - id: "T009"
+        title: "Implement canonical boundary checks and bounded binary-safe reads"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Relative local and sibling candidates are canonical regular files beneath their canonical permitted roots, so traversal and symlink escapes are rejected."
+          - "The reader opens the selected file and consumes at most 512 KiB plus one sentinel byte, rejecting overflow without relying only on metadata length."
+          - "Invalid UTF-8, NUL-bearing binary data, missing files, directories, and read failures produce a stable unavailable result without panic or lossy content exposure."
+      - id: "T010"
+        title: "Preserve explicit home and absolute path policy while surfacing unavailable results"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/navigation.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Home-relative and absolute references preserve established explicit-path behavior and never use sibling fallback."
+          - "Missing, ambiguous, unsafe, oversized, and non-text references are consumed as file-preview attempts and show the established unavailable notice rather than opening an unrelated external target."
+          - "The suffix parser supplies the underlying path consistently to resolution, availability notices, and extension checks."
+
+  - number: 5
+    title: "User Story 3 - Keep previews responsive and attached to the correct message"
+    purpose: "Move resolution and reading off the interaction path and apply only current results to their exact request owner."
+    story_reference: "US-003"
+    independent_test: "Delay multiple preview workers, continue scrolling and copying, supersede or remove owners, and open identical paths from duplicate messages, then verify only current exact-owner results attach."
+    tasks:
+      - id: "T011"
+        title: "Add asynchronous lifecycle, stale-result, and duplicate-message tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "Deterministically delayed workers prove click handling returns without waiting for filesystem resolution or reading and ordinary scroll/copy actions remain available."
+          - "Tests cover superseded generations, changed or removed messages, transcript-version changes, disconnected workers, collapse during loading, and transcript reset."
+          - "Two duplicate-text messages loading the same display path maintain independent pending, loaded, and collapsed states."
+      - id: "T012"
+        title: "Add pending PreviewRequest state and background worker spawning"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app.rs, crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/tui_lifecycle.rs"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "App owns pending requests keyed by InlineFilePreviewKey plus a monotonically increasing request generation."
+          - "Each request captures its exact message key, display-messages version, display path, and completion receiver."
+          - "Filesystem resolution and bounded reading run via tokio spawn_blocking when a runtime exists and a standard thread fallback in runtime-less tests, with one bounded completion per request."
+      - id: "T013"
+        title: "Poll preview completions from local and remote TUI maintenance loops"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/local.rs, crates/jcode-tui/src/tui/app/remote.rs, crates/jcode-tui/src/tui/app/inline_file_preview.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Both local/test and normal remote-client loops use non-blocking receiver polling and never wait synchronously for preview completion."
+          - "A current successful result moves atomically from pending to loaded state, and worker disconnection produces a visible unavailable result without panic."
+          - "Polling work is proportional to the small pending-request set and does not introduce a busy wait."
+      - id: "T014"
+        title: "Reject stale completions and clear pending ownership on lifecycle changes"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/inline_file_preview.rs, crates/jcode-tui/src/tui/app/state_ui_messages.rs, crates/jcode-tui/src/tui/app/tui_lifecycle.rs"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "Completion applies only when request generation, exact message key, requested display path, and current transcript ownership still match."
+          - "Supersession, collapse, transcript clear, message replacement, and App lifecycle reset remove or invalidate pending state so late results are discarded."
+          - "Repeated delayed stale and duplicate-message tests complete with zero cross-wired attachments."
+
+  - number: 6
+    title: "User Story 4 - Preserve established link and preview behavior"
+    purpose: "Retain current dev routing, rendering, collapse, copy, scrolling, and supported path semantics around the new resolver and async lifecycle."
+    story_reference: "US-004"
+    independent_test: "Exercise plain Markdown and quoted paths, configured external HTML opening, home and absolute paths, suffixes, Markdown and text rendering, missing files, collapse, copy selection, and transcript scrolling."
+    tasks:
+      - id: "T015"
+        title: "Add routing and rendered interaction compatibility regressions"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Tests cover quoted plain paths and plain Markdown paths without @, line and column suffixes, home and absolute paths, and established missing-file notices."
+          - "Configured external HTML opening still invokes the opener seam with the parsed underlying file, while inline HTML configuration remains on the established preview path."
+          - "Click-to-collapse, drag copy selection, ordinary copy, and transcript scrolling remain usable before, during, and after loading."
+      - id: "T016"
+        title: "Add renderer regressions for bounded Markdown and ordinary text previews"
+        status: "Completed"
+        type: "test"
+        parallel: true
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/ui_inline_file_preview.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Markdown content continues through the current Markdown renderer and ordinary UTF-8 content uses the existing text presentation."
+          - "Loading, loaded, unavailable, empty, and collapsed states remain bounded beneath the exact owning message."
+          - "Long lines, Unicode, tabs, and content at the accepted size boundary render without panic or unbounded transcript height."
+      - id: "T017"
+        title: "Finalize compatible navigation and exact-owner rendering integration"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/app/navigation.rs, crates/jcode-tui/src/tui/app/tui_state.rs, crates/jcode-tui/src/tui/ui_prepare.rs, crates/jcode-tui/src/tui/ui_inline_file_preview.rs"
+        dependencies: ["T015", "T016"]
+        acceptance_criteria:
+          - "Current dev routing order remains authoritative: supported external URLs and configured external HTML retain their opener behavior, while eligible plain file references toggle inline previews."
+          - "Renderer lookup uses InlineFilePreviewKey so duplicate message text cannot share loading, loaded, or collapse state."
+          - "Markdown rendering, ordinary text rendering, unavailable notices, copy selection, and transcript scrolling retain their established user-visible behavior."
+
+  - number: 7
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Document the final behavior and prove safety, responsiveness, compatibility, repository gates, and execution by the newly built TUI binary."
+    tasks:
+      - id: "T018"
+        title: "Update inline file preview documentation for the implemented policy"
+        status: "Completed"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "docs/INLINE_FILE_PREVIEW.md"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "Documentation states local precedence, unique immediate sibling same-relative-path fallback, ambiguity refusal, and no recursive search."
+          - "Documentation records canonical safety boundaries, the 512 KiB bounded binary-safe read, asynchronous loading, and stale-result rejection."
+          - "Preserved plain Markdown, quoted path, external HTML, home, absolute, suffix, collapse, copy, scroll, Markdown rendering, and unavailable behavior is explicit."
+      - id: "T019"
+        title: "Run deterministic stress and responsiveness acceptance tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/inline_file_preview.rs"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "Ambiguous sibling, stale completion, superseded request, and duplicate-message scenarios each pass 100 repeated deterministic iterations with zero incorrect selection or attachment."
+          - "Delayed-load instrumentation demonstrates that at least 95% of representative scroll, copy, and ordinary interaction operations complete without a user-visible pause over 100 ms."
+          - "Traversal, nested search, symlink escape, invalid UTF-8, NUL, and oversized cases expose zero unintended content."
+      - id: "T020"
+        title: "Run serialized repository validation and isolated built-binary smoke test"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/, scripts/check_guardrails.sh"
+        dependencies: ["T018", "T019"]
+        acceptance_criteria:
+          - "Focused parser, resolver, reader, async lifecycle, routing, renderer, copy, scroll, and stress tests pass, followed by cargo fmt checking and serialized jcode-tui package checks."
+          - "A coordinated TUI selfdev build succeeds and scripts/check_guardrails.sh passes, or any proven unrelated baseline failure is recorded without widening feature scope."
+          - "The newly built binary runs against an isolated socket, its resolved executable is confirmed, and local plus unique-sibling Markdown preview smoke scenarios exercise that binary rather than the shared daemon."
+          - "The final diff contains only scoped TUI preview code, focused tests, and current-state documentation, with no wholesale PR 2 import or unrelated refactor."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-003", "US-004"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003", "US-004"]
+    - story_id: "US-003"
+      depends_on: ["US-001", "US-002"]
+      blocks: ["US-004"]
+    - story_id: "US-004"
+      depends_on: ["US-001", "US-002", "US-003"]
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+
+parallel_execution:
+  - phase: 6
+    parallel_groups:
+      - tasks: ["T015", "T016"]
+        rationale: "App routing and interaction regressions are isolated from renderer unit regressions and share only the completed async lifecycle."
+  - phase: 7
+    parallel_groups:
+      - tasks: ["T018", "T019"]
+        rationale: "Current-state documentation and deterministic stress instrumentation use separate files and can proceed after integration is complete."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Canonical identity and parsing plus local-first, exact unique-sibling resolution with inline Markdown rendering."
+    validation: "Run the parser/key, resolver, local precedence, unique sibling, suffix, and Markdown rendering tests with tempfile repositories."
+  incremental_delivery:
+    - milestone: "Identity Foundation Ready"
+      phases: [1, 2]
+      deliverable: "Every preview reference has canonical parsed navigation metadata and exact duplicate-safe message ownership."
+    - milestone: "Cross-Repository MVP Complete"
+      phases: [1, 2, 3]
+      deliverable: "Local files win and one eligible immediate sibling same-relative-path file opens inline with Markdown rendering."
+    - milestone: "Safe Deterministic Resolution Complete"
+      phases: [1, 2, 3, 4]
+      deliverable: "Ambiguous, missing, unsafe, binary, and oversized references produce bounded unavailable outcomes without exposing unintended content."
+    - milestone: "Responsive Ownership Complete"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Background loading remains interactive and stale or duplicate-message results cannot cross-wire."
+    - milestone: "Validated Delivery Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Established link and preview behavior is preserved, documented, stress-tested, built, guardrail-checked, and exercised through an isolated newly built binary."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T20:32:30Z"
+  artifact_type: "tasks"
