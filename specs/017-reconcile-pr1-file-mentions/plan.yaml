@@ -1,0 +1,271 @@
+plan:
+  branch: "agent/jcode-5kb-pr1-integration"
+  created: "2026-08-25"
+  spec_path: "specs/017-reconcile-pr1-file-mentions/spec.yaml"
+
+summary: |
+  Reconcile the file-mention-related work reachable from fork PR 1 commit
+  49738a4d508c69a49aeaff00928db32d07609ecc against the current dev branch as a
+  behavior-first, superset-preserving integration. The implementation will first
+  freeze an evidence-backed behavior matrix covering file-mention discovery and
+  submission, picker behavior, compact transcript/provider projection, config,
+  remote sessions, working-directory and unsafe-file handling, and the focused PR
+  1 provider-projection assertions. Each difference will be classified as port,
+  preserve, reject, or no-op before code changes are selected.
+
+  Current dev remains authoritative. Only minimal changes whose behavior is
+  demonstrably superior and compatible will be ported, with ownership kept in
+  the existing config, TUI, app-core, and remote-session boundaries. PR 2 inline
+  previews are an explicit exclusion and will be checked by scope scans. Focused
+  tests will accompany every selected port, followed by the TUI build, relevant
+  regression checks, guardrails, and an isolated-socket runtime check using the
+  newly built binary. No wholesale cherry-pick or architecture replacement is
+  planned.
+
+technical_context:
+  language: "Rust with YAML/Markdown planning and repository shell validators"
+  framework: "Cargo workspace; ratatui-based TUI and Jcode modular monolith"
+  primary_dependencies:
+    - name: "Rust workspace crates"
+      version: "repository-pinned stable toolchain"
+      purpose: "Own file-mention configuration, TUI picker/input behavior, app state, compact transcript projection, and remote dispatch."
+    - name: "Cargo test"
+      version: "repository toolchain"
+      purpose: "Run focused TUI, config, app-core, remote-session, and provider-projection regression tests."
+    - name: "Git CLI"
+      version: "2.x"
+      purpose: "Read PR 1 and current-dev revisions without mutating the integration baseline and provide comparison evidence."
+    - name: "autospec artifact validator"
+      version: "autospec dev"
+      purpose: "Validate the generated specification plan artifact."
+  storage: "Existing Jcode session/config/transcript persistence; no new storage"
+  testing:
+    framework: "Rust unit/integration tests, TUI tests, repository scans, isolated-socket smoke test, and guardrails"
+    approach: "Compare revision behavior first, add or retain focused tests for every matrix row selected for port or preserve, verify excluded PR2 scope, then run the smallest relevant Cargo checks before the TUI build, guardrails, and newly built isolated runtime."
+  target_platform: "Linux development environment and supported Jcode Rust targets; runtime smoke test uses a private Unix socket"
+  project_type: "CLI/TUI coding-agent application"
+  performance_goals: "Preserve responsive file-mention discovery and picker behavior, avoid broad compile or runtime regressions, and keep the change surface limited to justified files."
+  constraints:
+    - "Current dev is the authoritative baseline and must remain the architectural direction."
+    - "PR 1 is candidate evidence, not merge authority; do not blindly cherry-pick it."
+    - "Only surgical changes with positive comparison evidence may be ported."
+    - "Preserve dev-specific profiles, jcode run safety, remote behavior, and existing custom features."
+    - "Exclude all PR 2 inline preview implementation, dependencies, and behavior."
+    - "Every changed file must map directly to a behavior-matrix row."
+    - "Do not rewrite history, mutate the root integration checkout, or perform live/costly validation without approval."
+  scale_scope: "One behavior matrix, a bounded set of existing TUI/config/app-core/remote files, focused regression tests, and no new public protocol or storage contract"
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes (PRIN-001)"
+      status: "PASS"
+      notes: "The plan requires a matrix-backed disposition for every changed file and explicitly excludes broad refactors, wholesale replacement, and unrelated cleanup."
+    - name: "Backward-Compatible User and Data Contracts (PRIN-002)"
+      status: "PASS"
+      notes: "Current dev defaults, config fields, persisted compact/transcript behavior, provider projections, remote sessions, and custom workflows remain the compatibility baseline."
+    - name: "Explicit Configuration Precedence (PRIN-003)"
+      status: "PASS"
+      notes: "Any file-mention config comparison reuses the existing resolver and verifies enabled/disabled defaults, ignore patterns, and unset behavior rather than introducing a parallel path."
+    - name: "Layered Rust Ownership and Dependency Direction (PRIN-004)"
+      status: "PASS"
+      notes: "The plan keeps changes within existing config, TUI, app-core, and remote-session owners and adds no new protocol, crate, or duplicated runtime path."
+    - name: "Focused Behavioral Tests (PRIN-005)"
+      status: "PASS"
+      notes: "Acceptance rows map to focused picker, file-mention, compact projection, config, remote, unsafe-file, and rewind/provider tests before broader checks."
+    - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
+      status: "PASS"
+      notes: "Unsafe paths, ignore rules, local/remote working directories, and unavailable or invalid file inputs remain explicitly tested with observable behavior."
+    - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
+      status: "PASS"
+      notes: "Delivery includes focused checks, the relevant TUI build, scripts/check_guardrails.sh, diff/scope review, and an isolated-socket runtime check using the new binary."
+    - name: "Custom-First, Upstream-Aware Simplicity (PRIN-008)"
+      status: "PASS"
+      notes: "Current dev custom behavior and ownership win unless PR1 evidence proves a compatible improvement; PR2 remains separately owned and excluded."
+    - name: "Outcome Ownership and Safe Autonomy (PRIN-009)"
+      status: "PASS"
+      notes: "The plan targets the accepted Bead jcode-5kb outcome, records unresolved evidence as preserve/reject rather than guessing, and avoids destructive or externally visible actions."
+    - name: "Measured Efficiency and Runtime Truth (PRIN-010)"
+      status: "PASS"
+      notes: "Picker responsiveness is part of the comparison, and runtime validation uses the newly built binary through a private socket rather than the shared daemon."
+
+research_findings:
+  decisions:
+    - topic: "Comparison authority and revision scope"
+      decision: "Use current dev as the baseline and inspect PR 1 at the specified commit plus its relevant ancestry, not the full fork history as an automatic merge."
+      rationale: "The PR 1 tip is a focused provider-projection test adjustment, while the accepted Bead scope refers to earlier file-mention, compact transcript, config, and remote-session changes reachable in that candidate line."
+      alternatives_considered:
+        - "Blindly cherry-pick PR 1 or merge the fork branch"
+        - "Compare only the PR 1 tip and ignore its in-scope ancestry"
+        - "Treat the fork as the new architecture"
+    - topic: "Behavior-matrix design"
+      decision: "Represent each mentioned file or behavior as a row containing PR1 behavior, dev behavior, compatibility risk, evidence, validation, and port/preserve/reject/no-op disposition."
+      rationale: "The acceptance contract requires complete classification and prevents unreviewed code movement when one revision is only locally better or conflicts with newer custom dev behavior."
+      alternatives_considered:
+        - "Use a prose summary without per-behavior disposition"
+        - "Classify only changed files and omit unchanged behavior"
+        - "Use commit ancestry as the disposition"
+    - topic: "Ownership and implementation boundary"
+      decision: "Reuse existing file-mention config types/resolvers, TUI input/picker and tests, app-core compaction/provider projection, and remote-session dispatch boundaries."
+      rationale: "The constitution requires one canonical owner and preserves the modular Rust layering; the existing source paths already own the relevant behavior."
+      alternatives_considered:
+        - "Add a new shared file-mention abstraction crate"
+        - "Move behavior into the root composition layer"
+        - "Copy PR1 modules wholesale"
+    - topic: "PR2 exclusion"
+      decision: "Treat inline previews as a separate non-goal and verify absence with changed-file review and targeted searches for PR2-only implementation or dependency artifacts."
+      rationale: "The spec and alignment comment assign PR2 inline previews to another Bead, so even overlapping files must be split at behavior boundaries."
+      alternatives_considered:
+        - "Port all file-preview-looking changes together"
+        - "Rely only on the commit message to prove exclusion"
+        - "Defer scope review until after implementation"
+    - topic: "Validation strategy"
+      decision: "Run focused tests first, then the relevant TUI build and guardrails, with a private-socket smoke test against the built binary."
+      rationale: "This matches repository delivery gates and distinguishes actual runtime behavior from the long-lived shared daemon."
+      alternatives_considered:
+        - "Use cargo build alone"
+        - "Run only the full workspace suite"
+        - "Test through the shared daemon without reloading it"
+
+data_model:
+  entities:
+    - name: "Behavior matrix row"
+      description: "An evidence-backed comparison of one PR1 file mention or behavior against current dev."
+      fields:
+        - name: "scope_identifier"
+          type: "relative file path or behavior key"
+          description: "Identifies the examined file or behavior, such as picker responsiveness or compact provider projection."
+          constraints: "Must be in PR1 file-mention scope and not PR2-only inline preview scope."
+        - name: "pr1_behavior"
+          type: "text and revision evidence"
+          description: "Observed or source-derived behavior at the PR1 candidate revision."
+          constraints: "Must cite commit, file, test, or direct comparison evidence."
+        - name: "dev_behavior"
+          type: "text and revision evidence"
+          description: "Current authoritative behavior and relevant custom feature invariants."
+          constraints: "Must be checked before edits."
+        - name: "compatibility_risk"
+          type: "enumerated risk narrative"
+          description: "Potential regression to defaults, persistence, provider messages, local/remote paths, or unsafe-file handling."
+          constraints: "Must identify known tradeoffs or evidence gaps."
+        - name: "disposition"
+          type: "enum"
+          description: "Decision for the difference."
+          constraints: "One of port, preserve, reject, or no-op."
+        - name: "validation"
+          type: "test/check command set"
+          description: "Focused evidence required for the disposition."
+          constraints: "Every port and changed behavior must have direct validation."
+      relationships:
+        - target: "Selected surgical change"
+          type: "one-to-zero-or-many"
+          description: "Only rows with a port disposition may justify code changes."
+    - name: "Selected surgical change"
+      description: "A minimal source or test edit justified by one or more positive matrix rows."
+      fields:
+        - name: "owned_path"
+          type: "repository-relative path"
+          description: "Existing config, TUI, app-core, remote, test, or documentation path to edit."
+          constraints: "No new path unless directly required and recorded in the matrix."
+        - name: "reason"
+          type: "matrix reference"
+          description: "Evidence showing PR1 is better and compatible."
+          constraints: "Must reference a positive disposition row."
+        - name: "regression_check"
+          type: "focused test/check"
+          description: "Direct check for preserved and improved behavior."
+          constraints: "Must pass before delivery."
+      relationships:
+        - target: "Behavior matrix row"
+          type: "many-to-one"
+          description: "Each selected edit is justified by its comparison row."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/017-reconcile-pr1-file-mentions/spec.yaml"
+      description: "Approved feature scope, acceptance criteria, constraints, and non-goals."
+    - path: "specs/017-reconcile-pr1-file-mentions/plan.yaml"
+      description: "Implementation design, behavior-matrix contract, research, phases, and validation plan."
+    - path: "docs/README.md"
+      description: "Existing documentation index; update only if a selected integration changes documented behavior."
+  source_code:
+    - path: "crates/jcode-config-types/src/display.rs"
+      description: "Existing config-type surface; inspect current file-mention fields, defaults, and ignore-pattern ownership here and in related resolver paths."
+    - path: "crates/jcode-tui/src/tui/app/input/file_mentions.rs"
+      description: "Current TUI input file-mention completion and selection behavior; inspect adjacent picker modules for owned integration points."
+    - path: "crates/jcode-tui/src/tui/app/remote/**"
+      description: "Local versus remote working-directory behavior and queued/remote dispatch boundaries."
+    - path: "crates/jcode-app-core/src/agent/compaction.rs"
+      description: "Compact transcript persistence boundary; inspect adjacent provider projection paths for final-dispatch materialization."
+    - path: "crates/jcode-tui/src/tui/app/tests/** and relevant crate tests"
+      description: "Focused regression evidence for each selected matrix disposition."
+  tests:
+    - path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+      description: "Picker discovery, responsiveness, ignores, local/remote paths, and unsafe-file acceptance behavior."
+    - path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_*/**"
+      description: "Remote startup and queued file-mention behavior."
+    - path: "crates/jcode-tui/src/tui/app/tests/state_model_poke_01/part_01.rs"
+      description: "Rewind and undo provider-projection assertions affected by PR1's tip change."
+    - path: "crates/jcode-app-core/src/**/*test*.rs and crates/jcode-base/src/**/*test*.rs"
+      description: "Compact persistence, final-dispatch expansion, input-size restoration, config defaults, and relevant app-core regressions."
+    - path: "scripts/check_guardrails.sh"
+      description: "Repository-wide delivery gates after focused validation."
+
+implementation_phases:
+  - phase: 1
+    name: "Freeze comparison scope and acceptance matrix"
+    goal: "Enumerate all in-scope PR1 file mentions and behaviors, separate PR2 inline previews, and capture current dev and candidate evidence before editing."
+    deliverables:
+      - "Revision and ancestry inventory for PR1 commit 49738a4d508c69a49aeff00928db32d07609ecc"
+      - "Explicit matrix rows for file-mention defaults, picker responsiveness, compact persistence, final-dispatch expansion, input-size restoration, ignore patterns, local/remote working directories, unsafe files, and PR1 provider projection assertions"
+      - "Port, preserve, reject, or no-op decision with compatibility risk and direct validation for every row"
+      - "PR2 inline-preview exclusion checklist and search terms"
+  - phase: 2
+    name: "Validate and lock current-dev invariants"
+    goal: "Run focused baseline checks and identify which candidate differences are already fixed, intentionally customized, or still actionable in dev."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Baseline focused TUI, config, app-core, compact/provider, and remote behavior results"
+      - "Documented dev-only profiles, jcode run safety, remote, and architecture invariants"
+      - "Evidence-backed narrowing of the candidate edit set to only compatible improvements"
+  - phase: 3
+    name: "Apply surgical ports and regression tests"
+    goal: "Implement only positive matrix dispositions in existing owners, preserving current dev behavior everywhere else."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Minimal source/test edits mapped to positive matrix rows"
+      - "Focused tests for each selected port and preserved behavior"
+      - "No PR2 inline-preview source, dependency, or behavior introduced"
+      - "Updated active documentation only where implemented behavior actually changes"
+  - phase: 4
+    name: "Run integration acceptance and delivery gates"
+    goal: "Prove the superset-preserving integration, scope exclusion, runtime behavior, and repository policy compliance."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "All targeted acceptance checks for defaults, picker, compact/provider projection, dispatch expansion, input restoration, ignores, local/remote paths, and unsafe files passing"
+      - "Relevant TUI build passing, with the PR1 rewind/provider projection assertions included"
+      - "PR2 exclusion scan and changed-file justification review passing"
+      - "scripts/check_guardrails.sh passing or any pre-existing unrelated failure isolated and recorded"
+      - "Isolated-socket runtime check using the resolved newly built binary, without touching the shared daemon"
+      - "Final diff, status, and commit evidence showing a surgical integration on the dedicated worktree"
+
+open_questions:
+  - question: "Which PR1 ancestry rows are still behaviorally superior after current dev and adjacent Beads have landed?"
+    context: "The specified PR1 tip is a focused test commit, while the accepted scope names earlier file-mention, compact, config, and remote changes that may already be superseded in dev."
+    proposed_resolution: "Resolve during Phase 1 and Phase 2 by comparing exact source/test behavior and running baseline checks; preserve or reject when evidence is insufficient."
+  - question: "Does any overlapping file contain PR2 inline-preview behavior that must be split from a PR1 candidate change?"
+    context: "The two features may touch common TUI or file-handling surfaces, but ownership and scope are explicitly separate."
+    proposed_resolution: "Mark PR2-only hunks as excluded in the matrix and verify with changed-file review plus targeted repository searches before acceptance."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T20:31:59Z"
+  artifact_type: "plan"

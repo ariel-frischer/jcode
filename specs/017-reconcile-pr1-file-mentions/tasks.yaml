@@ -1,0 +1,319 @@
+tasks:
+  branch: "agent/jcode-5kb-pr1-integration"
+  created: "2026-08-25"
+  spec_path: "specs/017-reconcile-pr1-file-mentions/spec.yaml"
+  plan_path: "specs/017-reconcile-pr1-file-mentions/plan.yaml"
+
+summary:
+  total_tasks: 18
+  total_phases: 5
+  parallel_opportunities: 5
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Create the review artifacts and freeze the comparison scope without editing product code."
+    tasks:
+      - id: "T001"
+        title: "Inventory PR1 commit ancestry and in-scope file mentions"
+        status: "Pending"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Inspect commit 49738a4d508c69a49aeaff00928db32d07609ecc and relevant ancestry read-only, without changing the integration baseline."
+          - "List the file and behavior scope covering config defaults, picker behavior, compact/provider projection, remote paths, working-directory handling, unsafe files, and provider-projection assertions."
+          - "Record the revision, path, and source or test evidence for every candidate row."
+      - id: "T002"
+        title: "Create behavior matrix and PR2 exclusion checklist"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Each row contains scope identifier, PR1 behavior, current-dev behavior, compatibility risk, evidence, validation, and exactly one disposition: port, preserve, reject, or no-op."
+          - "The matrix explicitly covers file-mention defaults, picker responsiveness, compact persistence, final-dispatch expansion, input-size restoration, ignore patterns, local and remote working directories, unsafe files, and PR1 provider projection assertions."
+          - "The checklist identifies PR2 inline-preview implementation, dependencies, and behavior as excluded and names targeted search terms or checks."
+          - "Every proposed code change has a positive port disposition before implementation begins."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Establish current-dev evidence and canonical ownership before selecting any surgical port."
+    tasks:
+      - id: "T003"
+        title: "Run focused current-dev baseline tests for config, file mentions, picker, and unsafe files"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Run the narrowest relevant tests for config defaults and ignore patterns, picker discovery and responsiveness, local paths, and unsafe-file handling."
+          - "Record exact commands, results, and any pre-existing failures in the behavior matrix."
+          - "Confirm the existing config resolver remains the canonical path for enabled, disabled, unset, and ignored-file behavior."
+      - id: "T004"
+        title: "Run focused current-dev baseline tests for compact transcript, provider projection, remote startup, and rewind"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-app-core/src/agent/compaction.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Run focused tests for compact persistence, final-dispatch expansion, input-size restoration, remote startup or queued file mentions, and rewind/provider projection assertions."
+          - "Record exact commands, results, and relevant architecture invariants in the matrix."
+          - "Identify which PR1 candidate differences are already fixed or intentionally customized in current dev."
+      - id: "T005"
+        title: "Resolve matrix dispositions and select only compatible surgical ports"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: ["T003", "T004"]
+        acceptance_criteria:
+          - "All in-scope rows have evidence-backed port, preserve, reject, or no-op dispositions."
+          - "Selected ports identify exact existing owners and minimal intended edits."
+          - "Current-dev profiles, jcode run safety, remote behavior, architecture boundaries, and custom features are explicitly marked as preserved invariants."
+          - "Rows with insufficient evidence are preserved or rejected rather than speculatively ported."
+
+  - number: 3
+    title: "User Story 1 - Reconcile PR 1 file mentions safely"
+    purpose: "Implement only positive matrix dispositions in existing owners, with tests written before each behavior change."
+    story_reference: "US-001"
+    independent_test: "Review behavior-matrix.md, run each selected focused test, run the relevant TUI build and guardrails, and verify the isolated-socket smoke test against the newly built binary."
+    tasks:
+      - id: "T006"
+        title: "Add or adjust focused file-mention and picker regression tests for selected matrix ports"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Tests directly cover every selected picker, discovery, ignore, responsiveness, unsafe-file, and local-path port."
+          - "Tests cover unchanged defaults and preserve behavior where the matrix disposition is preserve or no-op."
+          - "Tests do not introduce PR2 inline-preview behavior or fixtures."
+      - id: "T007"
+        title: "Add or adjust focused remote startup and queued file-mention regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_*/**"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Tests directly cover selected local-versus-remote working-directory and queued dispatch behavior."
+          - "Remote behavior remains within existing remote-session ownership and preserves current custom safety behavior."
+          - "Any rejected or preserved remote difference is represented by an explicit assertion or documented manual check."
+      - id: "T008"
+        title: "Add or adjust compact, dispatch-expansion, and provider-projection regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/**/*test*.rs"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "Tests directly cover selected compact persistence, final-dispatch expansion, input-size restoration, and provider-projection ports."
+          - "The PR1 rewind/provider-projection assertion is included at crates/jcode-tui/src/tui/app/tests/state_model_poke_01/part_01.rs when applicable to the selected disposition."
+          - "Persisted transcript and provider message compatibility remains asserted for unchanged behavior."
+      - id: "T009"
+        title: "Implement selected file-mention config and picker ports in existing owners"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-config-types/src/display.rs"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Only matrix rows with port disposition are implemented."
+          - "Existing config types, defaults, ignore-pattern resolver, and TUI picker ownership are reused."
+          - "Unset behavior, explicit overrides, invalid inputs, custom profiles, and existing architecture remain compatible."
+          - "No inline-preview source, dependency, or behavior is added."
+      - id: "T010"
+        title: "Implement selected remote working-directory and dispatch ports"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/remote/**"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Only the minimal remote behavior justified by the matrix is changed."
+          - "Local and remote paths, queued input, unsafe-file handling, and current remote-session boundaries remain correct."
+          - "No new protocol, storage path, or duplicated remote implementation is introduced."
+      - id: "T011"
+        title: "Implement selected compact transcript and provider projection ports"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/agent/compaction.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Only positive matrix rows are ported in the existing compaction and provider-projection boundaries."
+          - "Compact persistence, final-dispatch expansion, input-size restoration, rewind behavior, and provider message compatibility remain intact."
+          - "No broad refactor or wholesale PR1 replacement is included."
+      - id: "T012"
+        title: "Run selected focused tests and reconcile implementation evidence with the matrix"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: ["T009", "T010", "T011"]
+        acceptance_criteria:
+          - "Every selected port has passing direct test evidence recorded in the matrix."
+          - "Every changed file maps to at least one port row, and no preserve, reject, or no-op row caused an unintended code change."
+          - "Any failed test is diagnosed and fixed within scope or documented as a pre-existing unrelated failure."
+
+  - number: 4
+    title: "Integration acceptance and delivery gates"
+    purpose: "Validate superset preservation, PR2 exclusion, runtime truth, and repository policy compliance."
+    tasks:
+      - id: "T013"
+        title: "Verify PR2 inline-preview exclusion and changed-file scope"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Targeted repository searches find no PR2-only inline-preview implementation, dependency, fixture, or behavior introduced by this work."
+          - "Changed files are limited to matrix-justified paths and contain no unrelated formatting, cleanup, or refactoring."
+          - "The exclusion checklist and final diff review are recorded."
+      - id: "T014"
+        title: "Run relevant Jcode TUI build and focused regression suite"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/Cargo.toml"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "The relevant TUI build succeeds with the repository-pinned stable toolchain."
+          - "Focused config, picker, app-core, compact/provider, remote, unsafe-file, and rewind checks pass with zero new failures."
+          - "Exact commands and outcomes are recorded for acceptance review."
+      - id: "T015"
+        title: "Run repository guardrails and isolate unrelated failures"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "scripts/check_guardrails.sh passes, including relevant dependency-boundary, formatting, warning, test, and safety gates."
+          - "Any pre-existing failure outside the changed surface is isolated with evidence and is not masked or rebaselined."
+      - id: "T016"
+        title: "Run isolated-socket smoke test against the newly built binary"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "target/selfdev/jcode"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "The smoke test uses a private Unix socket and does not touch or reload the shared daemon."
+          - "The resolved executable is confirmed to be the newly built binary before testing."
+          - "The runtime check exercises the reconciled file-mention workflow and records observable results."
+
+  - number: 5
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Finalize documentation, acceptance traceability, and clean delivery evidence."
+    tasks:
+      - id: "T017"
+        title: "Update active documentation only if selected behavior changed"
+        status: "Pending"
+        type: "documentation"
+        parallel: true
+        story_id: null
+        file_path: "docs/README.md"
+        dependencies: ["T013", "T015", "T016"]
+        acceptance_criteria:
+          - "Documentation is changed only when the selected port changes documented user behavior."
+          - "Any changed documentation links to the authoritative behavior or configuration contract and does not describe excluded PR2 previews."
+          - "If no user-facing behavior changed, record the no-op decision instead of making speculative documentation edits."
+      - id: "T018"
+        title: "Finalize acceptance record, diff review, and surgical integration commit"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "specs/017-reconcile-pr1-file-mentions/behavior-matrix.md"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "The matrix records Bead jcode-5kb and the 2026-08-25 alignment acceptance checks, with all applicable checks passing."
+          - "All success criteria SC-001 through SC-004 are traceable to evidence."
+          - "Git status and diff show only intentional, matrix-justified files on the dedicated worktree."
+          - "The work is committed as a focused surgical integration without rewriting history or including unrelated changes."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: []
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: []
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T003", "T004"]
+        rationale: "Independent baseline test surfaces with no shared mutation."
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T006", "T007", "T008"]
+        rationale: "Independent focused test surfaces can be authored before implementation."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T013", "T016"]
+        rationale: "Scope scan and isolated runtime validation are independent after focused tests."
+  - phase: 5
+    parallel_groups:
+      - tasks: ["T017"]
+        rationale: "Documentation decision is independent after integration evidence is complete."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Freeze the evidence-backed matrix, validate current-dev invariants, and implement only tested positive PR1 dispositions."
+    validation: "Review every matrix row, run all focused selected-port and preserve tests, and confirm no PR2 preview artifacts are introduced."
+  incremental_delivery:
+    - milestone: "Comparison Scope Frozen"
+      phases: [1]
+      deliverable: "Complete PR1 ancestry inventory, behavior matrix schema, dispositions pending evidence, and PR2 exclusion checklist."
+    - milestone: "Foundation Ready"
+      phases: [1, 2]
+      deliverable: "Baseline current-dev evidence and a locked list of compatible surgical ports."
+    - milestone: "MVP Complete"
+      phases: [1, 2, 3]
+      deliverable: "Minimal tested reconciliation preserving current-dev architecture and custom behavior."
+    - milestone: "Delivery Accepted"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Guardrail-checked, isolated-runtime-validated, documented, and reviewable surgical integration."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-25T20:35:41Z"
+  artifact_type: "tasks"
