@@ -34,7 +34,10 @@ Baseline: current `dev` at `c46c53a36`. Candidate: fork PR 3 tip `781511c6d37412
 - Final exact-worktree guardrails: **PASS** on 2026-08-25, including formatting, all-target/all-feature check, Clippy with warnings denied, dependency and quality ratchets, desktop frame budget, and onboarding invariants. `cargo machete` was skipped because it is not installed.
 - Final scope review: **PASS**. Product edits are limited to the matrix-owned profile resolver/dispatch path, extracted profile tests, and the behavior-neutral PR1 `Default` derive needed by current Clippy. No PR2 implementation is present.
 - Fresh-base validation on `dev` at `c46c53a36`: **PASS** for all 23 serial profile tests and the complete repository guardrail suite.
-- Remaining: land on `dev`, push, install, reload, and close the Bead.
+- Landing and push: **PASS**. Merge commit `71a6ed39f` is on clean root `dev` and was pushed to `github/dev` after ancestry verification.
+- Detached installation receipt: **PASS**, exit `0`. `scripts/install_release.sh --fast` installed `/home/ari/.jcode/builds/versions/71a6ed39f/jcode` without launching a duplicate installer.
+- Graceful reload verification: **PASS**. Both `~/.jcode/builds/current/jcode` and `~/.jcode/builds/shared-server/jcode` resolve to `71a6ed39f`, reporting `jcode v0.79.689-dev (71a6ed39f)`.
+- Closure sequence: land this durable evidence record, then close Bead `jcode-anw` and remove only its owned feature/integration worktrees and branches.
 
 ## Risk review
 

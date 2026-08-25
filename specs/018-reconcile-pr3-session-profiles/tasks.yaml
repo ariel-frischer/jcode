@@ -121,7 +121,7 @@ phases:
     tasks:
       - id: "T009"
         title: "Commit, fresh-base validate, merge to dev, install, reload, and close jcode-anw"
-        status: "In Progress"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-001"
@@ -131,7 +131,7 @@ phases:
           - "Fresh-base focused tests pass."
           - "github/dev is an ancestor before push and root remains on dev."
           - "The installed current/shared runtime points to the landed revision."
-          - "Owned worktrees and branches are cleaned and Bead jcode-anw is closed with evidence."
+          - "Owned worktrees and branches are cleaned and Bead jcode-anw is closed with evidence after this durable closure record lands."
 
 dependencies:
   user_story_order:
