@@ -1,5 +1,16 @@
 const INLINE_PREVIEW_BYTE_LIMIT: usize = 512 * 1024;
 
+fn wait_for_inline_file_preview_loads(app: &mut App) {
+    for _ in 0..200 {
+        app.poll_inline_file_preview_loads();
+        if app.inline_file_preview_state.pending.is_empty() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    panic!("inline file preview load did not complete");
+}
+
 struct InlinePreviewFixture {
     _root: tempfile::TempDir,
     session_repository: std::path::PathBuf,
@@ -253,6 +264,152 @@ fn inline_preview_fixture_materializes_repository_and_content_variants() {
 }
 
 #[test]
+fn relative_markdown_path_previews_unique_sibling_repository_file() {
+    let fixture = InlinePreviewFixture::new();
+    fixture.write_bytes(
+        &fixture.directory_marker_sibling,
+        "docs/locus-cloud-architecture.md",
+        "# Locus Cloud Architecture\n\nSibling repository content.\n",
+    );
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(fixture.session_repository.display().to_string());
+    app.display_messages = vec![DisplayMessage::assistant(
+        "Open 'docs/locus-cloud-architecture.md'",
+    )];
+    app.bump_display_messages_version();
+
+    assert!(app.try_toggle_inline_file_preview(
+        "docs/locus-cloud-architecture.md",
+        0,
+    ));
+    wait_for_inline_file_preview_loads(&mut app);
+
+    let preview = app
+        .inline_file_preview_state.loaded
+        .values()
+        .next()
+        .expect("unique sibling preview");
+    assert_eq!(preview.display_path, "docs/locus-cloud-architecture.md");
+    assert!(preview.markdown);
+    assert!(preview.content.contains("Sibling repository content"));
+}
+
+#[test]
+fn local_relative_file_wins_over_sibling_and_ambiguous_siblings_are_rejected() {
+    let fixture = InlinePreviewFixture::new();
+    fixture.write_bytes(&fixture.session_repository, "docs/shared.md", "local");
+    fixture.write_bytes(&fixture.directory_marker_sibling, "docs/shared.md", "sibling");
+    fixture.write_bytes(&fixture.worktree_marker_sibling, "docs/shared.md", "other sibling");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(fixture.session_repository.display().to_string());
+    app.display_messages = vec![DisplayMessage::assistant("docs/shared.md")];
+    app.bump_display_messages_version();
+    assert!(app.try_toggle_inline_file_preview("docs/shared.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
+    assert_eq!(
+        app.inline_file_preview_state.loaded
+            .values()
+            .next()
+            .map(|preview| preview.content.as_str()),
+        Some("local")
+    );
+
+    app.inline_file_preview_state.loaded.clear();
+    std::fs::remove_file(fixture.session_repository.join("docs/shared.md"))
+        .expect("remove local fixture");
+    assert!(app.try_toggle_inline_file_preview("docs/shared.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.inline_file_preview_state.loaded.is_empty());
+    assert_eq!(app.status_notice(), Some("File is not available: docs/shared.md".to_string()));
+}
+
+#[test]
+fn line_and_column_suffix_preview_the_underlying_file() {
+    let fixture = InlinePreviewFixture::new();
+    fixture.write_bytes(&fixture.session_repository, "src/main.rs", "fn main() {}\n");
+    let mut app = create_test_app();
+    app.session.working_dir = Some(fixture.session_repository.display().to_string());
+    app.display_messages = vec![DisplayMessage::assistant("src/main.rs:42:7")];
+    app.bump_display_messages_version();
+
+    assert!(app.try_toggle_inline_file_preview("src/main.rs:42:7", 0));
+    wait_for_inline_file_preview_loads(&mut app);
+    let preview = app.inline_file_preview_state.loaded.values().next().expect("preview");
+    assert_eq!(preview.display_path, "src/main.rs");
+    assert_eq!(preview.content, "fn main() {}\n");
+}
+
+#[test]
+fn async_preview_results_stay_with_exact_duplicate_message_owners() {
+    let mut app = create_test_app();
+    app.display_messages = vec![
+        DisplayMessage::assistant("same.txt"),
+        DisplayMessage::assistant("same.txt"),
+    ];
+    app.bump_display_messages_version();
+
+    for message_index in 0..2 {
+        assert!(app.start_inline_file_preview_load_with(
+            "same.txt".to_string(),
+            message_index,
+            move || {
+                Ok(crate::tui::InlineFilePreview {
+                    display_path: "same.txt".to_string(),
+                    content: format!("owner {message_index}"),
+                    markdown: false,
+                })
+            },
+        ));
+    }
+    wait_for_inline_file_preview_loads(&mut app);
+
+    assert_eq!(app.inline_file_preview_state.loaded.len(), 2);
+    assert_eq!(
+        app.inline_file_preview_state.loaded
+            .get(&(0, app.display_messages[0].stable_cache_hash()))
+            .map(|preview| preview.content.as_str()),
+        Some("owner 0")
+    );
+    assert_eq!(
+        app.inline_file_preview_state.loaded
+            .get(&(1, app.display_messages[1].stable_cache_hash()))
+            .map(|preview| preview.content.as_str()),
+        Some("owner 1")
+    );
+}
+
+#[test]
+fn stale_async_preview_result_is_discarded_after_message_replacement() {
+    let mut app = create_test_app();
+    app.display_messages = vec![DisplayMessage::assistant("slow.txt")];
+    app.bump_display_messages_version();
+    let (release_sender, release_receiver) = std::sync::mpsc::channel();
+
+    assert!(app.start_inline_file_preview_load_with(
+        "slow.txt".to_string(),
+        0,
+        move || {
+            release_receiver.recv().expect("release delayed preview");
+            Ok(crate::tui::InlineFilePreview {
+                display_path: "slow.txt".to_string(),
+                content: "stale".to_string(),
+                markdown: false,
+            })
+        },
+    ));
+    assert_eq!(app.inline_file_preview_state.pending.len(), 1);
+
+    app.display_messages[0] = DisplayMessage::assistant("replacement.txt");
+    app.bump_display_messages_version();
+    release_sender.send(()).expect("release worker");
+    wait_for_inline_file_preview_loads(&mut app);
+
+    assert!(app.inline_file_preview_state.loaded.is_empty());
+}
+
+#[test]
 fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     let _render_lock = scroll_render_test_lock();
     let repository = tempfile::tempdir().expect("repository tempdir");
@@ -286,6 +443,7 @@ fn test_click_on_relative_markdown_path_toggles_inline_preview() {
     let (path_col, path_row) = rendered_text_position(&terminal, "docs/guide.md", 3)
         .expect("path must be visible");
     click_left(&mut app, path_col, path_row);
+    wait_for_inline_file_preview_loads(&mut app);
 
     let expanded = render_and_snap(&app, &mut terminal);
     assert!(
@@ -342,10 +500,11 @@ fn test_click_on_absolute_file_path_followed_by_period_opens_inline_preview() {
         *opened_for_closure.lock().unwrap() = Some(target.to_string());
         Ok::<(), &'static str>(())
     }));
+    wait_for_inline_file_preview_loads(&mut app);
 
     assert_eq!(*opened.lock().unwrap(), None);
     let preview = app
-        .inline_file_previews
+        .inline_file_preview_state.loaded
         .values()
         .next()
         .expect("absolute local file should open in the inline preview");
@@ -394,7 +553,7 @@ fn test_clicking_html_file_uses_resolved_external_opener_by_default() {
         Some(html.to_string_lossy().into_owned()),
         "HTML file opening must resolve against the session working directory"
     );
-    assert!(app.inline_file_previews.is_empty());
+    assert!(app.inline_file_preview_state.loaded.is_empty());
     assert_eq!(
         app.status_notice(),
         Some(format!("Opened file: {}", html.display()))
@@ -440,10 +599,11 @@ fn test_clicking_html_file_can_be_configured_to_use_inline_preview() {
             Ok::<(), &'static str>(())
         },
     );
+    wait_for_inline_file_preview_loads(&mut app);
 
     assert!(handled);
     assert!(!*opened.lock().unwrap());
-    assert_eq!(app.inline_file_previews.len(), 1);
+    assert_eq!(app.inline_file_preview_state.loaded.len(), 1);
 }
 
 #[test]
@@ -453,9 +613,10 @@ fn test_relative_file_preview_falls_back_to_process_working_directory() {
     app.display_messages = vec![DisplayMessage::assistant("`Cargo.toml`")];
     app.bump_display_messages_version();
     let opened = app.try_toggle_inline_file_preview("Cargo.toml", 0);
+    wait_for_inline_file_preview_loads(&mut app);
 
     assert!(opened, "relative paths should resolve without a session working directory");
-    assert_eq!(app.inline_file_previews.len(), 1);
+    assert_eq!(app.inline_file_preview_state.loaded.len(), 1);
 }
 
 #[test]
@@ -493,8 +654,9 @@ fn test_click_on_relative_file_uses_process_working_directory_without_session_cw
             modifiers: KeyModifiers::empty(),
         });
     }
+    wait_for_inline_file_preview_loads(&mut app);
 
-    assert_eq!(app.inline_file_previews.len(), 1);
+    assert_eq!(app.inline_file_preview_state.loaded.len(), 1);
 }
 
 #[test]
@@ -535,8 +697,9 @@ fn test_click_on_home_relative_file_path_toggles_inline_preview() {
         .expect("home-relative path must be visible");
 
     assert!(app.try_open_link_at(column, row));
+    wait_for_inline_file_preview_loads(&mut app);
     let preview = app
-        .inline_file_previews
+        .inline_file_preview_state.loaded
         .values()
         .next()
         .expect("home-relative file preview");
@@ -602,22 +765,25 @@ fn test_clicking_file_mentions_in_user_and_prior_messages_uses_session_cwd() {
 
     let (column, row) = locate(&terminal, "@current.txt").expect("current mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let current = render_and_snap(&app, &mut terminal);
     assert!(current.contains("Inline file · current.txt"));
     assert!(current.contains("current mention content"));
 
     let (column, row) = locate(&terminal, "@prior.txt").expect("prior mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let prior = render_and_snap(&app, &mut terminal);
     assert!(prior.contains("Inline file · prior.txt"));
     assert!(prior.contains("prior mention content"));
 
     let (column, row) = locate(&terminal, "@system.txt").expect("system mention visible");
     click(&mut app, column, row);
+    wait_for_inline_file_preview_loads(&mut app);
     let system = render_and_snap(&app, &mut terminal);
     assert!(system.contains("Inline file · system.txt"));
     assert!(system.contains("system mention content"));
-    assert_eq!(app.inline_file_previews.len(), 3);
+    assert_eq!(app.inline_file_preview_state.loaded.len(), 3);
 }
 
 #[test]
@@ -650,7 +816,8 @@ fn test_clicking_invalid_file_mention_is_consumed_locally() {
         .expect("invalid mention visible");
 
     assert!(app.try_open_link_at(column, row));
-    assert!(app.inline_file_previews.is_empty());
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.inline_file_preview_state.loaded.is_empty());
     assert!(
         app.status_notice
             .as_ref()
@@ -678,6 +845,7 @@ fn test_expanded_inline_file_preview_participates_in_chat_scroll() {
     ];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 1));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -708,6 +876,7 @@ fn test_clicking_visible_inline_file_body_collapses_preview() {
     app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -742,7 +911,7 @@ fn test_clicking_visible_inline_file_body_collapses_preview() {
     }
 
     assert!(
-        app.inline_file_previews.is_empty(),
+        app.inline_file_preview_state.loaded.is_empty(),
         "clicking a visible preview body row should remove the preview state"
     );
     let collapsed = render_and_snap(&app, &mut terminal);
@@ -769,6 +938,7 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
     app.display_messages = vec![DisplayMessage::assistant("`docs/long.md`")];
     app.bump_display_messages_version();
     assert!(app.try_toggle_inline_file_preview("docs/long.md", 0));
+    wait_for_inline_file_preview_loads(&mut app);
 
     let backend = ratatui::backend::TestBackend::new(72, 18);
     let mut terminal = ratatui::Terminal::new(backend).expect("create test terminal");
@@ -814,7 +984,7 @@ fn test_dragging_over_inline_file_body_keeps_preview_open_for_copying() {
     });
 
     assert!(
-        !app.inline_file_previews.is_empty(),
+        !app.inline_file_preview_state.loaded.is_empty(),
         "dragging to copy preview text must not collapse the preview"
     );
 }
@@ -833,14 +1003,16 @@ fn test_inline_file_preview_rejects_oversized_and_binary_files_safely() {
     app.bump_display_messages_version();
 
     assert!(app.try_toggle_inline_file_preview("large.txt", 0));
-    assert!(app.inline_file_previews.is_empty());
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.inline_file_preview_state.loaded.is_empty());
     assert!(
         app.status_notice()
             .is_some_and(|notice| notice.contains("too large"))
     );
 
     assert!(app.try_toggle_inline_file_preview("binary.bin", 0));
-    assert!(app.inline_file_previews.is_empty());
+    wait_for_inline_file_preview_loads(&mut app);
+    assert!(app.inline_file_preview_state.loaded.is_empty());
     assert!(
         app.status_notice()
             .is_some_and(|notice| notice.contains("not readable text"))
@@ -852,18 +1024,18 @@ fn clearing_transcript_releases_inline_file_preview_contents() {
     let mut app = create_test_app();
     app.push_display_message(DisplayMessage::user("src/main.rs"));
     let message_hash = app.display_messages[0].stable_cache_hash();
-    app.inline_file_previews.insert(
-        message_hash,
+    app.inline_file_preview_state.loaded.insert(
+        (0, message_hash),
         crate::tui::InlineFilePreview {
             display_path: "src/main.rs".to_string(),
             content: "fn main() {}".to_string(),
             markdown: false,
         },
     );
-    let version = app.inline_file_previews_version;
+    let version = app.inline_file_preview_state.version;
 
     app.clear_display_messages();
 
-    assert!(app.inline_file_previews.is_empty());
-    assert_ne!(app.inline_file_previews_version, version);
+    assert!(app.inline_file_preview_state.loaded.is_empty());
+    assert_ne!(app.inline_file_preview_state.version, version);
 }

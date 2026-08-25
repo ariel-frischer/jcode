@@ -34,7 +34,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Write parser and exact message-key contract tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
@@ -46,7 +46,7 @@ phases:
           - "Two transcript messages with identical content and path text receive distinct keys based on message position plus stable message hash."
       - id: "T003"
         title: "Implement canonical FileReference parsing and InlineFilePreviewKey"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
@@ -58,7 +58,7 @@ phases:
           - "InlineFilePreviewKey contains message index and stable message hash and is suitable for loaded and pending preview maps."
       - id: "T004"
         title: "Migrate App and renderer-facing preview state to exact message keys"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
@@ -77,7 +77,7 @@ phases:
     tasks:
       - id: "T005"
         title: "Add local-precedence and unique-sibling resolver tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
@@ -89,7 +89,7 @@ phases:
           - "Relative references with supported line and column suffixes resolve the same underlying file as the unsuffixed reference."
       - id: "T006"
         title: "Implement deterministic local-first and unique-sibling resolution"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -101,7 +101,7 @@ phases:
           - "Resolution does not recursively search, search by basename, inspect ancestors, or choose the first result from multiple matches."
       - id: "T007"
         title: "Integrate resolved local and sibling Markdown previews beneath the owning message"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -120,7 +120,7 @@ phases:
     tasks:
       - id: "T008"
         title: "Add resolver safety, ambiguity, and bounded-reader tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
@@ -132,7 +132,7 @@ phases:
           - "Ambiguous and unsafe cases expose none of the candidate contents and return the established unavailable outcome."
       - id: "T009"
         title: "Implement canonical boundary checks and bounded binary-safe reads"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
@@ -144,7 +144,7 @@ phases:
           - "Invalid UTF-8, NUL-bearing binary data, missing files, directories, and read failures produce a stable unavailable result without panic or lossy content exposure."
       - id: "T010"
         title: "Preserve explicit home and absolute path policy while surfacing unavailable results"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
@@ -163,7 +163,7 @@ phases:
     tasks:
       - id: "T011"
         title: "Add asynchronous lifecycle, stale-result, and duplicate-message tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
@@ -175,7 +175,7 @@ phases:
           - "Two duplicate-text messages loading the same display path maintain independent pending, loaded, and collapsed states."
       - id: "T012"
         title: "Add pending PreviewRequest state and background worker spawning"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -187,7 +187,7 @@ phases:
           - "Filesystem resolution and bounded reading run via tokio spawn_blocking when a runtime exists and a standard thread fallback in runtime-less tests, with one bounded completion per request."
       - id: "T013"
         title: "Poll preview completions from local and remote TUI maintenance loops"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -199,7 +199,7 @@ phases:
           - "Polling work is proportional to the small pending-request set and does not introduce a busy wait."
       - id: "T014"
         title: "Reject stale completions and clear pending ownership on lifecycle changes"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -218,7 +218,7 @@ phases:
     tasks:
       - id: "T015"
         title: "Add routing and rendered interaction compatibility regressions"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-004"
@@ -230,7 +230,7 @@ phases:
           - "Click-to-collapse, drag copy selection, ordinary copy, and transcript scrolling remain usable before, during, and after loading."
       - id: "T016"
         title: "Add renderer regressions for bounded Markdown and ordinary text previews"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-004"
@@ -242,7 +242,7 @@ phases:
           - "Long lines, Unicode, tabs, and content at the accepted size boundary render without panic or unbounded transcript height."
       - id: "T017"
         title: "Finalize compatible navigation and exact-owner rendering integration"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"
@@ -259,7 +259,7 @@ phases:
     tasks:
       - id: "T018"
         title: "Update inline file preview documentation for the implemented policy"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: true
         story_id: null
@@ -271,7 +271,7 @@ phases:
           - "Preserved plain Markdown, quoted path, external HTML, home, absolute, suffix, collapse, copy, scroll, Markdown rendering, and unavailable behavior is explicit."
       - id: "T019"
         title: "Run deterministic stress and responsiveness acceptance tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null
@@ -283,7 +283,7 @@ phases:
           - "Traversal, nested search, symlink escape, invalid UTF-8, NUL, and oversized cases expose zero unintended content."
       - id: "T020"
         title: "Run serialized repository validation and isolated built-binary smoke test"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null

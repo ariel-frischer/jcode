@@ -79,9 +79,8 @@ pub use crate::generated_image::{
     generated_image_side_panel_markdown, generated_image_side_panel_page_id,
     write_generated_image_side_panel_page,
 };
-pub use app::{App, CopyBadgeUiState, ProcessingStatus, RunResult};
-
 use crate::message::ToolCall;
+pub use app::{App, CopyBadgeUiState, ProcessingStatus, RunResult};
 use ratatui::prelude::Frame;
 use ratatui::text::Line;
 use std::time::Duration;
@@ -220,7 +219,7 @@ pub trait TuiState {
     }
     /// Version counter for display_messages (monotonic, increments on mutation)
     fn display_messages_version(&self) -> u64;
-    fn inline_file_preview(&self, _message_hash: u64) -> Option<&InlineFilePreview> {
+    fn inline_file_preview(&self, _key: (usize, u64)) -> Option<&InlineFilePreview> {
         None
     }
     fn inline_file_previews_version(&self) -> u64 {
