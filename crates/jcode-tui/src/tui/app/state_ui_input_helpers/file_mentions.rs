@@ -109,6 +109,7 @@ fn start_file_mention_discovery(
 )]
 fn process_file_mention_entry(
     root: &Path,
+    score_root: &Path,
     query: &str,
     ignored_paths: &ignore::gitignore::Gitignore,
     entry: ignore::DirEntry,
@@ -129,6 +130,11 @@ fn process_file_mention_entry(
         return true;
     };
     let text = relative.to_string_lossy().replace(MAIN_SEPARATOR, "/");
+    let score_text = path
+        .strip_prefix(score_root)
+        .unwrap_or(relative)
+        .to_string_lossy()
+        .replace(MAIN_SEPARATOR, "/");
     let is_dir = entry
         .file_type()
         .is_some_and(|file_type| file_type.is_dir());
@@ -141,7 +147,7 @@ fn process_file_mention_entry(
     let score = if query.is_empty() {
         Some(0)
     } else {
-        jcode_fuzzy::fuzzy_score(query, &text)
+        jcode_fuzzy::fuzzy_score(query, &score_text)
     };
     if let Some(score) = score {
         batch.push(FileMentionCandidate {
@@ -229,6 +235,19 @@ fn discover_file_mentions_batched(
     cancel: &Arc<AtomicBool>,
     sender: &mpsc::Sender<FileMentionBatch>,
 ) {
+    let nested_search = nested_file_mention_search(root, query);
+    if query.contains('/') && nested_search.is_none() {
+        drop(sender.send(FileMentionBatch {
+            generation,
+            candidates: Vec::new(),
+            done: true,
+        }));
+        return;
+    }
+    let (walk_root, score_query, direct_children_only) = match nested_search.as_ref() {
+        Some((directory, leaf_query)) => (directory.as_path(), leaf_query.as_str(), true),
+        None => (root, query, false),
+    };
     let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(root);
     for pattern in BUILTIN_IGNORE_PATTERNS
         .iter()
@@ -262,7 +281,7 @@ fn discover_file_mentions_batched(
     // Emit direct children first. A depth-first walk can otherwise fill the
     // first bounded batches with a large nested directory and hide files that
     // are immediately in the user's working directory.
-    let mut direct_builder = ignore::WalkBuilder::new(root);
+    let mut direct_builder = ignore::WalkBuilder::new(walk_root);
     direct_builder
         .hidden(false)
         .git_ignore(false)
@@ -275,9 +294,13 @@ fn discover_file_mentions_batched(
         should_walk_file_mention_entry(&direct_root, &direct_ignored_paths, entry)
     });
     for entry in direct_builder.build().filter_map(Result::ok) {
+        if entry.path() == walk_root {
+            continue;
+        }
         if !process_file_mention_entry(
             root,
-            query,
+            walk_root,
+            score_query,
             &ignored_paths,
             entry,
             cancel,
@@ -294,7 +317,7 @@ fn discover_file_mentions_batched(
         }
     }
 
-    if !stopped && match_count < FILE_MENTION_MAX_MATCHES {
+    if !direct_children_only && !stopped && match_count < FILE_MENTION_MAX_MATCHES {
         let mut recursive_builder = ignore::WalkBuilder::new(root);
         recursive_builder
             .hidden(false)
@@ -311,6 +334,7 @@ fn discover_file_mentions_batched(
                 continue;
             }
             if !process_file_mention_entry(
+                root,
                 root,
                 query,
                 &ignored_paths,
@@ -342,6 +366,33 @@ fn discover_file_mentions_batched(
             done: true,
         });
     }
+}
+
+fn nested_file_mention_search(root: &Path, query: &str) -> Option<(PathBuf, String)> {
+    let (directory, leaf_query) = query.rsplit_once('/')?;
+    if directory.is_empty() {
+        return None;
+    }
+    let relative = Path::new(directory);
+    if relative
+        .components()
+        .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return None;
+    }
+    let search_root = root.join(relative);
+    let canonical_root = match root.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return None,
+    };
+    let canonical_search_root = match search_root.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return None,
+    };
+    if !canonical_search_root.starts_with(canonical_root) || !canonical_search_root.is_dir() {
+        return None;
+    }
+    Some((search_root, leaf_query.to_owned()))
 }
 
 fn send_file_mention_batch(
