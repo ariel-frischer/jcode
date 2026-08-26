@@ -109,9 +109,9 @@ swarm_panel_focus = "alt+n"
 session_picker_enter = "current-terminal"
 
 [file_mentions]
-# Filesystem-backed `@` suggestions are disabled by default. Set true to enable
-# workspace discovery and submit-time file expansion.
-enabled = false
+# Filesystem-backed `@` suggestions and submit-time file expansion are enabled
+# by default. Set false to opt out.
+enabled = true
 # Additional path components excluded from suggestions.
 # ignore = ["private/", "*.generated.*"]
 
@@ -828,6 +828,8 @@ mod tests {
         );
         assert_eq!(config.tools.mcp_tools, McpToolsMode::Auto);
         assert_eq!(config.tools.mcp_tools_token_threshold, 8_000);
+        assert!(config.file_mentions.enabled);
+        assert!(template.contains("Set false to opt out."));
     }
 
     /// Colors are only discoverable if the template mentions them, since most
