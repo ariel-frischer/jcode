@@ -21,7 +21,7 @@ queued prompt does not expose an expanded payload.
 ```bash
 demo="$(mktemp -d)"
 mkdir -p "$demo/home" "$demo/work"
-printf '[file_mentions]\nenabled = true\n' > "$demo/home/config.toml"
+printf '[file_mentions]\n' > "$demo/home/config.toml"
 printf 'FILE_MENTION_DEMO=works\n' > "$demo/work/demo.txt"
 cd "$demo/work"
 JCODE_HOME="$demo/home" jcode
@@ -33,18 +33,30 @@ should identify `FILE_MENTION_DEMO=works` from the expanded provider context.
 
 ## Configuration
 
-File mentions are disabled by default to preserve existing composer and dispatch
-behavior. Enable filesystem-backed suggestions and expansion explicitly, and add
-optional gitignore-style exclusions, in `~/.jcode/config.toml`:
+File mentions are enabled by default. Set `enabled = false` to opt out of both
+filesystem-backed suggestions and provider-time expansion. Add optional
+gitignore-style exclusions in `~/.jcode/config.toml`:
 
 ```toml
 [file_mentions]
-enabled = true
-ignore = ["private/", "*.generated.*"]
+# enabled = false # Uncomment to opt out.
+ignore = [".worktrees/", "private/", "*.generated.*"]
 ```
 
-Custom patterns are additive to the built-in exclusions for generated and
-dependency directories.
+Custom patterns are additive to this built-in list:
+
+```text
+node_modules/  target/        vendor/         .venv/       venv/
+__pycache__/   .pytest_cache/ .mypy_cache/    .ruff_cache/ .tox/
+.nox/          dist/          build/          out/         coverage/
+.cache/        .next/         .nuxt/          .svelte-kit/ .turbo/
+.gradle/       .terraform/    .git/
+```
+
+Hidden project directories are not ignored merely because their names start with
+`.`. For example, `.agents/` remains visible unless a built-in or custom pattern
+matches it. Repository `.gitignore` files are not implicitly applied; the picker
+uses only the explicit built-in and configured patterns so behavior is predictable.
 
 ## Expansion and limits
 

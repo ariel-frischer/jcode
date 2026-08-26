@@ -13,7 +13,7 @@ pub struct FileMentionsConfig {
 impl Default for FileMentionsConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             ignore: Vec::new(),
         }
     }

@@ -44,6 +44,104 @@ fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selectio
 }
 
 #[test]
+fn file_mention_nested_directory_query_lists_only_direct_children() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills/local-skill"))
+            .expect("nested hidden skill directory");
+        std::fs::create_dir_all(temp.path().join("crates/example/src"))
+            .expect("unrelated nested src directory");
+        std::fs::create_dir_all(temp.path().join("src/bin")).expect("root source directory");
+        std::fs::write(temp.path().join(".agents/AGENTS.md"), "").expect("direct hidden file");
+        std::fs::write(
+            temp.path().join(".agents/skills/local-skill/SKILL.md"),
+            "",
+        )
+        .expect("nested skill file");
+        std::fs::write(temp.path().join("crates/example/src/lib.rs"), "")
+            .expect("unrelated source file");
+        std::fs::write(temp.path().join("src/lib.rs"), "")
+            .expect("direct root source file");
+        std::fs::write(temp.path().join("src/bin/tool.rs"), "")
+            .expect("nested root source file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@.agents/".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions
+                .iter()
+                .any(|(value, kind)| value == "@.agents/skills/" && *kind == "Directory"),
+            "expected direct skills directory, got {suggestions:?}"
+        );
+        assert!(suggestions
+            .iter()
+            .any(|(value, _)| value == "@.agents/AGENTS.md"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.ends_with("SKILL.md")),
+            "nested descendants should wait until their directory is selected: {suggestions:?}"
+        );
+
+        app.input = "@src/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/bin/"));
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/lib.rs"));
+        assert!(
+            suggestions.iter().all(|(value, _)| {
+                !value.starts_with("@crates/") && !value.ends_with("bin/tool.rs")
+            }),
+            "src browsing must stay at the selected directory's direct children: {suggestions:?}"
+        );
+
+        app.input = "@missing/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions.is_empty(),
+            "a missing root-level directory must not jump roots: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
+fn configured_file_mention_ignore_hides_worktrees_but_keeps_hidden_project_files() {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\nignore = [\".worktrees/\"]\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills"))
+            .expect("hidden project directory");
+        std::fs::create_dir_all(temp.path().join(".worktrees/agent/src"))
+            .expect("worktree directory");
+        std::fs::write(temp.path().join(".agents/skills/SKILL.md"), "")
+            .expect("hidden project file");
+        std::fs::write(temp.path().join(".worktrees/agent/src/lib.rs"), "")
+            .expect("worktree file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@.agents/"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.contains(".worktrees")),
+            "configured worktree ignore leaked into suggestions: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
 fn tab_completes_an_active_file_mention_without_submitting() {
     with_file_mentions_enabled(|| {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -158,54 +256,57 @@ fn remote_file_mention_picker_and_expansion_share_the_client_root() {
 
 #[test]
 fn file_mention_suggestions_rank_candidates_globally_across_batches() {
-    let mut app = create_test_app();
-    app.input = "@rank".to_owned();
-    app.cursor_pos = app.input.len();
-    let root = std::env::current_dir().expect("cwd");
-    let request = super::file_mentions::FileMentionRequest {
-        root,
-        query: "rank".to_owned(),
-        ignore_patterns: Vec::new(),
-    };
-    let (sender, receiver) = std::sync::mpsc::channel();
-    let generation = 99;
-    *app.file_mention_discovery.borrow_mut() = Some(super::file_mentions::FileMentionDiscovery {
-        request,
-        generation,
-        receiver,
-        cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
-        candidates: Vec::new(),
-    });
-    sender
-        .send(super::file_mentions::FileMentionBatch {
-            generation,
-            candidates: (0..100)
-                .map(|index| super::file_mentions::FileMentionCandidate {
-                    score: 1,
-                    path: format!("rank-low-{index:03}.txt"),
+    with_file_mentions_enabled(|| {
+        let mut app = create_test_app();
+        app.input = "@rank".to_owned();
+        app.cursor_pos = app.input.len();
+        let root = std::env::current_dir().expect("cwd");
+        let request = super::file_mentions::FileMentionRequest {
+            root,
+            query: "rank".to_owned(),
+            ignore_patterns: Vec::new(),
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let generation = 99;
+        *app.file_mention_discovery.borrow_mut() =
+            Some(super::file_mentions::FileMentionDiscovery {
+                request,
+                generation,
+                receiver,
+                cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                candidates: Vec::new(),
+            });
+        sender
+            .send(super::file_mentions::FileMentionBatch {
+                generation,
+                candidates: (0..100)
+                    .map(|index| super::file_mentions::FileMentionCandidate {
+                        score: 1,
+                        path: format!("rank-low-{index:03}.txt"),
+                        is_dir: false,
+                    })
+                    .collect(),
+                done: false,
+            })
+            .expect("first batch");
+        sender
+            .send(super::file_mentions::FileMentionBatch {
+                generation,
+                candidates: vec![super::file_mentions::FileMentionCandidate {
+                    score: 100,
+                    path: "rank-best.txt".to_owned(),
                     is_dir: false,
-                })
-                .collect(),
-            done: false,
-        })
-        .expect("first batch");
-    sender
-        .send(super::file_mentions::FileMentionBatch {
-            generation,
-            candidates: vec![super::file_mentions::FileMentionCandidate {
-                score: 100,
-                path: "rank-best.txt".to_owned(),
-                is_dir: false,
-            }],
-            done: true,
-        })
-        .expect("second batch");
+                }],
+                done: true,
+            })
+            .expect("second batch");
 
-    assert!(app.poll_file_mention_discovery());
-    let suggestions = app.file_mention_suggestions(&app.input);
+        assert!(app.poll_file_mention_discovery());
+        let suggestions = app.file_mention_suggestions(&app.input);
 
-    assert_eq!(suggestions.len(), 100);
-    assert_eq!(suggestions[0].0, "@rank-best.txt");
+        assert_eq!(suggestions.len(), 100);
+        assert_eq!(suggestions[0].0, "@rank-best.txt");
+    });
 }
 
 #[test]
@@ -243,25 +344,53 @@ fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
 }
 
 #[test]
-fn file_mentions_default_disabled_without_scanning() {
-    assert!(!jcode_config_types::FileMentionsConfig::default().enabled);
-    let legacy: crate::config::Config =
-        toml::from_str("[file_mentions]\nignore = []\n").expect("legacy config parses");
-    assert!(!legacy.file_mentions.enabled);
+fn file_mentions_default_enabled_and_can_be_disabled() {
+    let default_file_mentions = jcode_config_types::FileMentionsConfig::default();
+    assert!(default_file_mentions.enabled);
+    assert!(default_file_mentions.ignore.is_empty());
+
+    let omitted_enabled: crate::config::Config =
+        toml::from_str("[file_mentions]\nignore = [\"generated/\"]\n")
+            .expect("config with omitted enabled parses");
+    assert!(omitted_enabled.file_mentions.enabled);
+    assert_eq!(omitted_enabled.file_mentions.ignore, ["generated/"]);
 
     with_temp_jcode_home(|| {
-        write_test_config("[file_mentions]\nignore = []\n");
         crate::config::invalidate_config_cache();
 
         let temp = tempfile::tempdir().expect("tempdir");
-        std::fs::write(temp.path().join("README.md"), "").expect("readme");
+        std::fs::write(temp.path().join("README.md"), "default contents").expect("readme");
         let mut app = create_test_app();
         app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
         app.input = "@".to_owned();
         app.cursor_pos = 1;
 
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@README.md"));
+    });
+
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = false\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "disabled contents").expect("readme");
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "Explain @README.md".to_owned();
+        app.cursor_pos = app.input.len();
+
         assert!(app.command_suggestions().is_empty());
-        assert!(!app.poll_file_mention_discovery());
+        assert!(app.file_mention_discovery.borrow().is_none());
+        assert_eq!(app.input, "Explain @README.md");
+        assert_eq!(
+            super::file_mentions::expand_file_mentions(
+                &app.input,
+                temp.path().to_str(),
+                false,
+            ),
+            "Explain @README.md"
+        );
     });
 }
 

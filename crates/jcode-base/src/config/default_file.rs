@@ -105,11 +105,13 @@ swarm_panel_focus = "alt+n"
 session_picker_enter = "current-terminal"
 
 [file_mentions]
-# Filesystem-backed `@` suggestions are opt-in to preserve existing input behavior.
-# Set true to enable workspace discovery and provider-time file expansion.
-enabled = false
-# Additional path components excluded from suggestions.
-# ignore = ["private/", "*.generated.*"]
+# Filesystem-backed `@` suggestions and provider-time expansion are enabled by default.
+# Set false to opt out.
+enabled = true
+# Additional gitignore-style patterns excluded from suggestions. These are additive
+# to the built-in generated/dependency directory exclusions documented in
+# docs/FILE_MENTIONS.md.
+# ignore = [".worktrees/", "private/", "*.generated.*"]
 
 [dictation]
 # External speech-to-text command.
@@ -722,6 +724,8 @@ mod tests {
             toml::from_str::<Config>(&template).expect("the shipped config template must parse");
         assert_eq!(config.tools.mcp_tools, McpToolsMode::Auto);
         assert_eq!(config.tools.mcp_tools_token_threshold, 8_000);
+        assert!(config.file_mentions.enabled);
+        assert!(template.contains("Set false to opt out."));
     }
 
     /// Colors are only discoverable if the template mentions them, since most

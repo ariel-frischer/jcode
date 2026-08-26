@@ -112,6 +112,7 @@ fn start_file_mention_discovery(
 )]
 fn process_file_mention_entry(
     root: &Path,
+    score_root: &Path,
     query: &str,
     ignored_paths: &ignore::gitignore::Gitignore,
     entry: ignore::DirEntry,
@@ -134,6 +135,11 @@ fn process_file_mention_entry(
     let text = relative
         .to_string_lossy()
         .replace(std::path::MAIN_SEPARATOR, "/");
+    let score_text = path
+        .strip_prefix(score_root)
+        .unwrap_or(relative)
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
     let is_dir = entry
         .file_type()
         .is_some_and(|file_type| file_type.is_dir());
@@ -146,7 +152,7 @@ fn process_file_mention_entry(
     let score = if query.is_empty() {
         Some(0)
     } else {
-        jcode_fuzzy::fuzzy_score(query, &text)
+        jcode_fuzzy::fuzzy_score(query, &score_text)
     };
     if let Some(score) = score {
         batch.push(FileMentionCandidate {
@@ -160,6 +166,23 @@ fn process_file_mention_entry(
         return send_file_mention_batch(sender, generation, batch, false);
     }
     true
+}
+
+fn should_walk_file_mention_entry(
+    root: &Path,
+    ignored_paths: &ignore::gitignore::Gitignore,
+    entry: &ignore::DirEntry,
+) -> bool {
+    let path = entry.path();
+    if path == root {
+        return true;
+    }
+    let is_dir = entry
+        .file_type()
+        .is_some_and(|file_type| file_type.is_dir());
+    !ignored_paths
+        .matched_path_or_any_parents(path, is_dir)
+        .is_ignore()
 }
 
 /// Test-only entry point for deterministic batch and responsiveness checks.
@@ -181,6 +204,26 @@ fn discover_file_mentions_batched(
     cancel: &Arc<AtomicBool>,
     sender: &mpsc::Sender<FileMentionBatch>,
 ) {
+    let nested_search = nested_file_mention_search(root, query);
+    if query.contains('/') && nested_search.is_none() {
+        if sender
+            .send(FileMentionBatch {
+                generation,
+                candidates: Vec::new(),
+                done: true,
+            })
+            .is_err()
+        {
+            crate::logging::info(
+                "File mention discovery receiver disconnected for invalid nested query",
+            );
+        }
+        return;
+    }
+    let (walk_root, score_query, direct_children_only) = match nested_search.as_ref() {
+        Some((directory, leaf_query)) => (directory.as_path(), leaf_query.as_str(), true),
+        None => (root, query, false),
+    };
     let mut ignore_builder = ignore::gitignore::GitignoreBuilder::new(root);
     for pattern in BUILTIN_IGNORE_PATTERNS
         .iter()
@@ -194,7 +237,7 @@ fn discover_file_mentions_batched(
         }
     }
     let ignored_paths = match ignore_builder.build() {
-        Ok(ignored_paths) => ignored_paths,
+        Ok(ignored_paths) => Arc::new(ignored_paths),
         Err(error) => {
             crate::logging::warn(&format!(
                 "Failed to build file mention exclusion matcher: {error}"
@@ -221,17 +264,26 @@ fn discover_file_mentions_batched(
     // Emit direct children first. A depth-first walk can otherwise fill the
     // first bounded batches with a large nested directory and hide files that
     // are immediately in the user's working directory.
-    let mut direct_builder = ignore::WalkBuilder::new(root);
+    let mut direct_builder = ignore::WalkBuilder::new(walk_root);
     direct_builder
         .hidden(false)
         .git_ignore(false)
         .git_global(false)
         .git_exclude(false)
         .max_depth(Some(1));
+    let direct_root = root.to_path_buf();
+    let direct_ignored_paths = Arc::clone(&ignored_paths);
+    direct_builder.filter_entry(move |entry| {
+        should_walk_file_mention_entry(&direct_root, &direct_ignored_paths, entry)
+    });
     for entry in direct_builder.build().filter_map(Result::ok) {
+        if entry.path() == walk_root {
+            continue;
+        }
         if !process_file_mention_entry(
             root,
-            query,
+            walk_root,
+            score_query,
             &ignored_paths,
             entry,
             cancel,
@@ -248,18 +300,24 @@ fn discover_file_mentions_batched(
         }
     }
 
-    if !stopped && match_count < FILE_MENTION_MAX_MATCHES {
+    if !direct_children_only && !stopped && match_count < FILE_MENTION_MAX_MATCHES {
         let mut recursive_builder = ignore::WalkBuilder::new(root);
         recursive_builder
             .hidden(false)
             .git_ignore(false)
             .git_global(false)
             .git_exclude(false);
+        let recursive_root = root.to_path_buf();
+        let recursive_ignored_paths = Arc::clone(&ignored_paths);
+        recursive_builder.filter_entry(move |entry| {
+            should_walk_file_mention_entry(&recursive_root, &recursive_ignored_paths, entry)
+        });
         for entry in recursive_builder.build().filter_map(Result::ok) {
             if entry.depth() <= 1 {
                 continue;
             }
             if !process_file_mention_entry(
+                root,
                 root,
                 query,
                 &ignored_paths,
@@ -296,6 +354,33 @@ fn discover_file_mentions_batched(
             crate::logging::info("File mention discovery receiver disconnected at completion");
         }
     }
+}
+
+fn nested_file_mention_search(root: &Path, query: &str) -> Option<(PathBuf, String)> {
+    let (directory, leaf_query) = query.rsplit_once('/')?;
+    if directory.is_empty() {
+        return None;
+    }
+    let relative = Path::new(directory);
+    if relative
+        .components()
+        .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return None;
+    }
+    let search_root = root.join(relative);
+    let canonical_root = match root.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return None,
+    };
+    let canonical_search_root = match search_root.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return None,
+    };
+    if !canonical_search_root.starts_with(canonical_root) || !canonical_search_root.is_dir() {
+        return None;
+    }
+    Some((search_root, leaf_query.to_owned()))
 }
 
 fn send_file_mention_batch(
@@ -581,14 +666,13 @@ mod tests {
         std::fs::write(temp.path().join("node_modules/pkg/index.js"), "").expect("vendor");
         std::fs::write(temp.path().join("generated/api.rs"), "").expect("generated file");
 
-        let defaults = vec!["node_modules/".into()];
-        let paths = discover_file_mentions(temp.path(), "", &defaults);
+        let paths = discover_file_mentions(temp.path(), "", &[]);
         let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
         assert!(names.contains(&"src"), "discovered names: {names:?}");
         assert!(names.contains(&"src/main.rs"));
         assert!(!names.iter().any(|path| path.starts_with("node_modules/")));
 
-        let custom = vec!["node_modules/".into(), "generated/".into()];
+        let custom = vec!["generated/".into()];
         let paths = discover_file_mentions(temp.path(), "", &custom);
         assert!(
             !paths
@@ -596,6 +680,35 @@ mod tests {
                 .any(|(_, path, _)| path.starts_with("generated/"))
         );
     }
+
+    #[test]
+    fn file_mentions_apply_every_builtin_ignore_without_hiding_other_dot_directories() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        for pattern in BUILTIN_IGNORE_PATTERNS {
+            let directory = pattern.trim_end_matches('/');
+            std::fs::create_dir_all(temp.path().join(directory)).expect("ignored directory");
+            std::fs::write(temp.path().join(directory).join("ignored.txt"), "")
+                .expect("ignored fixture");
+        }
+        std::fs::create_dir_all(temp.path().join(".agents/skills"))
+            .expect("visible hidden directory");
+        std::fs::write(temp.path().join(".agents/skills/SKILL.md"), "")
+            .expect("visible hidden fixture");
+
+        let paths = discover_file_mentions(temp.path(), "", &[]);
+        let names: Vec<_> = paths.iter().map(|(_, path, _)| path.as_str()).collect();
+        assert!(names.contains(&".agents"), "discovered names: {names:?}");
+        for pattern in BUILTIN_IGNORE_PATTERNS {
+            let directory = pattern.trim_end_matches('/');
+            assert!(
+                names.iter().all(|path| {
+                    *path != directory && !path.starts_with(&format!("{directory}/"))
+                }),
+                "built-in ignore {pattern:?} leaked into {names:?}"
+            );
+        }
+    }
+
     #[test]
     fn file_mentions_expand_relative_paths_against_working_directory() {
         let dir = tempfile::tempdir().unwrap();
