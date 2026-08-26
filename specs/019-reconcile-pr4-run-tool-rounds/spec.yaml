@@ -1,7 +1,7 @@
 feature:
   branch: "agent/jcode-5hc-pr4-integration"
   created: "2026-08-25"
-  status: "Validated"
+  status: "Complete"
   input: "Reconcile fork PR 4 bounded unattended tool rounds into current dev without weakening the existing run-safety architecture."
 
 user_stories:

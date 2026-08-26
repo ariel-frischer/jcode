@@ -111,7 +111,7 @@ phases:
           - "All matrix checks pass with JCODE_IN_DEV_CARGO=1 and isolated target directories."
       - id: "T010"
         title: "Fresh-base merge, push, install, reload, close jcode-5hc, and clean owned worktrees"
-        status: "Pending"
+        status: "Completed"
         type: "delivery"
         parallel: false
         file_path: "specs/019-reconcile-pr4-run-tool-rounds/behavior-matrix.md"
