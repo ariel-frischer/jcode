@@ -1,0 +1,352 @@
+plan:
+  branch: "020-enable-file-picker"
+  created: "2026-08-26"
+  spec_path: "specs/020-enable-file-picker/spec.yaml"
+
+summary: |
+  Enable the existing TUI file-mention feature by changing the canonical
+  `FileMentionsConfig` built-in default from disabled to enabled and updating the
+  generated config template, while preserving an explicit `enabled = false`
+  opt-out. Keep activation and submit-time expansion on the same resolved config
+  value so an absent setting and explicit opt-in are equivalent, and explicit
+  opt-out prevents both filesystem discovery and provider-bound expansion.
+
+  Treat the current asynchronous picker and provider projection as established
+  contracts rather than redesign targets. Strengthen focused tests around
+  32-entry generation-tagged batches, cancellation, the 8-row visible window,
+  ignore composition, large-repository latency, active-span replacement, safe
+  repository-contained expansion, compact persisted history, and submission
+  restoration. No protocol, storage, dependency, desktop, or PR2 inline-preview
+  changes are required.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "Ratatui 0.30 and Crossterm 0.29 TUI in a Cargo workspace"
+  primary_dependencies:
+    - name: "jcode-config-types"
+      version: "workspace path dependency"
+      purpose: "Own the serde-backed FileMentionsConfig type and its default-enabled policy."
+    - name: "jcode-fuzzy"
+      version: "workspace path dependency"
+      purpose: "Preserve the existing fuzzy scoring of repository-relative file and directory candidates."
+    - name: "ignore"
+      version: "0.4"
+      purpose: "Preserve asynchronous repository walking, built-in exclusions, git ignore behavior, and additive valid custom exclusions."
+    - name: "ratatui"
+      version: "0.30"
+      purpose: "Render the existing bounded command-suggestion window of at most 8 visible rows."
+    - name: "tempfile"
+      version: "3"
+      purpose: "Create deterministic repository, unsafe-path, symlink, binary, oversized, and latency fixtures in focused tests."
+  storage: "Existing TOML configuration and compact session history only; no new storage or persisted expanded file content."
+  testing:
+    framework: "Rust built-in test framework with existing Jcode TUI test helpers and tempfile fixtures"
+    approach: "Update the default/explicit-enable/explicit-disable matrix, add deterministic discovery lifecycle and rendering bounds tests, preserve provider-expansion and restoration regression coverage, run exact file-mention tests first, then jcode-tui checks, a coordinated TUI build, repository guardrails, and an isolated-socket runtime smoke test against the newly built binary."
+  target_platform: "Jcode TUI on supported Linux, macOS, and Windows targets"
+  project_type: "cli"
+  performance_goals: "No discovery batch exceeds 32 candidates; no render exceeds the existing 8-row visible capacity; at least 95% of eligible first batches arrive within 100 ms; at least 95% of typing, navigation, cancellation, and submission events complete within 50 ms; zero stale-result mutations across 100 repeated sequencing scenarios."
+  constraints:
+    - "An absent file_mentions setting must resolve to enabled, while explicit enabled = false remains authoritative."
+    - "The same effective setting must gate picker discovery, persisted-message materialization, and final submit-time expansion."
+    - "Discovery must remain off the interactive event path, generation-owned, cancellable, capped at 32 candidates per batch, and bounded by the existing total match limit."
+    - "Built-in generated and dependency exclusions remain mandatory; valid global and profile exclusions remain additive; invalid custom patterns are skipped without terminating discovery or weakening built-ins."
+    - "Visible suggestions remain bounded by the existing COMMAND_SUGGESTION_VISIBLE_LIMIT of 8 even when the active candidate set is larger."
+    - "Provider expansion remains repository-contained, canonicalized, readable text only, size-limited, safely escaped, and absent from editable or persisted user-visible state."
+    - "Selecting a candidate replaces only the active @ mention span and preserves surrounding input byte for byte."
+    - "PR2 inline preview rendering, state, link handling, dependencies, sibling lookup, and fixtures are excluded."
+    - "Serialize Rust builds, tests, Clippy, and guardrail execution on the resource-constrained development machine."
+  scale_scope: "One configuration default and template change, existing TUI picker/discovery and submit projection paths, deterministic fixtures up to thousands of repository entries, and focused regression coverage without new public contracts."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "PRIN-001 Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The implementation is centered on the FileMentionsConfig default, config template wording, and focused tests. Existing discovery and expansion code changes only if a direct acceptance gap is proven. PR2 and unrelated refactors are explicit exclusions."
+    - name: "PRIN-002 Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "The config field, serde shape, explicit false behavior, compact history, provider projection format, remote flow, and public interfaces remain intact. The changed unset default is the explicitly requested product behavior and receives a compatibility matrix."
+    - name: "PRIN-003 Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "The plan changes the built-in default in the canonical FileMentionsConfig owner and continues to use the existing resolved config value everywhere. Absent, explicit true, explicit false, and invalid-ignore behavior are tested without a parallel override path."
+    - name: "PRIN-004 Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Stable configuration remains in jcode-config-types and transient picker, discovery, rendering, and provider projection remain in jcode-tui. No server, protocol, SDK, desktop, storage, or dependency-direction change is planned."
+    - name: "PRIN-005 Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Each functional and non-functional contract maps to focused config, picker, batch, generation, render-window, replacement, ignore, expansion, persistence, and restoration checks before broader validation."
+    - name: "PRIN-006 Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "The plan preserves visible worker-disconnection notices and tests invalid ignores plus traversal, outside-root absolute paths, symlink escapes, missing, unreadable, binary, oversized, and adversarial delimiter cases for zero unintended disclosure."
+    - name: "PRIN-007 Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Delivery requires exact file-mention tests, relevant package checks, a coordinated TUI build, scripts/check_guardrails.sh, artifact validation, scope review, and an isolated runtime check using the built binary."
+    - name: "PRIN-008 Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "Current dev implementation is authoritative. The plan reuses its existing asynchronous discovery and compact provider projection instead of importing PR code or adding abstractions, and preserves profile-specific ignores and Jcode custom workflows."
+    - name: "PRIN-009 Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The phases carry the requested default-enabled outcome through implementation, safety regression coverage, runtime verification, and documentation while avoiding destructive, external, or unrelated actions."
+    - name: "PRIN-010 Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The plan retains explicit 100 ms first-batch and 50 ms interaction budgets, validates bounded batching and rendering, and uses the newly built binary on a private socket rather than treating cargo build or the shared daemon as runtime proof."
+
+research_findings:
+  decisions:
+    - topic: "Canonical default and opt-out representation"
+      decision: "Implement Default for FileMentionsConfig so enabled is true while preserving serde(default), the existing enabled boolean field, and explicit false deserialization. Update the generated config template to document enabled-by-default behavior and explicit opt-out."
+      rationale: "The current derived Default produces false and all picker and expansion gates already read the same config field. Changing the owning default is the smallest way to make omitted and explicit-true configurations equivalent without changing serialized field names or adding precedence paths."
+      alternatives_considered:
+        - "Remove the enabled setting and make the feature unconditional"
+        - "Special-case absent configuration in the TUI activation path"
+        - "Add an environment variable or second runtime override"
+    - topic: "Discovery architecture and responsiveness"
+      decision: "Preserve the existing background thread, mpsc batch channel, atomic cancellation token, monotonically wrapping generation identity, per-frame non-blocking polling, 32-entry batch size, and 5000-match discovery cap."
+      rationale: "The implementation already satisfies the required asynchronous, generation-owned, cancellable shape and avoids waiting for complete enumeration on the composer event path. Focused tests should lock these properties instead of replacing the architecture."
+      alternatives_considered:
+        - "Enumerate the repository synchronously before showing suggestions"
+        - "Collect all matches in one worker result before publishing"
+        - "Introduce a new Tokio task or service solely for this default change"
+    - topic: "Bounded candidate and visible suggestion behavior"
+      decision: "Keep the existing candidate projection cap of 100 and the shared COMMAND_SUGGESTION_VISIBLE_LIMIT of 8, with scrolling selection over the bounded candidate set."
+      rationale: "The spec states that established capacities remain authoritative. The current TUI renders only 8 rows and file mention projection takes at most 100 ranked candidates independently of the 5000 discovery cap."
+      alternatives_considered:
+        - "Render every discovered match"
+        - "Increase capacities as part of default enablement"
+        - "Create a file-picker-specific rendering system"
+    - topic: "Cancellation and stale-result ownership"
+      decision: "Continue cancelling the prior AtomicBool when the request changes or discovery clears, increment generation for each new request, and reject batches whose generation differs from active discovery. Add explicit tests for query change, close, disable, and repeated stale-delivery sequences."
+      rationale: "Cancellation limits wasted traversal while generation checks provide the correctness boundary even if an old worker publishes after supersession. Both are needed for zero stale mutations."
+      alternatives_considered:
+        - "Rely only on dropping the receiver"
+        - "Rely only on query string comparison"
+        - "Allow old batches and re-rank them into the new query"
+    - topic: "Ignore precedence and invalid patterns"
+      decision: "Preserve built-in ignore patterns, repository ignore files, global file_mentions.ignore entries, and active profile file_mentions_ignore entries as additive inputs; skip each invalid custom pattern without discarding built-ins or aborting the walk."
+      rationale: "This matches current ownership in effective_file_mention_ignores and the discovery builder while satisfying the requirement that one bad user pattern cannot expose generated content or terminate discovery."
+      alternatives_considered:
+        - "Replace built-ins when custom ignores are configured"
+        - "Fail the entire picker on the first invalid pattern"
+        - "Ignore active profile exclusions"
+    - topic: "Provider expansion trust boundary"
+      decision: "Keep expansion at provider materialization and final submission, canonicalize against the authoritative session working directory, require the resolved path to remain inside it and be a readable text file within the existing size limit, escape path metadata and closing delimiters, and preserve compact mentions in composer, queue, session, and visible history."
+      rationale: "Default picker availability must not broaden disclosure. The existing projection path already separates compact user state from provider-bound context and restores queued or interleaved state when submission-size validation fails."
+      alternatives_considered:
+        - "Expand content immediately when a suggestion is selected"
+        - "Persist expanded contents in session history"
+        - "Permit absolute or symlink-resolved files outside the repository root"
+    - topic: "PR2 separation"
+      decision: "Limit implementation and validation to file mention config, discovery, composer suggestion, provider projection, and their focused tests; perform a final changed-file and dependency scan for preview-only surfaces."
+      rationale: "Inline preview is independently owned and does not contribute to default picker activation, discovery, replacement, or provider expansion."
+      alternatives_considered:
+        - "Bundle inline preview improvements because they also touch file paths"
+        - "Modify preview rendering tests opportunistically"
+        - "Import PR2 dependencies or sibling-repository lookup"
+
+
+data_model:
+  entities:
+    - name: "File mention preference"
+      description: "The resolved configuration controlling filesystem-backed @ suggestions and provider expansion."
+      fields:
+        - name: "configured_state"
+          type: "enum: absent | enabled | disabled"
+          description: "Distinguishes omitted configuration from explicit user choices for test and resolution purposes."
+          constraints: "Absent resolves to enabled; explicit true resolves to enabled; explicit false resolves to disabled."
+        - name: "effective_enabled"
+          type: "bool"
+          description: "Canonical value consumed by picker and expansion gates."
+          constraints: "Must come from the existing config resolver and must not diverge across activation and submission paths."
+        - name: "ignore_patterns"
+          type: "Vec<String>"
+          description: "Additional global gitignore-style exclusions."
+          constraints: "Additive to built-ins and active profile patterns; invalid entries are skipped individually."
+      relationships:
+        - target: "Discovery generation"
+          type: "one-to-zero-or-many"
+          description: "Only an effectively enabled preference may create or retain discovery generations."
+        - target: "Provider file context"
+          type: "one-to-zero-or-many"
+          description: "Only an effectively enabled preference permits submit-time materialization."
+    - name: "Discovery generation"
+      description: "One asynchronous repository search owned by a specific root, query, and ignore set."
+      fields:
+        - name: "generation"
+          type: "u64"
+          description: "Identity attached to every published batch."
+          constraints: "Incremented for each superseding request; only the active identity may mutate candidates."
+        - name: "request"
+          type: "FileMentionRequest"
+          description: "Repository root, active query, and effective ignore patterns."
+          constraints: "A request change cancels and supersedes the prior generation."
+        - name: "cancel"
+          type: "Arc<AtomicBool>"
+          description: "Cooperative worker cancellation signal."
+          constraints: "Set false when the query changes, picker closes, or feature is disabled."
+        - name: "completed"
+          type: "bool"
+          description: "Indicates receipt of the final current-generation batch."
+          constraints: "Must not be set by stale generations."
+      relationships:
+        - target: "Suggestion batch"
+          type: "one-to-many"
+          description: "A generation publishes zero or more bounded candidate batches."
+    - name: "Suggestion batch"
+      description: "An incremental discovery result sent from the background worker."
+      fields:
+        - name: "generation"
+          type: "u64"
+          description: "Originating discovery generation."
+          constraints: "Must equal the active generation before candidates are accepted."
+        - name: "candidates"
+          type: "Vec<FileMentionCandidate>"
+          description: "Fuzzy-scored repository-relative files and directories."
+          constraints: "Length must be between 0 and 32 inclusive."
+        - name: "done"
+          type: "bool"
+          description: "Marks final delivery for the generation."
+          constraints: "At most one accepted terminal state per generation."
+      relationships:
+        - target: "Visible suggestion set"
+          type: "many-to-one"
+          description: "Accepted batches contribute candidates to the active bounded suggestion projection."
+    - name: "Visible suggestion set"
+      description: "The navigable subset of active-generation candidates presented by the TUI."
+      fields:
+        - name: "candidate_projection"
+          type: "Vec<(String, description)>"
+          description: "Ranked replacement strings generated from current candidates."
+          constraints: "At most 100 candidates are projected for file mentions."
+        - name: "visible_window"
+          type: "range"
+          description: "Rows rendered around the current selection."
+          constraints: "At most 8 rows are simultaneously visible."
+        - name: "selected_index"
+          type: "usize"
+          description: "Current navigable candidate index."
+          constraints: "Clamped to the active candidate projection and reset safely when suggestions disappear."
+        - name: "active_mention_span"
+          type: "byte range"
+          description: "The @ token before the cursor that selection replaces."
+          constraints: "Replacement must preserve all bytes before the @ and after the cursor."
+      relationships:
+        - target: "Discovery generation"
+          type: "many-to-one"
+          description: "Visible state belongs only to the current request generation."
+    - name: "Provider file context"
+      description: "Transient provider-only text derived from one safe compact file mention."
+      fields:
+        - name: "canonical_path"
+          type: "PathBuf"
+          description: "Resolved target used for containment and metadata validation."
+          constraints: "Must remain under the authoritative canonical repository root and identify a regular readable file."
+        - name: "escaped_path"
+          type: "String"
+          description: "Mention path escaped for the file-context attribute."
+          constraints: "Ampersand, quote, less-than, and greater-than characters are escaped."
+        - name: "escaped_contents"
+          type: "String"
+          description: "Readable UTF-8 file content protected from closing the context wrapper."
+          constraints: "Binary or invalid UTF-8 input does not expand; closing file tags are escaped."
+        - name: "submission_bytes"
+          type: "usize"
+          description: "Contribution to the final provider-bound text size."
+          constraints: "The file and final submission must remain within MAX_SUBMITTED_TEXT_BYTES."
+      relationships:
+        - target: "File mention preference"
+          type: "many-to-one"
+          description: "Expansion occurs only when the canonical preference is enabled."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/020-enable-file-picker/spec.yaml"
+      description: "Approved behavior, performance, safety, compatibility, and PR2-separation requirements."
+    - path: "specs/020-enable-file-picker/plan.yaml"
+      description: "Technical design, research decisions, data model, implementation phases, and validation strategy."
+    - path: "crates/jcode-base/src/config/default_file.rs"
+      description: "Generated default config template and user-facing file_mentions opt-out documentation."
+  source_code:
+    - path: "crates/jcode-config-types/src/lib.rs"
+      description: "Canonical FileMentionsConfig type and default-enabled implementation."
+    - path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs"
+      description: "Effective global/profile ignores, activation gate, active mention parsing, bounded candidate projection, and mention replacement construction."
+    - path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers/file_mentions.rs"
+      description: "Existing asynchronous repository walk, 32-entry batches, cancellation, generation filtering, ranking, ignore construction, and bounded discovery state."
+    - path: "crates/jcode-tui/src/tui/ui_input.rs"
+      description: "Existing 8-row command suggestion render window; change only if focused tests reveal a requirement gap."
+    - path: "crates/jcode-tui/src/tui/app/input/file_mentions.rs"
+      description: "Submit-time repository-contained expansion, escaping, size validation, and queue/interleave restoration."
+    - path: "crates/jcode-tui/src/tui/app/conversation_state.rs"
+      description: "Compact persisted history and provider-only materialization cache using the same effective feature gate."
+  tests:
+    - path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+      description: "Primary default matrix, opt-out, picker, batching, latency, cancellation, ignores, replacement, expansion, persistence, and unsafe-path tests."
+    - path: "crates/jcode-tui/src/tui/app/tests/state_model_poke_02/part_01.rs"
+      description: "Existing bounded suggestion rendering and scrolling regressions reused or extended for file mention visibility."
+    - path: "crates/jcode-tui/src/tui/app/tests/remote*/**"
+      description: "Relevant direct, queued, startup, and interleave restoration or compact-history regressions where file mention expansion crosses remote dispatch."
+    - path: "scripts/check_guardrails.sh"
+      description: "Repository formatting, dependency, quality, warning, size, and architecture delivery gates."
+
+implementation_phases:
+  - phase: 1
+    name: "Change the canonical default and documentation"
+    goal: "Make absent file mention configuration enabled without weakening explicit opt-out or introducing a second resolution path."
+    deliverables:
+      - "Manual Default implementation for FileMentionsConfig with enabled = true and an empty ignore list"
+      - "Updated generated config template describing default-enabled behavior and enabled = false opt-out"
+      - "Focused deserialization matrix proving absent, explicit true, and explicit false semantics"
+      - "Scope check confirming no protocol, storage, desktop, or preview dependency change"
+  - phase: 2
+    name: "Lock picker lifecycle, bounds, and responsiveness"
+    goal: "Prove default activation retains the existing asynchronous, generation-owned, bounded behavior in small and large repositories."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Default, explicit-enable, and explicit-disable picker activation tests, including zero discovery while disabled"
+      - "Deterministic multi-batch tests proving every batch is at most 32 entries and first useful delivery meets the 100 ms target"
+      - "Query-change, picker-close, and feature-disable tests proving cancellation and zero stale mutations across repeated sequences"
+      - "Tests proving the candidate projection and 8-row visible window remain bounded while selection and navigation continue"
+      - "Latency checks for typing, navigation, cancellation, and submission during active large-fixture discovery"
+      - "Global, profile, built-in, repository-ignore, and invalid-custom-pattern coverage"
+  - phase: 3
+    name: "Preserve selection and provider safety contracts"
+    goal: "Ensure default availability does not alter editable text semantics or broaden provider-bound filesystem disclosure."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Beginning, middle, and end active-span replacement tests preserving surrounding input byte for byte"
+      - "Valid in-bound expansion tests with escaped path and closing-delimiter content"
+      - "Negative matrix for traversal, outside-root absolute paths, symlink escape, missing, unreadable, directory, binary, invalid UTF-8, and oversized files"
+      - "Direct, queued, resumed/materialized, rewound, remote, and interleaved regressions proving compact mentions remain user-visible"
+      - "Submission-size failure tests proving original text, surrounding content, attachments, reminders, and queue state are restored"
+  - phase: 4
+    name: "Validate runtime behavior and delivery scope"
+    goal: "Demonstrate the feature in the built TUI, satisfy repository gates, and prove PR2 remains separate."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Exact file-mention and affected render/dispatch tests passing"
+      - "Relevant jcode-tui package check and coordinated selfdev TUI build passing"
+      - "scripts/check_guardrails.sh passing or any unrelated pre-existing failure isolated and recorded"
+      - "Isolated-socket runtime smoke evidence for absent and explicit-disabled configuration using the newly built binary"
+      - "Final diff and dependency scan showing zero inline preview rendering, preview state, link hit-testing, sibling lookup, preview fixtures, or preview-only dependencies"
+      - "Updated artifact validation and clean ownership-focused commit evidence on branch 020-enable-file-picker"
+
+open_questions:
+  - question: "Should the default-enabled test matrix live entirely in jcode-tui or should a small config-type unit test also be added in jcode-config-types?"
+    context: "The default is owned by jcode-config-types, while user-observable activation and expansion are owned by jcode-tui. Both ownership and end-to-end behavior need direct evidence without duplicating a large matrix."
+    proposed_resolution: "Add a minimal FileMentionsConfig default/deserialization unit test in the type crate if that crate has an established local test section, and keep activation, opt-out, discovery, and expansion behavior in the existing TUI test module."
+  - question: "Can deterministic filesystem timing fixtures reliably enforce the 95th-percentile targets on all CI hosts?"
+    context: "The current exact test uses single-run 100 ms and 50 ms assertions, which may be noisy on loaded or slower cross-platform runners even though the product targets are percentile-based."
+    proposed_resolution: "Keep correctness tests deterministic, run repeated latency samples in a focused ignored or benchmark-style test, assert the stated 95th percentile where the repository permits timing tests, and record representative runtime evidence without weakening the product budget."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-26T07:17:10Z"
+  artifact_type: "plan"
