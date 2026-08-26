@@ -108,7 +108,7 @@ pub(super) fn complete_turn_and_should_stop(
 
 pub(super) fn print_plain_stop(agent: &crate::agent::Agent) {
     if let Some(reason) = agent.run_safety_stop_reason() {
-        println!("Run stopped: {} ({})", reason.label(), reason.code());
+        eprintln!("Run stopped: {} ({})", reason.label(), reason.code());
     }
 }
 

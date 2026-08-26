@@ -1316,9 +1316,7 @@ impl Agent {
                 }
             }
 
-            // If graceful shutdown was signaled during streaming and we have tool calls,
-            // we need to provide tool results for them (API requires tool_use -> tool_result)
-            // then exit cleanly
+            // Repair tool results before exiting after a graceful shutdown.
             if self.is_graceful_shutdown() {
                 logging::info(&format!(
                     "Graceful shutdown - skipping {} tool call(s)",
@@ -1380,6 +1378,7 @@ impl Agent {
             if self.provider.handles_tools_internally() {
                 tool_calls.retain(|tc| JCODE_NATIVE_TOOLS.contains(&tc.name.as_str()));
                 if tool_calls.is_empty() {
+                    self.run_safety_complete_tool_round();
                     // === INJECTION POINT D: After provider-handled tools, before next API call ===
                     let injected = self.inject_soft_interrupts();
                     if !injected.is_empty() {
@@ -1396,6 +1395,7 @@ impl Agent {
             // Execute tools and add results
             let tool_count = tool_calls.len();
             let mut tool_results_dirty = false;
+            let mut completed_tool_round = true;
             for tool_index in 0..tool_count {
                 // === INJECTION POINT C (before): Check for urgent abort before each tool (except first) ===
                 if tool_index > 0 && self.has_urgent_interrupt() {
@@ -1432,6 +1432,7 @@ impl Agent {
                         );
                     }
                     self.persist_session_best_effort("streamed tool output");
+                    completed_tool_round = false;
                     break; // Skip remaining tools
                 }
                 let tc = &tool_calls[tool_index];
@@ -1488,6 +1489,7 @@ impl Agent {
                 if !self.run_safety_before_tool_step() {
                     self.emit_run_safety_skipped_tool_results(&event_tx, &tool_calls[tool_index..]);
                     tool_results_dirty = true;
+                    completed_tool_round = false;
                     break;
                 }
 
@@ -1739,14 +1741,14 @@ impl Agent {
                     self.background_tool_signal.reset();
                 }
 
-                // NOTE: We do NOT inject between tools (non-urgent) because that would
-                // place user text between tool_results, which may violate API constraints.
-                // All non-urgent injection happens at Point D after all tools are done.
+                // Non-urgent injection waits until all tool results are present.
             }
 
             if tool_results_dirty {
                 self.session.save()?;
             }
+
+            self.run_safety_complete_tool_round_if(completed_tool_round);
 
             if !generated_image_contexts.is_empty() {
                 for blocks in generated_image_contexts.drain(..) {
@@ -1755,9 +1757,7 @@ impl Agent {
                 self.session.save()?;
             }
 
-            // === INJECTION POINT D: All tools done, before next API call ===
-            // This is the safest point for non-urgent injection since all tool_results
-            // have been added and the conversation is in a valid state.
+            // === INJECTION POINT D: all tool results are present before the next API call ===
             if let PostToolInterruptOutcome::SoftInterrupt { injected, point } =
                 self.take_post_tool_soft_interrupt()
             {
