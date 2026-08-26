@@ -42,6 +42,106 @@ fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selectio
 }
 
 #[test]
+fn file_mention_nested_directory_query_lists_only_direct_children() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills/local-skill"))
+            .expect("nested hidden skill directory");
+        std::fs::create_dir_all(temp.path().join("crates/example/src"))
+            .expect("unrelated nested src directory");
+        std::fs::create_dir_all(temp.path().join("src/bin")).expect("root source directory");
+        std::fs::write(temp.path().join(".agents/AGENTS.md"), "")
+            .expect("direct hidden file");
+        std::fs::write(
+            temp.path().join(".agents/skills/local-skill/SKILL.md"),
+            "",
+        )
+        .expect("nested skill file");
+        std::fs::write(temp.path().join("crates/example/src/lib.rs"), "")
+            .expect("unrelated source file");
+        std::fs::write(temp.path().join("src/lib.rs"), "").expect("direct root source file");
+        std::fs::write(temp.path().join("src/bin/tool.rs"), "")
+            .expect("nested root source file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@.agents/".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions
+                .iter()
+                .any(|(value, kind)| value == "@.agents/skills/" && *kind == "Directory"),
+            "expected direct skills directory, got {suggestions:?}"
+        );
+        assert!(suggestions
+            .iter()
+            .any(|(value, _)| value == "@.agents/AGENTS.md"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.ends_with("SKILL.md")),
+            "nested descendants should wait until their directory is selected: {suggestions:?}"
+        );
+
+        app.input = "@src/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/bin/"));
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/lib.rs"));
+        assert!(
+            suggestions.iter().all(|(value, _)| {
+                !value.starts_with("@crates/") && !value.ends_with("bin/tool.rs")
+            }),
+            "src browsing must stay at the selected directory's direct children: {suggestions:?}"
+        );
+
+        app.input = "@missing/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions.is_empty(),
+            "a missing root-level directory must not jump roots: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
+fn configured_file_mention_ignore_hides_worktrees_but_keeps_hidden_project_files() {
+    with_temp_jcode_home(|| {
+        write_test_config(
+            "[file_mentions]\nenabled = true\nignore = [\".worktrees/\"]\n",
+        );
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills"))
+            .expect("hidden project directory");
+        std::fs::create_dir_all(temp.path().join(".worktrees/agent/src"))
+            .expect("worktree directory");
+        std::fs::write(temp.path().join(".agents/skills/SKILL.md"), "")
+            .expect("hidden project file");
+        std::fs::write(temp.path().join(".worktrees/agent/src/lib.rs"), "")
+            .expect("worktree file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@.agents/"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.contains(".worktrees")),
+            "configured worktree ignore leaked into suggestions: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
 fn tab_completes_an_active_file_mention_without_submitting() {
     with_file_mentions_enabled(|| {
         let temp = tempfile::tempdir().expect("tempdir");
