@@ -201,10 +201,34 @@ fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
 }
 
 #[test]
-fn file_mentions_default_disabled_and_can_be_enabled() {
-    assert!(!jcode_config_types::FileMentionsConfig::default().enabled);
-    let legacy = crate::config::Config::default();
-    assert!(!legacy.file_mentions.enabled);
+fn file_mentions_default_enabled_and_can_be_disabled() {
+    let default_file_mentions = jcode_config_types::FileMentionsConfig::default();
+    assert!(default_file_mentions.enabled);
+    assert!(default_file_mentions.ignore.is_empty());
+    assert!(crate::config::Config::default().file_mentions.enabled);
+
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nignore = [\"generated/\"]\n");
+        crate::config::invalidate_config_cache();
+
+        let configured = crate::config::config();
+        assert!(configured.file_mentions.enabled);
+        assert_eq!(configured.file_mentions.ignore, ["generated/"]);
+    });
+
+    with_temp_jcode_home(|| {
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "default contents").expect("readme");
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = 1;
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@README.md"));
+    });
 
     with_temp_jcode_home(|| {
         write_test_config("[file_mentions]\nenabled = true\n");
@@ -219,6 +243,26 @@ fn file_mentions_default_disabled_and_can_be_enabled() {
 
         let suggestions = wait_for_file_mention_suggestions(&mut app);
         assert!(suggestions.iter().any(|(value, _)| value == "@README.md"));
+    });
+
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = false\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "disabled contents").expect("readme");
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "Explain @README.md".to_owned();
+        app.cursor_pos = app.input.len();
+
+        assert!(app.command_suggestions().is_empty());
+        assert!(app.file_mention_discovery.borrow().is_none());
+        assert_eq!(app.input, "Explain @README.md");
+        assert_eq!(
+            super::input::expand_file_mentions(&app.input, temp.path().to_str(), false),
+            "Explain @README.md"
+        );
     });
 }
 

@@ -53,7 +53,7 @@ phases:
     tasks:
       - id: "T003"
         title: "Write FileMentionsConfig default and deserialization matrix tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
@@ -65,7 +65,7 @@ phases:
           - "The serde field names and existing ignore-list representation remain unchanged."
       - id: "T004"
         title: "Write default, explicit-enable, and explicit-disable TUI gate tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
@@ -77,7 +77,7 @@ phases:
           - "Changing an active App to disabled cancels discovery, clears visible suggestions, ignores pending batches, and preserves composer text byte for byte."
       - id: "T005"
         title: "Write generated config template opt-out documentation regression"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
@@ -89,7 +89,7 @@ phases:
           - "The template does not introduce a second override mechanism or remove the existing ignore configuration."
       - id: "T006"
         title: "Implement the canonical default-enabled FileMentionsConfig"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -101,7 +101,7 @@ phases:
           - "No environment variable, TUI-only fallback, protocol field, storage migration, or parallel precedence path is added."
       - id: "T007"
         title: "Update the generated file_mentions template for default enablement and opt-out"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-001"
