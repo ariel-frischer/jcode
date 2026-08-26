@@ -1,0 +1,365 @@
+tasks:
+  branch: "020-enable-file-picker"
+  created: "2026-08-26"
+  spec_path: "specs/020-enable-file-picker/spec.yaml"
+  plan_path: "specs/020-enable-file-picker/plan.yaml"
+
+summary:
+  total_tasks: 20
+  total_phases: 7
+  parallel_opportunities: 4
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Prepare deterministic file-mention fixtures and preserve a clear baseline before changing the canonical default."
+    tasks:
+      - id: "T001"
+        title: "Prepare reusable file-mention configuration and repository fixtures"
+        status: "Pending"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "Helpers can create isolated absent-setting, explicit-enabled, and explicit-disabled App configurations without relying on the shared daemon or user configuration."
+          - "Tempfile helpers can create deterministic repositories with early and late matches, more than 32 matches, more than 100 matches, ignored trees, symlinks where supported, binary files, oversized files, and adversarial names or contents."
+          - "The existing exact file-mention tests are run before modification and any pre-existing failure is recorded separately from this feature."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Add reusable observability for discovery generations, batches, cancellation, and provider projection before story-specific assertions."
+    tasks:
+      - id: "T002"
+        title: "Add deterministic discovery lifecycle and provider-projection test helpers"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests can observe each FileMentionBatch generation, candidate count, done flag, and cancellation state without sleeping for unbounded time."
+          - "Helpers can drive query changes, picker close, feature disable, selection, direct submission, and queued submission while preserving the original compact composer text for comparison."
+          - "Timing helpers collect repeated samples and compute the 95th percentile for first useful batch and interactive event latency while correctness tests remain deterministic."
+
+  - number: 3
+    title: "User Story 1 - Use file mentions without setup"
+    purpose: "Make omitted file-mention configuration default to enabled while preserving equivalent explicit opt-in and authoritative explicit opt-out."
+    story_reference: "US-001"
+    independent_test: "Start isolated TUI Apps with the setting absent, explicitly true, and explicitly false; type an active @ mention and verify absent and true open equivalent pickers while false leaves input unchanged and starts neither discovery nor provider expansion."
+    tasks:
+      - id: "T003"
+        title: "Write FileMentionsConfig default and deserialization matrix tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-config-types/src/lib.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "FileMentionsConfig::default() is asserted to produce enabled = true and an empty ignore list."
+          - "TOML deserialization proves omitted file_mentions and omitted enabled fields resolve to enabled, explicit enabled = true remains enabled, and explicit enabled = false remains disabled."
+          - "The serde field names and existing ignore-list representation remain unchanged."
+      - id: "T004"
+        title: "Write default, explicit-enable, and explicit-disable TUI gate tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Absent-setting and explicit-true Apps open the same active @ picker, discover the same fixture candidates, and replace the same active mention span."
+          - "An explicit-false App opens no picker, creates no discovery generation, leaves typed @ text in ordinary input flow, and does not materialize file contents for provider submission."
+          - "Changing an active App to disabled cancels discovery, clears visible suggestions, ignores pending batches, and preserves composer text byte for byte."
+      - id: "T005"
+        title: "Write generated config template opt-out documentation regression"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-base/src/config/default_file.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "The generated template parses successfully after the default change."
+          - "The file_mentions section documents that the picker is enabled by default and that enabled = false is the explicit opt-out."
+          - "The template does not introduce a second override mechanism or remove the existing ignore configuration."
+      - id: "T006"
+        title: "Implement the canonical default-enabled FileMentionsConfig"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-config-types/src/lib.rs"
+        dependencies: ["T003", "T004"]
+        acceptance_criteria:
+          - "FileMentionsConfig uses a manual Default implementation with enabled = true and ignore = Vec::new()."
+          - "Explicit false deserialization remains authoritative through the existing resolved configuration path."
+          - "No environment variable, TUI-only fallback, protocol field, storage migration, or parallel precedence path is added."
+      - id: "T007"
+        title: "Update the generated file_mentions template for default enablement and opt-out"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-base/src/config/default_file.rs"
+        dependencies: ["T005", "T006"]
+        acceptance_criteria:
+          - "User-facing comments describe immediate @ picker availability and enabled = false opt-out accurately."
+          - "The emitted configuration remains valid TOML and retains the existing file_mentions ignore examples."
+          - "The default template and canonical Rust default do not contradict one another."
+
+  - number: 4
+    title: "User Story 2 - Search large repositories responsively"
+    purpose: "Lock the established asynchronous, generation-owned, bounded picker behavior under default enablement."
+    story_reference: "US-002"
+    independent_test: "Run deterministic small, medium, and large repository fixtures while typing, navigating, changing queries, closing, disabling, and submitting; verify 32-entry batches, generation rejection, bounded projection and rendering, ignore composition, and the stated latency budgets."
+    tasks:
+      - id: "T008"
+        title: "Add incremental batch, projection-cap, and first-result timing tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "A fixture with more than 32 matches emits multiple observable batches and every batch, including the terminal batch, contains at most 32 candidates."
+          - "The active file-mention projection never exceeds 100 ranked candidates and discovery never exceeds the established 5000-match cap."
+          - "Across repeated eligible samples, at least 95% of first non-empty batches arrive within 100 ms without waiting for complete enumeration."
+      - id: "T009"
+        title: "Add cancellation and stale-generation sequencing regressions"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Query change, picker close, and feature disable each cancel or supersede the prior worker and reject every late prior-generation batch."
+          - "Across 100 repeated rapid query-change and close sequences, zero stale results mutate visible suggestions, selected index, completion state, or composer input."
+          - "A disconnected current worker remains visibly reported and clears pending state without converting a stale disconnect into a current error."
+      - id: "T010"
+        title: "Add bounded 8-row file-mention rendering and scrolling regressions"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/state_model_poke_02/part_01.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "A file-mention candidate set larger than COMMAND_SUGGESTION_VISIBLE_LIMIT renders at most 8 rows at every selection position."
+          - "Navigation reaches candidates outside the initial window, scrolls the bounded window, and clamps selection safely when results shrink or disappear."
+          - "The test reuses the shared command-suggestion renderer and does not create a file-picker-specific preview or rendering path."
+      - id: "T011"
+        title: "Add built-in, repository, global, profile, and invalid-ignore coverage"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Generated and dependency content excluded by built-ins and repository ignore files never appears."
+          - "Valid global file_mentions.ignore and active-profile file_mentions_ignore patterns are additive rather than replacements."
+          - "An invalid custom pattern is skipped individually, discovery continues, and built-in exclusions remain effective."
+      - id: "T012"
+        title: "Close any proven picker lifecycle, bounds, or responsiveness gaps"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-tui/src/tui/app/state_ui_input_helpers.rs, crates/jcode-tui/src/tui/app/state_ui_input_helpers/file_mentions.rs, crates/jcode-tui/src/tui/ui_input.rs"
+        dependencies: ["T008", "T009", "T010", "T011"]
+        acceptance_criteria:
+          - "The existing background thread, mpsc channel, atomic cancellation token, generation identity, non-blocking polling, 32-entry batch size, 100-candidate projection, 5000-match cap, and 8-row renderer are preserved unless a focused failing test requires a surgical correction."
+          - "At least 95% of repeated typing, navigation, cancellation, and submission events during active discovery complete within 50 ms and no event waits for repository enumeration."
+          - "All new US-002 tests pass without introducing Tokio services, synchronous walking on the event path, unbounded state, or unrelated picker redesign."
+
+  - number: 5
+    title: "User Story 3 - Expand selected files safely"
+    purpose: "Preserve active-span replacement, repository containment, provider-only expansion, compact history, and lossless restoration."
+    story_reference: "US-003"
+    independent_test: "Select mentions at multiple input positions and submit valid and hostile file fixtures through direct and queued paths; inspect provider text, composer text, persisted history, and restored queue state for useful in-bound expansion and zero unintended disclosure."
+    tasks:
+      - id: "T013"
+        title: "Add active mention-span replacement regressions"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T012"]
+        acceptance_criteria:
+          - "Selections at the beginning, middle, and end replace only the active @ mention byte range."
+          - "Text before the @ and text after the cursor remain byte-for-byte identical, including Unicode and multiple-mention inputs."
+          - "Tab completion and repeated navigation do not submit the composer or mutate unrelated input."
+      - id: "T014"
+        title: "Add provider expansion containment, eligibility, and escaping safety matrix"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs"
+        dependencies: ["T013"]
+        acceptance_criteria:
+          - "A valid readable UTF-8 regular file beneath the authoritative canonical session root expands into safely delimited provider context."
+          - "Traversal, outside-root absolute paths, symlink escapes, missing files, unreadable files, directories, binary or invalid UTF-8 files, and oversized files disclose zero file bytes."
+          - "Ampersand, quote, less-than, greater-than, and closing file-tag text in paths or contents cannot escape the provider context boundary."
+      - id: "T015"
+        title: "Add compact persistence, remote dispatch, and submission restoration regressions"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs, crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/queued_file_mention_tests.rs"
+        dependencies: ["T014"]
+        acceptance_criteria:
+          - "Direct, queued, resumed or materialized, rewound, remote, and interleaved user-visible states retain compact @ mentions while provider-bound content receives expansion only at materialization or final submission."
+          - "Repeated provider materialization reuses the established safe projection without persisting expanded contents into session history."
+          - "If expansion makes the final submission exceed MAX_SUBMITTED_TEXT_BYTES, no oversized payload is sent and original mention text, surrounding text, attachments, reminders, and queue ordering are restored without loss."
+      - id: "T016"
+        title: "Close any proven provider projection or restoration safety gaps"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/input/file_mentions.rs, crates/jcode-tui/src/tui/app/conversation_state.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "Picker activation, persisted-message materialization, and final submit-time expansion consume the same resolved FileMentionsConfig.enabled value."
+          - "Canonical repository containment, readable-text eligibility, metadata and delimiter escaping, per-file limits, final submission limits, compact history, and restoration behavior satisfy the complete US-003 matrix."
+          - "No expanded file content enters editable composer state, queued user state, or persisted user-visible history."
+
+  - number: 6
+    title: "User Story 4 - Preserve feature separation"
+    purpose: "Demonstrate that default picker enablement remains independent from PR2 inline preview work."
+    story_reference: "US-004"
+    independent_test: "Review the final diff and dependency graph and verify no inline-preview rendering, state, link handling, sibling lookup, preview fixtures, desktop behavior, protocol changes, or preview-only dependencies were introduced."
+    tasks:
+      - id: "T017"
+        title: "Audit changed surfaces against the PR2 inline-preview exclusion boundary"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "specs/020-enable-file-picker/spec.yaml, specs/020-enable-file-picker/plan.yaml"
+        dependencies: ["T016"]
+        acceptance_criteria:
+          - "The changed-file list is limited to canonical file-mention config, generated template wording, existing picker or provider paths only when tests prove a gap, and focused tests."
+          - "No inline preview rendering, preview state, link hit-testing, sibling-repository lookup, preview fixtures, desktop surface, protocol schema, storage migration, or preview-only dependency change appears in the diff."
+          - "Every behavioral change maps to FR-001 through FR-013 and unrelated refactors are removed or split from this feature."
+
+  - number: 7
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Run focused, package, repository, artifact, and isolated runtime delivery gates against the newly built TUI."
+    tasks:
+      - id: "T018"
+        title: "Run exact file-mention, rendering, and dispatch regression tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-tui/src/tui/app/tests/file_mention_picker.rs, crates/jcode-tui/src/tui/app/tests/state_model_poke_02/part_01.rs, crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/queued_file_mention_tests.rs"
+        dependencies: ["T017"]
+        acceptance_criteria:
+          - "Exact FileMentionsConfig, generated-template, file_mention_picker, affected suggestion-rendering, and remote dispatch test filters pass."
+          - "The full relevant jcode-tui package check passes with no new warnings."
+          - "Rust tests and checks are run serially on the resource-constrained development machine."
+      - id: "T019"
+        title: "Run the coordinated TUI build and repository guardrails"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "scripts/check_guardrails.sh"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "A coordinated selfdev TUI build succeeds using selfdev build or build-reload rather than an uncoordinated release build."
+          - "scripts/check_guardrails.sh passes, or any unrelated pre-existing failure is reproduced and recorded separately with the feature checks still passing."
+          - "The final branch remains 020-enable-file-picker and the diff contains only ownership-focused feature changes and generated autospec artifacts."
+      - id: "T020"
+        title: "Validate isolated runtime behavior and autospec artifacts"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/020-enable-file-picker/tasks.yaml"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "The newly built target/selfdev/jcode binary is exercised on a private socket for absent-setting and explicit-disabled configurations, proving default picker availability and literal @ opt-out without measuring the shared daemon."
+          - "Runtime evidence confirms useful incremental suggestions, responsive cancellation, compact visible history, and safe provider projection for a representative in-bound file."
+          - "autospec artifact succeeds for spec.yaml, plan.yaml, and tasks.yaml, and final scope review still finds zero PR2 inline-preview behavior."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-002"]
+      blocks: ["US-004"]
+    - story_id: "US-004"
+      depends_on: ["US-003"]
+      blocks: []
+
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+
+parallel_execution:
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T003", "T005"]
+        rationale: "The config-type contract and generated-template contract are in separate crates and can be written concurrently after shared fixtures are ready."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T008", "T010"]
+        rationale: "Discovery batching tests and shared renderer-window tests modify different test files and exercise separate boundaries."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3]
+    description: "Setup, deterministic test foundations, and User Story 1 deliver the requested default-enabled picker with explicit opt-out."
+    validation: "Run the config default and deserialization matrix, generated-template regression, and isolated absent/true/false TUI activation tests; absent and true must be equivalent and false must start no discovery or provider expansion."
+  incremental_delivery:
+    - milestone: "Test Foundation Ready"
+      phases: [1, 2]
+      deliverable: "Reusable deterministic fixtures can observe configuration resolution, discovery generations, bounded batches, cancellation, timing, and provider projection."
+    - milestone: "MVP Complete"
+      phases: [1, 2, 3]
+      deliverable: "The @ file mention picker is enabled when configuration is omitted, explicit true remains compatible, explicit false remains authoritative, and the generated template documents opt-out."
+    - milestone: "Responsive Picker Contracts Locked"
+      phases: [1, 2, 3, 4]
+      deliverable: "Asynchronous 32-entry batching, generation cancellation, bounded 100-candidate and 8-row views, ignore composition, and latency budgets are covered."
+    - milestone: "Safety and Scope Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "Active-span replacement, provider containment and escaping, compact history, restoration, and PR2 separation are verified."
+    - milestone: "Delivery Validated"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Focused tests, package checks, coordinated build, guardrails, isolated runtime smoke, and autospec artifact validation pass."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-26T07:21:27Z"
+  artifact_type: "tasks"
