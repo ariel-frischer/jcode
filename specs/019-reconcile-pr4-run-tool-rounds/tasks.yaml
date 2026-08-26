@@ -1,0 +1,120 @@
+tasks:
+  branch: "agent/jcode-5hc-pr4-integration"
+  created: "2026-08-25"
+  spec_path: "specs/019-reconcile-pr4-run-tool-rounds/spec.yaml"
+  plan_path: "specs/019-reconcile-pr4-run-tool-rounds/plan.yaml"
+summary:
+  total_tasks: 10
+  total_phases: 5
+  estimated_complexity: "high"
+phases:
+  - number: 1
+    title: "Acceptance and TDD red phase"
+    purpose: "Document PR-vs-dev semantics and prove the missing behavior."
+    tasks:
+      - id: "T001"
+        title: "Complete PR4 behavior matrix"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        file_path: "specs/019-reconcile-pr4-run-tool-rounds/behavior-matrix.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Every PR4 behavior is Port, Preserve, or Reject with a direct check."
+      - id: "T002"
+        title: "Add failing controller tests for activation, source, reset, counting, and reason"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests fail because current dev has no max_tool_rounds policy or reason."
+      - id: "T003"
+        title: "Add failing capture and streaming tests proving stop before provider request 33"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        file_path: "crates/jcode-app-core/src/agent/tests"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Both tests fail by observing request 33 or missing reason."
+  - number: 2
+    title: "Controller implementation"
+    purpose: "Add the minimum shared policy and state behavior."
+    tasks:
+      - id: "T004"
+        title: "Implement implicit policy, per-turn counter, reset, accounting, and typed reason"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        file_path: "crates/jcode-app-core/src/agent/run_safety.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Controller tests pass and existing stop priority remains unchanged."
+  - number: 3
+    title: "Loop enforcement"
+    purpose: "Stop both execution modes at the same provider boundary."
+    tasks:
+      - id: "T005"
+        title: "Enforce and count rounds in capture loop"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        file_path: "crates/jcode-app-core/src/agent/turn_loops.rs"
+        dependencies: ["T003", "T004"]
+        acceptance_criteria:
+          - "Capture test stops before request 33."
+      - id: "T006"
+        title: "Enforce and count rounds in streaming loop"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        file_path: "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+        dependencies: ["T003", "T004"]
+        acceptance_criteria:
+          - "Streaming test stops before request 33."
+  - number: 4
+    title: "Output and documentation"
+    purpose: "Preserve structured contracts and improve human diagnostics."
+    tasks:
+      - id: "T007"
+        title: "Add failing plain/JSON/NDJSON channel and reason tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        file_path: "src/cli/commands_tests.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Tests require stderr plain output and parseable structured stdout."
+      - id: "T008"
+        title: "Implement output mapping and update run-safety documentation"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        file_path: "src/cli/commands/run_safety.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Output tests pass and docs distinguish rounds from tool steps."
+  - number: 5
+    title: "Validation and landing"
+    purpose: "Prove exact behavior and deliver safely."
+    tasks:
+      - id: "T009"
+        title: "Run exact-source focused tests, formatting, build, Clippy, guardrails, and runtime checks"
+        status: "Completed"
+        type: "validation"
+        parallel: false
+        file_path: "specs/019-reconcile-pr4-run-tool-rounds/behavior-matrix.md"
+        dependencies: ["T005", "T006", "T008"]
+        acceptance_criteria:
+          - "All matrix checks pass with JCODE_IN_DEV_CARGO=1 and isolated target directories."
+      - id: "T010"
+        title: "Fresh-base merge, push, install, reload, close jcode-5hc, and clean owned worktrees"
+        status: "Pending"
+        type: "delivery"
+        parallel: false
+        file_path: "specs/019-reconcile-pr4-run-tool-rounds/behavior-matrix.md"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Root remains clean on dev, current/shared runtime uses landed revision, Bead closes, and owned worktrees are removed."

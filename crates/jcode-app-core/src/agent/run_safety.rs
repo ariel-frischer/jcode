@@ -14,10 +14,13 @@ use crate::logging;
 use crate::message::{ContentBlock, Role, ToolCall};
 use crate::protocol::ServerEvent;
 
+const IMPLICIT_MAX_TOOL_ROUNDS: u64 = 32;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunSafetyBound {
     MaxTurns,
+    MaxToolRounds,
     MaxToolSteps,
     TokenBudget,
     Deadline,
@@ -27,6 +30,7 @@ impl RunSafetyBound {
     pub const fn name(self) -> &'static str {
         match self {
             Self::MaxTurns => "max_turns",
+            Self::MaxToolRounds => "max_tool_rounds",
             Self::MaxToolSteps => "max_tool_steps",
             Self::TokenBudget => "token_budget",
             Self::Deadline => "deadline",
@@ -65,6 +69,7 @@ pub struct RunSafetyCandidates {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectiveRunSafetyPolicy {
     pub max_turns: Option<NonZeroU64>,
+    pub max_tool_rounds: Option<NonZeroU64>,
     pub max_tool_steps: Option<NonZeroU64>,
     pub token_budget: Option<NonZeroU64>,
     pub deadline: Option<Instant>,
@@ -118,6 +123,7 @@ impl std::error::Error for RunSafetyError {}
 #[serde(rename_all = "snake_case")]
 pub enum RunStopReason {
     MaxTurnsExceeded,
+    MaxToolRoundsExceeded,
     MaxToolStepsExceeded,
     TokenBudgetExceeded,
     DeadlineExceeded,
@@ -127,6 +133,7 @@ impl RunStopReason {
     pub const fn bound(self) -> RunSafetyBound {
         match self {
             Self::MaxTurnsExceeded => RunSafetyBound::MaxTurns,
+            Self::MaxToolRoundsExceeded => RunSafetyBound::MaxToolRounds,
             Self::MaxToolStepsExceeded => RunSafetyBound::MaxToolSteps,
             Self::TokenBudgetExceeded => RunSafetyBound::TokenBudget,
             Self::DeadlineExceeded => RunSafetyBound::Deadline,
@@ -136,6 +143,7 @@ impl RunStopReason {
     pub const fn code(self) -> &'static str {
         match self {
             Self::MaxTurnsExceeded => "max_turns_exceeded",
+            Self::MaxToolRoundsExceeded => "max_tool_rounds_exceeded",
             Self::MaxToolStepsExceeded => "max_tool_steps_exceeded",
             Self::TokenBudgetExceeded => "token_budget_exceeded",
             Self::DeadlineExceeded => "deadline_exceeded",
@@ -145,6 +153,7 @@ impl RunStopReason {
     pub const fn label(self) -> &'static str {
         match self {
             Self::MaxTurnsExceeded => "maximum turns exceeded",
+            Self::MaxToolRoundsExceeded => "maximum tool rounds exceeded",
             Self::MaxToolStepsExceeded => "maximum tool steps exceeded",
             Self::TokenBudgetExceeded => "token budget exceeded",
             Self::DeadlineExceeded => "deadline exceeded",
@@ -156,11 +165,14 @@ impl RunStopReason {
 pub struct RunSafetyStopMetadata {
     pub bound: RunSafetyBound,
     pub source: RunSafetySource,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
 }
 
 fn source_value(config: &RunSafetyConfig, bound: RunSafetyBound) -> Option<&str> {
     match bound {
         RunSafetyBound::MaxTurns => config.max_turns.as_deref(),
+        RunSafetyBound::MaxToolRounds => None,
         RunSafetyBound::MaxToolSteps => config.max_tool_steps.as_deref(),
         RunSafetyBound::TokenBudget => config.token_budget.as_deref(),
         RunSafetyBound::Deadline => config.deadline.as_deref(),
@@ -252,6 +264,7 @@ pub fn resolve_run_safety(
         max_turns: max_turns
             .map(|value| parse_positive(RunSafetyBound::MaxTurns, max_turns_source, value))
             .transpose()?,
+        max_tool_rounds: max_turns.and_then(|_| NonZeroU64::new(IMPLICIT_MAX_TOOL_ROUNDS)),
         max_tool_steps: max_tool_steps
             .map(|value| parse_positive(RunSafetyBound::MaxToolSteps, max_tool_steps_source, value))
             .transpose()?,
@@ -296,6 +309,7 @@ fn usage_delta(
 pub struct RunSafetyController {
     policy: EffectiveRunSafetyPolicy,
     completed_turns: u64,
+    completed_tool_rounds: u64,
     tool_steps: u64,
     observed_usage: u64,
     stop_reason: Option<RunStopReason>,
@@ -306,6 +320,7 @@ impl RunSafetyController {
         Self {
             policy,
             completed_turns: 0,
+            completed_tool_rounds: 0,
             tool_steps: 0,
             observed_usage: 0,
             stop_reason: None,
@@ -324,6 +339,7 @@ impl RunSafetyController {
         let reason = self.stop_reason?;
         let source = match reason.bound() {
             RunSafetyBound::MaxTurns => self.policy.sources.max_turns,
+            RunSafetyBound::MaxToolRounds => self.policy.sources.max_turns,
             RunSafetyBound::MaxToolSteps => self.policy.sources.max_tool_steps,
             RunSafetyBound::TokenBudget => self.policy.sources.token_budget,
             RunSafetyBound::Deadline => self.policy.sources.deadline,
@@ -331,6 +347,8 @@ impl RunSafetyController {
         Some(RunSafetyStopMetadata {
             bound: reason.bound(),
             source,
+            limit: (reason == RunStopReason::MaxToolRoundsExceeded)
+                .then_some(IMPLICIT_MAX_TOOL_ROUNDS),
         })
     }
 
@@ -340,6 +358,10 @@ impl RunSafetyController {
 
     pub fn tool_steps(&self) -> u64 {
         self.tool_steps
+    }
+
+    pub fn completed_tool_rounds(&self) -> u64 {
+        self.completed_tool_rounds
     }
 
     pub fn observed_usage(&self) -> u64 {
@@ -379,6 +401,12 @@ impl RunSafetyController {
             .is_some_and(|limit| self.tool_steps >= limit.get())
         {
             self.select(RunStopReason::MaxToolStepsExceeded);
+        } else if self
+            .policy
+            .max_tool_rounds
+            .is_some_and(|limit| self.completed_tool_rounds >= limit.get())
+        {
+            self.select(RunStopReason::MaxToolRoundsExceeded);
         }
         self.stop_reason.is_some()
     }
@@ -406,6 +434,13 @@ impl RunSafetyController {
         self.stop_reason.is_none()
     }
 
+    /// Record one fully processed provider response that contained tool calls.
+    pub fn complete_tool_round(&mut self) {
+        if self.stop_reason.is_none() {
+            self.completed_tool_rounds = self.completed_tool_rounds.saturating_add(1);
+        }
+    }
+
     pub fn complete_turn(&mut self) {
         self.completed_turns = self.completed_turns.saturating_add(1);
         if self.stop_reason.is_none()
@@ -419,6 +454,7 @@ impl RunSafetyController {
     }
 
     pub fn before_turn(&mut self, current_usage: crate::protocol::TokenUsageTotals) -> bool {
+        self.completed_tool_rounds = 0;
         if self.observe(current_usage) {
             return false;
         }
@@ -436,6 +472,23 @@ impl RunSafetyController {
 pub(crate) const RUN_SAFETY_SKIPPED_TOOL_RESULT: &str = "[Skipped: run safety bound reached]";
 
 impl crate::agent::Agent {
+    pub(crate) fn run_safety_complete_tool_round(&mut self) {
+        if let Some(state) = self.run_safety.as_mut() {
+            state.complete_tool_round();
+        }
+    }
+
+    pub(crate) fn run_safety_complete_tool_round_and_observe_usage(&mut self) -> bool {
+        self.run_safety_complete_tool_round();
+        self.run_safety_observe_usage()
+    }
+
+    pub(crate) fn run_safety_complete_tool_round_if(&mut self, completed: bool) {
+        if completed {
+            self.run_safety_complete_tool_round();
+        }
+    }
+
     pub(super) fn record_run_safety_skipped_tool_result(&mut self, tool_call: &ToolCall) {
         self.add_message(
             Role::User,
@@ -586,6 +639,7 @@ mod tests {
 
         let policy = EffectiveRunSafetyPolicy {
             max_turns: NonZeroU64::new(1),
+            max_tool_rounds: None,
             max_tool_steps: NonZeroU64::new(1),
             token_budget: NonZeroU64::new(1),
             deadline: Some(Instant::now()),
@@ -598,5 +652,76 @@ mod tests {
             controller.stop_reason(),
             Some(RunStopReason::DeadlineExceeded)
         );
+    }
+
+    #[test]
+    fn max_turns_enables_and_resets_the_implicit_tool_round_bound() {
+        let candidates = RunSafetyCandidates {
+            invocation: RunSafetyConfig {
+                max_turns: Some("2".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let policy = resolve_run_safety(&candidates, Default::default()).unwrap();
+        assert_eq!(policy.max_tool_rounds.map(NonZeroU64::get), Some(32));
+
+        let mut controller = RunSafetyController::new(policy);
+        assert!(controller.before_turn(Default::default()));
+        for _ in 0..32 {
+            assert!(!controller.observe(Default::default()));
+            controller.complete_tool_round();
+        }
+        assert!(controller.observe(Default::default()));
+        assert_eq!(
+            controller.stop_reason(),
+            Some(RunStopReason::MaxToolRoundsExceeded)
+        );
+        assert_eq!(
+            controller.stop_metadata(),
+            Some(RunSafetyStopMetadata {
+                bound: RunSafetyBound::MaxToolRounds,
+                source: RunSafetySource::Invocation,
+                limit: Some(32),
+            })
+        );
+
+        let reset_policy = resolve_run_safety(&candidates, Default::default()).unwrap();
+        let mut reset_controller = RunSafetyController::new(reset_policy);
+        assert!(reset_controller.before_turn(Default::default()));
+        reset_controller.complete_tool_round();
+        assert_eq!(reset_controller.completed_tool_rounds(), 1);
+        assert!(reset_controller.before_turn(Default::default()));
+        assert_eq!(reset_controller.completed_tool_rounds(), 0);
+
+        let unset_policy =
+            resolve_run_safety(&RunSafetyCandidates::default(), Default::default()).unwrap();
+        assert!(unset_policy.max_tool_rounds.is_none());
+    }
+
+    #[test]
+    fn implicit_tool_round_bound_inherits_every_effective_max_turns_source() {
+        for source in [
+            RunSafetySource::Invocation,
+            RunSafetySource::Environment,
+            RunSafetySource::Persisted,
+        ] {
+            let mut candidates = RunSafetyCandidates::default();
+            let config = match source {
+                RunSafetySource::Invocation => &mut candidates.invocation,
+                RunSafetySource::Environment => &mut candidates.environment,
+                RunSafetySource::Persisted => &mut candidates.persisted,
+                RunSafetySource::Unset => unreachable!(),
+            };
+            config.max_turns = Some("1".to_string());
+            let policy = resolve_run_safety(&candidates, Default::default()).unwrap();
+            let mut controller = RunSafetyController::new(policy);
+            assert!(controller.before_turn(Default::default()));
+            for _ in 0..32 {
+                controller.complete_tool_round();
+            }
+            assert!(controller.observe(Default::default()));
+            assert_eq!(controller.stop_metadata().unwrap().source, source);
+        }
     }
 }

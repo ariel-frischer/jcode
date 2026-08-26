@@ -14,6 +14,7 @@ async fn agent_safety_state_is_opt_in_and_non_persisted() {
 
     let policy = crate::agent::run_safety::EffectiveRunSafetyPolicy {
         max_turns: std::num::NonZeroU64::new(1),
+        max_tool_rounds: std::num::NonZeroU64::new(32),
         max_tool_steps: None,
         token_budget: None,
         deadline: None,
@@ -39,6 +40,7 @@ async fn capture_and_streaming_paths_stop_before_next_turn_when_bound_is_reached
     let mut capture_agent = Agent::new(provider.clone(), registry.clone());
     let policy = crate::agent::run_safety::EffectiveRunSafetyPolicy {
         max_turns: std::num::NonZeroU64::new(1),
+        max_tool_rounds: std::num::NonZeroU64::new(32),
         max_tool_steps: None,
         token_budget: None,
         deadline: None,
@@ -200,16 +202,80 @@ impl Provider for UsageAndToolProvider {
     }
 }
 
+struct RepeatingToolProvider {
+    requests: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Provider for RepeatingToolProvider {
+    async fn complete(
+        &self,
+        _messages: &[Message],
+        _tools: &[ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> Result<EventStream> {
+        let request = self.requests.fetch_add(1, Ordering::SeqCst) + 1;
+        let (tx, rx) = tokio_mpsc::channel::<Result<StreamEvent>>(8);
+        tokio::spawn(async move {
+            let _ = tx
+                .send(Ok(StreamEvent::ToolUseStart {
+                    id: format!("round-{request}"),
+                    name: "counting_tool".to_string(),
+                }))
+                .await;
+            let _ = tx
+                .send(Ok(StreamEvent::ToolInputDelta(
+                    r#"{"intent":"continue"}"#.to_string(),
+                )))
+                .await;
+            let _ = tx.send(Ok(StreamEvent::ToolUseEnd)).await;
+            let _ = tx
+                .send(Ok(StreamEvent::MessageEnd {
+                    stop_reason: Some("tool_use".to_string()),
+                }))
+                .await;
+        });
+        Ok(Box::pin(ReceiverStream::new(rx)))
+    }
+
+    fn name(&self) -> &str {
+        "repeating-tool"
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(Self {
+            requests: self.requests.clone(),
+        })
+    }
+}
+
 fn safety_test_policy(
     max_tool_steps: Option<std::num::NonZeroU64>,
     token_budget: Option<std::num::NonZeroU64>,
 ) -> crate::agent::run_safety::EffectiveRunSafetyPolicy {
     crate::agent::run_safety::EffectiveRunSafetyPolicy {
         max_turns: None,
+        max_tool_rounds: None,
         max_tool_steps,
         token_budget,
         deadline: None,
         sources: Default::default(),
+        usage_baseline: Default::default(),
+    }
+}
+
+fn tool_round_test_policy() -> crate::agent::run_safety::EffectiveRunSafetyPolicy {
+    crate::agent::run_safety::EffectiveRunSafetyPolicy {
+        max_turns: std::num::NonZeroU64::new(1),
+        max_tool_rounds: std::num::NonZeroU64::new(32),
+        max_tool_steps: None,
+        token_budget: None,
+        deadline: None,
+        sources: crate::agent::run_safety::RunSafetySources {
+            max_turns: crate::agent::run_safety::RunSafetySource::Invocation,
+            ..Default::default()
+        },
         usage_baseline: Default::default(),
     }
 }
@@ -242,9 +308,9 @@ async fn capture_tool_step_bound_stops_before_next_provider_request_and_repairs_
         )
         .await;
     let mut agent = Agent::new(provider, registry);
-    agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(
-        safety_test_policy(std::num::NonZeroU64::new(1), None),
-    ));
+    let mut policy = tool_round_test_policy();
+    policy.max_tool_steps = std::num::NonZeroU64::new(1);
+    agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(policy));
 
     agent
         .run_once_capture("execute the tools")
@@ -318,5 +384,87 @@ async fn streaming_token_budget_stops_before_local_tool_execution() {
     assert_eq!(
         agent.run_safety_stop_reason(),
         Some(crate::agent::run_safety::RunStopReason::TokenBudgetExceeded)
+    );
+}
+
+async fn tool_round_test_agent(requests: Arc<AtomicUsize>, executions: Arc<AtomicUsize>) -> Agent {
+    let provider: Arc<dyn Provider> = Arc::new(RepeatingToolProvider { requests });
+    let registry = Registry::new(provider.clone()).await;
+    registry
+        .register(
+            "counting_tool".to_string(),
+            Arc::new(CountingTool { calls: executions }),
+        )
+        .await;
+    let mut agent = Agent::new(provider, registry);
+    agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(
+        tool_round_test_policy(),
+    ));
+    agent
+}
+
+#[tokio::test]
+async fn capture_tool_round_bound_stops_before_provider_request_33() {
+    let requests = Arc::new(AtomicUsize::new(0));
+    let executions = Arc::new(AtomicUsize::new(0));
+    let mut agent = tool_round_test_agent(requests.clone(), executions.clone()).await;
+
+    agent
+        .run_once_capture("keep using tools")
+        .await
+        .expect("bounded capture run should complete");
+
+    assert_eq!(requests.load(Ordering::SeqCst), 32);
+    assert_eq!(executions.load(Ordering::SeqCst), 32);
+    assert_eq!(
+        agent.run_safety_stop_reason(),
+        Some(crate::agent::run_safety::RunStopReason::MaxToolRoundsExceeded)
+    );
+}
+
+#[tokio::test]
+async fn streaming_tool_round_bound_stops_before_provider_request_33() {
+    let requests = Arc::new(AtomicUsize::new(0));
+    let executions = Arc::new(AtomicUsize::new(0));
+    let mut agent = tool_round_test_agent(requests.clone(), executions.clone()).await;
+    let (tx, mut rx) = tokio_mpsc::unbounded_channel();
+
+    agent
+        .run_once_streaming_mpsc("keep using tools", Vec::new(), None, tx)
+        .await
+        .expect("bounded streaming run should complete");
+    while rx.try_recv().is_ok() {}
+
+    assert_eq!(requests.load(Ordering::SeqCst), 32);
+    assert_eq!(executions.load(Ordering::SeqCst), 32);
+    assert_eq!(
+        agent.run_safety_stop_reason(),
+        Some(crate::agent::run_safety::RunStopReason::MaxToolRoundsExceeded)
+    );
+}
+
+#[tokio::test]
+async fn text_only_completion_does_not_consume_a_tool_round() {
+    let provider: Arc<dyn Provider> = Arc::new(DelayedProvider {
+        open_delay: Duration::ZERO,
+        first_event_delay: Duration::ZERO,
+    });
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = Agent::new(provider, registry);
+    agent.install_run_safety(crate::agent::run_safety::RunSafetyController::new(
+        tool_round_test_policy(),
+    ));
+
+    agent
+        .run_once_capture("return text")
+        .await
+        .expect("text-only capture should complete");
+
+    assert_eq!(
+        agent
+            .run_safety_controller()
+            .expect("controller installed")
+            .completed_tool_rounds(),
+        0
     );
 }

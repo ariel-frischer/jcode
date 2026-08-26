@@ -1,4 +1,108 @@
+use super::{Arc, Provider, Registry, SavedEnv, TestProvider};
 use crate::cli::commands::run_safety::{RunCommandReport, reject_schema};
+
+const PROCESS_CHILD_ENV: &str = "JCODE_RUN_SAFETY_PROCESS_CHILD";
+
+#[tokio::test]
+async fn run_safety_process_child() {
+    let Ok(mode) = std::env::var(PROCESS_CHILD_ENV) else {
+        return;
+    };
+
+    let _guard = crate::storage::lock_test_env();
+    let _saved = SavedEnv::capture(&["JCODE_HOME", "JCODE_RUN_AUTO_POKE"]);
+    let temp = tempfile::tempdir().expect("tempdir");
+    crate::env::set_var("JCODE_HOME", temp.path());
+    crate::env::set_var("JCODE_RUN_AUTO_POKE", "0");
+    let provider: Arc<dyn Provider> = Arc::new(TestProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation: crate::config::RunSafetyConfig {
+            max_turns: Some("1".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    crate::cli::commands::run_safety::install(&mut agent, candidates).expect("install run safety");
+
+    let (emit_json, emit_ndjson) = match mode.as_str() {
+        "plain" => (false, false),
+        "json" => (true, false),
+        "ndjson" => (false, true),
+        other => panic!("unknown process child mode: {other}"),
+    };
+    crate::cli::commands::run_single_message_with_agent(
+        &mut agent,
+        provider,
+        "Return the test response.",
+        emit_json,
+        emit_ndjson,
+    )
+    .await
+    .expect("bounded child run");
+}
+
+fn process_output(mode: &str) -> std::process::Output {
+    std::process::Command::new(std::env::current_exe().expect("current test executable"))
+        .args(["run_safety_process_child", "--nocapture"])
+        .env(PROCESS_CHILD_ENV, mode)
+        .output()
+        .unwrap_or_else(|error| panic!("spawn {mode} process child: {error}"))
+}
+
+fn json_objects(output: &str) -> Vec<serde_json::Value> {
+    output
+        .lines()
+        .filter_map(|line| line.find('{').map(|start| &line[start..]))
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect()
+}
+
+fn first_json_object(output: &str) -> serde_json::Value {
+    let start = output.find('{').expect("JSON object start");
+    let end = output[start..]
+        .find("\n}")
+        .map(|offset| start + offset + 2)
+        .expect("JSON object end");
+    serde_json::from_str(&output[start..end]).expect("valid JSON report")
+}
+
+#[test]
+fn bounded_run_output_channels_and_exit_status_match_the_contract() {
+    let stop_message = "Run stopped: maximum turns exceeded (max_turns_exceeded)";
+    let plain = process_output("plain");
+    assert!(plain.status.success(), "plain status: {:?}", plain.status);
+    let plain_stdout = String::from_utf8(plain.stdout).expect("plain stdout");
+    let plain_stderr = String::from_utf8(plain.stderr).expect("plain stderr");
+    assert!(
+        plain_stderr.contains(stop_message),
+        "stderr: {plain_stderr:?}"
+    );
+    assert!(
+        !plain_stdout.contains(stop_message),
+        "stdout: {plain_stdout:?}"
+    );
+
+    let json = process_output("json");
+    assert!(json.status.success(), "JSON status: {:?}", json.status);
+    let json_stdout = String::from_utf8(json.stdout).expect("JSON stdout");
+    let report = first_json_object(&json_stdout);
+    assert_eq!(report["stop_reason"], "max_turns_exceeded");
+    assert_eq!(report["outcome"], "bounded_stop");
+
+    let ndjson = process_output("ndjson");
+    assert!(
+        ndjson.status.success(),
+        "NDJSON status: {:?}",
+        ndjson.status
+    );
+    let values = json_objects(&String::from_utf8(ndjson.stdout).expect("NDJSON stdout"));
+    let done = values.last().expect("NDJSON done event");
+    assert_eq!(done["type"], "done");
+    assert_eq!(done["stop_reason"], "max_turns_exceeded");
+    assert_eq!(done["outcome"], "bounded_stop");
+}
 
 #[test]
 fn legacy_unset_run_report_omits_bounded_stop_fields() {
@@ -90,6 +194,7 @@ fn bounded_json_report_includes_canonical_reason_and_effective_source() {
     let metadata = crate::agent::run_safety::RunSafetyStopMetadata {
         bound: crate::agent::run_safety::RunSafetyBound::TokenBudget,
         source: crate::agent::run_safety::RunSafetySource::Environment,
+        limit: None,
     };
     let report = RunCommandReport {
         session_id: "session".to_string(),
@@ -120,6 +225,12 @@ fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
             "max_turns",
         ),
         (
+            crate::agent::run_safety::RunStopReason::MaxToolRoundsExceeded,
+            "max_tool_rounds_exceeded",
+            "maximum tool rounds exceeded",
+            "max_tool_rounds",
+        ),
+        (
             crate::agent::run_safety::RunStopReason::MaxToolStepsExceeded,
             "max_tool_steps_exceeded",
             "maximum tool steps exceeded",
@@ -146,6 +257,8 @@ fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
         let metadata = crate::agent::run_safety::RunSafetyStopMetadata {
             bound: reason.bound(),
             source: crate::agent::run_safety::RunSafetySource::Invocation,
+            limit: (reason == crate::agent::run_safety::RunStopReason::MaxToolRoundsExceeded)
+                .then_some(32),
         };
         let encoded = serde_json::to_value(metadata).expect("metadata should serialize");
         assert_eq!(encoded["bound"], bound);
@@ -153,8 +266,53 @@ fn bounded_stop_reasons_keep_stable_codes_labels_and_bound_metadata() {
             encoded["source"],
             serde_json::Value::String("invocation".to_string())
         );
+        if reason == crate::agent::run_safety::RunStopReason::MaxToolRoundsExceeded {
+            assert_eq!(encoded["limit"], 32);
+        } else {
+            assert!(encoded.get("limit").is_none());
+        }
         assert!(format!("Run stopped: {label} ({code})").contains(label));
     }
+}
+
+#[tokio::test]
+async fn tool_round_stop_maps_through_json_and_ndjson_reports() {
+    let provider: Arc<dyn Provider> = Arc::new(TestProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
+    let candidates = crate::agent::run_safety::RunSafetyCandidates {
+        invocation: crate::config::RunSafetyConfig {
+            max_turns: Some("1".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let policy = crate::agent::run_safety::resolve_run_safety(&candidates, Default::default())
+        .expect("resolve run safety");
+    let mut controller = crate::agent::run_safety::RunSafetyController::new(policy);
+    assert!(controller.before_turn(Default::default()));
+    for _ in 0..32 {
+        controller.complete_tool_round();
+    }
+    assert!(controller.observe(Default::default()));
+    agent.install_run_safety(controller);
+
+    let report = crate::cli::commands::run_safety::report(&agent, &provider, String::new());
+    let encoded = serde_json::to_value(report).expect("JSON report");
+    assert_eq!(encoded["stop_reason"], "max_tool_rounds_exceeded");
+    assert_eq!(encoded["safety_bound"]["bound"], "max_tool_rounds");
+    assert_eq!(encoded["safety_bound"]["source"], "invocation");
+    assert_eq!(encoded["safety_bound"]["limit"], 32);
+
+    let done = crate::cli::commands::run_safety::annotate_ndjson_done(
+        &agent,
+        serde_json::json!({"type": "done"}),
+    )
+    .expect("NDJSON done report");
+    assert_eq!(done["stop_reason"], "max_tool_rounds_exceeded");
+    assert_eq!(done["safety_bound"]["bound"], "max_tool_rounds");
+    assert_eq!(done["safety_bound"]["source"], "invocation");
+    assert_eq!(done["safety_bound"]["limit"], 32);
 }
 
 #[test]

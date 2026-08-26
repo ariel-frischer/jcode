@@ -1,0 +1,88 @@
+plan:
+  branch: "agent/jcode-5hc-pr4-integration"
+  created: "2026-08-25"
+  spec_path: "specs/019-reconcile-pr4-run-tool-rounds/spec.yaml"
+
+summary: |
+  Preserve current dev as authoritative and port only PR 4's missing safety
+  property: max_turns also bounds provider/tool rounds inside one turn. Extend
+  the existing RunSafetyPolicy and RunSafetyController with an internal fixed
+  per-turn limit of 32 whenever effective max_turns is present. Reset the round
+  counter at turn start, check it at both provider-loop heads before another
+  request, and increment only after a tool-bearing provider response is fully
+  processed. Keep the explicit invocation-global Registry max_tool_steps bound
+  separate. Reuse typed stop reporting, move plain bounded-stop diagnostics to
+  stderr, and keep JSON/NDJSON stdout valid.
+
+technical_context:
+  language: "Rust 2024 edition"
+  primary_owners:
+    - "crates/jcode-app-core/src/agent/run_safety.rs"
+    - "crates/jcode-app-core/src/agent/turn_loops.rs"
+    - "crates/jcode-app-core/src/agent/turn_streaming_mpsc.rs"
+    - "src/cli/commands/run_safety.rs"
+  tests:
+    approach: "TDD with focused controller/loop/output tests, exact worktree target, then affected build and guardrails."
+  constraints:
+    - "Dev run-safety architecture, precedence, harness, and protocol remain canonical."
+    - "The implicit value is 32 and is enabled only by effective max_turns."
+    - "A round means one fully processed provider response containing tool calls, not one Registry execution."
+    - "The stop occurs before the next provider request and first stop wins."
+    - "Plain output uses stderr; JSON/NDJSON stdout remains machine-parseable."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical scope"
+      status: "PASS"
+      notes: "Extends existing run-safety owners and avoids PR-only parallel paths."
+    - name: "Backward compatibility"
+      status: "PASS"
+      notes: "Unset max_turns retains existing behavior; structured fields are additive through the shared reason type."
+    - name: "Explicit precedence"
+      status: "PASS"
+      notes: "The implicit bound inherits the already-resolved effective max_turns source."
+    - name: "Layered Rust ownership"
+      status: "PASS"
+      notes: "Controller state remains in app-core and presentation remains in CLI."
+    - name: "Focused behavioral tests"
+      status: "PASS"
+      notes: "Capture, streaming, reset, priority, source, output channel, and unset cases have direct checks."
+    - name: "Visible failures"
+      status: "PASS"
+      notes: "Stable typed reasons are retained and plain diagnostics move to stderr."
+    - name: "Delivery guardrails"
+      status: "PASS"
+      notes: "Exact-source focused tests, build, format, Clippy, guardrails, install, and reload are required."
+
+research_findings:
+  decisions:
+    - topic: "Meaning of a tool round"
+      decision: "Count one completed provider response that contains tool calls."
+      rationale: "This directly bounds provider/tool recursion while remaining distinct from Registry execution count."
+    - topic: "Activation"
+      decision: "Enable a fixed 32-round limit whenever effective max_turns is present, inheriting its source metadata."
+      rationale: "Matches PR 4's safety intent without adding another configuration surface or weakening current precedence."
+    - topic: "Enforcement boundary"
+      decision: "Check before provider requests in capture and streaming loops."
+      rationale: "Prevents the prohibited request rather than stopping after extra provider work starts."
+    - topic: "Output"
+      decision: "Add a typed MaxToolRoundsExceeded reason and use existing structured reports; write plain stop diagnostics to stderr."
+      rationale: "Keeps machine-readable stdout clean and avoids a parallel reporting contract."
+
+phases:
+  - number: 1
+    name: "Acceptance and failing tests"
+    goal: "Freeze semantics and prove current dev lacks the per-turn bound."
+  - number: 2
+    name: "Controller implementation"
+    goal: "Add minimal policy, state, and typed reason behavior to pass controller tests."
+  - number: 3
+    name: "Loop enforcement"
+    goal: "Apply identical pre-request checks and completed-round accounting to capture and streaming paths."
+  - number: 4
+    name: "Output and documentation"
+    goal: "Keep structured output compatible, route plain diagnostics to stderr, and document distinctions."
+  - number: 5
+    name: "Validation and landing"
+    goal: "Run exact-source checks, fresh-base integration, install, reload, close, and clean up."

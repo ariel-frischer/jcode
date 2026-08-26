@@ -34,22 +34,33 @@ lower source.
 
 ## Accounting and enforcement
 
-`max_turns` counts completed top-level turns, including auto-poke follow-ups.
-`max_tool_steps` counts jcode Registry executions immediately before they
-start; provider-internal tools are not controllable Registry work. The token
+`max_turns` counts completed top-level turns, including auto-poke follow-ups. An
+effective `max_turns` value also enables a fixed limit of 32 completed
+provider/tool rounds inside each turn. A round is one fully processed provider
+response containing tool calls. The count advances only after those tool calls
+have been handled and resets before the next top-level turn. Jcode stops before
+provider request 33. The implicit bound inherits the effective `max_turns`
+source, is not separately configurable, and is disabled when `max_turns` is
+unset.
+
+`max_tool_steps` is separate: it counts jcode Registry executions immediately
+before they start across the entire invocation. Multiple tool calls in one
+provider response consume one provider/tool round but may consume several tool
+steps. Provider-internal tools are not controllable Registry work. The token
 budget is the current invocation's delta of native input, output, cache-read,
-and cache-creation usage, with saturating arithmetic. Resumed-session history
-is the baseline and is not charged to the new run.
+and cache-creation usage, with saturating arithmetic. Resumed-session history is
+the baseline and is not charged to the new run.
 
 The deadline is converted once to a monotonic instant and observed before
 provider requests, between stream events, before Registry calls, and after
 active tools. When multiple bounds are reached at one checkpoint, the primary
-reason is selected in this order: deadline, token budget, tool steps, turns.
+reason is selected in this order: deadline, token budget, tool steps, tool
+rounds, turns.
 
 ## Results
 
-Plain output prints a stable bounded-stop label. JSON and NDJSON add fields only
-when a bound stops the run:
+Plain output prints a stable bounded-stop label to stderr. JSON and NDJSON keep
+stdout machine-parseable and add fields only when a bound stops the run:
 
 ```json
 {
@@ -63,7 +74,9 @@ when a bound stops the run:
 }
 ```
 
-Canonical codes are `max_turns_exceeded`, `max_tool_steps_exceeded`,
+The per-turn stop uses `max_tool_rounds_exceeded` and reports
+`{"bound":"max_tool_rounds","source":"<max_turns source>","limit":32}`.
+The other canonical codes are `max_turns_exceeded`, `max_tool_steps_exceeded`,
 `token_budget_exceeded`, and `deadline_exceeded`. The `safety_bound` object names
 the effective bound and its winning source (`invocation`, `environment`, or
 `persisted`). Ordinary completion, provider errors, and cancellation remain

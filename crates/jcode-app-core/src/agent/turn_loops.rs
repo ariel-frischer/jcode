@@ -1003,11 +1003,11 @@ impl Agent {
                 "Turn has {} tool calls to execute",
                 tool_calls.len()
             ));
-
             // If provider handles tools internally (like Claude Code CLI), only run native tools locally
             if self.provider.handles_tools_internally() {
                 tool_calls.retain(|tc| JCODE_NATIVE_TOOLS.contains(&tc.name.as_str()));
                 if tool_calls.is_empty() {
+                    self.run_safety_complete_tool_round();
                     if !generated_image_contexts.is_empty() {
                         for blocks in generated_image_contexts.drain(..) {
                             self.add_message(Role::User, blocks);
@@ -1263,7 +1263,7 @@ impl Agent {
                 self.session.save()?;
             }
 
-            if self.run_safety_observe_usage() {
+            if self.run_safety_complete_tool_round_and_observe_usage() {
                 break;
             }
 
