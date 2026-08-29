@@ -1293,19 +1293,28 @@ fn detect_starved_queued_followup(app: &mut App) -> bool {
 /// model reasons silently, no real progress events cross the socket, so a
 /// hardcoded short watchdog cannot distinguish a dead connection from a healthy
 /// long think (issue #434). Derive it from `[provider]
-/// stream_idle_timeout_secs`, scaled by the active reasoning effort, plus grace
-/// so the server-side idle timeout (which produces a visible error event) can
-/// fire first. Never below 2 minutes.
-fn stall_timeout_for_effort(effort: Option<&str>) -> Duration {
+/// stream_idle_timeout_secs`, the active provider transport, and reasoning
+/// effort, plus grace so the server-side timeout (which produces a visible error
+/// event) can fire first. Never below 2 minutes.
+fn stall_timeout_for_provider_effort(provider: Option<&str>, effort: Option<&str>) -> Duration {
     const MIN_STALL_TIMEOUT: Duration = Duration::from_secs(2 * 60);
     const GRACE: Duration = Duration::from_secs(30);
-    let provider_idle = crate::provider::stream_idle_timeout_for_effort(effort);
+    let provider_idle = crate::provider::stream_watchdog_timeout_for_provider(provider, effort);
     provider_idle.saturating_add(GRACE).max(MIN_STALL_TIMEOUT)
 }
 
 fn stall_timeout(app: &App) -> Duration {
-    let effort = app.remote_reasoning_effort_hint();
-    stall_timeout_for_effort(effort.as_deref())
+    let effort = if app.current_message_id.is_none() {
+        // Scheduled tasks, background-task wakes, swarm delivery, and another
+        // attached client can start a turn without exposing the request's exact
+        // effort to this TUI. Budget against the supported ceiling rather than a
+        // stale/default session hint, or the client can cancel a legitimate
+        // high-effort request before the server/provider does.
+        Some("max".to_string())
+    } else {
+        app.remote_reasoning_effort_hint()
+    };
+    stall_timeout_for_provider_effort(app.remote_provider_name.as_deref(), effort.as_deref())
 }
 
 /// Human-readable stall duration for user-facing stall messages, e.g.
@@ -1788,7 +1797,7 @@ mod stall_guard_tests {
     fn stall_timeout_never_below_two_minutes() {
         // Even with the default 180s provider idle timeout, the client stall
         // guard must give the server-side timeout room to fire first.
-        let timeout = stall_timeout_for_effort(Some("max"));
+        let timeout = stall_timeout_for_provider_effort(None, Some("max"));
         assert!(
             timeout >= Duration::from_secs(2 * 60),
             "stall timeout regressed below 2 minutes: {timeout:?}"
@@ -1807,17 +1816,52 @@ mod stall_guard_tests {
     fn stall_timeout_uses_the_active_reasoning_effort() {
         let base = crate::provider::stream_idle_timeout();
         assert_eq!(
-            stall_timeout_for_effort(Some("low")),
+            stall_timeout_for_provider_effort(None, Some("low")),
             base.saturating_add(Duration::from_secs(30))
                 .max(Duration::from_secs(2 * 60))
         );
         assert_eq!(
-            stall_timeout_for_effort(Some("xhigh")),
+            stall_timeout_for_provider_effort(None, Some("xhigh")),
             (base * 3)
                 .saturating_add(Duration::from_secs(30))
                 .max(Duration::from_secs(2 * 60))
         );
-        assert!(stall_timeout_for_effort(Some("low")) < stall_timeout_for_effort(Some("xhigh")));
+        assert!(
+            stall_timeout_for_provider_effort(None, Some("low"))
+                < stall_timeout_for_provider_effort(None, Some("xhigh"))
+        );
+    }
+
+    #[test]
+    fn openai_stall_timeout_outlasts_the_persistent_websocket_budget() {
+        let provider_budget =
+            crate::provider::stream_watchdog_timeout_for_provider(Some("OpenAI"), Some("medium"));
+        let timeout = stall_timeout_for_provider_effort(Some("OpenAI"), Some("medium"));
+
+        assert!(timeout > provider_budget);
+        assert!(
+            provider_budget >= Duration::from_secs(300),
+            "OpenAI watchdog budget {provider_budget:?} must cover its websocket transport"
+        );
+    }
+
+    #[test]
+    fn externally_started_turn_uses_the_unknown_effort_ceiling() {
+        let mut app = App::new_for_remote(None);
+        app.remote_provider_name = Some("OpenAI".to_string());
+        app.remote_reasoning_effort = Some("low".to_string());
+        app.current_message_id = None;
+
+        assert_eq!(
+            stall_timeout(&app),
+            stall_timeout_for_provider_effort(Some("OpenAI"), Some("max"))
+        );
+
+        app.current_message_id = Some(7);
+        assert_eq!(
+            stall_timeout(&app),
+            stall_timeout_for_provider_effort(Some("OpenAI"), Some("low"))
+        );
     }
 
     #[test]

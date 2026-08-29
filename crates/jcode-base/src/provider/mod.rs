@@ -118,6 +118,7 @@ pub fn active_provider_fork() -> Option<Arc<dyn Provider>> {
 pub use stream_timeout::{
     MAX_STREAM_IDLE_TIMEOUT_MULTIPLIER, max_stream_idle_timeout, stream_idle_timeout,
     stream_idle_timeout_for_effort, stream_idle_timeout_multiplier_for_effort,
+    stream_watchdog_timeout_for_provider,
 };
 
 /// Whether reasoning deltas should be persisted in session history for later
