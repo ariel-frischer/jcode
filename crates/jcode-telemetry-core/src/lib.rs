@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 const BLOCKING_INSTALL_TIMEOUT: Duration = Duration::from_millis(1200);
 const BLOCKING_LIFECYCLE_TIMEOUT: Duration = Duration::from_millis(800);
+const BLOCKING_FIRST_PROMPT_TIMEOUT: Duration = Duration::from_millis(500);
 const TELEMETRY_SCHEMA_VERSION: u32 = 6;
 const DEFAULT_DISCOVERY_ENDPOINT: &str = "https://api.jcode.sh/v1/discovery";
 #[cfg(test)]
@@ -470,7 +471,15 @@ fn opt_out_marker_path() -> Option<std::path::PathBuf> {
 /// persisted marker. Env opt-outs win, so UI should present themselves as
 /// read-only in that case.
 pub fn opt_out_forced_by_env() -> bool {
-    std::env::var("JCODE_NO_TELEMETRY").is_ok() || std::env::var("DO_NOT_TRACK").is_ok()
+    fn is_truthy(name: &str) -> bool {
+        std::env::var(name).is_ok_and(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "" | "0" | "false" | "no" | "off"
+            )
+        })
+    }
+    is_truthy("JCODE_NO_TELEMETRY") || is_truthy("DO_NOT_TRACK")
 }
 
 /// Persist the user's anonymous-usage telemetry choice. `enabled == false`
@@ -490,6 +499,12 @@ pub fn set_usage_telemetry_enabled(enabled: bool) -> bool {
             }
         }
     } else {
+        // Record the explicit in-app choice once, while telemetry is still
+        // enabled. Failure never prevents or delays the opt-out itself, and
+        // environment-forced opt-outs remain completely silent.
+        if !path.exists() && !opt_out_forced_by_env() {
+            emit_telemetry_opt_out();
+        }
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -504,6 +519,31 @@ pub fn set_usage_telemetry_enabled(enabled: bool) -> bool {
             }
         }
     }
+}
+
+fn emit_telemetry_opt_out() {
+    let Some(id) = get_or_create_id() else {
+        return;
+    };
+    let (schema_version, build_channel, git_checkout, ci, from_cargo) = telemetry_envelope();
+    let payload = serde_json::json!({
+        "event_id": new_event_id(),
+        "id": id,
+        "event": "telemetry_opt_out",
+        "version": version(),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "step": "telemetry_settings",
+        "schema_version": schema_version,
+        "build_channel": build_channel,
+        "is_git_checkout": git_checkout,
+        "is_ci": ci,
+        "ran_from_cargo": from_cargo,
+    });
+    let _ = send_payload(
+        payload,
+        DeliveryMode::Blocking(BLOCKING_FIRST_PROMPT_TIMEOUT),
+    );
 }
 
 /// Marker file recording that the user opted in to sharing prompt and
@@ -1455,7 +1495,6 @@ fn maybe_emit_session_start() {
         if state.start_event_sent {
             return;
         }
-        state.start_event_sent = true;
         observe_session_concurrency(state);
         let (schema_version, build_channel, git_checkout, ci, from_cargo) = telemetry_envelope();
         SessionStartEvent {
@@ -1486,8 +1525,13 @@ fn maybe_emit_session_start() {
             ran_from_cargo: from_cargo,
         }
     };
-    if let Ok(payload) = serde_json::to_value(&event) {
-        let _ = send_payload(payload, DeliveryMode::Background);
+    if let Ok(payload) = serde_json::to_value(&event)
+        && send_payload(payload, DeliveryMode::Background)
+        && let Ok(mut guard) = SESSION_STATE.lock()
+        && let Some(state) = guard.as_mut()
+        && state.session_id == event.session_id
+    {
+        state.start_event_sent = true;
     }
 }
 
@@ -1887,6 +1931,8 @@ fn begin_session_with_mode(
 
 pub fn record_turn() {
     let id = get_or_create_id();
+    let mut prompt_event = None;
+    let mut first_prompt = false;
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
@@ -1900,6 +1946,7 @@ pub fn record_turn() {
             finalize_current_turn(id, state, now, "next_user_prompt", DeliveryMode::Background);
         }
         state.turns += 1;
+        first_prompt = state.turns == 1;
         logging::debug(&format!("recording telemetry turn index={}", state.turns));
         state.had_user_prompt = true;
         let idle_before_turn_ms = previous_last_activity.and_then(|last| {
@@ -1912,6 +1959,36 @@ pub fn record_turn() {
             now_ms_since(state.started_at),
             idle_before_turn_ms,
         ));
+        if let Some(ref id) = id {
+            let (schema_version, build_channel, git_checkout, ci, from_cargo) =
+                telemetry_envelope();
+            prompt_event = Some(serde_json::json!({
+                "event_id": new_event_id(),
+                "id": id,
+                "session_id": state.session_id,
+                "event": "prompt_submitted",
+                "version": version(),
+                "os": std::env::consts::OS,
+                "arch": std::env::consts::ARCH,
+                "turn_index": state.turns,
+                "schema_version": schema_version,
+                "build_channel": build_channel,
+                "is_git_checkout": git_checkout,
+                "is_ci": ci,
+                "ran_from_cargo": from_cargo,
+            }));
+        }
+    }
+    if let Some(payload) = prompt_event {
+        let mode = if first_prompt {
+            // Short `jcode run` invocations can exit before the background
+            // worker starts. Bound the first prompt's delivery so every active
+            // installation has an immediate durable activity anchor.
+            DeliveryMode::Blocking(BLOCKING_FIRST_PROMPT_TIMEOUT)
+        } else {
+            DeliveryMode::Background
+        };
+        let _ = send_payload(payload, mode);
     }
     emit_onboarding_step_once("first_prompt_sent", None, None);
     maybe_emit_session_start();

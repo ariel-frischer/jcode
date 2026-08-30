@@ -89,6 +89,7 @@ pub async fn run_tui_client(
     remote_working_dir: Option<String>,
     onboarding_sim: bool,
     startup_profile: Option<crate::protocol::SessionProfileStartup>,
+    update_sim: bool,
 ) -> Result<()> {
     startup_profile::mark("tui_client_enter");
     let (terminal, tui_runtime) = init_tui_runtime()?;
@@ -139,6 +140,9 @@ pub async fn run_tui_client(
     }
     if onboarding_sim {
         app.start_onboarding_simulator_on_launch();
+    }
+    if update_sim {
+        app.start_update_simulator_on_launch();
     }
     startup_profile::mark("app_new_for_remote");
     if resume_session.is_none()

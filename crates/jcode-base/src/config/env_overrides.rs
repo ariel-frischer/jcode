@@ -42,6 +42,13 @@ impl Config {
             self.lifecycle_observability.emit_structured_logs = parsed;
         }
 
+        // Server/operator behavior
+        if let Ok(v) = std::env::var("JCODE_WAKE_MODE")
+            && let Some(parsed) = WakeMode::parse(&v)
+        {
+            self.server.wake_mode = parsed;
+        }
+
         // Keybindings
         if let Ok(v) = std::env::var("JCODE_SCROLL_UP_KEY") {
             self.keybindings.scroll_up = v;

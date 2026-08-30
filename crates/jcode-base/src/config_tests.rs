@@ -441,6 +441,24 @@ fn test_env_override_swarm_model() {
 }
 
 #[test]
+fn wake_mode_defaults_parses_and_env_overrides() {
+    let _guard = crate::storage::lock_test_env();
+    let prev = std::env::var_os("JCODE_WAKE_MODE");
+    assert_eq!(
+        Config::default().server.wake_mode,
+        crate::config::WakeMode::Internal
+    );
+    let parsed: Config = toml::from_str("[server]\nwake_mode = \"external\"\n").unwrap();
+    assert_eq!(parsed.server.wake_mode, crate::config::WakeMode::External);
+
+    crate::env::set_var("JCODE_WAKE_MODE", "external");
+    let mut cfg = Config::default();
+    cfg.apply_env_overrides();
+    assert_eq!(cfg.server.wake_mode, crate::config::WakeMode::External);
+    restore_env_var("JCODE_WAKE_MODE", prev);
+}
+
+#[test]
 fn spawn_hook_defaults_to_none_and_parses_from_toml() {
     assert_eq!(Config::default().terminal.spawn_hook, None);
 
@@ -805,6 +823,79 @@ fn tool_config_disabled_only_keeps_full_profile_with_deny_list() {
     assert!(selection.disabled_tools.contains("browser"));
     assert!(selection.disabled_tools.contains("swarm"));
     assert!(!selection.disabled_tools.contains("gmail"));
+}
+
+#[test]
+fn test_generated_default_config_has_expected_user_defaults() {
+    let _guard = crate::storage::lock_test_env();
+    let prev_home = std::env::var_os("JCODE_HOME");
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    crate::env::set_var("JCODE_HOME", dir.path());
+
+    let path = Config::create_default_config_file().expect("create default config file");
+    let content = std::fs::read_to_string(path).expect("read default config file");
+
+    assert!(
+        content.contains("openai_reasoning_effort = \"low\""),
+        "generated default config should use low OpenAI reasoning effort"
+    );
+    assert!(
+        content.contains("openai_service_tier = \"priority\""),
+        "generated default config should enable OpenAI fast mode"
+    );
+    assert!(
+        content.contains("[tools]") && content.contains("profile = \"full\""),
+        "generated default config should document tool profiles"
+    );
+    assert!(
+        content.contains("[acp]") && content.contains("tool_profile = \"acp\""),
+        "generated default config should document ACP profile settings"
+    );
+    assert!(
+        content.contains("[agents]") && content.contains("swarm_spawn_mode = \"inline\""),
+        "generated default config should document agent spawn defaults"
+    );
+    assert!(
+        content.contains("memory_model = \"gpt-5.6-luna\"")
+            && content.contains("reasoning effort \"none\""),
+        "generated default config should document the Luna memory sidecar default"
+    );
+
+    // Effort keys come from the per-platform keybinding registry; the template
+    // placeholders must always be substituted.
+    assert!(
+        !content.contains("@EFFORT_INCREASE@") && !content.contains("@EFFORT_DECREASE@"),
+        "generated default config should substitute effort key placeholders"
+    );
+    let expected_increase = if cfg!(target_os = "macos") {
+        "effort_increase = \"cmd+right\""
+    } else {
+        "effort_increase = \"alt+right\""
+    };
+    assert!(
+        content.contains(expected_increase),
+        "generated default config should use the platform effort_increase default"
+    );
+
+    // The generated file must always be valid TOML for the current Config schema.
+    let parsed: Config =
+        toml::from_str(&content).expect("generated default config should parse as Config");
+    assert_eq!(parsed.agents.swarm_spawn_mode, SwarmSpawnMode::Inline);
+    assert!(
+        parsed.display.show_thinking,
+        "freshly created user config should request model reasoning"
+    );
+    assert_eq!(
+        parsed.display.reasoning_display(),
+        jcode_config_types::ReasoningDisplayMode::Full,
+        "freshly created user config should show the full reasoning trace"
+    );
+
+    if let Some(prev) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
 }
 
 #[test]
@@ -1260,6 +1351,8 @@ fn populate_context_limits_from_config_ref_seeds_global_cache() {
             base_url: "https://gateway.example.test/v1".to_string(),
             models: vec![NamedProviderModelConfig {
                 id: model_id.to_string(),
+                reasoning: None,
+                reasoning_effort: None,
                 context_window: Some(1_000_000),
                 input: Vec::new(),
             }],
@@ -1294,11 +1387,15 @@ fn populate_context_limits_from_config_seeds_qualified_runtime_model_shapes() {
             models: vec![
                 NamedProviderModelConfig {
                     id: "issue421-qwen-128k".to_string(),
+                    reasoning: None,
+                    reasoning_effort: None,
                     context_window: Some(131_072),
                     input: Vec::new(),
                 },
                 NamedProviderModelConfig {
                     id: "/opt/models/issue421-ornith-35b-q4.gguf".to_string(),
+                    reasoning: None,
+                    reasoning_effort: None,
                     context_window: Some(131_072),
                     input: Vec::new(),
                 },

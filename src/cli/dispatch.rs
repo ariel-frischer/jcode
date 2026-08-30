@@ -1032,6 +1032,7 @@ async fn run_default_command(
         args.remote_working_dir,
         args.onboarding_sim,
         interactive_profile_options.map(|options| options.startup_metadata()),
+        args.update_sim,
     )
     .await?;
 

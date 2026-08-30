@@ -63,6 +63,9 @@ pub enum ApiEvent {
     /// Reply to `CreateSession` / `AttachSession`.
     Attached { session: SessionInfo },
 
+    /// Reply to `ForkSession`.
+    SessionForked { session: SessionInfo },
+
     /// Reply to `GetHistory`.
     History {
         session_id: String,
@@ -132,6 +135,14 @@ pub enum ApiEvent {
 
     /// The turn finished; the agent is idle.
     TurnDone { session_id: String },
+
+    /// The daemon requests that its external operator decide when to run the
+    /// session. Emitted only when external wake ownership is configured.
+    WakeRequested {
+        session_id: String,
+        reason: String,
+        notification: String,
+    },
 
     /// A background task the agent is waiting on reported progress, or
     /// finished.
@@ -319,6 +330,7 @@ impl ApiEvent {
             Self::Error { .. } => owned("error", Terminal),
             Self::Sessions { .. } => outside("sessions"),
             Self::Attached { .. } => outside("attached"),
+            Self::SessionForked { .. } => outside("session_forked"),
             Self::History { .. } => outside("history"),
             Self::Pong => outside("pong"),
             Self::TextDelta { .. } => owned("text_delta", Content),
@@ -331,6 +343,7 @@ impl ApiEvent {
             Self::SidePaneImages { .. } => owned("side_pane_images", Content),
             Self::TokenUsage { .. } => owned("token_usage", Content),
             Self::TurnDone { .. } => owned("turn_done", Terminal),
+            Self::WakeRequested { .. } => outside("wake_requested"),
             Self::BackgroundProgress { .. } => owned("background_progress", Advisory),
             Self::MessageAccepted { .. } => owned("message_accepted", Advisory),
             Self::PermissionRequest { .. } => owned("permission_request", Permission),
@@ -388,6 +401,16 @@ pub struct SessionInfo {
     /// could not determine it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript_bytes: Option<u64>,
+    /// Whether the user pinned/saved this session. Saved sessions sort before
+    /// ordinary sessions in every first-party session picker.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub saved: bool,
+    /// Persisted transcript update time, used for newest-first ordering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at_ms: Option<i64>,
+    /// Most recent active-process timestamp when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_active_at_ms: Option<i64>,
     /// Archived sessions are hidden from the default list but never deleted.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub archived: bool,

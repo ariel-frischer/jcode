@@ -42,7 +42,7 @@ pub struct DisplayConfig {
     pub emoji: bool,
     /// Center all content (default: false)
     pub centered: bool,
-    /// Show thinking/reasoning content by default (default: false)
+    /// Show thinking/reasoning content by default (default: true)
     pub show_thinking: bool,
     /// How to display reasoning/thinking content (off/full/current).
     /// When unset, falls back to `show_thinking` (true => full, false => off).
@@ -155,8 +155,8 @@ impl Default for DisplayConfig {
             debug_socket: false,
             emoji: true,
             centered: false,
-            show_thinking: false,
-            reasoning_display: Some(ReasoningDisplayMode::Off),
+            show_thinking: true,
+            reasoning_display: Some(ReasoningDisplayMode::Full),
             diagram_mode: DiagramDisplayMode::default(),
             markdown_spacing: MarkdownSpacingMode::default(),
             latex_rendering: LatexRenderingMode::default(),
@@ -234,6 +234,7 @@ impl DisplayConfig {
 #[cfg(test)]
 mod tests {
     use super::{DisplayConfig, HtmlFileOpenMode};
+    use crate::ReasoningDisplayMode;
 
     #[test]
     fn html_file_open_defaults_to_external_and_accepts_inline_override() {
@@ -245,6 +246,17 @@ mod tests {
         let inline: DisplayConfig = toml::from_str("html_file_open = 'inline'")
             .expect("inline HTML opener setting should parse");
         assert_eq!(inline.html_file_open, HtmlFileOpenMode::Inline);
+    }
+
+    #[test]
+    fn thinking_is_shown_in_full_by_default() {
+        let default = DisplayConfig::default();
+        assert!(default.show_thinking);
+        assert_eq!(default.reasoning_display(), ReasoningDisplayMode::Full);
+
+        let missing: DisplayConfig = serde_json::from_str("{}").expect("display config");
+        assert!(missing.show_thinking);
+        assert_eq!(missing.reasoning_display(), ReasoningDisplayMode::Full);
     }
 
     #[test]

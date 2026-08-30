@@ -28,9 +28,16 @@ struct SkillFrontmatter {
     name: String,
     description: String,
     #[serde(rename = "allowed-tools")]
-    allowed_tools: Option<String>,
+    allowed_tools: Option<AllowedTools>,
     #[serde(rename = "default-prompt")]
     default_prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum AllowedTools {
+    CommaDelimited(String),
+    Sequence(Vec<String>),
 }
 
 /// Registry of available skills
@@ -492,8 +499,13 @@ impl SkillRegistry {
             default_prompt,
         } = frontmatter;
 
-        let allowed_tools =
-            allowed_tools.map(|s| s.split(',').map(|t| t.trim().to_string()).collect());
+        let allowed_tools = allowed_tools.map(|tools| match tools {
+            AllowedTools::CommaDelimited(tools) => tools
+                .split(',')
+                .map(|tool| tool.trim().to_string())
+                .collect(),
+            AllowedTools::Sequence(tools) => tools,
+        });
         let search_text = build_skill_search_text(&name, &description, &body);
 
         Ok(Skill {
