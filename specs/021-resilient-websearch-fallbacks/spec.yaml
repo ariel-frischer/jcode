@@ -1,0 +1,351 @@
+# ============ REQUIRED SECTIONS ============
+
+feature:
+  branch: "021-resilient-websearch-fallbacks"
+  created: "2026-08-31"
+  status: "Draft"
+  input: 'Implement Bead jcode-ow6: a simple modular free-only resilient websearch architecture. Preserve existing DuckDuckGo, Bing, and SearXNG compatibility while adding configurable orchestration with a master enable switch, per-engine enable controls, fallback order, bounded per-attempt timeout, narrowly eligible transient retries, short-lived engine circuit/health suppression, and aggregate non-secret diagnostics. Add only reasonable free fallbacks that do not require paid APIs, browser automation, CAPTCHA bypass, or an untrusted public default. Reuse existing shared HTTP and ToolOutput/event contracts. Add minimal TUI visibility showing selected engine and fallback/attempt summary without redesigning the TUI or making successful output noisy. Keep legacy config valid and defaults simple. Include deterministic tests for config precedence, ordering, disabled engines, empty/challenge/transient outcomes, retry/circuit behavior, diagnostics, and TUI rendering. Include reasonable orchestration-overhead benchmark evidence, built-binary isolated-socket validation, documentation, and an explicit post-integration user-config enablement step. Follow .autospec/constitution.yaml and the frozen acceptance matrix in Bead jcode-ow6.'
+
+user_stories:
+  - id: "US-001"
+    title: "Receive reliable free web search results"
+    priority: "P0"
+    as_a: "Jcode user"
+    i_want: "web search to try an ordered set of enabled free engines when the preferred engine cannot return usable results"
+    so_that: "temporary blocking, empty pages, or transient network failures do not unnecessarily prevent research"
+    why_this_priority: "Reliable search is the primary user outcome and must remain free and bounded."
+    independent_test: "Use deterministic engine responses and verify exact attempt order, stop-on-success behavior, and terminal outcomes without external network access."
+    acceptance_scenarios:
+      - given: "resilient orchestration is enabled and the preferred engine returns a challenge page"
+        when: "the user performs a web search"
+        then: "the next enabled engine in the configured order is attempted and searching stops at the first usable result set"
+      - given: "an engine returns an empty result set"
+        when: "another enabled fallback is available"
+        then: "the empty outcome is recorded and the next fallback is attempted"
+      - given: "an attempt has an eligible transient failure"
+        when: "the retry allowance has not been exhausted"
+        then: "that engine is retried only within the configured attempt and timeout bounds"
+      - given: "all eligible engines fail or return no usable results"
+        when: "the search completes"
+        then: "the user receives one actionable aggregate failure rather than a silent empty response"
+
+  - id: "US-002"
+    title: "Control resilient search behavior"
+    priority: "P0"
+    as_a: "Jcode operator"
+    i_want: "clear controls for orchestration, engine eligibility, fallback order, timeout, retry, health suppression, and diagnostics"
+    so_that: "search behavior is predictable for my environment and trust preferences"
+    why_this_priority: "The feature must be opt-in, explainable, and safe for existing installations."
+    independent_test: "Load defaults, persisted settings, environment overrides, and request-level engine selection in isolation and verify the documented effective configuration and attempt set."
+    acceptance_scenarios:
+      - given: "the master switch is unset or disabled"
+        when: "a legacy configuration performs a search"
+        then: "legacy behavior and accepted legacy fields remain valid"
+      - given: "an engine is disabled"
+        when: "it appears as the preferred engine or in the fallback order"
+        then: "it is not attempted and diagnostics identify it only as skipped without exposing sensitive input"
+      - given: "the same setting is supplied by more than one supported configuration source"
+        when: "effective settings are resolved"
+        then: "request or session override wins over environment, environment wins over persisted configuration, and persisted configuration wins over the built-in default"
+      - given: "SearXNG is selected without a configured trusted instance"
+        when: "the search is resolved"
+        then: "no public instance is selected automatically and an actionable unavailable or skipped outcome is produced"
+
+  - id: "US-003"
+    title: "Understand fallback activity without noise"
+    priority: "P1"
+    as_a: "TUI user"
+    i_want: "a compact indication of the selected engine and meaningful fallback or retry activity"
+    so_that: "I can understand search reliability decisions without a redesigned or noisy interface"
+    why_this_priority: "Visibility builds trust, but it must not distract from successful search results."
+    independent_test: "Render deterministic successful, fallback, retry, skipped, and aggregate-failure summaries and compare their compact text output."
+    acceptance_scenarios:
+      - given: "the first selected engine succeeds without a retry"
+        when: "the TUI renders the completed tool status"
+        then: "it shows the selected engine in a compact form without an additional verbose diagnostic block"
+      - given: "a fallback or retry was required"
+        when: "the TUI renders the completed tool status"
+        then: "it shows a concise attempt summary and the engine that produced the terminal result"
+      - given: "diagnostics are disabled"
+        when: "a search succeeds or fails"
+        then: "internal aggregate diagnostic detail is omitted while the normal user-facing result or error remains actionable"
+
+  - id: "US-004"
+    title: "Adopt the feature with confidence"
+    priority: "P1"
+    as_a: "Jcode maintainer"
+    i_want: "focused compatibility, performance, built-product, and documentation evidence"
+    so_that: "the feature can be integrated and enabled for a user without hidden regressions"
+    why_this_priority: "The frozen acceptance matrix requires direct evidence before user configuration is changed."
+    independent_test: "Validate the documented configuration, focused deterministic checks, performance evidence, and an isolated built-product search before performing the separate post-integration enablement step."
+    acceptance_scenarios:
+      - given: "the candidate implementation is built"
+        when: "the public websearch path is exercised using an isolated runtime endpoint"
+        then: "the enabled configuration produces observable fallback diagnostics and TUI-compatible output"
+      - given: "the feature has not yet landed in the user's active build"
+        when: "delivery work is in progress"
+        then: "the user's configuration is not modified to enable unsupported settings"
+      - given: "the supporting build has landed and is active"
+        when: "the explicit enablement step is performed"
+        then: "the user's configuration enables the feature using documented settings"
+
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "The product MUST provide one master switch for resilient websearch orchestration, and the switch MUST default to disabled so unset legacy configurations retain their prior behavior."
+      acceptance_criteria: "A configuration with the setting absent and one with it explicitly disabled both follow the legacy path; explicitly enabling it follows the resilient path."
+
+    - id: "FR-002"
+      description: "The product MUST preserve valid DuckDuckGo, Bing, and SearXNG engine names, aliases, existing websearch fields, and existing tool input compatibility."
+      acceptance_criteria: "Previously valid configurations and tool inputs for all three engines continue to parse and select the same named engine when orchestration is disabled."
+
+    - id: "FR-003"
+      description: "The product MUST provide independent enable controls for each supported engine, for fallback behavior, for transient retries, for health suppression, and for aggregate diagnostics."
+      acceptance_criteria: "Each control can be toggled independently in deterministic tests and changes only its documented behavior."
+
+    - id: "FR-004"
+      description: "The product MUST resolve supported websearch settings through one documented precedence order: explicit request or session override, then environment, then persisted configuration, then built-in default."
+      acceptance_criteria: "A precedence matrix verifies each source alone and conflicting combinations, including unset, empty, invalid, and unsupported values."
+
+    - id: "FR-005"
+      description: "The product MUST honor the configured fallback order after removing duplicate entries and MUST never attempt an engine that is disabled, unavailable, or suppressed by active health state."
+      acceptance_criteria: "Recorded attempts exactly match the configured eligible order, contain no duplicates, and exclude disabled, unavailable, and suppressed engines."
+
+    - id: "FR-006"
+      description: "An explicit request-level engine selection MUST remain compatible, while resilient orchestration MUST apply documented eligibility and fallback rules when the master switch is enabled."
+      acceptance_criteria: "Tests verify explicit engine selection with orchestration disabled, enabled with the engine eligible, and enabled with the engine disabled or unavailable."
+
+    - id: "FR-007"
+      description: "The product MUST continue to the next eligible engine after an anti-automation challenge response, an empty parsed result set, or an eligible transient failure, and MUST stop immediately after the first usable result set."
+      acceptance_criteria: "Deterministic challenge, empty, transient, and success sequences produce the expected attempt order and no attempts occur after success."
+
+    - id: "FR-008"
+      description: "Each engine attempt MUST have a configurable finite timeout with a documented positive default and validated bounds."
+      acceptance_criteria: "A stalled attempt terminates within the configured limit plus test tolerance, invalid limits are rejected or replaced by a documented safe fallback, and fallback may continue."
+
+    - id: "FR-009"
+      description: "Same-engine retries MUST be limited to narrowly classified transient transport, timeout, rate-limit, and server-unavailable outcomes, with a default maximum of one retry per engine attempt sequence."
+      acceptance_criteria: "Eligible transient outcomes retry no more than once by default; challenge, empty, authentication, invalid configuration, unsupported response, and other permanent outcomes do not retry the same engine."
+
+    - id: "FR-010"
+      description: "Retry delays and total work MUST remain bounded and MUST respect the per-attempt timeout and configured engine sequence."
+      acceptance_criteria: "Deterministic timing tests show no unbounded wait, retry loop, or attempt after the configured limits are exhausted."
+
+    - id: "FR-011"
+      description: "When health suppression is enabled, repeated eligible failures MUST temporarily suppress the affected engine after a configurable threshold, and the suppression MUST expire after a short configurable cooldown."
+      acceptance_criteria: "A deterministic clock test opens suppression at the threshold, skips the engine during cooldown, and permits a probe or normal attempt after expiry."
+
+    - id: "FR-012"
+      description: "Engine health state MUST be isolated by engine and MUST be cleared or improved after a successful attempt so one engine's condition does not suppress another."
+      acceptance_criteria: "Tests demonstrate independent engine state and successful recovery without cross-engine suppression."
+
+    - id: "FR-013"
+      description: "The product MUST distinguish success, empty results, challenge, timeout, transient failure, permanent failure, disabled, unavailable, health-suppressed, and exhausted outcomes for orchestration decisions and diagnostics."
+      acceptance_criteria: "Each outcome is generated deterministically and maps to the documented retry, fallback, suppression, and terminal behavior."
+
+    - id: "FR-014"
+      description: "Aggregate diagnostics MUST report effective non-secret settings when relevant, engines considered, attempts made, retries, skips, elapsed summary, selected engine, and terminal outcomes without exposing search queries, credentials, configured secrets, response bodies, or sensitive URLs."
+      acceptance_criteria: "Snapshot or structured assertions cover successful fallback and aggregate failure, and negative assertions prove prohibited sensitive values are absent."
+
+    - id: "FR-015"
+      description: "When every eligible engine is exhausted, the product MUST return one actionable aggregate outcome that preserves per-engine terminal reasons without replacing them with only the last error."
+      acceptance_criteria: "Mixed empty, challenge, transient, unavailable, and suppressed sequences retain a concise reason for every considered engine."
+
+    - id: "FR-016"
+      description: "The normal successful search result MUST remain concise; aggregate detail SHOULD be surfaced only when fallback, retry, suppression, or failure makes it useful."
+      acceptance_criteria: "A first-attempt success has no verbose attempt log, while a fallback or failed search has a bounded summary."
+
+    - id: "FR-017"
+      description: "The TUI MUST show the engine that produced the terminal result and MUST add only a compact fallback or attempt summary when more than one meaningful action occurred."
+      acceptance_criteria: "Deterministic rendering tests cover first-attempt success, fallback success, retry success, suppression, and aggregate failure within the existing tool-status presentation."
+
+    - id: "FR-018"
+      description: "The supported free engine set MUST NOT require a paid API, browser automation, CAPTCHA bypass, or a default connection to an untrusted public service."
+      acceptance_criteria: "Default enabled behavior works without a paid credential; SearXNG requires an explicitly configured trusted instance; no browser or challenge-bypass behavior is invoked."
+
+    - id: "FR-019"
+      description: "The product MUST use the existing websearch public tool identity and preserve existing result and event compatibility for consumers that do not understand the new diagnostics."
+      acceptance_criteria: "Existing consumers continue receiving valid tool completion output and events without requiring a new tool name or incompatible event shape."
+
+    - id: "FR-020"
+      description: "Configuration documentation MUST explain all controls, defaults, precedence, valid ranges, eligible retry outcomes, health suppression, diagnostic privacy, trusted SearXNG setup, and examples for disabled and enabled orchestration."
+      acceptance_criteria: "Documentation review maps every configurable behavior and legacy compatibility promise to an example or explicit statement."
+
+    - id: "FR-021"
+      description: "Delivery evidence MUST include deterministic checks for precedence, ordering, disabled engines, empty results, challenge responses, transient and permanent outcomes, retries, health suppression and recovery, aggregate diagnostics, privacy, and TUI rendering."
+      acceptance_criteria: "Every listed behavior has a focused automated check with an attributable result."
+
+    - id: "FR-022"
+      description: "Delivery evidence MUST include a built-product validation through the public websearch path using an isolated runtime endpoint and an enabled resilient configuration."
+      acceptance_criteria: "The recorded smoke run identifies the built candidate, uses an isolated endpoint, and observes fallback diagnostics plus output consumable by the existing TUI path."
+
+    - id: "FR-023"
+      description: "The user's personal configuration MUST be enabled only in an explicit post-integration step after the landed supporting build is active."
+      acceptance_criteria: "Pre-integration checks show no user configuration enablement; post-integration evidence identifies the active supporting build before applying and validating the documented settings."
+
+  non_functional:
+    - id: "NFR-001"
+      category: "performance"
+      description: "Orchestration bookkeeping MUST add negligible latency compared with external search work."
+      measurable_target: "A deterministic benchmark reports median orchestration-only overhead below 1 millisecond per search and below 2 percent of a representative 100 millisecond network attempt."
+
+    - id: "NFR-002"
+      category: "reliability"
+      description: "Timeout, retry, and health behavior MUST remain deterministic under a controlled clock and controlled engine outcomes."
+      measurable_target: "Focused tests complete without live network access and reproduce identical attempt decisions across at least 100 repeated runs."
+
+    - id: "NFR-003"
+      category: "security"
+      description: "Diagnostics and UI summaries MUST not disclose sensitive search or credential material."
+      measurable_target: "Automated negative assertions find zero occurrences of fixture queries, API keys, secret environment values, response bodies, or configured private instance URLs in aggregate diagnostics and TUI summaries."
+
+    - id: "NFR-004"
+      category: "usability"
+      description: "Status visibility MUST remain compact and avoid noise on ordinary success."
+      measurable_target: "First-attempt success adds only the selected engine label; fallback and failure summaries fit within one compact tool-status summary without a separate persistent panel."
+
+    - id: "NFR-005"
+      category: "code_quality"
+      description: "The feature MUST remain modular, scope-bound, and compatible with established ownership boundaries and contracts."
+      measurable_target: "No second websearch tool, incompatible event contract, paid service dependency, browser dependency, or unrelated TUI redesign is introduced, and repository guardrails pass."
+
+    - id: "NFR-006"
+      category: "reliability"
+      description: "Default and legacy behavior MUST remain stable until users explicitly opt in."
+      measurable_target: "All legacy configuration fixtures parse successfully and focused regression checks show unchanged behavior with the master switch absent or disabled."
+
+# ============ OPTIONAL SECTIONS ============
+
+success_criteria:
+  measurable_outcomes:
+    - id: "SC-001"
+      description: "Users with one challenged or empty preferred engine receive results from the next healthy configured free engine when that engine can answer."
+      metric: "Successful fallback completion rate in deterministic two-engine scenarios"
+      target: "100 percent of scenarios stop at the first usable fallback result"
+
+    - id: "SC-002"
+      description: "Operators can predict exactly which engines may be contacted for any effective configuration."
+      metric: "Agreement between documented eligible order and recorded attempts"
+      target: "100 percent agreement across the precedence, disablement, duplication, unavailability, and suppression matrix"
+
+    - id: "SC-003"
+      description: "Searches do not waste unbounded time repeating unhealthy engine work."
+      metric: "Attempts and elapsed bounds under stalled, transient, and circuit-open scenarios"
+      target: "No engine exceeds its configured timeout, no engine exceeds its retry allowance, and suppressed engines receive zero attempts during cooldown"
+
+    - id: "SC-004"
+      description: "Users can understand which engine answered and whether fallback was needed without seeing verbose internal logs."
+      metric: "TUI rendering acceptance scenarios"
+      target: "Selected engine is visible in every completed search status, and extra attempt detail appears only for fallback, retry, suppression, or failure"
+
+    - id: "SC-005"
+      description: "Diagnostic output supports troubleshooting without leaking sensitive user data."
+      metric: "Required diagnostic fields and prohibited-value assertions"
+      target: "All required aggregate fields are present and zero prohibited sensitive values are present"
+
+    - id: "SC-006"
+      description: "Existing users experience no configuration migration or default behavior change before opting in."
+      metric: "Legacy configuration and disabled-master regression suite"
+      target: "100 percent of legacy fixtures remain valid with unchanged selected-engine behavior"
+
+    - id: "SC-007"
+      description: "Maintainers have direct evidence that resilience adds insignificant local delay and works through the shipped public path."
+      metric: "Recorded benchmark and isolated built-product smoke"
+      target: "Benchmark meets NFR-001 and one enabled isolated-runtime smoke demonstrates a fallback summary through the public websearch tool"
+
+key_entities:
+  - name: "Websearch policy"
+    description: "The effective user-controlled rules governing resilient search behavior."
+    attributes:
+      - "master enable state"
+      - "per-engine enable states"
+      - "fallback enable state and ordered engines"
+      - "attempt timeout and retry allowance"
+      - "health suppression threshold and cooldown"
+      - "diagnostic enable state"
+
+  - name: "Engine outcome"
+    description: "A normalized non-secret result of considering or attempting one search engine."
+    attributes:
+      - "engine name"
+      - "attempt count"
+      - "terminal classification"
+      - "elapsed summary"
+      - "retry and fallback eligibility"
+
+  - name: "Engine health state"
+    description: "Short-lived operational state used to avoid repeatedly contacting an unhealthy engine."
+    attributes:
+      - "engine identity"
+      - "eligible consecutive failure count"
+      - "suppression expiry"
+      - "recovery state"
+
+  - name: "Search diagnostic summary"
+    description: "A bounded aggregate explanation of engine selection and terminal search behavior."
+    attributes:
+      - "effective non-secret policy summary"
+      - "considered, attempted, retried, and skipped engines"
+      - "selected engine or aggregate terminal outcome"
+      - "privacy-safe elapsed summary"
+
+edge_cases:
+  - scenario: "The configured order is empty or contains only disabled or unavailable engines."
+    expected_behavior: "No network request is made and the user receives an actionable aggregate configuration outcome."
+
+  - scenario: "The preferred engine appears again in the fallback list or the fallback list contains duplicates."
+    expected_behavior: "The effective order is de-duplicated while preserving first occurrence order."
+
+  - scenario: "A request explicitly selects an engine disabled by effective policy."
+    expected_behavior: "The engine is not contacted; the documented fallback policy is applied or an actionable disabled outcome is returned."
+
+  - scenario: "SearXNG is configured without a trusted instance URL, or its URL is empty or invalid."
+    expected_behavior: "No public default is inferred; the engine is unavailable and fallback continues when permitted."
+
+  - scenario: "An engine returns HTTP success with a challenge page, malformed response, or no parsed results."
+    expected_behavior: "The outcome is classified without same-engine transient retry and fallback proceeds when enabled."
+
+  - scenario: "An engine alternates between transient failure and success around the health threshold."
+    expected_behavior: "Only eligible failures affect health, success recovers health, and suppression decisions follow the configured deterministic threshold."
+
+  - scenario: "The cooldown expires while a search is choosing engines."
+    expected_behavior: "The engine is eligible only according to a single consistent time observation for that decision, avoiding duplicate or contradictory attempts."
+
+  - scenario: "Diagnostics are disabled while all engines fail."
+    expected_behavior: "The user still receives an actionable bounded error, but optional aggregate troubleshooting detail is omitted."
+
+  - scenario: "A Bing credential is present even though free-only orchestration is enabled."
+    expected_behavior: "Legacy Bing compatibility is preserved, but the resilient fallback architecture does not require a paid credential and its documented free fallback path remains available."
+
+assumptions:
+  - "The new resilient orchestration master switch is opt-in and defaults to disabled because post-integration user enablement is explicitly required."
+  - "Existing DuckDuckGo then Bing behavior remains the simple built-in order unless the user configures another order."
+  - "All existing engine names remain recognized; an engine enable flag controls eligibility but does not erase its configuration."
+  - "SearXNG is free-compatible only when the user explicitly supplies a self-hosted or otherwise trusted instance."
+  - "A single same-engine retry is a reasonable safe default for narrowly eligible transient outcomes; users may configure zero within documented bounds."
+  - "Health suppression is process-local and short-lived rather than persisted across restarts unless a later approved requirement says otherwise."
+  - "Detailed diagnostics are aggregate operational metadata, not search content, and successful first-attempt output remains intentionally minimal."
+
+constraints:
+  - "Follow .autospec/constitution.yaml, including scope-bound changes, backward compatibility, explicit precedence, focused tests, trust-boundary validation, measurable efficiency, and repository delivery gates."
+  - "Satisfy all eleven frozen acceptance checks recorded in Bead jcode-ow6 with direct evidence."
+  - "Reuse the established shared HTTP behavior and existing ToolOutput and event contracts."
+  - "Keep orchestration and engine behavior within existing ownership boundaries and use the existing minimal TUI tool-status surface."
+  - "Use no fallback that requires a paid API, browser automation, CAPTCHA bypass, or an untrusted public default."
+  - "Do not change personal user configuration until the supporting implementation is integrated and active."
+
+out_of_scope:
+  - "Browser-driven search, CAPTCHA solving, anti-bot bypass, or impersonation intended to defeat access controls."
+  - "A paid search service or required API-key dependency for resilient fallback behavior."
+  - "Shipping a default public SearXNG instance or automatically selecting an untrusted third-party instance."
+  - "A second websearch tool, a broad provider framework, or speculative engines without a reasonable trusted free access path."
+  - "A TUI redesign, persistent diagnostics dashboard, or verbose successful-search transcript output."
+  - "Breaking changes to existing engine names, legacy websearch configuration, tool inputs, result contracts, or events."
+  - "Changing the user's active configuration before the integrated build supports and validates the new settings."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-31T09:23:44Z"
+  artifact_type: "spec"
