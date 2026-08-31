@@ -285,5 +285,30 @@ green.
   integration checkout remained on `dev`.
 - The handoff includes focused config, orchestration, adapter, TUI, benchmark,
   isolated built-binary smoke, dependency-boundary, and guardrail evidence above.
-- Personal configuration remains unchanged pending the landed-build identity
-  verification required by T026.
+- Personal configuration remained unchanged until the landed-build identity
+  verification required by T026 completed.
+
+## T026 landed build installation and activation
+
+- Fresh-base merge commit: `c801693abccebbd54500eacd1967b3433a67ebda` on `dev`.
+- `scripts/install_release.sh --fast` installed `jcode v0.81.718-dev
+  (c801693ab)` and a graceful selfdev reload activated it.
+- `~/.local/bin/jcode`, `~/.jcode/builds/current/jcode`, and
+  `~/.jcode/builds/shared-server/jcode` all resolve to
+  `~/.jcode/builds/versions/c801693ab/jcode`.
+- The active identity was verified before the personal configuration write.
+
+## T027 personal enablement and installed runtime check
+
+- Backed up `~/.jcode/config.toml` to a timestamped
+  `config.toml.bak-websearch-*` file before modification.
+- Effective non-secret settings: master enabled; DuckDuckGo and Bing enabled;
+  SearXNG disabled because no operator-approved endpoint is configured;
+  fallback, one retry, health suppression, and diagnostics enabled; attempt
+  timeout 8,000 ms; threshold two; cooldown 30,000 ms.
+- An installed-binary `jcode run` used a unique socket and invoked `websearch`
+  once. It completed in 13 seconds with a tool result and resilient engine
+  summary, and emitted no websearch configuration error.
+- Normal rollback is `websearch.resilience.enabled = false`, which restores the
+  exact legacy branch. No credentials, private endpoint, or personal config
+  contents were committed or recorded.

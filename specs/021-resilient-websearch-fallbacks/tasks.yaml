@@ -443,7 +443,7 @@ phases:
 
       - id: "T026"
         title: "After merge, install and reload the supporting build and verify active executable identity"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"
@@ -456,7 +456,7 @@ phases:
 
       - id: "T027"
         title: "Explicitly enable and validate the personal resilient websearch configuration post-integration"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"
