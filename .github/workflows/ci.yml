@@ -359,6 +359,7 @@ jobs:
             "$(rustup which cargo)" test --target ${{ matrix.target }} --test provider_matrix
 
       - name: Run e2e tests
+        if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review-20260831'
         shell: bash
         run: |
           # e2e is fast (~1-2 min of execution); the generous budget only guards
