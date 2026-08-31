@@ -314,6 +314,7 @@ update_channel = "stable"
 engine = "duckduckgo"
 # Keyless HTML engines to try if the preferred engine fails. Default falls back to Bing HTML.
 fallback_engines = ["bing"]
+# Resilient mode can override this order with JCODE_WEBSEARCH_FALLBACK_ENGINES.
 # Bring your own Bing Search API key for primary Bing searches. Prefer using an env var.
 # Fallback Bing searches intentionally use keyless HTML search.
 # bing_api_key_env = "JCODE_BING_API_KEY"
@@ -327,6 +328,32 @@ bing_market = "en-US"
 # this. Configure here or via the JCODE_SEARXNG_URL environment variable, then
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
+
+[websearch.resilience]
+# Opt in to bounded fallback orchestration for trusted SearXNG and free HTML
+# engines. Keep false to preserve the legacy
+# websearch path exactly. Environment override: JCODE_WEBSEARCH_RESILIENCE_ENABLED.
+enabled = false
+# Independent engine eligibility controls. Missing values default to true.
+duckduckgo_enabled = true
+bing_enabled = true
+searxng_enabled = true
+# Continue to the next eligible engine after an unusable result.
+fallback_enabled = true
+# Per-attempt timeout: 100..60000 ms. Environment: JCODE_WEBSEARCH_ATTEMPT_TIMEOUT_MS.
+attempt_timeout_ms = 10000
+# Retry only transport, timeout, rate-limit, and server-unavailable outcomes.
+retries_enabled = true
+max_retries = 1
+# Suppress repeatedly failing engines in process-local memory.
+health_suppression_enabled = true
+health_failure_threshold = 2
+health_cooldown_ms = 30000
+# Attach bounded non-secret metadata and meaningful one-line activity summaries.
+diagnostics_enabled = true
+# trusted_searxng_url = "https://searx.example.org"
+# HTTP is allowed only for loopback fixtures, for example:
+# trusted_searxng_url = "http://127.0.0.1:8080"
 
 [tools]
 # Controls which built-in tools are sent to the model.
@@ -898,6 +925,25 @@ mod tests {
                 "colors should default to empty"
             );
             assert_eq!(value.len(), 7, "{role} example should be #rrggbb: {value}");
+        }
+    }
+
+    #[test]
+    fn default_config_template_documents_resilient_websearch_controls() {
+        let template = Config::default_config_file_contents();
+        for required in [
+            "[websearch.resilience]",
+            "enabled = false",
+            "fallback_enabled = true",
+            "attempt_timeout_ms = 10000",
+            "max_retries = 1",
+            "health_failure_threshold = 2",
+            "health_cooldown_ms = 30000",
+            "JCODE_WEBSEARCH_FALLBACK_ENGINES",
+            "JCODE_WEBSEARCH_RESILIENCE_ENABLED",
+            "trusted SearXNG",
+        ] {
+            assert!(template.contains(required), "template missing {required:?}");
         }
     }
 }

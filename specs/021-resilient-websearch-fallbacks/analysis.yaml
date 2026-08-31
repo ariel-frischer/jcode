@@ -1,0 +1,361 @@
+analysis:
+  branch: 021-resilient-websearch-fallbacks
+  timestamp: '2026-08-31T11:24:11Z'
+  spec_path: specs/021-resilient-websearch-fallbacks/spec.yaml
+  plan_path: specs/021-resilient-websearch-fallbacks/plan.yaml
+  tasks_path: specs/021-resilient-websearch-fallbacks/tasks.yaml
+  constitution_path: .autospec/constitution.yaml
+findings: []
+coverage:
+  requirements:
+  - id: FR-001
+    has_task: true
+    task_ids:
+    - T001
+    - T002
+    - T005
+    - T006
+    - T011
+    - T012
+    - T023
+    notes: Verified mapped to T001, T002, T005, T006, T011, T012, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-002
+    has_task: true
+    task_ids:
+    - T001
+    - T002
+    - T009
+    - T011
+    - T012
+    - T021
+    - T023
+    - T024
+    notes: Verified mapped to T001, T002, T009, T011, T012, T021, T023, T024 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-003
+    has_task: true
+    task_ids:
+    - T002
+    - T003
+    - T004
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T002, T003, T004, T012, T013, T023 and covered by the
+      remediated acceptance/evidence matrix.
+  - id: FR-004
+    has_task: true
+    task_ids:
+    - T003
+    - T006
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T003, T006, T012, T013, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-005
+    has_task: true
+    task_ids:
+    - T004
+    - T007
+    - T008
+    - T010
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T004, T007, T008, T010, T012, T013, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-006
+    has_task: true
+    task_ids:
+    - T009
+    - T011
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T009, T011, T012, T013, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-007
+    has_task: true
+    task_ids:
+    - T004
+    - T008
+    - T010
+    - T011
+    - T023
+    notes: Verified mapped to T004, T008, T010, T011, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-008
+    has_task: true
+    task_ids:
+    - T002
+    - T004
+    - T008
+    - T009
+    - T010
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T002, T004, T008, T009, T010, T012, T013, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-009
+    has_task: true
+    task_ids:
+    - T002
+    - T004
+    - T008
+    - T010
+    - T012
+    - T023
+    notes: Verified mapped to T002, T004, T008, T010, T012, T023 and covered by the
+      remediated acceptance/evidence matrix.
+  - id: FR-010
+    has_task: true
+    task_ids:
+    - T004
+    - T008
+    - T010
+    - T018
+    - T020
+    - T023
+    notes: Verified mapped to T004, T008, T010, T018, T020, T023 and covered by the
+      remediated acceptance/evidence matrix.
+  - id: FR-011
+    has_task: true
+    task_ids:
+    - T004
+    - T007
+    - T008
+    - T010
+    - T012
+    - T023
+    notes: Verified mapped to T004, T007, T008, T010, T012, T023 and covered by the
+      remediated acceptance/evidence matrix.
+  - id: FR-012
+    has_task: true
+    task_ids:
+    - T004
+    - T007
+    - T008
+    - T010
+    - T023
+    notes: Verified mapped to T004, T007, T008, T010, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-013
+    has_task: true
+    task_ids:
+    - T004
+    - T007
+    - T008
+    - T009
+    - T010
+    - T014
+    - T023
+    notes: Verified mapped to T004, T007, T008, T009, T010, T014, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-014
+    has_task: true
+    task_ids:
+    - T014
+    - T016
+    - T023
+    notes: Verified mapped to T014, T016, T023 and covered by the remediated acceptance/evidence
+      matrix.
+  - id: FR-015
+    has_task: true
+    task_ids:
+    - T008
+    - T010
+    - T014
+    - T016
+    - T023
+    notes: Verified mapped to T008, T010, T014, T016, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-016
+    has_task: true
+    task_ids:
+    - T014
+    - T016
+    - T017
+    - T023
+    notes: Verified mapped to T014, T016, T017, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-017
+    has_task: true
+    task_ids:
+    - T015
+    - T017
+    - T023
+    notes: Verified mapped to T015, T017, T023 and covered by the remediated acceptance/evidence
+      matrix.
+  - id: FR-018
+    has_task: true
+    task_ids:
+    - T001
+    - T002
+    - T009
+    - T011
+    - T012
+    - T019
+    - T021
+    - T022
+    - T024
+    - T027
+    notes: Verified mapped to T001, T002, T009, T011, T012, T019, T021, T022, T024,
+      T027 and covered by the remediated acceptance/evidence matrix.
+  - id: FR-019
+    has_task: true
+    task_ids:
+    - T001
+    - T009
+    - T011
+    - T016
+    - T017
+    - T022
+    - T024
+    notes: Verified mapped to T001, T009, T011, T016, T017, T022, T024 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-020
+    has_task: true
+    task_ids:
+    - T019
+    - T021
+    notes: Verified mapped to T019, T021 and covered by the remediated acceptance/evidence
+      matrix.
+  - id: FR-021
+    has_task: true
+    task_ids:
+    - T001
+    - T004
+    - T008
+    - T009
+    - T012
+    - T014
+    - T015
+    - T023
+    notes: Verified mapped to T001, T004, T008, T009, T012, T014, T015, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  - id: FR-022
+    has_task: true
+    task_ids:
+    - T001
+    - T020
+    - T022
+    - T023
+    notes: Verified mapped to T001, T020, T022, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: FR-023
+    has_task: true
+    task_ids:
+    - T001
+    - T025
+    - T026
+    - T027
+    notes: Verified mapped to T001, T025, T026, T027 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: NFR-001
+    has_task: true
+    task_ids:
+    - T018
+    - T020
+    - T023
+    - T024
+    notes: Verified mapped to T018, T020, T023, T024 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: NFR-002
+    has_task: true
+    task_ids:
+    - T004
+    - T008
+    - T010
+    - T023
+    notes: Verified mapped to T004, T008, T010, T023 and covered by the remediated
+      acceptance/evidence matrix.
+  - id: NFR-003
+    has_task: true
+    task_ids:
+    - T014
+    - T015
+    - T016
+    - T017
+    - T023
+    notes: Verified mapped to T014, T015, T016, T017, T023 and covered by the remediated
+      acceptance/evidence matrix. Contract-level diagnostic privacy remains separate
+      from presentation-level privacy by design.
+  - id: NFR-004
+    has_task: true
+    task_ids:
+    - T014
+    - T015
+    - T016
+    - T017
+    - T023
+    notes: Verified mapped to T014, T015, T016, T017, T023 and covered by the remediated
+      acceptance/evidence matrix. Presentation-level noise and TUI bounds remain separate
+      from the diagnostic contract by design.
+  - id: NFR-005
+    has_task: true
+    task_ids:
+    - T001
+    - T007
+    - T009
+    - T011
+    - T017
+    - T019
+    - T021
+    - T022
+    - T024
+    - T025
+    notes: Verified mapped to T001, T007, T009, T011, T017, T019, T021, T022, T024,
+      T025 and covered by the remediated acceptance/evidence matrix.
+  - id: NFR-006
+    has_task: true
+    task_ids:
+    - T001
+    - T002
+    - T009
+    - T011
+    - T012
+    - T013
+    - T023
+    notes: Verified mapped to T001, T002, T009, T011, T012, T013, T023 and covered
+      by the remediated acceptance/evidence matrix.
+  user_stories:
+  - id: US-001
+    tasks_count: 4
+    coverage_status: complete
+  - id: US-002
+    tasks_count: 2
+    coverage_status: complete
+  - id: US-003
+    tasks_count: 4
+    coverage_status: complete
+  - id: US-004
+    tasks_count: 10
+    coverage_status: complete
+constitution_alignment:
+  status: PASS
+  violations: []
+unmapped_tasks: []
+metrics:
+  total_requirements: 29
+  total_tasks: 27
+  coverage_percentage: 100
+  ambiguity_count: 0
+  duplication_count: 0
+  critical_issues: 0
+  high_issues: 0
+  medium_issues: 0
+  low_issues: 0
+summary:
+  overall_status: PASS
+  blocking_issues: 0
+  actionable_improvements: 0
+  ready_for_implementation: true
+_meta:
+  version: 1.0.0
+  generator: autospec
+  generator_version: autospec dev
+  created: '2026-08-31T11:24:11Z'
+  artifact_type: analysis
