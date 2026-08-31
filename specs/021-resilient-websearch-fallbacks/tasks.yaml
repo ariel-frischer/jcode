@@ -55,7 +55,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Record the legacy websearch baseline and frozen Bead acceptance evidence plan"
-        status: "Pending"
+        status: "Completed"
         type: "setup"
         parallel: false
         story_id: null
