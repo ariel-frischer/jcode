@@ -96,7 +96,7 @@ phases:
         acceptance_criteria:
           - "The matrix covers built-in defaults, persisted TOML values, environment candidates, and request/session candidates both alone and in every conflicting combination, with fallback_order tested through request resilience.fallback_order > JCODE_WEBSEARCH_FALLBACK_ENGINES > persisted websearch.fallback_engines > [bing]."
           - "Tests define the canonical order request/session override > environment > persisted config > built-in default for each field independently."
-          - "Invalid request overrides fail before network; invalid persisted policy is an actionable pre-network error; invalid or empty environment candidates warn without values and fall through. Unsupported engine/order values are rejected before network."
+          - "Invalid request overrides fail before network; invalid persisted policy produces an actionable handled configuration outcome before network; invalid or empty environment candidates warn without their values and fall through to the next source. Unsupported engine/order values are rejected before network."
           - "Environment tests isolate and restore all JCODE_WEBSEARCH_* variables, including master switch, explicit DuckDuckGo/Bing/SearXNG booleans, fallback order, timeout, retry, health, and diagnostics controls, and assert warnings never contain candidate values."
 
       - id: "T004"
@@ -109,7 +109,7 @@ phases:
         dependencies: ["T001"]
         acceptance_criteria:
           - "Tests require canonical DuckDuckGo, Bing, and SearXNG per-engine classifications for success, empty, challenge, timeout, transient, permanent, disabled, unavailable, and health-suppressed states; exhausted is tested only as an aggregate search-terminal outcome."
-          - "Tests require preferred/request-selected prepend followed by stable first-occurrence deduplication, explicit boolean eligibility with missing=true and unknown-key rejection, and skipped records for disabled, unavailable, and actively suppressed engines."
+          - "Tests require preferred/request-selected prepend followed by stable first-occurrence deduplication, explicit boolean eligibility with missing=true and unknown-key rejection, and skipped records for disabled, unavailable, and actively suppressed engines. With fallback disabled, the final considered sequence contains only the preferred/request-selected engine."
           - "Tests use explicit Instants to prove one health increment per failed engine sequence after retries, transient-then-success reset, threshold, cooldown expiry at now >= suppressed_until with clear-before-attempt, per-engine isolation, and one consistent selection-time observation."
           - "A scripted backend test repeats the same decision at least 100 times and requires identical considered/skipped records, physical attempts, and terminal classification."
 
@@ -138,7 +138,7 @@ phases:
         acceptance_criteria:
           - "Resolve each operational field independently in request/session, environment, persisted, default order and expose only validated effective values to runtime callers."
           - "Define and document stable JCODE_WEBSEARCH_* names for the master switch, explicit DuckDuckGo/Bing/SearXNG booleans, fallback_order, fallback, timeout, retries, health, and diagnostics settings."
-          - "Invalid request overrides fail before network work; invalid persisted policy returns an actionable pre-network validation error; invalid or empty environment candidates warn without their values and fall through to the next source; no candidate creates an unbounded or silently unsafe policy."
+          - "Invalid request overrides fail before network work; invalid persisted policy produces an actionable handled configuration outcome before network; invalid or empty environment candidates warn without their values and fall through to the next source; no candidate creates an unbounded or silently unsafe policy."
           - "All precedence tests pass while legacy configuration loading remains unchanged when the resilience section is absent."
 
       - id: "T007"
@@ -151,7 +151,7 @@ phases:
         dependencies: ["T004", "T005", "T006"]
         acceptance_criteria:
           - "Define typed normalized outcomes, resolved policy/order, bounded attempt records, aggregate state, and process-local health entries keyed only by WebSearchEngine."
-          - "Produce a stable first-occurrence engine order and mark disabled, unavailable, and health-suppressed engines without contacting them."
+          - "Produce a stable first-occurrence engine order, truncate the final considered sequence to the preferred/request-selected engine when fallback is disabled, and mark disabled, unavailable, and health-suppressed engines without contacting them."
           - "Make health transitions pure with explicit observed Instants, incrementing only eligible transient terminal failures, suppressing at threshold, expiring after cooldown, and clearing or improving on success."
           - "Provide a small scripted backend seam so orchestration decisions can be tested without live network access or a new external crate."
           - "Foundational ordering, outcome, health, privacy-safe field, and repeated-run tests compile and pass."
@@ -174,7 +174,7 @@ phases:
           - "Challenge, empty, malformed/partial, and eligible transient scripted sequences continue in configured eligible order, while the first usable result, defined as one non-empty title plus valid http/https URL with optional snippet, stops all later attempts."
           - "Transport, timeout, HTTP 429, and HTTP 502/503/504 outcomes retry only while retries are enabled and allowance remains; challenge, empty, authentication, invalid configuration, malformed, unsupported, and permanent outcomes never same-engine retry."
           - "Tests prove one default retry, configured zero-to-two retry bounds, fixed bounded retry delay, finite engine count, and no attempt after exhaustion or success."
-          - "Mixed failure sequences retain per-engine terminal reasons and return an actionable aggregate exhausted outcome instead of only the last error."
+          - "Mixed failure sequences retain per-engine terminal reasons and return an actionable aggregate exhausted outcome instead of only the last error; when fallback is disabled, only the preferred/request-selected engine is considered and its unusable/skipped outcome terminates actionably."
 
       - id: "T009"
         title: "Add failing local HTTP adapter and legacy compatibility tests"
@@ -185,7 +185,7 @@ phases:
         file_path: "crates/jcode-app-core/src/tool/websearch.rs"
         dependencies: ["T007"]
         acceptance_criteria:
-          - "Local TCP fixtures classify DuckDuckGo challenge/empty/usable HTML, Bing keyless HTML and API responses, SearXNG JSON, malformed bodies, 429/5xx, and stalled responses into the typed outcomes."
+          - "Local TCP fixtures classify DuckDuckGo challenge/empty/usable HTML, resilient keyless Bing HTML, legacy credentialed Bing API responses, SearXNG JSON, malformed bodies, 429/5xx, and stalled responses into the typed outcomes; resilient mode never selects the credentialed API path."
           - "Tests prove every physical request uses the existing shared reqwest client and a finite tokio timeout without constructing a second client on the normal path."
           - "Existing engine aliases, parser result text, legacy credentialed Bing API behavior, resilient keyless Bing HTML behavior, SearXNG URL validation/trust handling, and ToolOutput/event compatibility remain covered."
           - "The fixtures never require a paid API, browser automation, CAPTCHA bypass, or a public default endpoint."
@@ -271,9 +271,9 @@ phases:
         dependencies: ["T013"]
         acceptance_criteria:
           - "Tests require the stable bounded SearchDiagnosticSummary schema containing effective non-secret settings, considered engines including skipped entries, physical attempt/retry/skip counts, bounded elapsed summary, selected engine, per-engine terminal reasons, and aggregate search-terminal outcome."
-          - "Diagnostics-enabled first-attempt success has structured metadata but no extra diagnostic line; fallback, retry, suppression, or aggregate failure has at most one concise summary line, while diagnostics-disabled output omits optional metadata/text."
+          - "Diagnostics-enabled first-attempt success has structured contract metadata but no extra diagnostic line; fallback, retry, suppression, or aggregate failure has at most one concise presentation summary line, while diagnostics-disabled output omits optional metadata/text."
           - "Diagnostics-disabled success and failure retain normal result/actionable error behavior while omitting optional aggregate detail."
-          - "Negative assertions separately prove contract metadata and presentation text/title contain none of fixture queries, Bing keys, secret environment values, response bodies, or private SearXNG URLs."
+          - "Contract-level negative assertions separately prove structured metadata contains none of fixture queries, Bing keys, secret environment values, response bodies, or private SearXNG URLs."
 
       - id: "T015"
         title: "Add failing TUI rendering tests for selected-engine and compact attempt summaries"
@@ -287,7 +287,7 @@ phases:
           - "The existing tool-status presentation renders the terminal selected engine for first-attempt success, fallback success, retry success, suppression, and aggregate failure on one line capped at 96 display characters."
           - "Ordinary success does not render an additional verbose attempt block; meaningful fallback/retry/suppression/failure renders one compact bounded summary."
           - "Diagnostics-disabled output remains actionable and does not expose internal aggregate details."
-          - "The tests separately assert contract-level metadata privacy and presentation-level rendered-line privacy/noise: no query, credential, response body, secret value, or private endpoint URL appears, and no new panel or event shape is required."
+          - "Presentation-level negative assertions separately prove rendered text, title, and TUI lines contain no query, credential, response body, secret value, or private endpoint URL, while preserving the one-line/noise bound; no new panel or event shape is required."
 
       - id: "T016"
         title: "Implement bounded SearchDiagnosticSummary and ToolOutput metadata/title/text formatting"

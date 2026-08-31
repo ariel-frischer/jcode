@@ -155,7 +155,7 @@ requirements:
       acceptance_criteria: "Absent and explicitly false master settings execute the unchanged legacy path; explicitly true selects resilient mode with default subcontrols enabled."
 
     - id: "FR-002"
-      description: "The product MUST preserve valid DuckDuckGo, Bing, and SearXNG engine names and aliases. Canonical legacy request fields are exactly query, num_results, engine, and bing_market; Bing credentials/settings and the SearXNG URL remain persisted or environment configuration-only and are not request-policy fields. Existing persisted websearch.fallback_engines and other legacy configuration fields remain valid."
+      description: "The product MUST preserve valid DuckDuckGo, Bing, and SearXNG engine names and aliases. Canonical legacy request fields are exactly query, num_results, engine, and bing_market; credentials and the SearXNG URL remain configuration-only, supplied through persisted or environment configuration and never through request policy. Existing persisted websearch.fallback_engines and other legacy configuration fields remain valid."
       acceptance_criteria: "Legacy fixtures for DuckDuckGo/ddg, Bing, SearXNG/searx, query, num_results, engine, bing_market, fallback_engines, Bing credential settings, and configured SearXNG URL parse and preserve legacy behavior with orchestration disabled; request overrides reject credential and URL fields."
 
     - id: "FR-003"
@@ -164,11 +164,11 @@ requirements:
 
     - id: "FR-004"
       description: "The product MUST resolve operational websearch settings through request/session override > environment > persisted configuration > built-in default. The fallback-order field has the exact precedence request resilience.fallback_order > JCODE_WEBSEARCH_FALLBACK_ENGINES > existing persisted websearch.fallback_engines > default [bing]. The preferred or explicitly request-selected engine is prepended before stable first-occurrence deduplication."
-      acceptance_criteria: "A per-field matrix verifies source conflicts and precedence. Invalid request overrides fail before network work; invalid persisted policy is rejected with an actionable pre-network error; invalid or empty environment candidates emit a warning without candidate values and fall through to the next source."
+      acceptance_criteria: "A per-field matrix verifies source conflicts and precedence. Invalid request overrides fail before network work; invalid persisted policy fails with an actionable pre-network configuration outcome; invalid or empty environment candidates emit a warning without candidate values and fall through to the next source."
 
     - id: "FR-005"
-      description: "The product MUST construct the resilient order by prepending the preferred or explicitly request-selected engine to the selected fallback order, then applying stable first-occurrence deduplication. It MUST record disabled, unavailable, or actively suppressed engines as skipped and MUST never physically attempt them."
-      acceptance_criteria: "Recorded considered entries preserve the merged order and first occurrences; physical attempts contain no duplicates and exclude disabled, unavailable, and suppressed engines."
+      description: "The product MUST construct the resilient order by prepending the preferred or explicitly request-selected engine to the selected fallback order, then applying stable first-occurrence deduplication. When fallback_enabled is false, the final considered sequence MUST contain only that preferred or selected engine. It MUST record disabled, unavailable, or actively suppressed engines as skipped and MUST never physically attempt them."
+      acceptance_criteria: "With fallback enabled, recorded considered entries preserve the merged order and first occurrences; with fallback disabled, only the preferred or selected engine is considered. Physical attempts contain no duplicates and exclude disabled, unavailable, and suppressed engines."
 
     - id: "FR-006"
       description: "An explicit request-level engine selection MUST remain compatible in legacy mode and MUST be prepended to the resilient order when enabled. If it is disabled, unavailable, or health-suppressed, it MUST be recorded as skipped; fallback continues only when fallback_enabled is true."
@@ -180,11 +180,11 @@ requirements:
 
     - id: "FR-008"
       description: "Each engine attempt MUST have a configurable finite timeout with a documented positive default and validated bounds."
-      acceptance_criteria: "A stalled attempt terminates within the configured limit plus test tolerance. Invalid request limits fail before network work, invalid persisted limits return an actionable pre-network validation error, and invalid or empty environment limits warn without their values and fall through; valid lower-precedence limits or built-in defaults remain bounded, and fallback may continue."
+      acceptance_criteria: "A stalled attempt terminates within the configured limit plus test tolerance. Invalid request limits fail before network work, invalid persisted limits produce an actionable pre-network configuration outcome, and invalid or empty environment limits warn without their values and fall through; valid lower-precedence limits or built-in defaults remain bounded, and fallback may continue."
 
     - id: "FR-009"
       description: "Same-engine retries MUST be limited to narrowly classified transient transport, timeout, rate-limit, and server-unavailable outcomes, with a default maximum of one additional physical attempt per engine sequence. Health accounting occurs once only if that engine sequence ends in an eligible transient failure after retries; transient-then-success resets that engine's health state."
-      acceptance_criteria: "Eligible transient outcomes retry only while enabled and within max_retries; challenge, empty, authentication, invalid configuration, malformed/unsupported response, and permanent outcomes do not retry; each exhausted transient sequence increments health once, not once per physical attempt."
+      acceptance_criteria: "Eligible transient outcomes retry only while enabled and within max_retries; challenge, empty, authentication, invalid configuration, malformed/unsupported response, and permanent outcomes do not retry; each transient sequence that reaches its retry allowance increments health once, not once per physical attempt."
 
     - id: "FR-010"
       description: "Retry delays and total work MUST remain bounded and MUST respect the per-attempt timeout and configured engine sequence. For E eligible engines, E <= 3, and R=max_retries, maximum physical attempts are E*(1+R); elapsed upper bound is E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance."
@@ -203,11 +203,11 @@ requirements:
       acceptance_criteria: "Each per-engine outcome is generated deterministically and maps to retry, fallback, skip, health, and aggregate-terminal behavior; aggregate exhaustion is emitted only when the search has no usable result."
 
     - id: "FR-014"
-      description: "When diagnostics are enabled, aggregate diagnostics MUST use the stable schema in diagnostics_contract and report only effective non-secret settings, considered engines, physical attempts, retries, skips, elapsed summary, selected engine, per-engine outcomes, and aggregate search-terminal outcome. Diagnostics MUST never expose queries, credentials, configured secrets, response bodies, or endpoint URLs."
+      description: "When diagnostics are enabled, contract-level aggregate metadata MUST use the stable schema in diagnostics_contract and report only effective non-secret settings, considered engines, physical attempts, retries, skips, elapsed summary, selected engine, per-engine outcomes, and aggregate search-terminal outcome. Contract-level diagnostic metadata MUST never expose queries, credentials, configured secrets, response bodies, or endpoint URLs; presentation privacy and noise are specified separately in FR-016 and NFR-004."
       acceptance_criteria: "The trigger matrix covers diagnostics-enabled first success (metadata present, no extra text), fallback/retry/suppression (metadata and one bounded summary line), aggregate exhaustion (metadata and one bounded actionable line), and diagnostics-disabled outcomes (no optional aggregate metadata/text); negative assertions prove prohibited values are absent."
 
     - id: "FR-015"
-      description: "When every eligible engine is exhausted, the product MUST return one actionable aggregate outcome that preserves per-engine terminal reasons without replacing them with only the last error."
+      description: "When no considered engine produces a usable result, the product MUST return one actionable aggregate outcome that preserves per-engine terminal reasons without replacing them with only the last error. The aggregate exhausted classification is used only at search scope."
       acceptance_criteria: "Mixed empty, challenge, transient, unavailable, and suppressed sequences retain a concise reason for every considered engine."
 
     - id: "FR-016"
@@ -255,13 +255,13 @@ requirements:
 
     - id: "NFR-003"
       category: "security"
-      description: "Contract-level diagnostics and presentation-level UI summaries MUST not disclose sensitive search or credential material."
-      measurable_target: "Automated negative assertions find zero occurrences of fixture queries, API keys, secret environment values, response bodies, or configured private instance URLs in ToolOutput metadata, ToolOutput text, titles, or rendered TUI lines."
+      description: "Contract-level diagnostic metadata MUST not disclose sensitive search, credential, response, or endpoint material."
+      measurable_target: "Automated negative assertions find zero occurrences of fixture queries, API keys, secret environment values, response bodies, or configured private instance URLs in the structured ToolOutput metadata."
 
     - id: "NFR-004"
       category: "usability"
-      description: "Status visibility MUST remain compact and avoid noise on ordinary success."
-      measurable_target: "Every websearch title is one line no wider than 96 display characters with deterministic ellipsis; first-attempt success adds only the selected engine label, while fallback/retry/suppression/failure uses one bounded summary and no separate persistent panel."
+      description: "Presentation-level ToolOutput text, titles, and TUI summaries MUST avoid sensitive values and remain compact without noise on ordinary success."
+      measurable_target: "Automated negative assertions find zero occurrences of fixture queries, API keys, secret environment values, response bodies, or configured private instance URLs in ToolOutput text, titles, and rendered TUI lines. Every websearch title is one line no wider than 96 display characters with deterministic ellipsis; first-attempt success adds only the selected engine label, while fallback/retry/suppression/failure uses one bounded summary and no separate persistent panel."
 
     - id: "NFR-005"
       category: "code_quality"
@@ -353,10 +353,10 @@ key_entities:
 
 edge_cases:
   - scenario: "fallback_order is supplied by multiple sources, or is empty/invalid."
-    expected_behavior: "Use request resilience.fallback_order, then JCODE_WEBSEARCH_FALLBACK_ENGINES, then existing persisted websearch.fallback_engines, then default [bing]. Invalid request values fail before network; invalid persisted policy is an actionable pre-network error; invalid or empty environment candidates warn without values and fall through. The preferred/request-selected engine is prepended before stable first-occurrence deduplication."
+    expected_behavior: "Use request resilience.fallback_order, then JCODE_WEBSEARCH_FALLBACK_ENGINES, then existing persisted websearch.fallback_engines, then default [bing]. Invalid request values fail before network; invalid persisted policy produces an actionable pre-network configuration outcome; invalid or empty environment candidates warn without values and fall through. The preferred/request-selected engine is prepended before stable first-occurrence deduplication."
 
   - scenario: "The configured order is empty or contains only disabled, unavailable, or suppressed engines."
-    expected_behavior: "No network request is made. If fallback is enabled, the user receives an actionable aggregate configuration/no-eligible-engine outcome; if fallback is disabled, the preferred/selected engine's skipped or unusable outcome terminates actionably. Neither case labels a per-engine outcome exhausted."
+    expected_behavior: "No network request is made. If fallback is enabled, the user receives an actionable aggregate configuration/no-eligible-engine outcome; if fallback is disabled, only the preferred/selected engine is considered and its skipped or unusable outcome terminates actionably. Neither case labels a per-engine outcome exhausted."
 
   - scenario: "A request explicitly selects an engine disabled, unavailable, or health-suppressed by effective policy."
     expected_behavior: "The selected engine is prepended, recorded as skipped with its reason, and never physically attempted. Fallback continues only when fallback_enabled is true; otherwise the skipped outcome terminates actionably."
@@ -377,7 +377,7 @@ edge_cases:
     expected_behavior: "One captured decision time is used. Suppression is active before expiry; at now >= suppressed_until state is cleared before a normal eligible attempt; a failed post-expiry sequence follows ordinary health accounting."
 
   - scenario: "Diagnostics are enabled or disabled for first success, fallback/retry, suppression, or aggregate failure."
-    expected_behavior: "Enabled diagnostics always attach the stable non-secret metadata schema, including first success, but add no extra text on clean first success. Meaningful activity adds at most one bounded line. Disabled diagnostics omit optional metadata and text while preserving normal output or actionable outcome."
+    expected_behavior: "Enabled diagnostics always attach the stable non-secret contract metadata schema, including first success, but add no extra text on clean first success. Meaningful activity adds at most one bounded presentation line. Disabled diagnostics omit optional metadata and diagnostic presentation text while preserving normal output or actionable outcome. Contract metadata privacy and presentation privacy/noise are checked separately."
 
   - scenario: "The resilient and legacy Bing modes both have a credential configured."
     expected_behavior: "Resilient mode always uses free keyless Bing HTML; legacy mode preserves the existing credentialed Bing API behavior. Credentials remain configuration-only and never appear in request policy or diagnostics."
@@ -397,6 +397,7 @@ constraints:
   - "Reuse the established shared HTTP behavior and existing ToolOutput and event contracts."
   - "Keep orchestration and engine behavior within existing ownership boundaries and use the existing minimal TUI tool-status surface."
   - "Use no fallback that requires a paid API, browser automation, CAPTCHA bypass, or an untrusted public default."
+  - "Keep contract-level diagnostic privacy and presentation-level privacy/noise as separate, independently testable obligations."
   - "Do not change personal user configuration until the supporting implementation is integrated, installed, active, and separately verified; rollback is master enabled = false."
 
 constitution_check:
@@ -405,49 +406,49 @@ constitution_check:
     - id: "PRIN-001"
       requirement_refs: ["NFR-005", "FR-020", "FR-022"]
       executable_checks:
-        - "git diff --check and feature-owned path review in T024/T025; reject unrelated files or broad refactors"
+        - "Run git diff --check, inspect git status/diff, and verify T024/T025 stage only feature-owned paths; reject unrelated files or broad refactors."
     - id: "PRIN-002"
       requirement_refs: ["FR-001", "FR-002", "FR-019", "NFR-006"]
       executable_checks:
-        - "T002/T009/T011/T023 legacy fixtures and absent/false-master regression tests pass"
+        - "Run the T002/T009/T011/T023 legacy fixtures and absent/false-master regression tests; all must pass with unchanged legacy output and events."
     - id: "PRIN-003"
       requirement_refs: ["FR-004", "FR-005", "FR-006"]
       executable_checks:
-        - "T003/T006/T012/T013 precedence matrix asserts request > environment > persisted > default and exact fallback_order precedence"
+        - "Run the T003/T006/T012/T013 precedence matrix and assert request/session > environment > persisted > default plus the exact fallback_order source chain."
     - id: "PRIN-004"
       requirement_refs: ["NFR-005", "FR-019"]
       executable_checks:
-        - "T024 runs scripts/check_dependency_boundaries.py and Cargo metadata checks"
+        - "Run T024's scripts/check_dependency_boundaries.py and Cargo metadata checks; report any dependency-direction violation."
     - id: "PRIN-005"
       requirement_refs: ["FR-007", "FR-008", "FR-009", "FR-011", "FR-014", "FR-017", "FR-021"]
       executable_checks:
-        - "T023 runs exact focused config, orchestration, adapter, ToolOutput, and TUI test names plus the eleven-check matrix"
+        - "Run T023's exact focused config, orchestration, adapter, ToolOutput, and TUI test names plus the OW6-001..OW6-011 matrix."
     - id: "PRIN-006"
       requirement_refs: ["FR-004", "FR-018", "FR-022", "NFR-003"]
       executable_checks:
-        - "T003/T009/T012/T014/T022 assert pre-network validation, no secret values, trusted endpoint rules, and actionable handled outcomes"
+        - "Run T003/T009/T012/T014/T022 assertions for pre-network validation, value-free warnings, trusted endpoint rules, contract metadata privacy, and actionable handled outcomes."
     - id: "PRIN-007"
       requirement_refs: ["FR-021", "FR-022", "FR-023", "NFR-005"]
       executable_checks:
-        - "T024 runs formatting, affected builds, Clippy, guardrails, dependency boundaries, and artifact validators"
+        - "Run T024 formatting, affected builds, Clippy, guardrails, dependency-boundary checks, and all four artifact validators."
     - id: "PRIN-008"
       requirement_refs: ["FR-018", "FR-019", "NFR-005"]
       executable_checks:
-        - "T009/T011/T024 prove existing owner/contracts, no paid/browser dependency, no second tool, and no unrelated TUI redesign"
+        - "Run T009/T011/T024 checks for existing ownership/contracts, no paid or browser dependency, no second tool, and no unrelated TUI redesign."
     - id: "PRIN-009"
       requirement_refs: ["FR-023"]
       executable_checks:
-        - "T025/T026/T027 record handoff, active-build identity before config write, backup, validation, and master-disabled rollback"
+        - "Run the T025/T026/T027 handoff and active-build checks, then verify backup, validation, and master-disabled rollback before accepting config changes."
     - id: "PRIN-010"
       requirement_refs: ["NFR-001", "FR-022"]
       executable_checks:
-        - "T018/T020 record benchmark median/p95 and T022 records isolated-socket built-binary identity and runtime evidence"
+        - "Run T018/T020 and record benchmark median/p95; run T022 and record isolated-socket built-binary identity and runtime evidence."
 
 glossary:
   - term: "preferred engine"
     definition: "The existing configured engine used when no request engine is supplied."
   - term: "selected engine"
-    definition: "The explicit request engine when supplied, or the preferred engine otherwise; in a completed success summary, selected_engine is the engine whose usable result is returned."
+    definition: "The engine whose usable result is returned in a successful search; before a result exists, preferred or request-selected identifies the first policy candidate, and selected_engine is null for an aggregate failure."
   - term: "considered engine"
     definition: "An engine in the merged, deduplicated resilient order, including engines that are later skipped."
   - term: "skipped engine"
