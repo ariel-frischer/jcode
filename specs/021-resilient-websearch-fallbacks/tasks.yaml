@@ -201,6 +201,7 @@ phases:
         acceptance_criteria:
           - "Execute at most the finite eligible engine order, wrap each physical adapter call in tokio::time::timeout using the validated policy, and apply only the narrow transient retry class."
           - "Use the configured fixed capped retry delay and never exceed max_retries, per-attempt timeout, or the total bounded engine sequence."
+          - "Enforce E <= 3, maximum physical attempts E*(1+R), and elapsed upper bound E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance, with no attempt after success or aggregate exhaustion."
           - "Update only the matching engine health state for eligible terminal transient failures, skip active suppression, permit cooldown expiry, and recover state after success."
           - "Return the first objective usable SearchResult and otherwise return one aggregate search-terminal outcome containing concise per-engine classifications; exhausted is aggregate-only."
           - "All US-001 orchestration behavior tests pass deterministically."
@@ -404,6 +405,8 @@ phases:
         acceptance_criteria:
           - "Run exact config-types, base resolver, app-core websearch/orchestration, and TUI test names first, including precedence, ordering, disablement, empty/challenge/transient/permanent outcomes, timeout, retry, health recovery/isolation, diagnostics/privacy, and rendering."
           - "Run the deterministic decision suite at least 100 times and record identical attempts/classifications, with no live search dependency."
+          - "Assert the diagnostics trigger matrix: diagnostics-enabled clean first success has structured metadata but no extra diagnostic text; meaningful activity has one bounded line; aggregate failure has one actionable line; diagnostics-disabled output omits optional metadata/text. Keep contract metadata privacy assertions separate from presentation privacy/noise assertions."
+          - "Record E <= 3, maximum physical attempts E*(1+R), elapsed upper bound E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance, and the mapping that handled timeout exhaustion stays aggregate ToolOutput while only infrastructure/runtime failures escape as errors."
           - "Cross-reference each result to OW6-001..OW6-011 using the stable task/evidence map, verify T023-T027 remain US-004 tasks, and mark any unrelated baseline failure separately rather than weakening or hiding it."
 
       - id: "T024"

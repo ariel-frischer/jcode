@@ -100,6 +100,12 @@ categories:
         spec_reference: "constitution_check"
         status: "pass"
         notes: "Resolved: spec.yaml constitution_check.principles contains PRIN-001..PRIN-010 with requirement_refs and executable_checks, mirrored by plan and delivery tasks."
+      - id: "CHK069"
+        description: "Does the specification define a diagnostics trigger matrix requiring metadata on diagnostics-enabled first success while forbidding extra diagnostic text, and distinguish meaningful activity, aggregate failure, and diagnostics-disabled output?"
+        quality_dimension: "completeness"
+        spec_reference: "diagnostics_contract"
+        status: "pass"
+        notes: "Resolved: the schema and trigger matrix define metadata/text behavior for clean success, meaningful activity, aggregate failure, and disabled diagnostics."
 
   - name: "Requirement Clarity"
     description: "Are websearch policy terms, boundaries, and outcomes specific enough to avoid interpretation differences?"
@@ -440,8 +446,8 @@ categories:
         notes: ""
 
 summary:
-  total_items: 68
-  passed: 68
+  total_items: 69
+  passed: 69
   failed: 0
   pending: 0
   pass_rate: "100%"

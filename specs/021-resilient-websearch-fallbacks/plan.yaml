@@ -214,7 +214,7 @@ research_findings:
         - "Create state per call, which cannot suppress repeatedly failing engines."
         - "Add a clock crate, which is unnecessary for explicit-time pure transitions."
     - topic: "Diagnostics and exhausted outcome"
-      decision: "Build one bounded privacy-safe SearchDiagnosticSummary, attach its structured form as ToolOutput metadata when enabled, add one concise text line only for meaningful fallback/retry/suppression or exhaustion, and return handled exhaustion as an actionable ToolOutput rather than discarding all but the last error."
+      decision: "Build one bounded privacy-safe SearchDiagnosticSummary, attach its structured form as ToolOutput metadata when enabled including clean first-attempt success, add one concise text line only for meaningful fallback/retry/suppression or exhaustion, and return handled exhaustion as an actionable ToolOutput rather than discarding all but the last error."
       rationale: "Existing consumers keep valid tool output, the public path can observe the summary, and the TUI can render a title without an event-contract change."
       alternatives_considered:
         - "Log full requests/responses, which violates privacy."

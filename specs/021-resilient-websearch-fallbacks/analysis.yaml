@@ -1,6 +1,6 @@
 analysis:
   branch: 021-resilient-websearch-fallbacks
-  timestamp: '2026-08-31T11:13:18Z'
+  timestamp: '2026-08-31T11:24:11Z'
   spec_path: specs/021-resilient-websearch-fallbacks/spec.yaml
   plan_path: specs/021-resilient-websearch-fallbacks/plan.yaml
   tasks_path: specs/021-resilient-websearch-fallbacks/tasks.yaml
@@ -357,5 +357,5 @@ _meta:
   version: 1.0.0
   generator: autospec
   generator_version: autospec dev
-  created: '2026-08-31T11:13:18Z'
+  created: '2026-08-31T11:24:11Z'
   artifact_type: analysis

@@ -188,7 +188,7 @@ requirements:
 
     - id: "FR-010"
       description: "Retry delays and total work MUST remain bounded and MUST respect the per-attempt timeout and configured engine sequence. For E eligible engines, E <= 3, and R=max_retries, maximum physical attempts are E*(1+R); elapsed upper bound is E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance."
-      acceptance_criteria: "Timing tests assert the formula, no retry loop, no attempt after success or exhaustion, and the configured inclusive bounds."
+      acceptance_criteria: "Timing evidence explicitly records E <= 3, R=max_retries, maximum physical attempts E*(1+R), and elapsed upper bound E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance; it also proves no retry loop and no attempt after success or aggregate exhaustion."
 
     - id: "FR-011"
       description: "When health suppression is enabled, repeated eligible engine-sequence failures MUST temporarily suppress that engine after the configured threshold. Health increments once per engine sequence ending in an eligible transient failure after retries, transient-then-success resets the state, and non-eligible outcomes do not increment. Suppression expires when now >= suppressed_until; expiry clears suppression state before the normal attempt."
@@ -204,7 +204,7 @@ requirements:
 
     - id: "FR-014"
       description: "When diagnostics are enabled, contract-level aggregate metadata MUST use the stable schema in diagnostics_contract and report only effective non-secret settings, considered engines, physical attempts, retries, skips, elapsed summary, selected engine, per-engine outcomes, and aggregate search-terminal outcome. Contract-level diagnostic metadata MUST never expose queries, credentials, configured secrets, response bodies, or endpoint URLs; presentation privacy and noise are specified separately in FR-016 and NFR-004."
-      acceptance_criteria: "The trigger matrix covers diagnostics-enabled first success (metadata present, no extra text), fallback/retry/suppression (metadata and one bounded summary line), aggregate exhaustion (metadata and one bounded actionable line), and diagnostics-disabled outcomes (no optional aggregate metadata/text); negative assertions prove prohibited values are absent."
+      acceptance_criteria: "The trigger matrix covers diagnostics-enabled first success (metadata present, no extra diagnostic text), fallback/retry/suppression (metadata and one bounded summary line), aggregate exhaustion (metadata and one bounded actionable line), and diagnostics-disabled outcomes (no optional aggregate metadata/text); negative assertions separately prove prohibited values are absent from contract metadata and presentation output."
 
     - id: "FR-015"
       description: "When no considered engine produces a usable result, the product MUST return one actionable aggregate outcome that preserves per-engine terminal reasons without replacing them with only the last error. The aggregate exhausted classification is used only at search scope."
