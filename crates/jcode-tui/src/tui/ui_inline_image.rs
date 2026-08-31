@@ -1330,10 +1330,11 @@ mod tests {
     }
 
     #[test]
-    fn expand_level_cycle_visits_every_level_and_wraps() {
-        assert_eq!(ImageExpandLevel::Fit.next(), ImageExpandLevel::Large);
-        assert_eq!(ImageExpandLevel::Large.next(), ImageExpandLevel::Full);
-        assert_eq!(ImageExpandLevel::Full.next(), ImageExpandLevel::Fit);
+    fn expand_level_indices_visit_every_level() {
+        assert_eq!(ImageExpandLevel::from_index(0), ImageExpandLevel::Fit);
+        assert_eq!(ImageExpandLevel::from_index(1), ImageExpandLevel::Large);
+        assert_eq!(ImageExpandLevel::from_index(2), ImageExpandLevel::Full);
+        assert_eq!(ImageExpandLevel::from_index(3), ImageExpandLevel::Fit);
     }
 
     #[test]

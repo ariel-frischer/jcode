@@ -92,7 +92,7 @@
     "crates/jcode-tui/src/tui/ui.rs": 3727,
     "crates/jcode-tui/src/tui/ui_frame_metrics.rs": 1438,
     "crates/jcode-tui/src/tui/ui_header.rs": 1758,
-    "crates/jcode-tui/src/tui/ui_inline_image.rs": 1782,
+    "crates/jcode-tui/src/tui/ui_inline_image.rs": 1783,
     "crates/jcode-tui/src/tui/ui_inline_interactive.rs": 1268,
     "crates/jcode-tui/src/tui/ui_input.rs": 3191,
     "crates/jcode-tui/src/tui/ui_messages.rs": 4399,
