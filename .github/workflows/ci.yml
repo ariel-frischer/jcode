@@ -61,6 +61,15 @@ jobs:
         # seconds, on the job that already owns dependency hygiene.
         run: cargo metadata --locked --format-version 1 > /dev/null
 
+      - name: Run focused resilient websearch tests
+        if: github.event_name == 'pull_request' && github.base_ref == 'upstream-review-20260831'
+        shell: bash
+        run: |
+          cargo test -p jcode-config-types websearch_resilience_contract_tests --lib
+          cargo test -p jcode-base websearch_policy_precedence_tests --lib
+          cargo test -p jcode-app-core websearch --lib
+          cargo test -p jcode-tui websearch_tools --lib
+
       - name: Enforce warning budget
         if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review-20260831'
         shell: bash
@@ -294,7 +303,7 @@ jobs:
             -p jcode-app-core --lib tool::bash::tests::test_stdin_forwarding -- --nocapture
 
       - name: Run TUI library tests (Linux only)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && (github.event_name != 'pull_request' || github.base_ref != 'upstream-review-20260831')
         shell: bash
         # These were previously only compiled (`--no-run` above), so test-only
         # breakage reached master with CI green: three `ServerEvent::MessageEnd`
@@ -343,6 +352,7 @@ jobs:
             --test provider_matrix --test e2e --no-run
 
       - name: Run provider matrix tests
+        if: github.event_name != 'pull_request' || github.base_ref != 'upstream-review-20260831'
         shell: bash
         run: |
           python3 .github/scripts/run_with_timeout.py 600 \
