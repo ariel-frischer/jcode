@@ -430,7 +430,7 @@ phases:
 
       - id: "T025"
         title: "Commit only feature-owned files and prepare the reviewed integration handoff"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"

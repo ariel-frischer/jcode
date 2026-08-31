@@ -277,3 +277,13 @@ Feature-owned validation after the modular size-ratchet repair:
 The remaining aggregate guardrail failures are recorded as pre-existing repository
 state rather than hidden or rebaselined. Feature-attributable focused checks are
 green.
+
+## T025 integration handoff
+
+- Feature commit: `d66b21771 feat(websearch): add resilient free-search fallbacks`.
+- The feature worktree was clean immediately after the commit, and the root
+  integration checkout remained on `dev`.
+- The handoff includes focused config, orchestration, adapter, TUI, benchmark,
+  isolated built-binary smoke, dependency-boundary, and guardrail evidence above.
+- Personal configuration remains unchanged pending the landed-build identity
+  verification required by T026.
