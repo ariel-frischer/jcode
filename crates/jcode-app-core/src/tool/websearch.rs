@@ -136,10 +136,10 @@ impl Tool for WebSearchTool {
         let num_results = params.num_results.unwrap_or(8).min(20);
 
         let config = crate::config::config();
-        let policy = config
+        if let Some(policy) = config
             .resolve_websearch_policy(params.resilience.as_ref())
-            .map_err(|err| anyhow::anyhow!("websearch configuration: {err}"))?;
-        if policy.enabled {
+            .map_err(|err| anyhow::anyhow!("websearch configuration: {err}"))?
+        {
             return self.execute_resilient(&params, policy).await;
         }
 
@@ -279,9 +279,6 @@ impl WebSearchTool {
         let message = match execution.terminal {
             orchestration::SearchTerminalOutcome::NoEligibleEngine => {
                 "No eligible websearch engine is configured. Enable an engine or configure a trusted SearXNG instance."
-            }
-            orchestration::SearchTerminalOutcome::Configuration => {
-                "Websearch configuration is invalid. Check the resilient policy and trusted SearXNG settings."
             }
             orchestration::SearchTerminalOutcome::Exhausted => {
                 "All eligible websearch engines returned no usable results or failed transiently. Check engine access or try again."

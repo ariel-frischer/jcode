@@ -28,7 +28,6 @@ pub(crate) enum PerEngineOutcomeKind {
 pub(crate) enum SearchTerminalOutcome {
     Success,
     NoEligibleEngine,
-    Configuration,
     Exhausted,
 }
 
@@ -139,7 +138,7 @@ impl SearchDiagnosticSummary {
         serde_json::to_value(self).unwrap_or_else(|_| {
             serde_json::json!({
                 "schema_version": "jcode.websearch.diagnostics.v1",
-                "search_terminal": "configuration"
+                "search_terminal": "exhausted"
             })
         })
     }
@@ -172,7 +171,6 @@ pub(crate) fn presentation_title(execution: &SearchExecution) -> String {
             "websearch: no eligible engine (skipped {})",
             execution.skip_count
         ),
-        SearchTerminalOutcome::Configuration => "websearch: configuration error".to_string(),
         SearchTerminalOutcome::Exhausted => format!(
             "websearch: exhausted (attempts {}, retries {}, skipped {})",
             execution.physical_attempt_count, execution.retry_count, execution.skip_count
@@ -199,9 +197,6 @@ pub(crate) fn presentation_summary(execution: &SearchExecution) -> Option<String
             "No eligible search engine was contacted ({} skipped).",
             execution.skip_count
         ),
-        SearchTerminalOutcome::Configuration => {
-            "Websearch configuration prevented a network attempt.".to_string()
-        }
         SearchTerminalOutcome::Exhausted => format!(
             "Websearch exhausted {} attempt(s) across eligible engines.",
             execution.physical_attempt_count
@@ -251,7 +246,6 @@ impl EngineHealthState {
 
     pub(crate) fn record_terminal_failure(
         &mut self,
-        _engine: WebSearchEngine,
         classification: PerEngineOutcomeKind,
         now: Instant,
         policy: &ResolvedWebSearchPolicy,
@@ -351,6 +345,7 @@ pub(crate) async fn run_search<B: SearchBackend>(
 
     for engine in considered_order {
         let engine_started = Instant::now();
+        let engine_now = now + search_started.elapsed();
         let enabled = engine_enabled(policy, engine);
         if !enabled {
             considered.push(EngineAttempt {
@@ -375,7 +370,7 @@ pub(crate) async fn run_search<B: SearchBackend>(
             continue;
         }
         let state = health.entry(engine).or_default();
-        if state.is_suppressed(now) {
+        if state.is_suppressed(engine_now) {
             considered.push(EngineAttempt {
                 engine,
                 attempts: 0,
@@ -395,7 +390,7 @@ pub(crate) async fn run_search<B: SearchBackend>(
         let mut attempts = 0_u8;
         let mut engine_retry_count = 0_u8;
         let mut terminal = PerEngineOutcomeKind::Permanent;
-        let mut usable_results = None;
+        let mut filtered_usable_results = None;
 
         while attempts < max_attempts {
             attempts += 1;
@@ -407,12 +402,17 @@ pub(crate) async fn run_search<B: SearchBackend>(
             .await
             .unwrap_or(BackendOutcome::Timeout);
             match outcome {
-                BackendOutcome::Results(results) if has_usable_result(&results) => {
-                    terminal = PerEngineOutcomeKind::Success;
-                    usable_results = Some(results);
+                BackendOutcome::Results(results) => {
+                    let results = retain_usable_results(results);
+                    if results.is_empty() {
+                        terminal = PerEngineOutcomeKind::Empty;
+                    } else {
+                        terminal = PerEngineOutcomeKind::Success;
+                        filtered_usable_results = Some(results);
+                    }
                     break;
                 }
-                BackendOutcome::Results(_) | BackendOutcome::Empty => {
+                BackendOutcome::Empty => {
                     terminal = PerEngineOutcomeKind::Empty;
                     break;
                 }
@@ -448,14 +448,14 @@ pub(crate) async fn run_search<B: SearchBackend>(
         if terminal == PerEngineOutcomeKind::Success {
             state.record_success();
             selected_engine = Some(engine);
-            selected_results = usable_results;
+            selected_results = filtered_usable_results;
         } else if matches!(
             terminal,
             PerEngineOutcomeKind::Challenge
                 | PerEngineOutcomeKind::Transient
                 | PerEngineOutcomeKind::Timeout
         ) {
-            state.record_terminal_failure(engine, terminal, now, policy);
+            state.record_terminal_failure(terminal, now + search_started.elapsed(), policy);
         }
         considered.push(EngineAttempt {
             engine,
@@ -500,6 +500,7 @@ pub(crate) async fn run_search_with_shared_health<B: SearchBackend>(
 ) -> anyhow::Result<SearchExecution> {
     let mut snapshot = health.lock().await.clone();
     let execution = run_search(policy, preferred, &mut snapshot, now, backend).await?;
+    let completed_at = now + Duration::from_millis(execution.elapsed_ms);
 
     let mut shared = health.lock().await;
     for attempt in &execution.considered {
@@ -509,7 +510,7 @@ pub(crate) async fn run_search_with_shared_health<B: SearchBackend>(
             PerEngineOutcomeKind::Challenge
             | PerEngineOutcomeKind::Transient
             | PerEngineOutcomeKind::Timeout => {
-                state.record_terminal_failure(attempt.engine, attempt.classification, now, policy);
+                state.record_terminal_failure(attempt.classification, completed_at, policy);
             }
             PerEngineOutcomeKind::Empty
             | PerEngineOutcomeKind::Permanent
@@ -558,16 +559,19 @@ fn engine_available(policy: &ResolvedWebSearchPolicy, engine: WebSearchEngine) -
     }
 }
 
-fn has_usable_result(results: &[SearchResult]) -> bool {
-    results.iter().any(|result| {
-        if result.title.trim().is_empty() {
-            return false;
-        }
-        let Ok(url) = url::Url::parse(result.url.trim()) else {
-            return false;
-        };
-        matches!(url.scheme(), "http" | "https")
-    })
+fn retain_usable_results(results: Vec<SearchResult>) -> Vec<SearchResult> {
+    results
+        .into_iter()
+        .filter(|result| {
+            if result.title.trim().is_empty() {
+                return false;
+            }
+            let Ok(url) = url::Url::parse(result.url.trim()) else {
+                return false;
+            };
+            matches!(url.scheme(), "http" | "https")
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -847,21 +851,130 @@ mod tests {
         assert_eq!(backend.calls().len(), 2);
     }
 
+    #[tokio::test]
+    async fn usable_result_sets_drop_invalid_entries_before_rendering() {
+        let now = Instant::now();
+        let mut configured = policy();
+        configured.fallback_order = vec![WebSearchEngine::Duckduckgo];
+        let mut health = EngineHealthMap::default();
+        let mut backend = ScriptedBackend::new([BackendOutcome::Results(vec![
+            result("usable", "https://usable.test"),
+            result("", "https://missing-title.test"),
+            result("unsupported", "ftp://unsupported.test"),
+        ])]);
+
+        let execution = run_search(
+            &configured,
+            WebSearchEngine::Duckduckgo,
+            &mut health,
+            now,
+            &mut backend,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(execution.terminal, SearchTerminalOutcome::Success);
+        assert_eq!(
+            execution.results,
+            Some(vec![result("usable", "https://usable.test")])
+        );
+    }
+
+    struct DelayedSequenceBackend {
+        outcomes: VecDeque<(Duration, BackendOutcome)>,
+        calls: Vec<WebSearchEngine>,
+    }
+
+    #[async_trait]
+    impl SearchBackend for DelayedSequenceBackend {
+        async fn search(&mut self, engine: WebSearchEngine, _attempt: u8) -> BackendOutcome {
+            self.calls.push(engine);
+            let (delay, outcome) = self.outcomes.pop_front().unwrap();
+            tokio::time::sleep(delay).await;
+            outcome
+        }
+    }
+
+    #[tokio::test]
+    async fn suppression_expiry_is_checked_when_each_engine_is_reached() {
+        let now = Instant::now();
+        let mut configured = policy();
+        configured.retries_enabled = false;
+        configured.fallback_order = vec![WebSearchEngine::Bing];
+        let mut health = EngineHealthMap::from([(
+            WebSearchEngine::Bing,
+            EngineHealthState {
+                consecutive_failures: 0,
+                suppressed_until: Some(now + Duration::from_millis(5)),
+            },
+        )]);
+        let mut backend = DelayedSequenceBackend {
+            outcomes: VecDeque::from([
+                (Duration::from_millis(15), BackendOutcome::Empty),
+                (
+                    Duration::ZERO,
+                    BackendOutcome::Results(vec![result("usable", "https://usable.test")]),
+                ),
+            ]),
+            calls: Vec::new(),
+        };
+
+        let execution = run_search(
+            &configured,
+            WebSearchEngine::Duckduckgo,
+            &mut health,
+            now,
+            &mut backend,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(execution.selected_engine, Some(WebSearchEngine::Bing));
+        assert_eq!(
+            backend.calls,
+            vec![WebSearchEngine::Duckduckgo, WebSearchEngine::Bing]
+        );
+    }
+
+    #[tokio::test]
+    async fn shared_health_cooldown_starts_after_the_failed_attempt() {
+        let now = Instant::now();
+        let mut configured = policy();
+        configured.retries_enabled = false;
+        configured.health_failure_threshold = 1;
+        configured.health_cooldown_ms = 1_000;
+        configured.fallback_order = vec![WebSearchEngine::Duckduckgo];
+        let health = tokio::sync::Mutex::new(EngineHealthMap::default());
+        let mut backend = DelayedSequenceBackend {
+            outcomes: VecDeque::from([(Duration::from_millis(15), BackendOutcome::Transient)]),
+            calls: Vec::new(),
+        };
+
+        run_search_with_shared_health(
+            &configured,
+            WebSearchEngine::Duckduckgo,
+            &health,
+            now,
+            &mut backend,
+        )
+        .await
+        .unwrap();
+
+        let suppressed_until = health.lock().await[&WebSearchEngine::Duckduckgo]
+            .suppressed_until
+            .unwrap();
+        assert!(suppressed_until >= now + Duration::from_millis(1_010));
+    }
+
     #[test]
     fn health_threshold_cooldown_is_inclusive_and_engine_local() {
         let start = Instant::now();
         let mut state = EngineHealthState::default();
         let configured = policy();
 
-        state.record_terminal_failure(
-            WebSearchEngine::Duckduckgo,
-            PerEngineOutcomeKind::Transient,
-            start,
-            &configured,
-        );
+        state.record_terminal_failure(PerEngineOutcomeKind::Transient, start, &configured);
         assert!(!state.is_suppressed(start));
         state.record_terminal_failure(
-            WebSearchEngine::Duckduckgo,
             PerEngineOutcomeKind::Transient,
             start + Duration::from_millis(1),
             &configured,
@@ -878,15 +991,9 @@ mod tests {
         let mut state = EngineHealthState::default();
         let configured = policy();
 
-        state.record_terminal_failure(
-            WebSearchEngine::Duckduckgo,
-            PerEngineOutcomeKind::Challenge,
-            start,
-            &configured,
-        );
+        state.record_terminal_failure(PerEngineOutcomeKind::Challenge, start, &configured);
         assert!(!state.is_suppressed(start));
         state.record_terminal_failure(
-            WebSearchEngine::Duckduckgo,
             PerEngineOutcomeKind::Challenge,
             start + Duration::from_millis(1),
             &configured,

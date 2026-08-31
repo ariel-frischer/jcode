@@ -85,6 +85,11 @@ this order:
 3. persisted `[websearch.resilience]` value,
 4. built-in default.
 
+This precedence includes the master switch: a request may explicitly enable or
+disable resilient mode. The request policy cannot supply credentials or an
+endpoint, so enabling resilient mode does not cross the configuration-only
+SearXNG trust boundary.
+
 The fallback order has one explicit compatibility exception:
 
 1. request `resilience.fallback_order`,
@@ -122,16 +127,19 @@ The supported environment candidates are:
 accepted compatibility aliases for the corresponding canonical environment
 settings.
 
-Invalid request overrides fail before network work. Invalid persisted policy
-is an actionable configuration failure before network work. Invalid or empty
-environment candidates produce a value-free warning and fall through to the
-next source. Unknown engine names and unsupported fallback entries are not
-silently accepted.
+When the effective master switch is disabled, resilience subcontrols and the
+resilient trusted-endpoint policy are inert and the legacy path runs without
+validating them. When resilient mode is enabled, invalid request overrides fail
+before network work and invalid persisted policy is an actionable configuration
+failure. Invalid or empty environment candidates produce a value-free warning
+and fall through to the next source. Unknown engine names and unsupported
+fallback entries are not silently accepted.
 
 ## Outcomes, retries, and health
 
 A usable result has a non-empty title and a valid `http` or `https` URL. A
-snippet is optional. Empty, partial, and malformed result sets are unusable.
+snippet is optional. Invalid entries are dropped before rendering, and a result
+set is usable only when at least one valid entry remains.
 Per-engine outcomes are:
 
 - `success`: a usable result set was returned.
@@ -159,12 +167,18 @@ before the next normal attempt. Health state is not persisted.
 
 ## SearXNG trust boundary
 
-SearXNG endpoints must be explicitly supplied through persisted configuration
-or the trusted endpoint environment variable. HTTPS is required. HTTP is
-allowed only for loopback addresses (`localhost`, `127.0.0.1`, or `::1`) so
-local fixtures can be used. URLs with userinfo, missing hosts, invalid syntax,
-or untrusted HTTP hosts are rejected before network work. Jcode never infers a
-public instance and never includes the endpoint in diagnostics.
+In resilient mode, SearXNG endpoints must be explicitly supplied through
+persisted configuration or the trusted endpoint environment variable. HTTPS is
+required. HTTP is allowed only for loopback addresses (`localhost`,
+`127.0.0.1`, or `::1`) so local fixtures can be used. URLs with userinfo,
+missing hosts, invalid syntax, or untrusted HTTP hosts are rejected before
+network work. Jcode never infers a public instance and never includes the
+endpoint in diagnostics.
+
+Legacy mode intentionally retains its pre-resilience behavior: it reads
+`websearch.searxng_url` or `searxng_url_env` directly without applying the
+resilient HTTPS/userinfo validation. This asymmetry preserves existing
+self-hosted LAN configurations while keeping the new fallback path strict.
 
 For example:
 
