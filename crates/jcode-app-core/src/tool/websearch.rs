@@ -4,16 +4,61 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::sync::Arc;
+use std::time::Instant;
+
+pub(crate) mod orchestration;
+
+fn classify_http_status(status: reqwest::StatusCode) -> orchestration::PerEngineOutcomeKind {
+    match status {
+        reqwest::StatusCode::REQUEST_TIMEOUT => orchestration::PerEngineOutcomeKind::Timeout,
+        reqwest::StatusCode::TOO_MANY_REQUESTS
+        | reqwest::StatusCode::BAD_GATEWAY
+        | reqwest::StatusCode::SERVICE_UNAVAILABLE
+        | reqwest::StatusCode::GATEWAY_TIMEOUT => orchestration::PerEngineOutcomeKind::Transient,
+        _ => orchestration::PerEngineOutcomeKind::Permanent,
+    }
+}
+
+fn classify_html_response(
+    status: reqwest::StatusCode,
+    body: &str,
+    results: Vec<SearchResult>,
+) -> orchestration::BackendOutcome {
+    if !status.is_success() {
+        return match classify_http_status(status) {
+            orchestration::PerEngineOutcomeKind::Timeout => orchestration::BackendOutcome::Timeout,
+            orchestration::PerEngineOutcomeKind::Transient => {
+                orchestration::BackendOutcome::Transient
+            }
+            _ => orchestration::BackendOutcome::Permanent,
+        };
+    }
+    if detect_anti_bot_page(body).is_some() {
+        return orchestration::BackendOutcome::Challenge;
+    }
+    if results.is_empty() {
+        orchestration::BackendOutcome::Empty
+    } else {
+        orchestration::BackendOutcome::Results(results)
+    }
+}
+
+fn classify_transport_error() -> orchestration::BackendOutcome {
+    orchestration::BackendOutcome::Transient
+}
 
 /// Web search using DuckDuckGo or Bing (HTML scraping, with optional Bing API)
 pub struct WebSearchTool {
     client: reqwest::Client,
+    health: Arc<tokio::sync::Mutex<orchestration::EngineHealthMap>>,
 }
 
 impl WebSearchTool {
     pub fn new() -> Self {
         Self {
             client: crate::provider::shared_http_client(),
+            health: Arc::new(tokio::sync::Mutex::new(Default::default())),
         }
     }
 }
@@ -27,10 +72,12 @@ struct WebSearchInput {
     engine: Option<WebSearchEngine>,
     #[serde(default)]
     bing_market: Option<String>,
+    #[serde(default)]
+    resilience: Option<crate::config::WebSearchPolicyOverride>,
 }
 
-#[derive(Debug)]
-struct SearchResult {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SearchResult {
     title: String,
     url: String,
     snippet: String,
@@ -75,6 +122,10 @@ impl Tool for WebSearchTool {
                 "bing_market": {
                     "type": "string",
                     "description": "Optional Bing market, e.g. en-US or zh-CN. Defaults to JCODE_BING_MARKET or en-US."
+                },
+                "resilience": {
+                    "type": "object",
+                    "description": "Optional non-secret resilient websearch controls. Credentials and endpoints remain configuration-only."
                 }
             }
         })
@@ -85,6 +136,15 @@ impl Tool for WebSearchTool {
         let num_results = params.num_results.unwrap_or(8).min(20);
 
         let config = crate::config::config();
+        let policy = config
+            .resolve_websearch_policy(params.resilience.as_ref())
+            .map_err(|err| anyhow::anyhow!("websearch configuration: {err}"))?;
+        if policy.enabled {
+            return self.execute_resilient(&params, policy).await;
+        }
+
+        // Keep the legacy branch separate and unchanged when resilience is
+        // absent or disabled.
         let mut engines = Vec::new();
         engines.push(params.engine.unwrap_or(config.websearch.engine));
         engines.extend(config.websearch.fallback_engines.iter().copied());
@@ -158,6 +218,89 @@ impl Tool for WebSearchTool {
 }
 
 impl WebSearchTool {
+    async fn execute_resilient(
+        &self,
+        params: &WebSearchInput,
+        policy: crate::config::ResolvedWebSearchPolicy,
+    ) -> Result<ToolOutput> {
+        let config = crate::config::config();
+        let num_results = params.num_results.unwrap_or(8).min(20);
+        let preferred = params.engine.unwrap_or(config.websearch.engine);
+        let market = params
+            .bing_market
+            .as_deref()
+            .unwrap_or(&config.websearch.bing_market);
+        let mut backend = ResilientHttpBackend {
+            tool: self,
+            query: &params.query,
+            num_results,
+            market,
+            searxng_url: policy.trusted_searxng_url.as_deref(),
+        };
+        let execution = orchestration::run_search_with_shared_health(
+            &policy,
+            preferred,
+            self.health.as_ref(),
+            Instant::now(),
+            &mut backend,
+        )
+        .await?;
+
+        let diagnostic = policy
+            .diagnostics_enabled
+            .then(|| orchestration::SearchDiagnosticSummary::from_execution(&policy, &execution));
+        let title = orchestration::presentation_title(&execution);
+        let activity_summary = diagnostic
+            .as_ref()
+            .and_then(|_| orchestration::presentation_summary(&execution));
+
+        if let Some(results) = execution.results.as_ref() {
+            let mut output = format!("Search results for: {}\n\n", params.query);
+            for (index, result) in results.iter().enumerate() {
+                output.push_str(&format!(
+                    "{}. **{}**\n   {}\n   {}\n\n",
+                    index + 1,
+                    result.title,
+                    result.url,
+                    result.snippet
+                ));
+            }
+            if let Some(activity_summary) = activity_summary {
+                output.push_str(&format!("{activity_summary}\n"));
+            }
+            let mut tool_output = ToolOutput::new(output);
+            tool_output = tool_output.with_title(title);
+            if let Some(diagnostic) = diagnostic {
+                tool_output = tool_output.with_metadata(diagnostic.metadata());
+            }
+            return Ok(tool_output);
+        }
+
+        let message = match execution.terminal {
+            orchestration::SearchTerminalOutcome::NoEligibleEngine => {
+                "No eligible websearch engine is configured. Enable an engine or configure a trusted SearXNG instance."
+            }
+            orchestration::SearchTerminalOutcome::Configuration => {
+                "Websearch configuration is invalid. Check the resilient policy and trusted SearXNG settings."
+            }
+            orchestration::SearchTerminalOutcome::Exhausted => {
+                "All eligible websearch engines returned no usable results or failed transiently. Check engine access or try again."
+            }
+            orchestration::SearchTerminalOutcome::Success => "No results found.",
+        };
+        let mut output = message.to_string();
+        if let Some(activity_summary) = activity_summary {
+            output.push('\n');
+            output.push_str(&activity_summary);
+        }
+        let mut tool_output = ToolOutput::new(output);
+        tool_output = tool_output.with_title(title);
+        if let Some(diagnostic) = diagnostic {
+            tool_output = tool_output.with_metadata(diagnostic.metadata());
+        }
+        Ok(tool_output)
+    }
+
     async fn search_with_engine(
         &self,
         engine: WebSearchEngine,
@@ -380,6 +523,154 @@ impl WebSearchTool {
         })?;
 
         Ok(parse_searxng_results(parsed, num_results))
+    }
+
+    async fn search_duckduckgo_resilient(
+        &self,
+        query: &str,
+        num_results: usize,
+    ) -> orchestration::BackendOutcome {
+        let response = match self
+            .client
+            .post("https://html.duckduckgo.com/html/")
+            .header(
+                reqwest::header::USER_AGENT,
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+                 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            .header(reqwest::header::ACCEPT, "text/html,application/xhtml+xml")
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
+            .form(&[("q", query), ("kl", "us-en")])
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(_) => return classify_transport_error(),
+        };
+        let status = response.status();
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(_) => return classify_transport_error(),
+        };
+        classify_html_response(status, &body, parse_ddg_results(&body, num_results))
+    }
+
+    async fn search_bing_html_resilient(
+        &self,
+        query: &str,
+        num_results: usize,
+        market: &str,
+    ) -> orchestration::BackendOutcome {
+        let url = format!(
+            "https://www.bing.com/search?q={}&mkt={}",
+            urlencoding::encode(query),
+            urlencoding::encode(market)
+        );
+        let response = match self
+            .client
+            .get(&url)
+            .header(
+                reqwest::header::USER_AGENT,
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            )
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(_) => return classify_transport_error(),
+        };
+        let status = response.status();
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(_) => return classify_transport_error(),
+        };
+        classify_html_response(status, &body, parse_bing_html_results(&body, num_results))
+    }
+
+    async fn search_searxng_resilient(
+        &self,
+        query: &str,
+        num_results: usize,
+        base: &str,
+    ) -> orchestration::BackendOutcome {
+        let endpoint = format!("{}/search", base.trim_end_matches('/'));
+        let response = match self
+            .client
+            .get(&endpoint)
+            .query(&[("q", query), ("format", "json")])
+            .header(
+                reqwest::header::USER_AGENT,
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            )
+            .header(reqwest::header::ACCEPT, "application/json")
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(_) => return classify_transport_error(),
+        };
+        if !response.status().is_success() {
+            return match classify_http_status(response.status()) {
+                orchestration::PerEngineOutcomeKind::Timeout => {
+                    orchestration::BackendOutcome::Timeout
+                }
+                orchestration::PerEngineOutcomeKind::Transient => {
+                    orchestration::BackendOutcome::Transient
+                }
+                _ => orchestration::BackendOutcome::Permanent,
+            };
+        }
+        let parsed: SearxngResponse = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(_) => return orchestration::BackendOutcome::Permanent,
+        };
+        let results = parse_searxng_results(parsed, num_results);
+        if results.is_empty() {
+            orchestration::BackendOutcome::Empty
+        } else {
+            orchestration::BackendOutcome::Results(results)
+        }
+    }
+}
+
+struct ResilientHttpBackend<'a> {
+    tool: &'a WebSearchTool,
+    query: &'a str,
+    num_results: usize,
+    market: &'a str,
+    searxng_url: Option<&'a str>,
+}
+
+#[async_trait]
+impl orchestration::SearchBackend for ResilientHttpBackend<'_> {
+    async fn search(
+        &mut self,
+        engine: WebSearchEngine,
+        _attempt: u8,
+    ) -> orchestration::BackendOutcome {
+        match engine {
+            WebSearchEngine::Duckduckgo => {
+                self.tool
+                    .search_duckduckgo_resilient(self.query, self.num_results)
+                    .await
+            }
+            WebSearchEngine::Bing => {
+                self.tool
+                    .search_bing_html_resilient(self.query, self.num_results, self.market)
+                    .await
+            }
+            WebSearchEngine::Searxng => match self.searxng_url {
+                Some(url) => {
+                    self.tool
+                        .search_searxng_resilient(self.query, self.num_results, url)
+                        .await
+                }
+                None => orchestration::BackendOutcome::Permanent,
+            },
+        }
     }
 }
 
@@ -644,194 +935,4 @@ fn html_decode(s: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_bing_html_results() {
-        let html = r#"
-            <li class="b_algo">
-              <h2><a href="https://example.com/rust">Rust &amp; Cargo</a></h2>
-              <div class="b_caption"><p>A <strong>systems</strong> language.</p></div>
-            </li>
-            <li class="b_algo"><h2><a href="https://www.bing.com/aclk">ad</a></h2></li>
-            <li class="b_algo">
-              <h2><a href="https://example.org/jcode">Jcode</a></h2>
-              <div class="b_caption"><p>Agentic coding.</p></div>
-            </li>
-        "#;
-
-        let results = parse_bing_html_results(html, 10);
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].title, "Rust & Cargo");
-        assert_eq!(results[0].url, "https://example.com/rust");
-        assert_eq!(results[0].snippet, "A systems language.");
-        assert_eq!(results[1].title, "Jcode");
-    }
-
-    #[test]
-    fn parses_bing_api_results() {
-        let response: BingApiResponse = serde_json::from_value(json!({
-            "webPages": {
-                "value": [
-                    {"name": "One", "url": "https://one.test", "snippet": "first"},
-                    {"name": "Two", "url": "https://two.test", "snippet": "second"}
-                ]
-            }
-        }))
-        .unwrap();
-
-        let results = parse_bing_api_results(response, 1);
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].title, "One");
-        assert_eq!(results[0].url, "https://one.test");
-    }
-
-    #[test]
-    fn parses_ddg_html_results() {
-        // Mirrors the markup html.duckduckgo.com returns for the POST form,
-        // where titles and snippets contain inline <b> highlight tags.
-        let html = r#"
-            <div class="result results_links results_links_deep web-result">
-              <a class="result__a" href="https://rust-lang.org/"><b>Rust</b> Language</a>
-              <a class="result__snippet" href="https://rust-lang.org/">A <b>systems</b> programming language.</a>
-            </div>
-            <div class="result results_links results_links_deep web-result">
-              <a class="result__a" href="https://en.wikipedia.org/wiki/Rust">Rust on Wikipedia</a>
-              <a class="result__snippet" href="https://en.wikipedia.org/wiki/Rust">Encyclopedia <b>entry</b>.</a>
-            </div>
-        "#;
-
-        let results = parse_ddg_results(html, 10);
-        assert_eq!(results.len(), 2);
-        assert_eq!(results[0].title, "Rust Language");
-        assert_eq!(results[0].url, "https://rust-lang.org/");
-        assert_eq!(results[0].snippet, "A systems programming language.");
-        assert_eq!(results[1].url, "https://en.wikipedia.org/wiki/Rust");
-        assert_eq!(results[1].snippet, "Encyclopedia entry.");
-    }
-
-    #[test]
-    fn websearch_engine_accepts_aliases() {
-        assert_eq!(
-            WebSearchEngine::parse("ddg"),
-            Some(WebSearchEngine::Duckduckgo)
-        );
-        assert_eq!(WebSearchEngine::parse("bing"), Some(WebSearchEngine::Bing));
-        assert_eq!(WebSearchEngine::parse("google"), None);
-    }
-
-    #[test]
-    fn detects_ddg_anomaly_challenge_page() {
-        // Shape of the anti-bot challenge DDG serves (HTTP 200) instead of
-        // results when a request is flagged (e.g. TLS fingerprint on Linux).
-        let html = r#"<!DOCTYPE html><html><head>
-            <script src="/dist/anomaly.js"></script></head>
-            <body><div class="anomaly-modal__title">Unfortunately, bots use DuckDuckGo too.</div>
-            </body></html>"#;
-        assert_eq!(detect_anti_bot_page(html), Some("anomaly challenge"));
-        // And it should parse to zero real results.
-        assert!(parse_ddg_results(html, 10).is_empty());
-    }
-
-    #[test]
-    fn detects_generic_captcha_page() {
-        let html = r#"<html><body><div class="g-recaptcha"></div>
-            Please verify you are human.</body></html>"#;
-        assert!(detect_anti_bot_page(html).is_some());
-    }
-
-    #[test]
-    fn real_results_are_not_flagged_as_anti_bot() {
-        let html = r#"
-            <div class="result results_links web-result">
-              <a class="result__a" href="https://rust-lang.org/">Rust</a>
-              <a class="result__snippet" href="https://rust-lang.org/">A language.</a>
-            </div>
-        "#;
-        assert_eq!(detect_anti_bot_page(html), None);
-        assert_eq!(parse_ddg_results(html, 10).len(), 1);
-    }
-
-    // Captured from a live DuckDuckGo request that was flagged on Linux (GH #270):
-    // the HTML endpoint returns HTTP 202 with an "anomaly" challenge page and no
-    // results. These fixtures pin the real-world shapes so the fix stays honest.
-    #[test]
-    fn real_captured_ddg_anomaly_fixture_is_detected() {
-        let html = include_str!("testdata/ddg_anomaly.html");
-        // The bug: this page parses to zero real results...
-        assert!(
-            parse_ddg_results(html, 10).is_empty(),
-            "anomaly page should yield no results"
-        );
-        // ...but the fix now recognizes it as a challenge instead of a silent
-        // "no results found".
-        assert_eq!(detect_anti_bot_page(html), Some("anomaly challenge"));
-    }
-
-    #[test]
-    fn real_captured_ddg_results_fixture_parses() {
-        let html = include_str!("testdata/ddg_results.html");
-        assert_eq!(detect_anti_bot_page(html), None);
-        assert!(
-            !parse_ddg_results(html, 10).is_empty(),
-            "real results page should yield results"
-        );
-    }
-
-    #[test]
-    fn parses_searxng_json_results() {
-        // Shape of a real SearXNG /search?format=json response (#270).
-        let body = serde_json::json!({
-            "query": "rust",
-            "results": [
-                {
-                    "url": "https://www.rust-lang.org/",
-                    "title": "Rust Programming Language",
-                    "content": "A language empowering everyone."
-                },
-                {
-                    "url": "https://doc.rust-lang.org/book/",
-                    "title": "The Rust Book",
-                    "content": "Learn Rust."
-                },
-                // Entry with empty url is dropped; missing content tolerated.
-                { "url": "", "title": "junk" },
-                { "url": "https://crates.io", "title": "" }
-            ]
-        });
-        let parsed: SearxngResponse = serde_json::from_value(body).unwrap();
-        let results = parse_searxng_results(parsed, 10);
-        assert_eq!(results.len(), 3, "empty-url entry should be dropped");
-        assert_eq!(results[0].url, "https://www.rust-lang.org/");
-        assert_eq!(results[0].title, "Rust Programming Language");
-        assert_eq!(results[0].snippet, "A language empowering everyone.");
-        // Missing title falls back to the URL.
-        assert_eq!(results[2].title, "https://crates.io");
-        assert_eq!(results[2].snippet, "");
-    }
-
-    #[test]
-    fn searxng_results_respect_limit() {
-        let body = serde_json::json!({
-            "results": (0..10)
-                .map(|i| serde_json::json!({"url": format!("https://x/{i}"), "title": "t"}))
-                .collect::<Vec<_>>()
-        });
-        let parsed: SearxngResponse = serde_json::from_value(body).unwrap();
-        assert_eq!(parse_searxng_results(parsed, 3).len(), 3);
-    }
-
-    #[test]
-    fn websearch_engine_parses_searxng_aliases() {
-        assert_eq!(
-            WebSearchEngine::parse("searxng"),
-            Some(WebSearchEngine::Searxng)
-        );
-        assert_eq!(
-            WebSearchEngine::parse("searx"),
-            Some(WebSearchEngine::Searxng)
-        );
-        assert_eq!(WebSearchEngine::Searxng.as_str(), "searxng");
-    }
-}
+mod tests;
