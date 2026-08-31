@@ -17,21 +17,15 @@ fn parse_env_list(raw: &str) -> Vec<String> {
 }
 
 impl Config {
-    /// Resolve one invocation's resilient websearch policy. Environment values
-    /// are read here as candidates rather than trusted blindly so invalid
-    /// values can fall through to persisted configuration without weakening a
-    /// bounded policy.
+    /// Resolve one invocation's resilient websearch policy. Returns `None`
+    /// without validating inert subcontrols when the effective master switch is
+    /// disabled. Environment values are read as candidates rather than trusted
+    /// blindly so invalid values can fall through to persisted configuration.
     pub fn resolve_websearch_policy(
         &self,
         request: Option<&jcode_config_types::WebSearchPolicyOverride>,
-    ) -> anyhow::Result<super::ResolvedWebSearchPolicy> {
-        if let Some(request) = request {
-            request.validate().map_err(anyhow::Error::msg)?;
-        }
-
+    ) -> anyhow::Result<Option<super::ResolvedWebSearchPolicy>> {
         let persisted = &self.websearch.resilience;
-        persisted.validate().map_err(anyhow::Error::msg)?;
-
         let enabled = resolve_bool(
             request.and_then(|v| v.enabled),
             &[
@@ -40,6 +34,15 @@ impl Config {
             ],
             persisted.enabled,
         );
+        if !enabled {
+            return Ok(None);
+        }
+
+        if let Some(request) = request {
+            request.validate().map_err(anyhow::Error::msg)?;
+        }
+        persisted.validate().map_err(anyhow::Error::msg)?;
+
         let duckduckgo_enabled = resolve_bool(
             request.and_then(|v| v.duckduckgo_enabled),
             &["JCODE_WEBSEARCH_DUCKDUCKGO_ENABLED"],
@@ -120,7 +123,7 @@ impl Config {
         let fallback_order = resolve_fallback_order(request, self)?;
         let trusted_searxng_url = resolve_trusted_searxng_url(self)?;
 
-        Ok(super::ResolvedWebSearchPolicy {
+        Ok(Some(super::ResolvedWebSearchPolicy {
             enabled,
             duckduckgo_enabled,
             bing_enabled,
@@ -135,7 +138,7 @@ impl Config {
             health_cooldown_ms,
             diagnostics_enabled,
             trusted_searxng_url,
-        })
+        }))
     }
 }
 
@@ -350,13 +353,13 @@ mod websearch_policy_precedence_tests {
         let _lock = crate::storage::lock_test_env();
         let _environment = with_clean_environment();
         let mut config = Config::default();
-        config.websearch.resilience.enabled = false;
+        config.websearch.resilience.enabled = true;
         config.websearch.resilience.attempt_timeout_ms = 20_000;
         config.websearch.resilience.max_retries = 2;
         config.websearch.fallback_engines = vec![WebSearchEngine::Searxng];
 
-        let defaults = config.resolve_websearch_policy(None).unwrap();
-        assert!(!defaults.enabled);
+        let defaults = config.resolve_websearch_policy(None).unwrap().unwrap();
+        assert!(defaults.enabled);
         assert_eq!(defaults.attempt_timeout_ms, 20_000);
         assert_eq!(defaults.max_retries, 2);
         assert_eq!(defaults.fallback_order, vec![WebSearchEngine::Searxng]);
@@ -364,7 +367,7 @@ mod websearch_policy_precedence_tests {
         crate::env::set_var("JCODE_WEBSEARCH_RESILIENCE_ENABLED", "true");
         crate::env::set_var("JCODE_WEBSEARCH_ATTEMPT_TIMEOUT_MS", "30000");
         crate::env::set_var("JCODE_WEBSEARCH_FALLBACK_ENGINES", "bing,ddg");
-        let environment = config.resolve_websearch_policy(None).unwrap();
+        let environment = config.resolve_websearch_policy(None).unwrap().unwrap();
         assert!(environment.enabled);
         assert_eq!(environment.attempt_timeout_ms, 30_000);
         assert_eq!(environment.max_retries, 2);
@@ -380,7 +383,19 @@ mod websearch_policy_precedence_tests {
             ..WebSearchPolicyOverride::default()
         };
         let request_policy = config.resolve_websearch_policy(Some(&request)).unwrap();
-        assert!(!request_policy.enabled);
+        assert!(request_policy.is_none());
+
+        let request = WebSearchPolicyOverride {
+            enabled: Some(true),
+            attempt_timeout_ms: Some(100),
+            fallback_order: Some(vec![WebSearchEngine::Duckduckgo]),
+            ..WebSearchPolicyOverride::default()
+        };
+        let request_policy = config
+            .resolve_websearch_policy(Some(&request))
+            .unwrap()
+            .unwrap();
+        assert!(request_policy.enabled);
         assert_eq!(request_policy.attempt_timeout_ms, 100);
         assert_eq!(
             request_policy.fallback_order,
@@ -393,6 +408,7 @@ mod websearch_policy_precedence_tests {
         let _lock = crate::storage::lock_test_env();
         let _environment = with_clean_environment();
         let mut config = Config::default();
+        config.websearch.resilience.enabled = true;
         config.websearch.resilience.attempt_timeout_ms = 5_000;
         config.websearch.resilience.max_retries = 1;
         config.websearch.fallback_engines = vec![WebSearchEngine::Bing];
@@ -400,7 +416,7 @@ mod websearch_policy_precedence_tests {
         crate::env::set_var("JCODE_WEBSEARCH_ATTEMPT_TIMEOUT_MS", "secret-60001");
         crate::env::set_var("JCODE_WEBSEARCH_MAX_RETRIES", "not-a-number");
         crate::env::set_var("JCODE_WEBSEARCH_FALLBACK_ENGINES", "unknown-engine");
-        let policy = config.resolve_websearch_policy(None).unwrap();
+        let policy = config.resolve_websearch_policy(None).unwrap().unwrap();
         assert_eq!(policy.attempt_timeout_ms, 5_000);
         assert_eq!(policy.max_retries, 1);
         assert_eq!(policy.fallback_order, vec![WebSearchEngine::Bing]);
@@ -412,6 +428,7 @@ mod websearch_policy_precedence_tests {
         let _environment = with_clean_environment();
         let config = Config::default();
         let request = WebSearchPolicyOverride {
+            enabled: Some(true),
             attempt_timeout_ms: Some(60_001),
             ..WebSearchPolicyOverride::default()
         };
@@ -420,17 +437,39 @@ mod websearch_policy_precedence_tests {
     }
 
     #[test]
+    fn disabled_policy_ignores_inert_invalid_values_and_legacy_http_searxng() {
+        let _lock = crate::storage::lock_test_env();
+        let _environment = with_clean_environment();
+        let mut config = Config::default();
+        config.websearch.searxng_url = Some("http://searx.internal:8080".to_string());
+        config.websearch.resilience.enabled = false;
+        config.websearch.resilience.attempt_timeout_ms = 50;
+        let request = WebSearchPolicyOverride {
+            health_cooldown_ms: Some(500),
+            ..WebSearchPolicyOverride::default()
+        };
+
+        assert!(
+            config
+                .resolve_websearch_policy(Some(&request))
+                .expect("disabled resilience must leave legacy configuration inert")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn missing_engine_flags_default_to_eligible_and_unknown_order_entries_fail() {
         let _lock = crate::storage::lock_test_env();
         let _environment = with_clean_environment();
-        let config = Config::default();
-        let policy = config.resolve_websearch_policy(None).unwrap();
+        let mut config = Config::default();
+        config.websearch.resilience.enabled = true;
+        let policy = config.resolve_websearch_policy(None).unwrap().unwrap();
         assert!(policy.duckduckgo_enabled);
         assert!(policy.bing_enabled);
         assert!(policy.searxng_enabled);
 
         crate::env::set_var("JCODE_WEBSEARCH_FALLBACK_ENGINES", "ddg,not-real");
-        let policy = config.resolve_websearch_policy(None).unwrap();
+        let policy = config.resolve_websearch_policy(None).unwrap().unwrap();
         assert_eq!(policy.fallback_order, vec![WebSearchEngine::Bing]);
     }
 }
