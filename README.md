@@ -101,6 +101,12 @@ The clearest examples of my custom delta include:
   failure codes surfaced through the harness and Go SDK, fixes that prevent
   stale provider rerouting on restore, safer standard-tier OpenAI request
   defaults, and bounded, cancellable post-login validation for `jcode login`.
+- **Resilient free websearch:** a configurable DuckDuckGo-to-Bing fallback
+  chain with bounded retries and timeouts, temporary suppression of unhealthy
+  engines, privacy-safe diagnostics, and concise fallback status in the TUI.
+  Trusted SearXNG endpoints can be added explicitly, while the master switch
+  and per-engine controls preserve the legacy path when disabled. See the
+  [websearch guide](docs/WEBSEARCH.md) for configuration and behavior.
 - **Configurable debugging:** DAP debugger operations, adapter setup and
   launch transport, policy controls, and CLI/configuration switches for
   disabling the debugger when it is not wanted.
