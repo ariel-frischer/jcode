@@ -63,15 +63,6 @@ pub enum ImageExpandLevel {
 }
 
 impl ImageExpandLevel {
-    /// Next level in the click cycle (Fit -> Large -> Full -> Fit).
-    pub(crate) fn next(self) -> Self {
-        match self {
-            ImageExpandLevel::Fit => ImageExpandLevel::Large,
-            ImageExpandLevel::Large => ImageExpandLevel::Full,
-            ImageExpandLevel::Full => ImageExpandLevel::Fit,
-        }
-    }
-
     pub(crate) fn from_index(index: u8) -> Self {
         match index {
             1 => Self::Large,
