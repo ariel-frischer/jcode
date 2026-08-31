@@ -2,9 +2,17 @@ plan:
   branch: "021-resilient-websearch-fallbacks"
   created: "2026-08-31"
   spec_path: "specs/021-resilient-websearch-fallbacks/spec.yaml"
+  lifecycle: "accepted_target"
+  status: "Accepted target"
+  document_authority: "Normative target architecture for the feature; current implementation facts are listed separately and must not be read as already implemented."
+  current_facts:
+    - "The repository currently has legacy DuckDuckGo, Bing, and SearXNG websearch paths and existing configuration/output contracts."
+    - "The resilient policy, orchestrator, health state, diagnostic fields, TUI branch, and delivery evidence described below are not implemented by this planning artifact."
+  accepted_target:
+    - "When implemented, absent or false resilience uses the unchanged legacy path; true enables the bounded resilient target described below."
 
 summary: |
-  Keep the existing `websearch` tool, DuckDuckGo/Bing/SearXNG adapters, shared reqwest client, result text, and ToolOutput/event flow as the compatibility shell. Add an opt-in policy resolver and a small orchestration submodule in `jcode-app-core` that produces a stable eligible order, normalizes engine outcomes, applies one bounded transient retry by default, and maintains short-lived in-memory health suppression per engine. Legacy execution remains the exact path when the new master switch is absent or false. The resilient path uses only DuckDuckGo HTML, keyless Bing HTML fallback, and an explicitly configured trusted SearXNG instance; it adds no paid, browser-driven, CAPTCHA-bypass, or untrusted-public engine.
+  This is an accepted target plan, not a current-state description. Keep the existing `websearch` tool, DuckDuckGo/Bing/SearXNG adapters, shared reqwest client, result text, and ToolOutput/event flow as the compatibility shell. Add an opt-in policy resolver and a small orchestration submodule in `jcode-app-core` that produces a stable eligible order, normalizes engine outcomes, applies one bounded transient retry by default, and maintains short-lived in-memory health suppression per engine. Legacy execution remains the exact path when the new master switch is absent or false. The resilient path uses DuckDuckGo HTML, always uses free keyless Bing HTML, and uses SearXNG only through an explicitly configured trusted instance; it adds no paid, browser-driven, CAPTCHA-bypass, or untrusted-public engine.
 
   Add additive typed configuration in `jcode-config-types`, environment resolution in `jcode-base`, and optional non-secret request policy overrides while retaining all legacy input fields and aliases. A bounded privacy-safe diagnostic summary is attached through existing ToolOutput metadata/text and a compact ToolOutput title. The TUI makes one targeted `websearch` rendering exception so ordinary success shows only the selected engine, while fallback, retry, suppression, or exhaustion shows one compact attempt summary. Delivery proceeds through focused deterministic tests, orchestration-only benchmark evidence, a newly built binary on an isolated socket with a local trusted SearXNG fixture, documentation, guardrails, integration, and only then a separate explicit user-config enablement step.
 
@@ -46,16 +54,16 @@ technical_context:
   constraints:
     - "The resilient master switch defaults to false, and the false or absent setting must execute the current legacy path unchanged."
     - "DuckDuckGo, Bing, and SearXNG names, aliases, existing config fields, tool input, result text shape, and events remain valid."
-    - "The canonical precedence for new operational settings is request override, then environment, then persisted configuration, then built-in default."
+    - "Operational settings resolve request/session override > environment > persisted configuration > built-in default. fallback_order specifically resolves request resilience.fallback_order > JCODE_WEBSEARCH_FALLBACK_ENGINES > existing persisted websearch.fallback_engines > default [bing], then prepends the preferred/request-selected engine and stable-deduplicates first occurrences."
     - "Default resilient policy uses fallback, retry, health suppression, and diagnostics only after the master switch is enabled."
-    - "SearXNG is unavailable without an explicitly configured trusted instance, and diagnostics must never print its URL."
+    - "SearXNG is persisted/environment configuration-only and unavailable without an explicitly configured operator-trusted endpoint. The endpoint must be valid HTTPS, except HTTP loopback is allowed, must have no userinfo, is validated before network work, and is never inferred or emitted."
     - "No required API key, paid search API, browser automation, CAPTCHA solving, challenge bypass, or default untrusted public endpoint is introduced."
     - "All waits and work are bounded by finite per-attempt timeout, retry count, fixed capped retry delay, finite engine order, and short health cooldown."
-    - "Queries, keys, response bodies, and private endpoint URLs are prohibited from diagnostics and TUI summaries."
+    - "Contract-level diagnostics and presentation-level TUI summaries each prohibit queries, keys, response bodies, secret values, and endpoint URLs; the two obligations remain separately testable."
     - "The existing shared HTTP client and ToolOutput/event contracts must be reused."
     - "Personal user configuration remains untouched until the supporting change is merged, installed, active, and separately verified."
     - "No new external crate dependency is required."
-  scale_scope: "At most three supported engines per search, default one retry per eligible engine, small process-local health entries keyed by engine, and one bounded summary per tool call."
+  scale_scope: "At most three supported engines per search (E <= 3), default one retry per eligible engine (R = 1), maximum physical attempts E*(1+R), elapsed upper bound E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance, small process-local health entries keyed by engine, and one bounded summary per tool call."
 
 constitution_check:
   constitution_path: ".autospec/constitution.yaml"
@@ -77,7 +85,7 @@ constitution_check:
       notes: "Every frozen Bead check and specification behavior maps to an exact resolver, state-machine, adapter, privacy, rendering, benchmark, or isolated-runtime check."
     - name: "Visible Failures and Trust-Boundary Validation (PRIN-006)"
       status: "PASS"
-      notes: "Invalid policy values fail or use a documented lower-precedence safe value before network work, exhausted search is actionable, and negative assertions prohibit sensitive diagnostics."
+      notes: "Invalid request overrides fail before network work; invalid persisted policy returns an actionable pre-network validation error; invalid or empty environment candidates warn without their values and fall through. Exhausted search is actionable, and negative assertions prohibit sensitive diagnostics."
     - name: "Repository Guardrails Are Delivery Gates (PRIN-007)"
       status: "PASS"
       notes: "Focused tests precede affected builds; formatting, Clippy/guardrails, benchmark evidence, and the isolated built-binary smoke are explicit delivery gates."
@@ -91,6 +99,65 @@ constitution_check:
       status: "PASS"
       notes: "A focused orchestration benchmark enforces the stated budget, and runtime evidence uses the newly built executable through a private socket with executable identity recorded."
 
+  executable_checks:
+    - principle: "PRIN-001"
+      check: "git diff --check; review git status/diff and stage only feature-owned paths in T025"
+    - principle: "PRIN-002"
+      check: "Focused legacy fixture and absent/false-master regression tests in T002/T009/T011/T023"
+    - principle: "PRIN-003"
+      check: "T003/T006/T012/T013 precedence matrix, including exact fallback_order source chain"
+    - principle: "PRIN-004"
+      check: "scripts/check_dependency_boundaries.py and Cargo metadata in T024"
+    - principle: "PRIN-005"
+      check: "Exact focused config, orchestration, adapter, diagnostics, and TUI tests in T023"
+    - principle: "PRIN-006"
+      check: "Pre-network invalid-policy/trust-boundary and negative privacy assertions in T003/T009/T014/T022"
+    - principle: "PRIN-007"
+      check: "Formatting, affected builds, Clippy, guardrails, and artifact validators in T024"
+    - principle: "PRIN-008"
+      check: "No paid/browser dependency, second tool, or unrelated TUI redesign in T009/T011/T024"
+    - principle: "PRIN-009"
+      check: "T025/T026/T027 active-build-before-config-write and reversible post-integration workflow"
+    - principle: "PRIN-010"
+      check: "T018/T020 benchmark receipt and T022 isolated-socket built-binary runtime identity"
+
+frozen_bead_mapping:
+  source: "spec.yaml:frozen_acceptance_checks"
+  checks:
+    - id: "OW6-001"
+      tasks: ["T001", "T002", "T009", "T011", "T023"]
+      evidence: "validation.md#OW6-001"
+    - id: "OW6-002"
+      tasks: ["T003", "T006", "T007", "T012", "T013", "T023"]
+      evidence: "validation.md#OW6-002"
+    - id: "OW6-003"
+      tasks: ["T004", "T007", "T009", "T012", "T013", "T022", "T023"]
+      evidence: "validation.md#OW6-003"
+    - id: "OW6-004"
+      tasks: ["T004", "T008", "T010", "T011", "T023"]
+      evidence: "validation.md#OW6-004"
+    - id: "OW6-005"
+      tasks: ["T008", "T010", "T018", "T020", "T023"]
+      evidence: "validation.md#OW6-005"
+    - id: "OW6-006"
+      tasks: ["T004", "T007", "T010", "T023"]
+      evidence: "validation.md#OW6-006"
+    - id: "OW6-007"
+      tasks: ["T014", "T016", "T023"]
+      evidence: "validation.md#OW6-007"
+    - id: "OW6-008"
+      tasks: ["T015", "T017", "T023"]
+      evidence: "validation.md#OW6-008"
+    - id: "OW6-009"
+      tasks: ["T011", "T016", "T022", "T023"]
+      evidence: "validation.md#OW6-009"
+    - id: "OW6-010"
+      tasks: ["T019", "T020", "T021", "T024"]
+      evidence: "validation.md#OW6-010"
+    - id: "OW6-011"
+      tasks: ["T022", "T024", "T025", "T026", "T027"]
+      evidence: "validation.md#OW6-011"
+
 research_findings:
   decisions:
     - topic: "Compatibility boundary"
@@ -100,7 +167,7 @@ research_findings:
         - "Route both modes through the new state machine, which creates unnecessary regression risk for legacy users."
         - "Replace the websearch tool, which would break the public identity and consumer expectations."
     - topic: "Supported free engine set"
-      decision: "Orchestrate only the three existing engines: DuckDuckGo HTML, keyless Bing HTML for fallback, and explicitly configured trusted SearXNG."
+      decision: "Orchestrate only the three existing engines: DuckDuckGo HTML, always-free keyless Bing HTML in resilient mode, and explicitly configured trusted SearXNG."
       rationale: "No additional engine found in scope offers a clearly trustworthy free access path without paid credentials, unstable scraping, browser automation, or an untrusted public default."
       alternatives_considered:
         - "Add a paid search API, rejected by the free-only requirement."
@@ -114,20 +181,20 @@ research_findings:
         - "Expose unbounded retry/backoff controls, which increases complexity and risk."
         - "Disable every subfeature by default, which makes opt-in orchestration unexpectedly ineffective."
     - topic: "Precedence and request controls"
-      decision: "Represent non-secret operational request overrides as one optional nested WebSearchPolicyOverride while retaining existing flat engine, market, query, and result-count inputs; resolve each field independently over raw environment, persisted config, and defaults."
+      decision: "Represent non-secret operational request overrides as one optional nested WebSearchPolicyOverride while retaining exactly the canonical legacy request fields query, num_results, engine, and bing_market. Credentials and the SearXNG URL remain configuration-only. Resolve operational fields independently over request/session, environment, persisted config, and defaults; resolve fallback_order through its explicit four-source chain."
       rationale: "This satisfies the mandated precedence without duplicating credentials or private URLs in tool input and avoids a large set of new top-level model-facing fields."
       alternatives_considered:
         - "Use only global config, which fails request-over-environment precedence."
         - "Expose Bing keys or SearXNG URLs in request policy, which expands the sensitive-data boundary."
         - "Mutate global configuration per request, which would leak state across sessions."
     - topic: "Stable orchestration and outcome model"
-      decision: "Use a small pure policy/order/state layer with a scripted backend seam for tests; normalize each engine attempt as success, empty, challenge, timeout, transient, permanent, unavailable, disabled, or health-suppressed."
+      decision: "Use a small pure policy/order/state layer with a scripted backend seam for tests; normalize each considered engine as success, empty, challenge, timeout, transient, permanent, unavailable, disabled, or health-suppressed. Exhausted is aggregate search scope only."
       rationale: "Typed outcomes make retry, fallback, health, diagnostics, and exhaustive tests deterministic instead of inferring policy from anyhow strings."
       alternatives_considered:
         - "Continue matching human-readable error strings, which is brittle and leaks presentation into policy."
         - "Build a general search-provider framework, which is broader than the three-engine requirement."
     - topic: "Retry, timeout, and health semantics"
-      decision: "Wrap each physical engine request in tokio::time::timeout, retry only transport errors, timeouts, HTTP 429, and HTTP 502/503/504, never retry challenge/empty/auth/config/parser/permanent outcomes, and update health only for eligible transient terminal failures."
+      decision: "Wrap each physical engine request in tokio::time::timeout, retry only transport errors, timeouts, HTTP 429, and HTTP 502/503/504, never retry challenge/empty/auth/config/parser/permanent outcomes, and update health once only when the engine sequence ends in eligible transient failure after retries; transient-then-success resets health."
       rationale: "This directly implements the narrow transient policy, prevents challenge hammering, and bounds total work by engine count times retry allowance and timeout."
       alternatives_considered:
         - "Retry every error, which wastes time and risks repeated blocked requests."
@@ -148,7 +215,7 @@ research_findings:
         - "Return only the final anyhow error, which loses per-engine causes and the ToolOutput title."
         - "Always print verbose diagnostics, which makes successful output noisy."
     - topic: "Minimal TUI visibility"
-      decision: "Set the WebSearch ToolOutput title to the selected engine for ordinary success or a compact engine/attempt/retry summary for meaningful activity, and teach the existing generic tool-card renderer to prefer title only for websearch."
+      decision: "Set the WebSearch ToolOutput title to the terminal selected engine for ordinary success or a deterministic one-line engine/attempt/retry summary for meaningful activity, capped at 96 display characters with deterministic ellipsis, and teach the existing generic tool-card renderer to prefer title only for websearch."
       rationale: "The current TUI already transports ToolOutput titles but only special-cases subagent titles; one websearch branch provides visibility without a new panel or event shape."
       alternatives_considered:
         - "Redesign the tool card or add a diagnostics panel, which is explicitly out of scope."
@@ -172,10 +239,26 @@ data_model:
           type: "bool"
           description: "Master switch selecting legacy or resilient execution."
           constraints: "Defaults false."
-        - name: "engine_enabled"
-          type: "Map<WebSearchEngine, bool>"
-          description: "Independent eligibility for DuckDuckGo, Bing, and SearXNG."
-          constraints: "Known engines only; legacy path ignores these flags."
+        - name: "duckduckgo_enabled"
+          type: "bool"
+          description: "Independent eligibility for DuckDuckGo."
+          constraints: "Missing defaults true; unknown serialized keys are rejected; legacy path ignores this field."
+        - name: "bing_enabled"
+          type: "bool"
+          description: "Independent eligibility for Bing."
+          constraints: "Missing defaults true; unknown serialized keys are rejected; legacy path ignores this field."
+        - name: "searxng_enabled"
+          type: "bool"
+          description: "Independent eligibility for SearXNG."
+          constraints: "Missing defaults true; unknown serialized keys are rejected; legacy path ignores this field."
+        - name: "trusted_searxng_url"
+          type: "Option<Url>"
+          description: "Operator-supplied SearXNG endpoint retained in persisted/environment configuration only."
+          constraints: "Must be valid HTTPS, except HTTP loopback is allowed; no userinfo; empty/malformed/untrusted values are actionable before network; never inferred or emitted."
+        - name: "fallback_order"
+          type: "Vec<WebSearchEngine>"
+          description: "Persisted resilient fallback candidates, sourced from request/environment/persisted/default precedence."
+          constraints: "Environment name JCODE_WEBSEARCH_FALLBACK_ENGINES; persisted source is existing websearch.fallback_engines; default [bing]; invalid persisted values are actionable before network."
         - name: "fallback_enabled"
           type: "bool"
           description: "Whether eligible engines after the preferred engine may be considered."
@@ -216,9 +299,9 @@ data_model:
       description: "Optional non-secret per-request or per-session operational candidates."
       fields:
         - name: "fields"
-          type: "Option values matching WebSearchResilienceConfig"
-          description: "Only explicitly supplied values override lower-precedence sources."
-          constraints: "No credentials or endpoint URLs; invalid values fail before network work."
+          type: "Independent optional non-secret fields"
+          description: "Only explicitly supplied values override lower-precedence sources; fallback_order is one supported field."
+          constraints: "Canonical legacy request fields remain query, num_results, engine, and bing_market; credentials and SearXNG endpoint URLs are forbidden; invalid values fail before network work."
       relationships:
         - target: "ResolvedWebSearchPolicy"
           type: "many-to-one"
@@ -232,8 +315,8 @@ data_model:
           constraints: "Each value records a non-secret source and satisfies documented bounds."
         - name: "engine_order"
           type: "Vec<WebSearchEngine>"
-          description: "Preferred engine followed by configured fallbacks in first-occurrence order."
-          constraints: "No duplicates; disabled, unavailable, and currently suppressed engines are excluded from attempts."
+          description: "Preferred or request-selected engine prepended to the resolved fallback_order, then stable first-occurrence deduplicated."
+          constraints: "Considered order retains skipped entries; disabled, unavailable, and currently suppressed engines are recorded skipped and excluded from physical attempts."
       relationships:
         - target: "EngineAttemptOutcome"
           type: "one-to-many"
@@ -253,9 +336,9 @@ data_model:
           description: "Physical attempt index for the engine."
           constraints: "At most max_retries plus one."
         - name: "classification"
-          type: "EngineOutcomeKind"
-          description: "Success, empty, challenge, timeout, transient, permanent, disabled, unavailable, health-suppressed, or exhausted."
-          constraints: "Classification deterministically defines retry, fallback, health, and terminal behavior."
+          type: "PerEngineOutcomeKind"
+          description: "Success, empty, challenge, timeout, transient, permanent, disabled, unavailable, or health-suppressed."
+          constraints: "Exhausted is forbidden at per-engine scope; classification deterministically defines retry, fallback, health, and terminal behavior."
         - name: "elapsed_ms"
           type: "u64"
           description: "Privacy-safe bounded attempt duration."
@@ -272,12 +355,12 @@ data_model:
       fields:
         - name: "consecutive_failures"
           type: "u8"
-          description: "Count of eligible consecutive terminal failures."
-          constraints: "Reset or improved on success; permanent/challenge/empty outcomes do not increment."
+          description: "Count of eligible consecutive engine sequences that ended transiently after all permitted retries."
+          constraints: "Increment once per terminal sequence only; transient-then-success resets; permanent/challenge/empty outcomes do not increment."
         - name: "suppressed_until"
           type: "Option<Instant>"
           description: "Cooldown expiry for the engine."
-          constraints: "Not serialized; expiry is evaluated against one captured decision time."
+          constraints: "Not serialized; suppression is active only when now < suppressed_until, and at now >= suppressed_until the state is cleared before a normal attempt using one captured decision time."
       relationships:
         - target: "WebSearchTool"
           type: "many-to-one"
@@ -287,8 +370,8 @@ data_model:
       fields:
         - name: "considered"
           type: "Vec<EngineSummary>"
-          description: "Ordered attempted and skipped engine outcomes."
-          constraints: "Maximum one bounded entry per supported engine plus retry counts."
+          description: "Ordered entries for every engine in the merged order, including skipped engines."
+          constraints: "Maximum one bounded entry per supported engine plus physical retry counts; each entry has a per-engine outcome, never exhausted."
         - name: "selected_engine"
           type: "Option<WebSearchEngine>"
           description: "Engine producing usable results, if any."
@@ -298,9 +381,9 @@ data_model:
           description: "Total physical attempts."
           constraints: "Bounded by eligible engines and retry allowance."
         - name: "terminal_outcome"
-          type: "EngineOutcomeKind"
-          description: "Success or aggregate exhaustion classification."
-          constraints: "Actionable but privacy-safe."
+          type: "SearchTerminalOutcome"
+          description: "Aggregate search-terminal success, actionable no-eligible/configuration failure, or exhausted."
+          constraints: "Exhausted exists only at aggregate search scope and is actionable but privacy-safe."
       relationships:
         - target: "ToolOutput"
           type: "one-to-one"
@@ -313,7 +396,7 @@ api_contracts:
       description: "Existing public websearch tool with additive optional resilient operational overrides."
       request:
         content_type: "application/json"
-        body_schema: "{query:string, num_results?:integer, engine?:duckduckgo|ddg|bing|searxng|searx, bing_market?:string, resilience?:WebSearchPolicyOverride}"
+        body_schema: "{query:string, num_results?:integer, engine?:duckduckgo|ddg|bing|searxng|searx, bing_market?:string, resilience?:WebSearchPolicyOverride}; canonical legacy request fields are query, num_results, engine, and bing_market; Bing credentials/settings and the SearXNG URL are configuration-only and are not accepted in resilience"
       response:
         success_code: 200
         body_schema: "Existing ToolOutput text plus title and optional privacy-safe metadata; ordinary result formatting remains compatible, and handled exhaustion returns one actionable aggregate outcome."
@@ -321,7 +404,7 @@ api_contracts:
         - code: 400
           description: "Malformed JSON, invalid override bounds, unsupported engine values, or other pre-network input validation failure."
         - code: 504
-          description: "Individual engine timeouts are normalized and may fallback; only unhandled tool-runtime failures escape the aggregate orchestration contract."
+          description: "Only infrastructure/runtime failures escape as errors; handled per-engine timeouts and timeout exhaustion remain aggregate ToolOutput outcomes, with fallback only when enabled."
 
 project_structure:
   documentation:
@@ -354,80 +437,90 @@ project_structure:
     - path: "crates/jcode-app-core/src/tool/websearch.rs"
       description: "Existing parser/alias regression tests plus local HTTP fixture classification and ToolOutput integration tests."
     - path: "crates/jcode-tui/src/tui/ui_messages.rs"
-      description: "Rendered first-success, fallback, retry, suppression, diagnostics-disabled, and aggregate-failure compact status assertions."
+      description: "Rendered first-success, fallback, retry, suppression, diagnostics-disabled, and aggregate-failure one-line status assertions with a 96 display-character cap and deterministic ellipsis."
+
+diagnostics_contract:
+  schema:
+    fields: ["schema_version", "effective_policy", "considered", "physical_attempt_count", "retry_count", "skip_count", "elapsed_ms", "selected_engine", "per_engine_outcomes", "search_terminal"]
+    bounds: "At most one considered entry per supported engine, E <= 3, physical attempts <= E*(1+R), and elapsed upper bound E*(1+R)*timeout + E*R*retry_delay plus scheduler tolerance."
+    prohibited: ["query", "credentials", "secret values", "response bodies", "SearXNG URL", "other endpoint URLs"]
+  trigger_matrix:
+    - condition: "diagnostics_enabled and clean first-attempt success"
+      metadata: "Present with selected_engine and success outcome."
+      text: "No extra diagnostic text."
+    - condition: "diagnostics_enabled and fallback/retry/suppression"
+      metadata: "Present with ordered considered entries, counts, and per-engine outcomes."
+      text: "Exactly one bounded summary line."
+    - condition: "diagnostics_enabled and aggregate failure"
+      metadata: "Present with concise reason for every considered engine and aggregate search-terminal outcome."
+      text: "Exactly one bounded actionable line."
+    - condition: "diagnostics disabled"
+      metadata: "Absent."
+      text: "Absent beyond normal result or actionable aggregate outcome."
 
 implementation_phases:
   - phase: 1
-    name: "Freeze compatibility and policy contracts"
-    goal: "Define additive config and request types, exact defaults/ranges, canonical precedence, and failing tests before runtime behavior changes."
+    name: "Setup"
+    goal: "Freeze compatibility facts, the eleven frozen Bead checks, the accepted target boundary, and deterministic evidence commands before runtime changes."
     deliverables:
-      - "Legacy TOML and tool-input fixtures for DuckDuckGo, Bing, SearXNG, aliases, fallback_engines, Bing settings, and absent resilience policy."
-      - "WebSearchResilienceConfig and WebSearchPolicyOverride serde/default/validation tests."
-      - "Full request > environment > persisted > default precedence matrix, including unset, empty, invalid, unsupported, and conflicting candidates."
-      - "Documented environment variable names and lower-precedence fallback/error behavior."
+      - "Legacy configuration/request/output/event inventory and baseline evidence."
+      - "OW6-001..OW6-011 matrix mapped to requirements, tasks, and validation.md evidence anchors."
+      - "Explicit statement that master-disabled behavior remains legacy and personal configuration is untouched before T027."
   - phase: 2
-    name: "Build the deterministic orchestration core"
-    goal: "Introduce the modular typed outcome and state-machine layer without changing the existing engine HTTP code."
+    name: "Foundational"
+    goal: "Define additive policy contracts, exact source precedence, validation behavior, and pure typed orchestration primitives."
     dependencies:
       - "Phase 1"
     deliverables:
-      - "Stable first-occurrence engine ordering and eligibility filtering."
-      - "Typed success, empty, challenge, timeout, transient, permanent, disabled, unavailable, health-suppressed, and exhausted outcomes."
-      - "Scripted backend seam with exact attempt-order, no-duplicate, no-disabled-attempt, stop-on-success, and aggregate-reason tests."
-      - "At least 100 repeated deterministic decision runs with identical recorded attempts."
+      - "Explicit DuckDuckGo/Bing/SearXNG boolean eligibility fields with missing=true and unknown-key rejection."
+      - "fallback_order source chain: request resilience.fallback_order > JCODE_WEBSEARCH_FALLBACK_ENGINES > existing persisted websearch.fallback_engines > default [bing]."
+      - "Invalid request/persisted/environment candidate behavior, with pre-network errors and value-free warnings as specified."
+      - "Stable preferred/request-selected prepend and first-occurrence deduplication, typed per-engine outcomes, aggregate-only exhausted, and explicit-time health state."
   - phase: 3
-    name: "Integrate adapters, bounds, retries, and health"
-    goal: "Route resilient mode through existing DuckDuckGo, Bing, and SearXNG adapters while preserving the disabled-master legacy path."
+    name: "User Story 1 - Receive reliable free web search results"
+    goal: "Use the existing free adapters through a bounded resilient state machine that recognizes objective usable results and preserves the exact legacy branch."
     dependencies:
       - "Phase 2"
     deliverables:
-      - "Existing shared HTTP client retained with per-request tokio timeout wrappers."
-      - "HTTP/transport/parser response mapping into normalized outcomes using local deterministic servers where transport classification is required."
-      - "One default retry only for transport, timeout, 429, 502, 503, and 504 outcomes with fixed bounded delay and no retry for challenge, empty, auth, config, malformed, or permanent outcomes."
-      - "Process-local per-engine health threshold, cooldown, skip, expiry, success recovery, and cross-engine isolation with explicit-time tests."
-      - "Trusted SearXNG unavailable behavior with no inferred public endpoint."
-      - "Legacy and resilient Bing API/HTML compatibility tests proving no new paid dependency and keyless fallback behavior."
+      - "Usable result predicate: at least one result with non-empty title and valid http/https URL; snippet optional."
+      - "Fallback-disabled terminal behavior, narrow transient retries, exact E*(1+R) and elapsed bounds, and actionable aggregate outcomes."
+      - "SearXNG trust validation and resilient keyless Bing HTML versus legacy credentialed Bing API behavior."
   - phase: 4
-    name: "Add aggregate diagnostics and minimal TUI status"
-    goal: "Explain meaningful fallback behavior through existing output contracts without making ordinary success noisy."
+    name: "User Story 2 - Control resilient search behavior"
+    goal: "Expose independently validated operator controls and request policy overrides without expanding the credential or endpoint trust boundary."
     dependencies:
       - "Phase 3"
     deliverables:
-      - "Bounded SearchDiagnosticSummary with effective non-secret values, considered engines, attempts, retries, skips, elapsed summary, selected engine, and terminal reasons."
-      - "Negative assertions for query fixtures, keys, secret environment values, response bodies, and private SearXNG URLs."
-      - "ToolOutput title showing only the selected engine on first success and a compact attempt/retry summary on meaningful activity."
-      - "Conditional one-line public output summary for fallback/retry/suppression/exhaustion only when diagnostics are enabled."
-      - "Targeted TUI rendering tests for first success, fallback success, retry success, suppression, diagnostics disabled, and aggregate failure without a new panel."
+      - "Canonical request fields and non-secret request override wiring."
+      - "Pre-network validation for request/persisted policy errors and warning-only value-free environment fallthrough."
+      - "Independent eligibility, fallback, retry, health, timeout, and diagnostics controls with no global-state mutation."
   - phase: 5
-    name: "Document and prove performance"
-    goal: "Make configuration predictable and record attributable orchestration-overhead evidence."
+    name: "User Story 3 - Understand fallback activity without noise"
+    goal: "Attach the stable bounded diagnostic contract and one-line TUI visibility while separating metadata contract requirements from presentation noise requirements."
     dependencies:
       - "Phase 4"
     deliverables:
-      - "docs/WEBSEARCH.md and default config template covering every control, default, precedence rule, valid range, retry class, cooldown behavior, privacy promise, trusted SearXNG requirement, and disabled/enabled examples."
-      - "Focused ignored benchmark-style test over orchestration-only work with warm-up, repeated samples, median and p95 output, and assertion of median below 1 ms and below 2 percent of 100 ms."
-      - "Before/after or legacy/resilient benchmark receipt with command, candidate commit, profile, hardware, sample count, and measured values in validation.md."
+      - "Diagnostics schema/trigger matrix, including metadata on diagnostics-enabled first success and no extra text."
+      - "Contract-level privacy assertions and presentation-level privacy/noise assertions kept distinct."
+      - "One-line TUI title capped at 96 display characters with deterministic ellipsis."
   - phase: 6
-    name: "Validate the built public path"
-    goal: "Prove the candidate binary, not the shared old daemon, exposes deterministic resilient behavior through the public websearch workflow."
+    name: "User Story 4 - Adopt the feature with confidence"
+    goal: "Document the accepted target and produce attributable benchmark and newly built public-path evidence before integration."
     dependencies:
       - "Phase 5"
     deliverables:
-      - "Focused config, app-core, and TUI tests plus formatting and affected builds."
-      - "Temporary JCODE_HOME with resilience enabled, first engine disabled, trusted local SearXNG fixture, diagnostics enabled, and no personal config mutation."
-      - "Newly built jcode run against a unique isolated socket with resolved executable identity and candidate commit recorded."
-      - "Observed fallback/skip summary, selected SearXNG title, compatible search output, and zero external search requests in the deterministic fixture smoke."
-      - "scripts/check_guardrails.sh result with unrelated baseline failures isolated rather than hidden."
+      - "Documentation/template coverage for both modes, precedence, bounds, trust, privacy, and rollback."
+      - "Orchestration-only benchmark receipt with median/p95 and formula evidence."
+      - "Isolated-socket built-binary smoke using local trusted SearXNG fixture, candidate identity, fallback summary, selected title, compatible output, and zero external search traffic."
   - phase: 7
-    name: "Integrate, activate, and explicitly enable user configuration"
-    goal: "Complete the frozen post-integration acceptance check without enabling unsupported settings early."
+    name: "Polish & Cross-Cutting Concerns"
+    goal: "Run final checks, hand off only owned files, verify the active landed build, then perform the explicit reversible personal-config enablement."
     dependencies:
       - "Phase 6"
     deliverables:
-      - "Commit only owned feature files in the isolated worktree and hand the reviewed branch to the repository integration workflow."
-      - "After merge into dev, install the active build using the repository fast install/reload procedure and verify the launcher/shared-server binary contains the supporting commit."
-      - "Only after active-build verification, back up and update Ariel's personal config with the documented resilient settings and trusted SearXNG choice if available."
-      - "Run one post-enable validation, record effective non-secret settings and outcome, and preserve an easy rollback to master disabled."
+      - "Focused acceptance matrix, repeated-run proof, formatting/build/Clippy/guardrail/dependency checks."
+      - "Feature-owned commit and reviewed integration handoff without root-branch changes."
+      - "Post-merge install/reload and active executable identity before any personal config write; backup, enablement, validation, and master-disabled rollback."
 
 open_questions:
   - question: "Which explicitly trusted SearXNG instance, if any, should be placed in Ariel's personal configuration during the post-integration enablement step?"
