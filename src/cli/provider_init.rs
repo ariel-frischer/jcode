@@ -91,6 +91,10 @@ const PROVIDER_CHOICE_LOGIN_PROVIDERS: &[(ProviderChoice, LoginProviderDescripto
         crate::provider_catalog::BASETEN_LOGIN_PROVIDER,
     ),
     (
+        ProviderChoice::Conifer,
+        crate::provider_catalog::CONIFER_LOGIN_PROVIDER,
+    ),
+    (
         ProviderChoice::Cortecs,
         crate::provider_catalog::CORTECS_LOGIN_PROVIDER,
     ),
@@ -197,6 +201,10 @@ const PROVIDER_CHOICE_LOGIN_PROVIDERS: &[(ProviderChoice, LoginProviderDescripto
     (
         ProviderChoice::Cerebras,
         crate::provider_catalog::CEREBRAS_LOGIN_PROVIDER,
+    ),
+    (
+        ProviderChoice::Belvedir,
+        crate::provider_catalog::BELVEDIR_LOGIN_PROVIDER,
     ),
     (
         ProviderChoice::AlibabaCodingPlan,
@@ -1388,6 +1396,7 @@ async fn init_provider_with_options(
         | ProviderChoice::Zai
         | ProviderChoice::Ai302
         | ProviderChoice::Baseten
+        | ProviderChoice::Conifer
         | ProviderChoice::Cortecs
         | ProviderChoice::Comtegra
         | ProviderChoice::Deepseek
@@ -1415,6 +1424,7 @@ async fn init_provider_with_options(
         | ProviderChoice::Ollama
         | ProviderChoice::Chutes
         | ProviderChoice::Cerebras
+        | ProviderChoice::Belvedir
         | ProviderChoice::AlibabaCodingPlan
         | ProviderChoice::GeminiApi
         | ProviderChoice::OpenaiCompatible => {
