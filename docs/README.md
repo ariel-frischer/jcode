@@ -22,6 +22,7 @@ Reference documentation for the jcode codebase.
 - TUI file previews: `INLINE_FILE_PREVIEW.md`
 - Desktop app: `DESKTOP_APP_ARCHITECTURE.md`, `DESKTOP_CODEBASE_ARCHITECTURE.md`
 - Providers: `PROVIDER_DOCTOR.md`, `AWS_BEDROCK_PROVIDER.md`
+- Web search: `WEBSEARCH.md` (legacy compatibility, opt-in resilient fallbacks, controls, trust, diagnostics, and rollback)
 - Go SDK: `GO_SDK.md`, `GO_SDK_ARCHITECTURE.md`, `GO_SDK_RELEASE_PLAN.md` (external `jcode-go/dev` ownership, read-only wire compatibility, and tagged releases)
 
 ## Conventions

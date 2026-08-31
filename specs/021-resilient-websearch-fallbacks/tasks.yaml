@@ -78,7 +78,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Add failing config contract tests for resilient policy defaults, bounds, aliases, and legacy decoding"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
@@ -92,7 +92,7 @@ phases:
 
       - id: "T003"
         title: "Add failing environment and persisted-policy precedence matrix tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
@@ -106,7 +106,7 @@ phases:
 
       - id: "T004"
         title: "Add failing deterministic tests for typed outcomes, order filtering, and health transitions"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
@@ -120,7 +120,7 @@ phases:
 
       - id: "T005"
         title: "Implement additive WebSearchResilienceConfig and WebSearchPolicyOverride types"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
@@ -134,7 +134,7 @@ phases:
 
       - id: "T006"
         title: "Implement the canonical websearch policy source resolver and safe environment parsing"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
@@ -148,7 +148,7 @@ phases:
 
       - id: "T007"
         title: "Implement the pure orchestration model, eligible-order resolver, and per-engine health state"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: null
@@ -169,7 +169,7 @@ phases:
     tasks:
       - id: "T008"
         title: "Add failing orchestration behavior tests for fallback, retry, timeout, and exhaustion"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
@@ -183,7 +183,7 @@ phases:
 
       - id: "T009"
         title: "Add failing local HTTP adapter and legacy compatibility tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-001"
@@ -197,7 +197,7 @@ phases:
 
       - id: "T010"
         title: "Implement bounded retry/fallback execution and health-aware attempt transitions"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -213,7 +213,7 @@ phases:
 
       - id: "T011"
         title: "Integrate resilient execution into WebSearchTool while preserving the exact legacy branch"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -234,7 +234,7 @@ phases:
     tasks:
       - id: "T012"
         title: "Add failing end-to-end control, precedence, and free-only compatibility tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
@@ -249,7 +249,7 @@ phases:
 
       - id: "T013"
         title: "Wire resolved policy and request overrides into WebSearchTool execution"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
@@ -269,7 +269,7 @@ phases:
     tasks:
       - id: "T014"
         title: "Add failing diagnostic privacy and output-contract tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"
@@ -283,7 +283,7 @@ phases:
 
       - id: "T015"
         title: "Add failing TUI rendering tests for selected-engine and compact attempt summaries"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-003"
@@ -297,7 +297,7 @@ phases:
 
       - id: "T016"
         title: "Implement bounded SearchDiagnosticSummary and ToolOutput metadata/title/text formatting"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -311,7 +311,7 @@ phases:
 
       - id: "T017"
         title: "Implement the targeted websearch title preference in the existing TUI tool-card renderer"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -330,7 +330,7 @@ phases:
     tasks:
       - id: "T018"
         title: "Add the ignored orchestration-overhead benchmark acceptance test"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-004"
@@ -343,7 +343,7 @@ phases:
 
       - id: "T019"
         title: "Add documentation and generated-template coverage checks"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: "US-004"
@@ -356,7 +356,7 @@ phases:
 
       - id: "T020"
         title: "Implement the focused benchmark and record attributable performance evidence"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-004"
@@ -369,7 +369,7 @@ phases:
 
       - id: "T021"
         title: "Document legacy and resilient websearch configuration and update the default TOML template"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-004"
@@ -383,7 +383,7 @@ phases:
 
       - id: "T022"
         title: "Run the newly built public websearch path on an isolated socket with a local trusted fixture"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
@@ -401,7 +401,7 @@ phases:
     tasks:
       - id: "T023"
         title: "Run the complete focused deterministic acceptance matrix and repeated-run proof"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"
@@ -416,7 +416,7 @@ phases:
 
       - id: "T024"
         title: "Run formatting, affected builds, Clippy, dependency-boundary checks, and repository guardrails"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"

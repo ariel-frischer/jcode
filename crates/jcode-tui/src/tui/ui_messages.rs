@@ -1,6 +1,8 @@
 use super::*;
 #[path = "ui_messages_cache.rs"]
 mod cache_support;
+#[path = "ui_websearch.rs"]
+mod websearch_ui;
 use crate::message::{
     ParsedBackgroundTaskNotification, ParsedBackgroundTaskProgressNotification,
     parse_background_task_notification_markdown,
@@ -4057,19 +4059,8 @@ pub(crate) fn render_tool_message(
         }
     } else if let Some(error_summary) = tools_ui::concise_tool_error_summary(&msg.content) {
         error_summary
-    } else if tc.name == "subagent" {
-        msg.title
-            .as_deref()
-            .filter(|title| !title.trim().is_empty())
-            .map(|title| {
-                super::line_plain_text(&super::truncate_line_with_ellipsis_to_width(
-                    &Line::from(title.to_string()),
-                    technical_summary_width,
-                ))
-            })
-            .unwrap_or_else(|| {
-                tools_ui::get_tool_summary_with_budget(tc, 50, Some(technical_summary_width))
-            })
+    } else if tc.name == "subagent" || tc.name == "websearch" {
+        websearch_ui::result_summary(tc, msg.title.as_deref(), technical_summary_width)
     } else {
         tools_ui::get_tool_summary_with_budget(tc, 50, Some(technical_summary_width))
     };
