@@ -1,0 +1,377 @@
+analysis:
+  branch: "021-resilient-websearch-fallbacks"
+  timestamp: "2026-08-31T09:59:33Z"
+  spec_path: "specs/021-resilient-websearch-fallbacks/spec.yaml"
+  plan_path: "specs/021-resilient-websearch-fallbacks/plan.yaml"
+  tasks_path: "specs/021-resilient-websearch-fallbacks/tasks.yaml"
+  constitution_path: ".autospec/constitution.yaml"
+
+findings:
+  - id: "CON-001"
+    category: "constitution"
+    severity: "CRITICAL"
+    location: "spec.yaml:constraints"
+    summary: "The specification does not identify applicable constitution principles or executable compliance checks"
+    details: "The constitution rule requires every specification and plan to identify applicable principles and provide executable compliance checks. The plan has a constitution_check section, but the specification only gives a generic instruction to follow the constitution and does not map principles to requirements or checks."
+    recommendation: "Add a specification-level constitution_check or requirement-to-principle matrix mapping the relevant PRIN-001 through PRIN-010 obligations to concrete tests, guardrails, benchmark evidence, and runtime validation."
+
+  - id: "CON-002"
+    category: "constitution"
+    severity: "CRITICAL"
+    location: "plan.yaml:plan"
+    summary: "The architecture plan does not declare its document lifecycle status"
+    details: "The constitution's Documentation Authority requires architecture documents to state whether they describe current state, an accepted target, an active migration, or exploration. The plan has no status or lifecycle declaration, while the specification remains Draft and all tasks are Pending."
+    recommendation: "Declare the plan as an accepted target, proposal, or other accurate lifecycle state, and distinguish normative target decisions from current implementation facts."
+
+  - id: "COV-001"
+    category: "coverage"
+    severity: "HIGH"
+    location: "spec.yaml:constraints[1]; tasks.yaml:phases[1].tasks[0].acceptance_criteria[2]"
+    summary: "The eleven frozen Bead acceptance checks are referenced but not enumerated or linked"
+    details: "The specification and T001 require direct coverage of eleven frozen jcode-ow6 checks, but neither artifact includes their identifiers, text, or a stable source link. The feature checklist independently marks this as a traceability gap, so T001 cannot verify the matrix from the core artifacts alone."
+    recommendation: "Include the eleven check identifiers and text, or link an immutable Bead acceptance artifact, then map each check to a task and validation command in validation.md."
+
+  - id: "UND-001"
+    category: "underspecification"
+    severity: "HIGH"
+    location: "plan.yaml:data_model.entities[0]; plan.yaml:data_model.entities[2]; plan.yaml:api_contracts.endpoints[0].request"
+    summary: "No persisted, request, or resolved source field defines fallback order"
+    details: "FR-005 requires configurable fallback order and tasks test ordered duplicate entries, but WebSearchResilienceConfig lists no fallback_order field. WebSearchPolicyOverride is only described as matching those fields, and the public request schema does not expose an order field. ResolvedWebSearchPolicy has engine_order, but no source can populate it."
+    recommendation: "Add an explicit fallback_order field to the persisted policy and request override, define its environment mapping, preferred-engine merge rule, default order, and validation behavior."
+
+  - id: "INC-001"
+    category: "inconsistency"
+    severity: "HIGH"
+    location: "plan.yaml:api_contracts.endpoints[0].request; spec.yaml:requirements.functional[1]"
+    summary: "The public request schema omits legacy fields that the plan and tasks promise to preserve"
+    details: "The API body schema lists query, num_results, engine, bing_market, and resilience, but does not list fallback_engines, Bing credential/settings, or the SearXNG endpoint. T002, T009, T011, and T012 explicitly require those legacy fields and behaviors to remain valid."
+    recommendation: "Replace the abbreviated body string with the canonical complete request shape or explicitly state that it is a partial additive overlay and reference every preserved legacy field and alias."
+
+  - id: "AMB-001"
+    category: "ambiguity"
+    severity: "HIGH"
+    location: "spec.yaml:requirements.functional[6].acceptance_criteria; spec.yaml:user_stories[0].acceptance_scenarios"
+    summary: "Usable result set has no objective definition"
+    details: "Fallback and stop-on-success decisions depend on a usable result set, but the artifacts never specify the minimum parsed result count, required fields, or parser/content criteria."
+    recommendation: "Define usable as an objective adapter-level predicate, such as at least one result with required title, URL, and snippet fields, and specify malformed or partial-result handling."
+
+  - id: "AMB-002"
+    category: "ambiguity"
+    severity: "HIGH"
+    location: "spec.yaml:requirements.functional[3]; plan.yaml:implementation_phases[0].deliverables; tasks.yaml:phases[1].tasks[1].acceptance_criteria[2]"
+    summary: "Invalid, empty, malformed, and unsupported policy candidates have unresolved handling"
+    details: "The specification asks for a precedence matrix covering these values, while the plan and T006 allow either lower-precedence fallback or a visible pre-network error. T013 additionally requires unsupported engines and bounds to be validated before network work. The winning behavior is not defined per source and field."
+    recommendation: "Specify a deterministic table for absent, empty, malformed, out-of-range, and unsupported values for every source, including whether the resolver falls back or returns an error and whether a partially valid policy is allowed."
+
+  - id: "AMB-003"
+    category: "ambiguity"
+    severity: "HIGH"
+    location: "spec.yaml:requirements.functional[5]; spec.yaml:edge_cases[2]; plan.yaml:data_model.entities[2]"
+    summary: "Explicit engine selection is not defined relative to configured order and eligibility"
+    details: "The artifacts require explicit selection compatibility and first-occurrence de-duplication, but do not define whether a selected engine is prepended, must be present in fallback_order, or is rejected when absent. They also leave the fallback-disabled result unclear when the selected engine is disabled, unavailable, or suppressed."
+    recommendation: "Specify the exact merge algorithm for request-selected engine plus configured fallbacks, including duplicate removal, absent selection, disabled selection, unavailable selection, suppressed selection, and fallback_enabled=false."
+
+  - id: "AMB-004"
+    category: "ambiguity"
+    severity: "HIGH"
+    location: "spec.yaml:edge_cases[3]; plan.yaml:research_findings.decisions[1]; tasks.yaml:phases[2].tasks[2].acceptance_criteria[2]"
+    summary: "Trusted and valid SearXNG instance criteria are not defined"
+    details: "The artifacts consistently reject an inferred public endpoint, but do not define what makes an endpoint trusted or valid, such as accepted schemes, host restrictions, operator approval source, or validation of empty and malformed URLs."
+    recommendation: "Define the trust boundary and validation contract, including allowed URL forms, how trust is supplied, how invalid endpoints fail before network work, and how the URL remains excluded from diagnostics."
+
+  - id: "INC-002"
+    category: "inconsistency"
+    severity: "HIGH"
+    location: "spec.yaml:requirements.functional[17].acceptance_criteria; spec.yaml:requirements.functional[0]"
+    summary: "The phrase 'default enabled behavior' conflicts with the disabled master default"
+    details: "FR-001 and the assumptions make the master switch disabled by default, while FR-018 says default enabled behavior works without a paid credential. The intended meaning appears to be enabled resilient mode with default subcontrols, but the literal wording is contradictory."
+    recommendation: "Change the FR-018 acceptance criterion to say 'enabled resilient mode with its defaults' and explicitly distinguish the master default from subcontrol defaults."
+
+  - id: "AMB-005"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:edge_cases[0]; spec.yaml:requirements.functional[4]; tasks.yaml:phases[3].tasks[0].acceptance_criteria[1]"
+    summary: "Fallback-disabled behavior is not specified when the preferred engine is unusable"
+    details: "The policy has fallback_enabled, but the artifacts only say fallback proceeds when policy allows. They do not state whether a disabled, unavailable, suppressed, challenged, empty, or transient preferred engine produces a distinct terminal outcome without trying any other engine."
+    recommendation: "Define fallback_enabled=false for each preferred-engine outcome and distinguish no-eligible-engine configuration failure from normal aggregate exhaustion."
+
+  - id: "AMB-006"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:requirements.functional[8], spec.yaml:requirements.functional[10]; plan.yaml:data_model.entities[4]"
+    summary: "Retry and health-failure counting interaction is unspecified"
+    details: "The plan says health increments only for eligible terminal transient failures, but does not say whether a physical retry failure counts once per engine sequence or once per physical attempt, nor whether a transient-then-success sequence clears or changes the counter."
+    recommendation: "Define health accounting over a retry sequence, including transient-then-success, transient-then-transient, retries disabled, and max_retries exhaustion cases."
+
+  - id: "AMB-007"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:edge_cases[6]; plan.yaml:data_model.entities[4].fields[1]"
+    summary: "Cooldown expiry and post-suppression probe semantics are incomplete"
+    details: "The artifacts require one consistent time observation and say a probe or normal attempt is permitted after expiry, but do not define the exact boundary condition at suppressed_until or how a failed probe changes suppression state."
+    recommendation: "State the comparison rule, such as eligible when now >= suppressed_until, and define whether the first post-expiry attempt is a probe with separate recovery accounting."
+
+  - id: "AMB-008"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:requirements.non_functional[3]; spec.yaml:user_stories[2].acceptance_scenarios"
+    summary: "Compact TUI output has no concrete size or truncation bound"
+    details: "The artifacts require one compact summary line and no noisy panel, but do not set a character, cell, or truncation limit. A renderer could satisfy the wording with substantially different output lengths."
+    recommendation: "Set an objective maximum line or cell budget, required tokens, and deterministic truncation behavior for engine names, counts, and terminal reasons."
+
+  - id: "INC-003"
+    category: "inconsistency"
+    severity: "MEDIUM"
+    location: "spec.yaml:key_entities; plan.yaml:data_model.entities[2], plan.yaml:data_model.entities[5]"
+    summary: "Selection and attempt terminology is not defined consistently"
+    details: "SearchDiagnosticSummary.considered includes attempted and skipped engines, while EngineAttemptOutcome describes both considering and physically attempting an engine. The artifacts use selected, considered, attempted, skipped, retry, and terminal outcome without shared invariants, making counts and UI wording ambiguous."
+    recommendation: "Add a glossary and invariants defining each term, especially whether skipped engines are included in considered and whether retries create attempt records or only counters."
+
+  - id: "INC-004"
+    category: "inconsistency"
+    severity: "MEDIUM"
+    location: "plan.yaml:data_model.entities[3].fields[2]; plan.yaml:data_model.entities[5].fields[3]"
+    summary: "The exhausted classification is ambiguous at per-engine and aggregate scopes"
+    details: "EngineAttemptOutcome.classification includes exhausted alongside per-engine outcomes, while SearchDiagnosticSummary.terminal_outcome describes success or aggregate exhaustion. It is unclear whether exhausted can be attached to an engine entry, only to the whole search, or both."
+    recommendation: "Separate per-engine outcome kinds from aggregate search terminal kinds, or define the allowed scope and serialization of exhausted explicitly."
+
+  - id: "INC-005"
+    category: "inconsistency"
+    severity: "MEDIUM"
+    location: "plan.yaml:implementation_phases; tasks.yaml:phases"
+    summary: "Plan and task phase numbering describe different work in the same phase numbers"
+    details: "Plan phase 1 includes policy tests and precedence, but tasks phase 1 is only setup and tasks phase 2 contains those deliverables. Plan phase 2 starts the orchestration core while tasks phase 3 is User Story 1, and later plan phases similarly span adjacent task phases. This makes milestone and phase references difficult to reconcile."
+    recommendation: "Either add the setup phase to the plan or renumber/relabel one artifact, then align dependencies, milestones, and validation evidence to one canonical phase map."
+
+  - id: "COV-002"
+    category: "coverage"
+    severity: "MEDIUM"
+    location: "tasks.yaml:phases[6].tasks[0..4]; spec.yaml:user_stories[3]"
+    summary: "Final US-004 delivery work is not linked by story_id"
+    details: "US-004 explicitly covers integration, active-build verification, and post-integration enablement, but T023 through T027 all use story_id null. Their acceptance criteria do cover the outcome, yet direct story-to-task traceability is lost."
+    recommendation: "Assign T023-T027 to US-004 where appropriate, or add an explicit cross-cutting mapping section that links them to US-004 and FR-022/FR-023."
+
+  - id: "AMB-009"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:requirements.functional[9]; plan.yaml:technical_context.performance_goals; plan.yaml:api_contracts.endpoints[0].errors"
+    summary: "The public meaning of timeout error 504 is unclear"
+    details: "The plan lists 504 as an API error while also saying individual timeouts are normalized and may fallback, with handled exhaustion returned as ToolOutput. It does not state when a user sees 504 versus an aggregate exhausted result."
+    recommendation: "Define the public error mapping: which failures remain inside aggregate ToolOutput, which unhandled runtime failures produce 504, and whether a fully exhausted timeout sequence ever uses 504."
+
+  - id: "UND-002"
+    category: "underspecification"
+    severity: "MEDIUM"
+    location: "plan.yaml:data_model.entities[0].fields[1]; tasks.yaml:phases[1].tasks[0].acceptance_criteria[1]"
+    summary: "Per-engine enable-map omission and unknown-key behavior is undefined"
+    details: "The plan uses Map<WebSearchEngine, bool> and says known engines only, but does not define the default for omitted engine keys, how unknown serialized keys are handled, or whether an absent map differs from all engines enabled."
+    recommendation: "Specify map serialization, missing-key defaults for all three engines, unknown-key rejection or ignore behavior, and migration behavior for absent maps."
+
+  - id: "AMB-010"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:requirements.functional[13]; plan.yaml:research_findings.decisions[7]"
+    summary: "Diagnostic emission triggers and required-field conditions are not precise"
+    details: "FR-014 says effective settings are reported when relevant, while the plan says structured metadata is attached when diagnostics are enabled and text appears only for meaningful activity. The artifacts do not define which fields are always present, when effective settings count as relevant, or whether diagnostics-enabled first success carries metadata."
+    recommendation: "Define a stable schema and trigger matrix for diagnostics-enabled and disabled modes, including first-success metadata, fallback text, exhaustion metadata, and maximum counts/elapsed values."
+
+  - id: "UND-003"
+    category: "underspecification"
+    severity: "MEDIUM"
+    location: "spec.yaml:requirements.functional[9]; plan.yaml:technical_context.constraints[6]; tasks.yaml:phases[2].tasks[0].acceptance_criteria[2]"
+    summary: "The total-work bound lacks an explicit formula"
+    details: "The artifacts state finite engine count, timeout, retry count, and fixed delay, but never define whether the bound is per request or per whole search and whether retry delays are included."
+    recommendation: "State the maximum physical attempts and elapsed upper bound, for example at most eligible_engine_count times max_retries plus one, plus bounded inter-attempt delays and scheduler tolerance."
+
+  - id: "AMB-011"
+    category: "ambiguity"
+    severity: "MEDIUM"
+    location: "spec.yaml:edge_cases[8]; tasks.yaml:phases[2].tasks[1].acceptance_criteria[2]"
+    summary: "Bing credential and keyless fallback selection order is unspecified"
+    details: "The artifacts preserve Bing credential behavior and require keyless Bing HTML fallback, but do not state whether resilient mode tries the credentialed API first, always prefers HTML, or falls back between them after particular classifications."
+    recommendation: "Define the resilient Bing adapter sequence and classification rules while explicitly preserving the legacy credentialed path when orchestration is disabled."
+
+  - id: "DUP-001"
+    category: "duplication"
+    severity: "LOW"
+    location: "spec.yaml:requirements.functional[13]; spec.yaml:requirements.non_functional[2]"
+    summary: "Diagnostic privacy prohibitions are repeated across functional and security requirements"
+    details: "FR-014 lists prohibited query, credential, body, and URL disclosure, while NFR-003 repeats nearly the same negative assertion set. The overlap is useful but creates two normative lists that could drift."
+    recommendation: "Keep FR-014 focused on diagnostic contents and reference NFR-003 as the single privacy invariant for all output surfaces."
+
+  - id: "DUP-002"
+    category: "duplication"
+    severity: "LOW"
+    location: "spec.yaml:requirements.functional[15..16]"
+    summary: "Concise-success and compact-TUI requirements substantially overlap"
+    details: "FR-016 governs concise successful output and conditional detail, while FR-017 repeats the same meaningful-activity distinction for the TUI. The presentation boundary is not clearly separated from the general output rule."
+    recommendation: "Consolidate the shared noise invariant and leave FR-017 with only TUI-specific rendering obligations."
+
+coverage:
+  requirements:
+    - id: "FR-001"
+      has_task: true
+      task_ids: ["T001", "T002", "T005", "T006", "T011", "T012", "T023"]
+      notes: "Covered by config defaults, legacy-branch integration, and final regression evidence."
+    - id: "FR-002"
+      has_task: true
+      task_ids: ["T001", "T002", "T009", "T011", "T012", "T021", "T023", "T024"]
+      notes: "Covered in stated acceptance criteria, but the complete legacy field inventory is not enumerated."
+    - id: "FR-003"
+      has_task: true
+      task_ids: ["T002", "T003", "T004", "T012", "T013", "T023"]
+      notes: "Independent controls are named and tested."
+    - id: "FR-004"
+      has_task: true
+      task_ids: ["T003", "T006", "T012", "T013", "T023"]
+      notes: "Matrix is planned, but invalid-value resolution remains ambiguous."
+    - id: "FR-005"
+      has_task: true
+      task_ids: ["T004", "T007", "T008", "T010", "T012", "T013", "T023"]
+      notes: "Order filtering and health eligibility are covered; source fallback_order is not defined."
+    - id: "FR-006"
+      has_task: true
+      task_ids: ["T009", "T011", "T012", "T013", "T023"]
+      notes: "Coverage exists, but explicit-selection merge semantics are incomplete."
+    - id: "FR-007"
+      has_task: true
+      task_ids: ["T004", "T008", "T010", "T011", "T023"]
+      notes: "Challenge, empty, transient, success, and stop-on-success paths are named."
+    - id: "FR-008"
+      has_task: true
+      task_ids: ["T002", "T004", "T008", "T009", "T010", "T012", "T013", "T023"]
+      notes: "Bounds and timeout fixture behavior are covered."
+    - id: "FR-009"
+      has_task: true
+      task_ids: ["T002", "T004", "T008", "T010", "T012", "T023"]
+      notes: "Retryable and non-retryable classes are explicitly listed."
+    - id: "FR-010"
+      has_task: true
+      task_ids: ["T004", "T008", "T010", "T018", "T020", "T023"]
+      notes: "Bounded timing is covered, but the whole-search formula is not stated."
+    - id: "FR-011"
+      has_task: true
+      task_ids: ["T004", "T007", "T008", "T010", "T012", "T023"]
+      notes: "Threshold, cooldown, skip, expiry, and recovery are planned."
+    - id: "FR-012"
+      has_task: true
+      task_ids: ["T004", "T007", "T008", "T010", "T023"]
+      notes: "Isolation and success recovery are covered."
+    - id: "FR-013"
+      has_task: true
+      task_ids: ["T004", "T007", "T008", "T009", "T010", "T014", "T023"]
+      notes: "All named classifications are included, though exhausted scope is ambiguous."
+    - id: "FR-014"
+      has_task: true
+      task_ids: ["T014", "T016", "T023"]
+      notes: "Required fields and negative privacy assertions are planned."
+    - id: "FR-015"
+      has_task: true
+      task_ids: ["T008", "T010", "T014", "T016", "T023"]
+      notes: "Per-engine terminal reasons and aggregate exhaustion are covered."
+    - id: "FR-016"
+      has_task: true
+      task_ids: ["T014", "T016", "T017", "T023"]
+      notes: "Noise rules are covered, with overlap with FR-017."
+    - id: "FR-017"
+      has_task: true
+      task_ids: ["T015", "T017", "T023"]
+      notes: "TUI scenarios are directly named."
+    - id: "FR-018"
+      has_task: true
+      task_ids: ["T001", "T002", "T009", "T011", "T012", "T019", "T021", "T022", "T024", "T027"]
+      notes: "Free-only and trusted-SearXNG boundaries are covered, but trust validity needs definition."
+    - id: "FR-019"
+      has_task: true
+      task_ids: ["T001", "T009", "T011", "T016", "T017", "T022", "T024"]
+      notes: "Existing public tool and output/event compatibility are addressed."
+    - id: "FR-020"
+      has_task: true
+      task_ids: ["T019", "T021"]
+      notes: "Documentation and template checks are explicit."
+    - id: "FR-021"
+      has_task: true
+      task_ids: ["T001", "T004", "T008", "T009", "T012", "T014", "T015", "T023"]
+      notes: "Focused automated checks are planned for listed behaviors."
+    - id: "FR-022"
+      has_task: true
+      task_ids: ["T001", "T020", "T022", "T023"]
+      notes: "Built-binary isolated-socket validation is explicit."
+    - id: "FR-023"
+      has_task: true
+      task_ids: ["T001", "T025", "T026", "T027"]
+      notes: "Post-integration sequencing and rollback are explicit."
+    - id: "NFR-001"
+      has_task: true
+      task_ids: ["T018", "T020", "T023", "T024"]
+      notes: "Benchmark and guardrail tasks cover the performance target."
+    - id: "NFR-002"
+      has_task: true
+      task_ids: ["T004", "T008", "T010", "T023"]
+      notes: "Controlled outcomes, timestamps, and repeated runs are planned."
+    - id: "NFR-003"
+      has_task: true
+      task_ids: ["T014", "T015", "T016", "T017", "T023"]
+      notes: "Privacy assertions cover metadata, text, titles, and TUI lines."
+    - id: "NFR-004"
+      has_task: true
+      task_ids: ["T014", "T015", "T016", "T017", "T023"]
+      notes: "Compact output is covered, but no concrete size bound exists."
+    - id: "NFR-005"
+      has_task: true
+      task_ids: ["T001", "T007", "T009", "T011", "T017", "T019", "T021", "T022", "T024", "T025"]
+      notes: "Scope, ownership, free-only, and guardrail checks are planned."
+    - id: "NFR-006"
+      has_task: true
+      task_ids: ["T001", "T002", "T009", "T011", "T012", "T013", "T023"]
+      notes: "Absent/disabled master regression coverage is explicit."
+
+  user_stories:
+    - id: "US-001"
+      tasks_count: 4
+      coverage_status: "complete"
+    - id: "US-002"
+      tasks_count: 2
+      coverage_status: "complete"
+    - id: "US-003"
+      tasks_count: 4
+      coverage_status: "complete"
+    - id: "US-004"
+      tasks_count: 10
+      coverage_status: "complete"
+
+constitution_alignment:
+  status: "FAIL"
+  violations:
+    - principle: "Constitution rules: specification and plan traceability"
+      status: "VIOLATION"
+      details: "The specification does not identify applicable principles or executable compliance checks, despite the explicit constitution rule requiring both."
+    - principle: "Documentation Authority"
+      status: "VIOLATION"
+      details: "The architecture plan does not declare whether it describes current state, an accepted target, an active migration, or exploration."
+
+unmapped_tasks: []
+
+metrics:
+  total_requirements: 29
+  total_tasks: 27
+  coverage_percentage: 100.0
+  ambiguity_count: 11
+  duplication_count: 2
+  critical_issues: 2
+  high_issues: 8
+  medium_issues: 13
+  low_issues: 2
+
+summary:
+  overall_status: "FAIL"
+  blocking_issues: 2
+  actionable_improvements: 21
+  ready_for_implementation: false
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-08-31T09:59:33Z"
+  artifact_type: "analysis"
