@@ -61,6 +61,11 @@ phases:
         story_id: null
         file_path: "specs/021-resilient-websearch-fallbacks/validation.md"
         dependencies: []
+        execution_boundary:
+          - "Create and commit only validation.md plus the T001 status update in tasks.yaml."
+          - "Do not revise spec.yaml, plan.yaml, analysis.yaml, or checklist artifacts; their preparation gate already passes."
+          - "Do not edit production Rust, configuration templates, documentation outside validation.md, or user configuration."
+          - "Use existing repository state and focused read-only inspection; do not broaden into another clarification or analysis pass."
         acceptance_criteria:
           - "Record the current branch, candidate base revision, existing focused websearch/config/TUI test commands, and any unrelated baseline failures before implementation."
           - "Inventory the existing DuckDuckGo, Bing, and SearXNG names and aliases, legacy WebSearchConfig fields, request fields, Bing API behavior, result text shape, ToolOutput fields, and event flow that must remain compatible."
