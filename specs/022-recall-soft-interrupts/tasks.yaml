@@ -17,7 +17,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Record requirement-to-check acceptance matrix"
-        status: "Pending"
+        status: "Completed"
         type: "setup"
         parallel: false
         story_id: null

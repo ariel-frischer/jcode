@@ -8,20 +8,20 @@ The shared daemon and installed launcher remain on the pre-fix binary until inte
 
 ## Acceptance matrix
 
-| Requirement | Direct check |
-|---|---|
-| FR-001 empty composer only | TUI tests with text and with pending images assert no request or mutation |
-| FR-002 newest one at a time | Server queue test and repeated TUI result test return newest then next-newest |
-| FR-003 ownership/source/order | Mixed-client, unowned, User/System/BackgroundTask queue test |
-| FR-004 text and images | Protocol, persistence, server result, and TUI composer image assertions |
-| FR-005 authoritative result only | Pending, error, stale result, malformed result, and disconnect TUI tests |
-| FR-006 one in flight | Repeated Alt+Q test observes one outbound request |
-| FR-007 idempotent retry | Same operation replay and duplicate result tests |
-| FR-008 legacy fails closed | Persistence legacy fixture and mixed-queue test |
-| FR-009 compatibility | Existing local Alt+Q cycle/original-slot tests and CancelSoftInterrupts tests |
-| NFR-001 requester-only safety | Lifecycle routing and mixed-owner tests |
-| NFR-002 race reliability | Bounded deterministic consumption, replay, duplicate, and disconnect scenarios |
-| NFR-003 boundary coverage | Focused crate tests, format/checks, guardrails, isolated built-binary workflow, live installed verification |
+| Requirement | Boundaries | Direct check |
+|---|---|---|
+| FR-001 empty composer only | TUI, regression | TUI tests with text and with pending images assert no request or mutation; existing nonempty-composer behavior remains unchanged |
+| FR-002 newest one at a time | Server, TUI, runtime | Server queue test and repeated TUI result test return newest then next-newest; isolated-socket workflow recalls exactly one message per operation |
+| FR-003 ownership/source/order | Server, runtime | Mixed-client, unowned, User/System/BackgroundTask queue test; isolated workflow confirms unrelated queued work survives |
+| FR-004 text and images | Protocol, persistence, server, TUI, runtime | Wire round trips, persisted fixtures, server result assertions, TUI composer assertions, and isolated multimodal recall preserve exact text and ordered images |
+| FR-005 authoritative result only | Protocol, TUI, runtime | Result contract identifies the operation; pending, error, stale, malformed, and disconnected TUI cases do not mutate; isolated workflow applies only a confirmed result |
+| FR-006 one in flight | TUI, runtime | Repeated Alt+Q test observes one outbound request; isolated workflow confirms repeated input while pending does not enqueue another operation |
+| FR-007 idempotent retry | Server, TUI, runtime | Same-operation replay and duplicate-result tests show one removal and one application; isolated response-loss retry reconciles the same result |
+| FR-008 legacy fails closed | Persistence, server, regression | Legacy persistence fixture loads without ownership; mixed-queue test leaves unowned entries untouched; prior persisted sessions remain loadable |
+| FR-009 compatibility | Protocol, server, TUI, regression | Existing request/Ack shapes, local Alt+Q cycle/original-slot tests, and CancelSoftInterrupts tests retain their expectations |
+| NFR-001 requester-only safety | Protocol, server, runtime | Lifecycle routing and mixed-owner tests prove only the requester receives its owned payload; isolated multi-client workflow checks requester-only delivery |
+| NFR-002 race reliability | Server, TUI, runtime | Bounded deterministic consumption, replay, duplicate, and disconnect scenarios run repeatedly without duplication, unrelated loss, or unconfirmed composer mutation |
+| NFR-003 boundary coverage | Protocol, persistence, server, TUI, regression, runtime | Focused crate tests, format/checks, guardrails, isolated built-binary workflow, and live installed verification cover every affected boundary |
 
 ## Validation order
 
