@@ -530,5 +530,7 @@ mod rendering;
 mod swarm_buffer;
 #[path = "tools.rs"]
 mod tools;
+#[path = "top_bar.rs"]
+mod top_bar;
 #[path = "websearch_tools.rs"]
 mod websearch_tools;

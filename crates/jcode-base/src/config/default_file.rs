@@ -144,6 +144,10 @@ html_file_open = "external"
 # Center all content by default (default: false)
 centered = false
 
+# Keep the adaptive active-session top bar visible when space permits (default: true).
+# Set false to use the bar-free conversation layout.
+top_bar = true
+
 # Pin read images to a side pane (default: true)
 pin_images = true
 

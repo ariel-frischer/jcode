@@ -45,6 +45,7 @@ impl Config {
 - Diff mode: {}
 - HTML file opening: {}
 - Centered: {}
+- Top bar: {}
 - Markdown spacing: {}
 - LaTeX rendering: {}
 - Pin images: {}
@@ -179,6 +180,7 @@ impl Config {
                 crate::config::HtmlFileOpenMode::Inline => "inline",
             },
             self.display.centered,
+            self.display.top_bar,
             self.display.markdown_spacing.label(),
             self.display.latex_rendering.as_str(),
             self.display.pin_images,

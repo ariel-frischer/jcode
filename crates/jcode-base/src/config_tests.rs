@@ -314,6 +314,25 @@ fn auto_poke_toggle_key_defaults_parses_and_reports_disabled() {
 }
 
 #[test]
+fn top_bar_default_opt_out_template_and_summary_are_discoverable() {
+    assert!(Config::default().display.top_bar);
+
+    let disabled: Config =
+        toml::from_str("[display]\ntop_bar = false\n").expect("display.top_bar should parse");
+    assert!(!disabled.display.top_bar);
+    assert!(
+        disabled.display_string().contains("- Top bar: false"),
+        "effective display summary should report the top-bar preference"
+    );
+
+    let template = Config::default_config_file_contents();
+    assert!(template.contains("top_bar = true"));
+    assert!(template.contains("bar-free conversation layout"));
+    let parsed: Config = toml::from_str(&template).expect("template with top_bar should parse");
+    assert!(parsed.display.top_bar);
+}
+
+#[test]
 fn auto_poke_environment_override_uses_standard_boolean_values() {
     let _guard = crate::storage::lock_test_env();
     let previous = std::env::var_os("JCODE_AUTO_POKE");

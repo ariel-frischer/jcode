@@ -1673,6 +1673,12 @@ impl crate::tui::TuiState for App {
         }
     }
 
+    fn top_bar_context(&self) -> Option<crate::tui::TopBarContext> {
+        let session = self.session_display_name();
+        let data = self.info_widget_data();
+        crate::tui::ui_top_bar::context_from_info_widget_data(session.as_deref(), &data)
+    }
+
     fn workspace_mode_enabled(&self) -> bool {
         self.workspace_client.is_enabled()
     }

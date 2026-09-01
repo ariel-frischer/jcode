@@ -116,6 +116,78 @@ fn test_usage_progress_updates_card_incrementally() {
 }
 
 #[test]
+fn top_bar_context_reuses_safe_usage_snapshot_without_leaking_provider_errors() {
+    let mut data = crate::tui::info_widget::InfoWidgetData {
+        provider_name: Some("openai".to_string()),
+        model: Some("gpt-5.6-sol".to_string()),
+        auth_method: crate::tui::info_widget::AuthMethod::OpenAIApiKey,
+        usage_info: Some(crate::tui::info_widget::UsageInfo {
+            provider: crate::tui::info_widget::UsageProvider::OpenAI,
+            primary_limit_label: Some("5-hour".to_string()),
+            five_hour: 0.38,
+            available: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let context = crate::tui::ui_top_bar::context_from_info_widget_data(Some("dolphin"), &data)
+        .expect("active session should produce top-bar context");
+
+    assert_eq!(context.session_label, "dolphin");
+    assert_eq!(context.auth_label.as_deref(), Some("API key"));
+    assert_eq!(
+        context.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Known
+    );
+    assert!(context.credit.summary().is_some());
+
+    data.usage_info.as_mut().unwrap().five_hour = f32::NAN;
+    let malformed = crate::tui::ui_top_bar::context_from_info_widget_data(Some("dolphin"), &data)
+        .expect("malformed usage must not discard session identity");
+    assert_eq!(
+        malformed.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Unavailable
+    );
+    assert_ne!(malformed.credit.primary_summary.as_deref(), Some("0% left"));
+    assert_eq!(data.model.as_deref(), Some("gpt-5.6-sol"));
+}
+
+#[test]
+fn top_bar_context_keeps_source_data_available_for_missing_or_unsupported_usage() {
+    let data = crate::tui::info_widget::InfoWidgetData {
+        provider_name: Some("opencode".to_string()),
+        model: Some("model-x".to_string()),
+        auth_method: crate::tui::info_widget::AuthMethod::OpenCodeApiKey,
+        ..Default::default()
+    };
+    let context = crate::tui::ui_top_bar::context_from_info_widget_data(Some("oak"), &data)
+        .expect("session identity should remain available without usage");
+
+    assert_eq!(
+        context.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::NotApplicable
+    );
+    assert_eq!(context.model_label.as_deref(), Some("model-x"));
+    assert_eq!(data.provider_name.as_deref(), Some("opencode"));
+}
+
+#[test]
+fn app_top_bar_context_reuses_existing_session_sources() {
+    let app = create_test_app();
+    let context = crate::tui::TuiState::top_bar_context(&app)
+        .expect("a local active app should expose its session context");
+
+    assert!(!context.session_label.is_empty());
+    assert!(
+        context
+            .fields()
+            .iter()
+            .flat_map(|field| field.full.spans.iter())
+            .all(|span| !span.content.to_ascii_lowercase().contains("token"))
+    );
+}
+
+#[test]
 fn test_usage_with_suffix_does_not_open_picker_preview() {
     let mut app = create_test_app();
 

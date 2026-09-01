@@ -69,6 +69,8 @@ pub mod test_harness;
 pub mod theme_detect;
 mod ui;
 mod ui_diff;
+pub(crate) mod ui_top_bar;
+pub use ui_top_bar::TopBarContext;
 pub mod usage_overlay;
 pub mod visual_debug;
 pub mod workspace_client;
@@ -553,6 +555,13 @@ pub trait TuiState {
     fn server_update_available(&self) -> Option<bool>;
     /// Get info widget data (todos, client count, etc.)
     fn info_widget_data(&self) -> info_widget::InfoWidgetData;
+
+    /// Presentation-safe snapshot used by the persistent session top bar.
+    /// Implementations must reuse already available state and must not perform
+    /// credential, filesystem, network, or provider billing I/O here.
+    fn top_bar_context(&self) -> Option<crate::tui::TopBarContext> {
+        None
+    }
 
     /// Whether the inline swarm gallery band should be shown above the chat.
     /// Active when `agents.swarm_spawn_mode = inline` and the swarm has members.
