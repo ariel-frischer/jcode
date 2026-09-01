@@ -121,7 +121,7 @@ phases:
       tasks:
         - id: "T009"
           title: "Add failing authoritative eligibility, ownership, snapshot, and replay tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"
@@ -133,7 +133,7 @@ phases:
             - "Repeated operations with matching fingerprints return equivalent cached outcomes; conflicting operation_id reuse is rejected without mutation."
         - id: "T010"
           title: "Add failing requester delivery, disconnect, timeout, and shutdown recovery tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-002"
@@ -145,7 +145,7 @@ phases:
             - "Grace expiry, explicit abandonment, timeout, shutdown, and unsupported continuation release immutable originals exactly once and leave no active reservation."
         - id: "T011"
           title: "Implement the authoritative navigation coordinator and bounded replay cache"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -157,7 +157,7 @@ phases:
             - "Replay keys include owner, Jcode session, navigation session, operation ID, and request fingerprint with bounded completed-outcome retention."
         - id: "T012"
           title: "Wire verified client ownership, editor dispatch, and abandonment release"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -169,7 +169,7 @@ phases:
             - "Release immutable originals on grace expiry, explicit abandonment, timeout, or shutdown without applying uncommitted working drafts."
         - id: "T013"
           title: "Keep reserved snapshots outside dispatch and preserve atomic recovery persistence"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-002"
@@ -181,7 +181,7 @@ phases:
             - "Queue persistence retains active recovery metadata and never serializes held originals or drafts as injected work."
         - id: "T014"
           title: "Pass the authoritative safety and recovery test matrix"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"

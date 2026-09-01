@@ -395,6 +395,80 @@ fn recall_returns_exact_payload_only_to_requesting_client() {
     assert!(queue.lock().expect("queue lock").is_empty());
 }
 
+#[test]
+fn queued_editor_result_is_delivered_only_to_verified_requester_and_release_restores_originals() {
+    let queue = Arc::new(std::sync::Mutex::new(vec![
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "first".to_string(),
+            images: vec![("image/png".to_string(), "first-image".to_string())],
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("editor-first".to_string()),
+            owner_client_instance_id: Some("editor-owner".to_string()),
+            enqueue_sequence: Some(1),
+        },
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "second".to_string(),
+            images: vec![("image/jpeg".to_string(), "second-image".to_string())],
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("editor-second".to_string()),
+            owner_client_instance_id: Some("editor-owner".to_string()),
+            enqueue_sequence: Some(2),
+        },
+    ]));
+    let control = SessionControlHandle::new(
+        "queued-editor-lifecycle-test",
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+    let (requester_tx, mut requester_rx) = mpsc::unbounded_channel();
+    let (_other_tx, mut other_rx) = mpsc::unbounded_channel::<ServerEvent>();
+
+    queued_message_editor(
+        51,
+        "lifecycle-navigation".to_string(),
+        "lifecycle-start".to_string(),
+        crate::protocol::QueuedMessageEditorOperation::Start,
+        Some("editor-owner"),
+        &control,
+        &requester_tx,
+    );
+    assert!(matches!(
+        requester_rx.try_recv(),
+        Ok(ServerEvent::QueuedMessageEditorResult {
+            id: 51,
+            outcome: crate::protocol::QueuedMessageEditorOutcome::Started,
+            ..
+        })
+    ));
+    assert!(other_rx.try_recv().is_err());
+    assert!(queue.lock().expect("queue lock").is_empty());
+
+    queued_message_editor(
+        52,
+        "lifecycle-navigation".to_string(),
+        "lifecycle-release".to_string(),
+        crate::protocol::QueuedMessageEditorOperation::Release,
+        Some("editor-owner"),
+        &control,
+        &requester_tx,
+    );
+    assert!(matches!(
+        requester_rx.try_recv(),
+        Ok(ServerEvent::QueuedMessageEditorResult {
+            id: 52,
+            outcome: crate::protocol::QueuedMessageEditorOutcome::Released,
+            ..
+        })
+    ));
+    let restored = queue.lock().expect("queue lock");
+    assert_eq!(restored.len(), 2);
+    assert_eq!(restored[0].content, "first");
+    assert_eq!(restored[1].content, "second");
+}
+
 #[tokio::test]
 async fn refreshed_session_control_handle_does_not_wait_for_busy_agent_lock() {
     let provider: Arc<dyn Provider> = Arc::new(PanicOnForkProvider {
