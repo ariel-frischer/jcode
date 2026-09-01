@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::QueuedMessageEditorOperation;
+
 /// Curated request surface. Internally-tagged on `"req"`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "req", rename_all = "snake_case")]
@@ -203,6 +205,15 @@ pub enum ApiRequest {
     /// The counterpart to `SoftInterrupt`: a client that lets a user queue a
     /// follow-up must also let them take it back before it lands.
     CancelSoftInterrupts { session_id: String },
+
+    /// Operate one owner-scoped authoritative queued-message editor session.
+    /// Clients must first discover `queued_message_navigation_v1`.
+    QueuedMessageEditor {
+        session_id: String,
+        navigation_session_id: String,
+        operation_id: String,
+        operation: QueuedMessageEditorOperation,
+    },
 
     /// Liveness check.
     Ping,

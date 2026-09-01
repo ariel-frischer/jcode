@@ -3,7 +3,8 @@
 
 use crate::background_progress::parse_background_notification;
 use jcode_harness_api::{
-    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, ServerFrame, SessionInfo,
+    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, QueuedMessageEditorOutcome,
+    QueuedMessageEditorPlacement, QueuedMessageEditorSelection, ServerFrame, SessionInfo,
     TextMatch,
 };
 use jcode_protocol::SessionProfileStartup;
@@ -31,6 +32,7 @@ const REQUIRES_ATTACH: &[&str] = &[
     "cancel",
     "soft_interrupt",
     "cancel_soft_interrupts",
+    "queued_message_editor",
     "clear",
     "rewind",
     "rewind_undo",
@@ -235,6 +237,7 @@ enum SimpleKind {
     Compact,
     /// Awaiting the catalog reply that answers `list_models`.
     Models,
+    QueuedMessageEditor,
     Credential {
         provider: String,
         configured: bool,
@@ -1002,6 +1005,18 @@ impl BridgeState {
                     json!({"type": "cancel_soft_interrupts", "id": id}),
                 )]
             }
+            "queued_message_editor" => {
+                let id = self.legacy_id();
+                self.pending_simple
+                    .push((id, api_id, SimpleKind::QueuedMessageEditor));
+                vec![Outbound::Legacy(json!({
+                    "type": "queued_message_editor",
+                    "id": id,
+                    "navigation_session_id": request["navigation_session_id"],
+                    "operation_id": request["operation_id"],
+                    "operation": request["operation"],
+                }))]
+            }
             "detach_session" => {
                 let id = self.legacy_id();
                 vec![
@@ -1416,6 +1431,53 @@ impl BridgeState {
                     title: event["title"].as_str().map(str::to_string),
                     display_title: event["display_title"].as_str().unwrap_or("").to_string(),
                 })]
+            }
+            "queued_message_editor_result" => {
+                let id = event["id"].as_u64().unwrap_or(0);
+                let Some(api_id) = self.take_simple(id, SimpleKind::QueuedMessageEditor) else {
+                    return vec![];
+                };
+                let parsed = (
+                    serde_json::from_value::<QueuedMessageEditorOutcome>(event["outcome"].clone()),
+                    serde_json::from_value::<QueuedMessageEditorPlacement>(
+                        event["placement"].clone(),
+                    ),
+                    serde_json::from_value::<Option<QueuedMessageEditorSelection>>(
+                        event.get("selection").cloned().unwrap_or(Value::Null),
+                    ),
+                );
+                let (outcome, placement, selection) = match parsed {
+                    (Ok(outcome), Ok(placement), Ok(selection)) => (outcome, placement, selection),
+                    _ => {
+                        return vec![ServerFrame::reply(
+                            api_id,
+                            ApiEvent::Error {
+                                code: ErrorCode::Internal,
+                                message: "daemon returned an invalid queued-message editor result"
+                                    .into(),
+                                provider_code: None,
+                            },
+                        )];
+                    }
+                };
+                vec![ServerFrame::reply(
+                    api_id,
+                    ApiEvent::QueuedMessageEditorResult {
+                        session_id: session(self),
+                        navigation_session_id: event["navigation_session_id"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                        operation_id: event["operation_id"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_string(),
+                        outcome,
+                        selection,
+                        placement,
+                        message: event["message"].as_str().map(str::to_string),
+                    },
+                )]
             }
             "available_models_updated" => {
                 self.note_models(event);

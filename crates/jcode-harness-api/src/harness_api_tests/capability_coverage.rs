@@ -54,6 +54,7 @@ const LEDGER: &[(&str, Disposition)] = &[
     ("InputShell", ClientInternal),
     ("Message", Covered),
     ("NotifyAuthChanged", Covered),
+    ("QueuedMessageEditor", Covered),
     (
         "RecallSoftInterrupt",
         Gap(

@@ -451,7 +451,7 @@ phases:
       tasks:
         - id: "T034"
           title: "Add failing harness and Rust SDK capability and outcome tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-006"
@@ -463,7 +463,7 @@ phases:
             - "Capability contracts do not duplicate server ownership, anchoring, or mutation logic."
         - id: "T035"
           title: "Expose queued-message navigation through harness and Rust SDK surfaces"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-006"
@@ -475,7 +475,7 @@ phases:
             - "Use jcode-protocol as the authoritative wire contract rather than reimplementing queue semantics."
         - id: "T036"
           title: "Add Rust SDK capability discovery and typed outcome compatibility"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-006"
@@ -487,7 +487,8 @@ phases:
             - "Existing SDK behavior remains unchanged when the capability is absent."
         - id: "T037"
           title: "Run explicit read-only Go SDK compatibility validation"
-          status: "Pending"
+          status: "Blocked"
+          blocked_reason: 'Read-only validation against /home/ari/repos/jcode-go dev failed: Go protocol inventory lacks queued_message_editor request and queued_message_editor_result event. Update and validate jcode-go in its owning repository, then rerun this task.'
           type: "test"
           parallel: false
           story_id: "US-006"

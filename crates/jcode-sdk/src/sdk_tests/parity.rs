@@ -172,6 +172,10 @@ const RUST_ONLY: &[&str] = &[
     "is_closed",
     // TS reads `client.socketPath` as a field; Rust exposes it as an accessor.
     "socket_path",
+    // The queued-message editor is an additive Rust protocol-v1 surface. The
+    // mirrored Go SDK is validated separately and the TypeScript SDK does not
+    // yet expose the authoritative reservation workflow.
+    "queued_message_editor",
 ];
 
 /// Public TypeScript methods not yet represented by an equivalent Rust method.

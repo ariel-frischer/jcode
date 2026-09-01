@@ -8,7 +8,7 @@
  */
 
 export const API_VERSION_MAJOR = 1;
-export const API_VERSION_MINOR = 0;
+export const API_VERSION_MINOR = 1;
 
 export type PermissionDecision = "allow" | "allow_always" | "deny";
 
@@ -73,6 +73,46 @@ export interface RenderedImage {
 /** Base64 image attachment: [mediaType, base64Data]. */
 export type ImageAttachment = [string, string];
 
+export const QUEUED_MESSAGE_NAVIGATION_CAPABILITY = "queued_message_navigation_v1";
+
+export type QueuedMessageEditorDirection = "older" | "newer";
+export interface QueuedMessageEditorDraft {
+  content: string;
+  images?: ImageAttachment[];
+}
+export type QueuedMessageEditorOperation =
+  | { kind: "start" }
+  | {
+      kind: "move";
+      direction: QueuedMessageEditorDirection;
+      selected_message_id: string;
+      draft: QueuedMessageEditorDraft;
+    }
+  | {
+      kind: "finish";
+      selected_message_id: string;
+      draft: QueuedMessageEditorDraft;
+    }
+  | { kind: "release" };
+export type QueuedMessageEditorOutcome =
+  | "started"
+  | "moved"
+  | "boundary"
+  | "committed"
+  | "deleted"
+  | "released"
+  | "stale_placement"
+  | "conflict"
+  | "replay";
+export type QueuedMessageEditorPlacement = "exact" | "stale_best_effort" | "not_applied";
+export interface QueuedMessageEditorSelection {
+  message_id: string;
+  content: string;
+  images?: ImageAttachment[];
+  older_available: boolean;
+  newer_available: boolean;
+}
+
 export type ApiRequest =
   | { req: "hello"; min_version: number; max_version: number; client: string }
   | { req: "list_sessions"; include_archived?: boolean; limit?: number }
@@ -124,6 +164,13 @@ export type ApiRequest =
   | { req: "rename_session"; session_id: string; title?: string }
   | { req: "rewind_undo"; session_id: string }
   | { req: "cancel_soft_interrupts"; session_id: string }
+  | {
+      req: "queued_message_editor";
+      session_id: string;
+      navigation_session_id: string;
+      operation_id: string;
+      operation: QueuedMessageEditorOperation;
+    }
   | { req: "ping" };
 
 export type ApiEvent =
@@ -230,6 +277,16 @@ export type ApiEvent =
       session_id: string;
       title?: string;
       display_title: string;
+    }
+  | {
+      ev: "queued_message_editor_result";
+      session_id: string;
+      navigation_session_id: string;
+      operation_id: string;
+      outcome: QueuedMessageEditorOutcome;
+      selection?: QueuedMessageEditorSelection;
+      placement: QueuedMessageEditorPlacement;
+      message?: string;
     };
 
 /**
@@ -298,6 +355,7 @@ export const KNOWN_EVENT_KINDS = [
   "file_status",
   "compacted",
   "session_renamed",
+  "queued_message_editor_result",
 ] as const;
 
 /** Every request tag the SDK can send. */
@@ -333,6 +391,7 @@ export const KNOWN_REQUEST_KINDS = [
   "rename_session",
   "rewind_undo",
   "cancel_soft_interrupts",
+  "queued_message_editor",
   "ping",
 ] as const;
 

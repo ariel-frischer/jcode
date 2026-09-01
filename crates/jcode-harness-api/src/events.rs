@@ -2,6 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::{
+    QueuedMessageEditorOutcome, QueuedMessageEditorPlacement, QueuedMessageEditorSelection,
+};
+
 /// Closed semantic classes for events that can reach an owned turn stream.
 ///
 /// This is intentionally not inferred from event names or payload shape. A new
@@ -296,6 +300,19 @@ pub enum ApiEvent {
         display_title: String,
     },
 
+    /// Typed result for an owner-scoped queued-message editor operation.
+    QueuedMessageEditorResult {
+        session_id: String,
+        navigation_session_id: String,
+        operation_id: String,
+        outcome: QueuedMessageEditorOutcome,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selection: Option<QueuedMessageEditorSelection>,
+        placement: QueuedMessageEditorPlacement,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+
     /// Forward-compatibility catch-all: clients must skip this silently.
     #[serde(other)]
     Unknown,
@@ -359,6 +376,7 @@ impl ApiEvent {
             Self::FileStatus { .. } => outside("file_status"),
             Self::Compacted { .. } => outside("compacted"),
             Self::SessionRenamed { .. } => outside("session_renamed"),
+            Self::QueuedMessageEditorResult { .. } => outside("queued_message_editor_result"),
             Self::Unknown => outside("unknown"),
         }
     }
