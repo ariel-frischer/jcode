@@ -1,5 +1,7 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CopySelectionPane {
+    /// Persistent session metadata rendered above the conversation.
+    TopBar,
     Chat,
     SidePane,
     /// The prompt composer (input box) where the user types the next message.
@@ -9,6 +11,7 @@ pub enum CopySelectionPane {
 impl CopySelectionPane {
     pub fn label(self) -> &'static str {
         match self {
+            Self::TopBar => "Top bar",
             Self::Chat => "Chat",
             Self::SidePane => "Side pane",
             Self::Input => "Input",

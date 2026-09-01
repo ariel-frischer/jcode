@@ -689,6 +689,72 @@ fn test_copy_selection_mouse_drag_auto_copies_and_keeps_highlight() {
 }
 
 #[test]
+fn test_top_bar_mouse_drag_auto_copies_and_keeps_highlight() {
+    let _render_lock = scroll_render_test_lock();
+    let (mut app, mut terminal) = create_copy_test_app();
+    let copied = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let copied_for_closure = copied.clone();
+
+    render_and_snap(&app, &mut terminal);
+    let layout = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
+    let top_bar = layout.top_bar_area.expect("visible top bar");
+    let mapped = (top_bar.x..top_bar.x + top_bar.width)
+        .filter_map(|column| {
+            crate::tui::ui::copy_point_from_screen(column, top_bar.y)
+                .filter(|point| point.pane.label() == "Top bar")
+                .map(|point| (column, point))
+        })
+        .collect::<Vec<_>>();
+    let (start_x, start) = *mapped.first().expect("top-bar drag start");
+    let (end_x, end) = *mapped.last().expect("top-bar drag end");
+    assert_eq!(start.pane.label(), "Top bar");
+    assert_eq!(end.pane.label(), "Top bar");
+
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Drag(MouseButton::Left),
+    ] {
+        let (column, point) = if matches!(kind, MouseEventKind::Down(_)) {
+            (start_x, start)
+        } else {
+            (end_x, end)
+        };
+        assert_eq!(point.pane.label(), "Top bar");
+        app.handle_copy_selection_mouse_with(
+            MouseEvent {
+                kind,
+                column,
+                row: top_bar.y,
+                modifiers: KeyModifiers::empty(),
+            },
+            |_| true,
+        );
+    }
+    app.handle_copy_selection_mouse_with(
+        MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: end_x,
+            row: top_bar.y,
+            modifiers: KeyModifiers::empty(),
+        },
+        |text| {
+            *copied_for_closure.lock().unwrap() = text.to_string();
+            true
+        },
+    );
+
+    assert!(copied.lock().unwrap().contains("test"));
+    assert_eq!(
+        app.current_copy_selection_pane().map(|pane| pane.label()),
+        Some("Top bar")
+    );
+    assert_eq!(
+        app.status_notice(),
+        Some("Copied selection · highlight remains visible".to_string())
+    );
+}
+
+#[test]
 fn test_side_panel_mouse_drag_extracts_expected_text() {
     let _render_lock = scroll_render_test_lock();
     let mut app = create_test_app();

@@ -192,6 +192,59 @@ fn rendered_top_bar_regions_do_not_overlap_chat_or_required_chrome() {
 }
 
 #[test]
+fn rendered_top_bar_registers_copyable_text_and_uses_status_colors() {
+    let _guard = crate::tui::ui::render_state_test_lock();
+    let state = active_session(CreditFixture::KnownSubscription);
+    let backend = ratatui::backend::TestBackend::new(120, 32);
+    let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|frame| crate::tui::ui::draw(frame, &state))
+        .expect("draw");
+
+    let snapshot = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
+    let top_bar = snapshot.top_bar_area.expect("visible top bar");
+    let points = (top_bar.x..top_bar.x + top_bar.width)
+        .filter_map(|column| crate::tui::ui::copy_point_from_screen(column, top_bar.y))
+        .collect::<Vec<_>>();
+    assert!(
+        !points.is_empty(),
+        "top-bar cells must participate in copy hit testing"
+    );
+    assert!(
+        points.iter().all(|point| point.pane.label() == "Top bar"),
+        "top-bar copy points must be isolated from transcript selection"
+    );
+
+    let range = crate::tui::CopySelectionRange {
+        start: *points.first().expect("first top-bar point"),
+        end: *points.last().expect("last top-bar point"),
+    };
+    let copied = crate::tui::ui::copy_selection_text(range).expect("copyable top-bar text");
+    assert!(
+        copied.contains("dolphin"),
+        "copied top-bar text: {copied:?}"
+    );
+
+    let buffer = terminal.backend().buffer();
+    let top_text = (top_bar.y..top_bar.y + top_bar.height)
+        .flat_map(|y| (top_bar.x..top_bar.x + top_bar.width).map(move |x| buffer[(x, y)].symbol()))
+        .collect::<String>();
+    assert!(
+        top_text.contains('▰') || top_text.contains('▱'),
+        "known subscription credit should use the compact status progress style: {top_text:?}"
+    );
+
+    let colors = (top_bar.y..top_bar.y + top_bar.height)
+        .flat_map(|y| (top_bar.x..top_bar.x + top_bar.width).map(move |x| buffer[(x, y)].fg))
+        .filter(|color| *color != ratatui::style::Color::Reset)
+        .collect::<std::collections::HashSet<_>>();
+    assert!(
+        colors.len() >= 3,
+        "top-bar fields should use differentiated status colors, got {colors:?}"
+    );
+}
+
+#[test]
 fn disabling_rendered_top_bar_reclaims_the_original_top_rows() {
     let _guard = crate::tui::ui::render_state_test_lock();
     let enabled = active_session(CreditFixture::KnownSubscription);
