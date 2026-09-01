@@ -17,7 +17,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Create the complete requirement-to-evidence matrix skeleton"
-        status: "Pending"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: null
@@ -29,7 +29,7 @@ phases:
           - "Require each cell to contain a command/result reference or an explicit justified not-applicable rationale, with no blank cells."
       - id: "T002"
         title: "Add reusable ordered-image and mixed-queue test fixtures"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
@@ -41,7 +41,7 @@ phases:
           - "Keep fixtures deterministic through stable message IDs, client IDs, operation IDs, and enqueue sequence values."
       - id: "T003"
         title: "Add additive queued-message editor protocol red tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null
@@ -53,7 +53,7 @@ phases:
           - "Prove legacy RecallSoftInterrupt JSON remains unchanged and malformed identities or operation shapes are rejected."
       - id: "T004"
         title: "Add versioned soft-interrupt persistence red tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: true
         story_id: null

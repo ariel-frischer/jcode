@@ -1,0 +1,1741 @@
+_meta:
+  artifact_type: requirement_evidence_matrix
+  created: '2026-09-01T20:05:15Z'
+  feature: 023-queued-message-editor
+  version: 1.0.0
+instructions:
+  completion_rule: Every cell must retain a command/result reference or an explicit justified not-applicable rationale; blank
+    cells are invalid.
+  status_values:
+  - pending
+  - pass
+  - fail
+  - not_applicable
+  required_categories:
+  - protocol
+  - persistence
+  - server
+  - tui
+  - regression
+  - sdk_capability
+  - format_check
+  - private_socket
+  - installed_runtime
+  - cleanup
+requirements:
+- requirement_id: FR-001
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-002
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-003
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-004
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-005
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-006
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-007
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-008
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-009
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-010
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-011
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-012
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-013
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-014
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-015
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-016
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-017
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-018
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-019
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-020
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-021
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-022
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-023
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-024
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-025
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-026
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: FR-027
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-001
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-002
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-003
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-004
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-005
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
+- requirement_id: NFR-006
+  evidence:
+    protocol:
+      status: pending
+      planned_tasks: T003,T006,T008
+      command_or_result: cargo test -p jcode-protocol queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    persistence:
+      status: pending
+      planned_tasks: T004,T007,T008
+      command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
+      result: Pending implementation and phase-specific validation.
+    server:
+      status: pending
+      planned_tasks: T009-T019,T024-T025,T029
+      command_or_result: cargo test -p jcode-app-core queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    tui:
+      status: pending
+      planned_tasks: T017-T023,T026-T029,T039
+      command_or_result: cargo test -p jcode-tui queued_message_editor
+      result: Pending implementation and phase-specific validation.
+    regression:
+      status: pending
+      planned_tasks: T030-T033
+      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
+      result: Pending implementation and phase-specific validation.
+    sdk_capability:
+      status: pending
+      planned_tasks: T034-T037
+      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
+      result: Pending implementation and phase-specific validation.
+    format_check:
+      status: pending
+      planned_tasks: T041
+      command_or_result: cargo fmt --all -- --check && scripts/check_guardrails.sh
+      result: Pending implementation and phase-specific validation.
+    private_socket:
+      status: pending
+      planned_tasks: T041-T042
+      command_or_result: ./target/selfdev/jcode run --no-update --socket /run/user/1000/jcode-queued-editor-test.sock '<scenario>'
+      result: Pending implementation and phase-specific validation.
+    installed_runtime:
+      status: pending
+      planned_tasks: T042
+      command_or_result: jcode run --no-update '<installed-runtime scenario>'
+      result: Pending implementation and phase-specific validation.
+    cleanup:
+      status: pending
+      planned_tasks: T042
+      command_or_result: inspect queues, reservations, sockets, temporary state, and orphaned processes after verification
+      result: Pending implementation and phase-specific validation.
