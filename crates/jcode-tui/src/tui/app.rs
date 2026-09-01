@@ -30,7 +30,7 @@ use helpers::*;
 use jcode_tui_messages::DisplayMessage;
 use ratatui::DefaultTerminal;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,16 +38,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AppRuntimeMode {
-    /// Normal product TUI. The client renders state owned by the jcode server.
-    RemoteClient,
-    /// Deterministic playback of recorded session/server events. Never calls live providers.
-    Replay,
-    /// Local in-process harness used by unit tests and transitional UI fixtures only.
-    TestHarness,
-}
 
 mod auth;
 mod auth_account_picker_saved_accounts;
@@ -70,6 +60,7 @@ pub(crate) mod helpers;
 mod hotkey_feedback;
 pub(crate) mod idle_animation_repaint;
 mod idle_heap_release;
+mod inline_file_preview;
 mod inline_interactive;
 mod input;
 mod input_help;
@@ -90,6 +81,8 @@ mod remote_notifications;
 mod replay;
 pub(crate) mod run_shell;
 mod runtime_memory;
+mod runtime_mode;
+pub use runtime_mode::AppRuntimeMode;
 mod shortcut_hints;
 mod split_view;
 mod state_ui;
@@ -837,6 +830,12 @@ pub struct App {
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,
+    inline_file_previews: HashMap<crate::tui::InlineFilePreviewKey, crate::tui::InlineFilePreview>,
+    pending_inline_file_preview_loads: HashMap<
+        crate::tui::InlineFilePreviewKey,
+        inline_file_preview::PendingInlineFilePreviewLoad,
+    >,
+    inline_file_previews_version: u64,
     display_user_message_count: usize,
     display_edit_tool_message_count: usize,
     compacted_history_lazy: CompactedHistoryLazyState,

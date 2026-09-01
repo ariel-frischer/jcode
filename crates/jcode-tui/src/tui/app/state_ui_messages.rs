@@ -510,6 +510,11 @@ impl App {
             self.display_messages.clear();
             self.bump_display_messages_version();
         }
+        if !self.inline_file_previews.is_empty() {
+            self.inline_file_previews.clear();
+            self.inline_file_previews_version = self.inline_file_previews_version.wrapping_add(1);
+        }
+        self.pending_inline_file_preview_loads.clear();
     }
 
     /// Terminal-style clear (Ctrl+L): append a viewport-height blank spacer

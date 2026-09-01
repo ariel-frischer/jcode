@@ -2,6 +2,8 @@ use super::state_ui::RestoredReloadInput;
 use super::*;
 use crate::tui::{backend, keybind};
 
+mod remote;
+
 impl App {
     pub(super) fn apply_restored_reload_input(&mut self, restored: RestoredReloadInput) {
         self.input = restored.input;
@@ -126,7 +128,8 @@ impl App {
         images: Vec<(String, String)>,
         is_system: bool,
     ) -> Result<u64> {
-        remote::begin_remote_send(self, remote, content, images, is_system, None, false, 0).await
+        super::remote::begin_remote_send(self, remote, content, images, is_system, None, false, 0)
+            .await
     }
 
     pub(super) fn schedule_pending_remote_retry(&mut self, reason: &str) -> bool {
@@ -406,6 +409,9 @@ impl App {
             session,
             display_messages: Vec::new(),
             display_messages_version: 0,
+            inline_file_previews: HashMap::new(),
+            pending_inline_file_preview_loads: HashMap::new(),
+            inline_file_previews_version: 0,
             display_user_message_count: 0,
             display_edit_tool_message_count: 0,
             compacted_history_lazy: CompactedHistoryLazyState::default(),
@@ -853,6 +859,9 @@ impl App {
             session,
             display_messages: Vec::new(),
             display_messages_version: 0,
+            inline_file_previews: HashMap::new(),
+            pending_inline_file_preview_loads: HashMap::new(),
+            inline_file_previews_version: 0,
             display_user_message_count: 0,
             display_edit_tool_message_count: 0,
             compacted_history_lazy: CompactedHistoryLazyState::default(),
@@ -1310,64 +1319,5 @@ impl App {
             image_ms,
             load_start.elapsed().as_millis()
         ));
-    }
-
-    /// Create an App instance for remote mode (connecting to server)
-    pub fn new_for_remote(resume_session: Option<String>) -> Self {
-        Self::new_for_remote_with_options(resume_session, false)
-    }
-
-    pub fn new_for_remote_with_options(resume_session: Option<String>, fresh_spawn: bool) -> Self {
-        let provider: Arc<dyn Provider> =
-            Arc::new(InertRuntimeProvider::new(AppRuntimeMode::RemoteClient));
-        let registry = Registry::empty();
-        let session = resume_session
-            .as_ref()
-            .and_then(|session_id| Session::load_startup_stub(session_id).ok())
-            .unwrap_or_else(|| Session::create(None, None));
-        let mut app = Self::new_minimal_with_session(provider, registry, session);
-        app.is_remote = true;
-        app.runtime_mode = AppRuntimeMode::RemoteClient;
-        app.remote_startup_phase = Some(super::RemoteStartupPhase::Connecting);
-        app.remote_startup_phase_started = Some(Instant::now());
-
-        let reload_fast_start = std::env::var("JCODE_RELOAD_FAST_START")
-            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        // One-shot handoff flag. A later ordinary resume in the same process
-        // must retain the existing eager local-history behavior.
-        crate::env::remove_var("JCODE_RELOAD_FAST_START");
-
-        // Load session to get canary status (for "client self-dev" badge)
-        if let Some(ref session_id) = resume_session {
-            if reload_fast_start {
-                crate::logging::info(&format!(
-                    "Remote reload fast start: deferring persisted transcript for {} until server history",
-                    session_id
-                ));
-            } else {
-                app.restore_remote_startup_history(session_id);
-            }
-            if fresh_spawn && !reload_fast_start {
-                crate::logging::info(&format!(
-                    "Remote startup fresh-spawn path: restored persisted transcript for {} while awaiting server history",
-                    session_id
-                ));
-            }
-            if let Some(restored) = Self::restore_input_for_reload(session_id) {
-                app.apply_restored_reload_input(restored);
-            }
-        }
-
-        app.resume_session_id = resume_session;
-        app
-    }
-
-    /// Mark that a server was just spawned - run_remote will retry initial connection
-    /// instead of failing fatally, allowing the TUI to show while the server starts.
-    pub fn set_server_spawning(&mut self) {
-        self.server_spawning = true;
-        self.remote_startup_phase = Some(super::RemoteStartupPhase::StartingServer);
-        self.remote_startup_phase_started = Some(Instant::now());
     }
 }

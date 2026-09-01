@@ -55,6 +55,8 @@ mod file_diff_ui;
 mod frame_metrics;
 #[path = "ui_header.rs"]
 pub(crate) mod header;
+#[path = "ui_inline_file_preview.rs"]
+mod inline_file_preview_ui;
 #[path = "ui_inline_image.rs"]
 pub(crate) mod inline_image_ui;
 #[path = "ui_inline_interactive.rs"]
@@ -78,6 +80,8 @@ mod overlays;
 mod pinned_ui;
 #[path = "ui_prepare.rs"]
 pub(crate) mod prepare;
+#[path = "ui_shared_helpers.rs"]
+mod shared_helpers;
 #[path = "ui_smoothness.rs"]
 mod smoothness;
 #[path = "ui_test_state.rs"]
@@ -153,6 +157,9 @@ pub(crate) use pinned_ui::{
 use pinned_ui::{
     collect_pinned_diffs_cached, draw_pinned_content_cached, draw_side_panel_markdown,
 };
+pub(crate) use shared_helpers::chat_link_target_from_screen;
+pub use shared_helpers::last_user_prompt_positions;
+use shared_helpers::{hash_text_for_cache, update_user_prompt_positions};
 #[cfg(test)]
 use transitions::extract_line_text;
 #[cfg(test)]
@@ -323,43 +330,6 @@ pub fn last_diff_pane_max_scroll() -> usize {
     #[cfg(not(test))]
     {
         LAST_DIFF_PANE_MAX_SCROLL.load(Ordering::Relaxed)
-    }
-}
-
-/// Get the last known user prompt line positions (from the most recent render frame).
-/// Returns positions as wrapped line indices from the top of content.
-pub fn last_user_prompt_positions() -> Vec<usize> {
-    #[cfg(test)]
-    {
-        return TEST_LAST_USER_PROMPT_POSITIONS.with(|v| v.borrow().clone());
-    }
-    #[cfg(not(test))]
-    {
-        LAST_USER_PROMPT_POSITIONS
-            .get_or_init(|| Mutex::new(Vec::new()))
-            .lock()
-            .map(|v| v.clone())
-            .unwrap_or_default()
-    }
-}
-
-fn update_user_prompt_positions(positions: &[usize]) {
-    #[cfg(test)]
-    {
-        TEST_LAST_USER_PROMPT_POSITIONS.with(|v| {
-            let mut v = v.borrow_mut();
-            v.clear();
-            v.extend_from_slice(positions);
-        });
-        return;
-    }
-    #[cfg(not(test))]
-    {
-        let mutex = LAST_USER_PROMPT_POSITIONS.get_or_init(|| Mutex::new(Vec::new()));
-        if let Ok(mut v) = mutex.lock() {
-            v.clear();
-            v.extend_from_slice(positions);
-        }
     }
 }
 
@@ -537,12 +507,6 @@ pub(crate) fn take_tail_follow_snap_request() -> bool {
     {
         TAIL_FOLLOW_SNAP_PENDING.swap(false, Ordering::Relaxed)
     }
-}
-
-pub(super) fn hash_text_for_cache(text: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    std::hash::Hasher::finish(&hasher)
 }
 
 #[path = "ui_layout.rs"]
@@ -971,6 +935,7 @@ struct BodyCacheKey {
     width: u16,
     diff_mode: crate::config::DiffDisplayMode,
     messages_version: u64,
+    inline_file_previews_version: u64,
     diagram_mode: crate::config::DiagramDisplayMode,
     centered: bool,
     /// Mermaid render geometry depends on the scoped transcript/pane aspect
@@ -1074,6 +1039,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|entry| entry.msg_count)
             .map(|entry| (entry.prepared.clone(), entry.msg_count));
@@ -1095,6 +1062,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|entry| entry.msg_count)
             .map(|entry| (entry.prepared.clone(), entry.msg_count));
@@ -1135,6 +1104,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|(_, entry)| entry.msg_count)
             .map(|(idx, entry)| (false, idx, entry.msg_count));
@@ -1157,6 +1128,8 @@ impl BodyCacheState {
                     && entry.key.images_signature == key.images_signature
                     && entry.key.expanded_images_version == key.expanded_images_version
                     && entry.key.swarm_members_signature == key.swarm_members_signature
+                    && entry.key.inline_file_previews_version
+                        == key.inline_file_previews_version
             })
             .max_by_key(|(_, entry)| entry.msg_count)
             .map(|(idx, entry)| (true, idx, entry.msg_count));
@@ -1247,6 +1220,7 @@ struct FullPrepCacheKey {
     height: u16,
     diff_mode: crate::config::DiffDisplayMode,
     messages_version: u64,
+    inline_file_previews_version: u64,
     diagram_mode: crate::config::DiagramDisplayMode,
     centered: bool,
     /// The scoped Mermaid profile can also change when pane geometry changes
@@ -1711,6 +1685,7 @@ mod profile;
 pub(crate) mod selection_highlight;
 #[path = "ui/url.rs"]
 mod url_regex_support;
+pub(crate) use self::copy_selection::chat_inline_file_preview_message_from_screen;
 use self::copy_selection::{
     copy_point_from_snapshot, copy_selection_text_from_raw_lines, link_target_from_snapshot,
 };

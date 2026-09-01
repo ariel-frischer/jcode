@@ -4,6 +4,36 @@ use super::display_width::{clamp_display_col, display_col_slice, line_display_wi
 use super::url_regex_support::link_target_for_display_column;
 use super::{CopyViewportData, CopyViewportSnapshot};
 
+pub(crate) fn chat_inline_file_preview_message_from_screen(column: u16, row: u16) -> Option<usize> {
+    let point = super::copy_point_from_screen(column, row)?;
+    if point.pane != crate::tui::CopySelectionPane::Chat {
+        return None;
+    }
+    let snapshot = super::copy_snapshot_for_pane(point.pane)?;
+    let prepared = match &snapshot.data {
+        CopyViewportData::ChatFrame { prepared } => prepared,
+        CopyViewportData::Dense { .. } => return None,
+    };
+    let message_index = prepared.message_index_at_line(point.abs_line)?;
+    let mut line = point.abs_line;
+    loop {
+        if prepared.message_index_at_line(line) != Some(message_index) {
+            break;
+        }
+        if prepared.wrapped_plain_line(line).is_some_and(|text| {
+            text.trim_start()
+                .starts_with(super::inline_file_preview_ui::INLINE_FILE_PREVIEW_HEADER_PREFIX)
+        }) {
+            return Some(message_index);
+        }
+        if line == 0 {
+            break;
+        }
+        line -= 1;
+    }
+    None
+}
+
 pub(super) fn copy_point_from_snapshot(
     snapshot: &CopyViewportSnapshot,
     column: u16,
