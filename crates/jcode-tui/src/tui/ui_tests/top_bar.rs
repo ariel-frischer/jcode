@@ -140,6 +140,34 @@ fn top_bar_suppression_reserves_no_space_and_is_explicit() {
 }
 
 #[test]
+fn top_bar_default_and_explicit_true_preferences_select_the_same_adaptive_layout() {
+    let state = active_session(CreditFixture::KnownSubscription);
+    let context = state.top_bar_context().expect("active session context");
+
+    // The persisted setting's omitted value resolves to the documented true
+    // default before it reaches the pure selector. Explicit true must follow
+    // exactly the same path.
+    let omitted = crate::tui::ui_top_bar::select_top_bar_layout(
+        Some(&context),
+        crate::config::DisplayConfig::default().top_bar,
+        120,
+        32,
+        8,
+    );
+    let explicit_true = crate::tui::ui_top_bar::select_top_bar_layout(
+        Some(&context),
+        true,
+        120,
+        32,
+        8,
+    );
+
+    assert!(omitted.row_count > 0);
+    assert_eq!(omitted, explicit_true);
+    assert_eq!(omitted.suppression_reason, None);
+}
+
+#[test]
 fn rendered_top_bar_regions_do_not_overlap_chat_or_required_chrome() {
     let _guard = crate::tui::ui::render_state_test_lock();
     for (width, height) in [(40, 12), (60, 16), (80, 24), (120, 32), (160, 48)] {
@@ -187,4 +215,23 @@ fn disabling_rendered_top_bar_reclaims_the_original_top_rows() {
         disabled_layout.messages_area.y,
         enabled_layout.messages_area.y - enabled_layout.top_bar_row_count
     );
+}
+
+#[test]
+fn disabling_top_bar_in_a_very_small_terminal_reserves_no_rows_or_stale_snapshot() {
+    let _guard = crate::tui::ui::render_state_test_lock();
+    let mut state = active_session(CreditFixture::KnownSubscription);
+    state.top_bar_enabled = true;
+    let _ = render_state(&state, 40, 12);
+    let enabled_layout = crate::tui::ui::last_layout_snapshot().expect("enabled layout");
+    assert!(enabled_layout.top_bar_row_count > 0);
+
+    state.top_bar_enabled = false;
+    let _ = render_state(&state, 24, 8);
+    let disabled_layout = crate::tui::ui::last_layout_snapshot().expect("disabled layout");
+
+    assert_eq!(disabled_layout.top_bar_row_count, 0);
+    assert!(disabled_layout.top_bar_area.is_none());
+    assert_eq!(disabled_layout.messages_area.y, 0);
+    assert!(disabled_layout.input_area.is_some());
 }

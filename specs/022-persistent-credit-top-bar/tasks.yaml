@@ -361,7 +361,7 @@ phases:
       tasks:
         - id: "T025"
           title: "Add failing disabled, enabled, default, and exact-row-reclamation regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-004"
@@ -374,7 +374,7 @@ phases:
             - "Tests cover the disabled option in a very small terminal and confirm that no top-bar content or stale layout snapshot remains visible."
         - id: "T026"
           title: "Implement the canonical top-bar preference gate and bar-free layout path"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-004"
