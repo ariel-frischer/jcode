@@ -539,7 +539,7 @@ phases:
       tasks:
         - id: "T041"
           title: "Run serialized performance, reliability, quality, and runtime validation"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -552,7 +552,7 @@ phases:
             - "Record exact commands, executable identity, results, durations, and any proven unrelated baseline failure in evidence.yaml."
         - id: "T042"
           title: "Validate private-socket and installed-runtime journeys, then clean all fixtures"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null

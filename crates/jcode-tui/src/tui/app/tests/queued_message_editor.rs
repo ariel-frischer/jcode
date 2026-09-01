@@ -607,3 +607,52 @@ fn local_queue_recovery_keeps_interleave_images_aligned() {
     assert_eq!(app.queued_message_images, [images]);
     assert!(app.interleave_images.is_empty());
 }
+
+#[test]
+#[ignore = "phase 9 performance validation; run explicitly on an otherwise idle host"]
+fn queued_editor_thousand_message_local_navigation_meets_latency_budget() {
+    use std::time::{Duration, Instant};
+
+    let mut app = create_test_app();
+    for index in 0..1_000 {
+        queue_local_draft(
+            &mut app,
+            &format!("queued draft {index}"),
+            vec![("image/png".to_string(), format!("image-{index}"))],
+        );
+    }
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("start thousand-message editor");
+    let mut samples = Vec::with_capacity(1_998);
+    for _ in 1..1_000 {
+        let started = Instant::now();
+        app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+            .expect("move older");
+        samples.push(started.elapsed());
+    }
+    for _ in 1..1_000 {
+        let started = Instant::now();
+        app.handle_key(
+            KeyCode::Char('q'),
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        )
+        .expect("move newer");
+        samples.push(started.elapsed());
+    }
+
+    samples.sort_unstable();
+    let p95_index = (samples.len() * 95).div_ceil(100).saturating_sub(1);
+    let p95 = samples[p95_index];
+    eprintln!(
+        "queued-editor local navigation: actions={}, p95={p95:?}",
+        samples.len()
+    );
+    assert!(
+        p95 < Duration::from_millis(100),
+        "local queued-editor p95 was {p95:?} across {} actions",
+        samples.len()
+    );
+    assert_eq!(app.input, "queued draft 999");
+    assert_eq!(app.pending_images[0].1, "image-999");
+}

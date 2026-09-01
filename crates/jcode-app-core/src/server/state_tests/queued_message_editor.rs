@@ -792,3 +792,47 @@ async fn disconnect_grace_can_resume_or_release_immutable_originals_exactly_once
     assert_eq!(pending[0].content, "queued editor fixture held");
     assert_eq!(pending[0].images, ordered_images("held"));
 }
+
+#[test]
+#[ignore = "phase 9 reliability validation; runs 1,000 mixed authoritative trials"]
+fn queued_message_editor_thousand_mixed_trials_preserve_exactly_once_invariants() {
+    use std::time::{Duration, Instant};
+
+    let mut samples = Vec::with_capacity(1_000);
+    for _ in 0..195 {
+        let started = Instant::now();
+        matching_replay_returns_equivalent_outcome_without_second_reservation();
+        samples.push(started.elapsed());
+        let started = Instant::now();
+        cross_client_and_conflicting_operation_reuse_fail_without_disclosure_or_mutation();
+        samples.push(started.elapsed());
+        let started = Instant::now();
+        finish_restores_between_two_surviving_anchors_exactly();
+        samples.push(started.elapsed());
+        let started = Instant::now();
+        finish_without_anchors_restores_between_survivors_and_arrivals();
+        samples.push(started.elapsed());
+        let started = Instant::now();
+        replayed_finish_returns_recorded_result_without_mutating_the_restored_queue_again();
+        samples.push(started.elapsed());
+    }
+    for _ in 0..25 {
+        let started = Instant::now();
+        disconnect_grace_can_resume_or_release_immutable_originals_exactly_once();
+        samples.push(started.elapsed());
+    }
+
+    samples.sort_unstable();
+    let p95_index = (samples.len() * 95).div_ceil(100).saturating_sub(1);
+    let p95 = samples[p95_index];
+    eprintln!(
+        "queued-editor authoritative reliability: trials={}, p95={p95:?}",
+        samples.len()
+    );
+    assert_eq!(samples.len(), 1_000);
+    assert!(
+        p95 < Duration::from_secs(1),
+        "authoritative queued-editor p95 was {p95:?} across {} trials",
+        samples.len()
+    );
+}
