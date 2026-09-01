@@ -933,6 +933,22 @@ impl RemoteConnection {
             .await
     }
 
+    /// Recall this client's newest server-queued user soft interrupt.
+    ///
+    /// The caller owns `operation_id` and must reuse it when retrying after a
+    /// disconnect so the server can replay the original authoritative result
+    /// without removing another queued message.
+    pub async fn recall_soft_interrupt(&mut self, operation_id: &str) -> Result<u64> {
+        let id = self.next_request_id;
+        self.next_request_id += 1;
+        self.send_request(Request::RecallSoftInterrupt {
+            id,
+            operation_id: operation_id.to_string(),
+        })
+        .await?;
+        Ok(id)
+    }
+
     /// Split the current session - ask server to clone conversation into a new session
     pub async fn split(&mut self) -> Result<u64> {
         let id = self.next_request_id;

@@ -115,7 +115,7 @@ phases:
     tasks:
       - id: "T008"
         title: "Implement backend request and small TUI recall state module"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
