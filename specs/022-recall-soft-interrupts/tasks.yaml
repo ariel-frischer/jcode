@@ -1,0 +1,555 @@
+tasks:
+  branch: "agent/jcode-c9u-alt-q-soft-queue"
+  created: "2026-09-01"
+  spec_path: "specs/022-recall-soft-interrupts/spec.yaml"
+  plan_path: "specs/022-recall-soft-interrupts/plan.yaml"
+
+summary:
+  total_tasks: 32
+  total_phases: 7
+  parallel_opportunities: 11
+  estimated_complexity: "high"
+
+phases:
+  - number: 1
+    title: "Setup"
+    purpose: "Freeze the current soft-interrupt, Alt+q, cancellation, protocol, persistence, and runtime validation baseline before behavior changes."
+    tasks:
+      - id: "T001"
+        title: "Record the recall feature baseline, exact validation commands, and acceptance evidence map"
+        status: "Pending"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/022-recall-soft-interrupts/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Record the candidate branch and revision, affected crate boundaries, existing SoftInterruptMessage fields, queue lock and persistence paths, Subscribe client_instance_id flow, CancelSoftInterrupts behavior, local Alt+q recall behavior, composer text/image representation, and active runtime binary caveat."
+          - "Map FR-001 through FR-015 and NFR-001 through NFR-005 to the task IDs and focused evidence commands that will prove them."
+          - "List exact focused test, 10,000-iteration stress, latency, serialized Cargo, selfdev build, guardrail, and isolated-socket runtime commands without mutating personal configuration or the shared daemon."
+          - "Confirm the implementation will add no dependency, duplicate queue, optimistic composer mutation, Go SDK copy, or change to CancelSoftInterrupts semantics."
+
+  - number: 2
+    title: "Foundational"
+    purpose: "Add backward-compatible message identity, ownership, persistence, and wire contracts required by every recall story."
+    tasks:
+      - id: "T002"
+        title: "Add failing tests for stable queued-message identity and optional client ownership metadata"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-agent-runtime/src/lib.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests require user soft interrupts to support a stable QueuedSoftInterruptId and optional owner_client_instance_id while preserving content, ordered images, urgency, and SoftInterruptSource."
+          - "Tests cover owned and unowned construction, identity equality, and legacy/default construction paths without changing system or background message behavior."
+          - "A stable ID can be derived from the owning client identity plus originating soft-interrupt request identity without using mutable queue indexes or content."
+
+      - id: "T003"
+        title: "Add failing protocol serde and request-correlation tests for recall request and result events"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-protocol/src/wire.rs, crates/jcode-protocol/src/lib.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "JSON fixtures require additive RecallSoftInterrupts fields id, operation_id, and ordered message_ids, plus SoftInterruptsRecalled fields id, operation_id, complete|partial|unavailable outcome, ordered recalled_messages, and unavailable_message_ids."
+          - "Round trips preserve text and ordered image payloads exactly, request-ID extraction includes recall requests, and older peers can ignore the additive server event."
+          - "Malformed identities, unknown outcomes, missing required correlation fields, and incompatible operation replays fail visibly without changing existing Ack or CancelSoftInterrupts wire shapes."
+
+      - id: "T004"
+        title: "Add failing persistence compatibility tests for owned, unowned, legacy, and multimodal pending interrupts"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: null
+        file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Legacy pending-soft-interrupt JSON fixtures load successfully with absent identity and owner fields defaulting to unowned and non-recallable."
+          - "Owned text, image-only, and multimodal messages round trip with stable identity, exact owner, source, urgency, content, and image order."
+          - "Overwrite fixtures prove the post-recall remaining queue persists in relative order and a persistence failure cannot be represented as a committed recall."
+
+      - id: "T005"
+        title: "Implement stable soft-interrupt identity and fail-closed optional ownership metadata"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-agent-runtime/src/lib.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Add the smallest typed queued-message identity and optional owner fields to SoftInterruptMessage without changing existing payload, urgency, or source semantics."
+          - "User request construction can assign a deterministic stable identity and verified owner, while system, background, and legacy paths remain unowned unless explicitly authoritative."
+          - "All runtime model tests pass and no new crate dependency is introduced."
+
+      - id: "T006"
+        title: "Implement additive RecallSoftInterrupts and SoftInterruptsRecalled protocol contracts"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-protocol/src/wire.rs, crates/jcode-protocol/src/lib.rs"
+        dependencies: ["T003", "T005"]
+        acceptance_criteria:
+          - "Define typed request, result, outcome, recallable message, and identity fields matching plan.yaml while keeping existing protocol variants source- and wire-compatible."
+          - "Include recall requests in request-ID helpers and preserve Ack handling for injection and cancellation."
+          - "Protocol tests pass for complete, partial, unavailable, multimodal, unknown-event tolerance, and legacy fixtures."
+
+      - id: "T007"
+        title: "Implement additive pending-soft-interrupt identity and ownership persistence"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-base/src/soft_interrupt_store.rs"
+        dependencies: ["T004", "T005"]
+        acceptance_criteria:
+          - "Extend PersistedSoftInterrupt with serde-defaulted optional identity and owner metadata and reuse the existing load and overwrite format."
+          - "Legacy records remain loadable but fail closed for recall, and owned multimodal records retain exact content and order."
+          - "Persistence tests pass without migration, deletion, or a second recall-only store."
+
+      - id: "T008"
+        title: "Add failing lifecycle tests for binding queued user messages to the verified subscribing client"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T005", "T006"]
+        acceptance_criteria:
+          - "Tests prove Request::SoftInterrupt from a subscribed TUI receives the current stable client_instance_id and stable message identity before enqueue and persistence."
+          - "Missing, stale, or mismatched subscription identity fails closed, and system/background producers never inherit the current user client owner accidentally."
+          - "Reconnect with the same stable client identity remains distinguishable from a new transport connection and does not transfer another client's ownership."
+
+      - id: "T009"
+        title: "Bind user-originated queued interrupts to verified client identity and add redacted lifecycle classification"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: null
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs, crates/jcode-app-core/src/server/client_lifecycle_logging.rs"
+        dependencies: ["T007", "T008"]
+        acceptance_criteria:
+          - "Enqueue user soft interrupts with the verified current_client_instance_id and stable message identity before updating authoritative queue and persistence state."
+          - "Keep system and background interrupts unowned and preserve existing injection and CancelSoftInterrupts paths."
+          - "Logging classifies recall-related request IDs, operation IDs, counts, outcomes, and latency without recording text, image data, or full client identifiers."
+
+  - number: 3
+    title: "User Story 1 - Recall my queued soft interrupts"
+    purpose: "Recall still-available owned messages authoritatively and restore their text and images to the editable composer in deterministic order."
+    story_reference: "US-001"
+    independent_test: "Queue multiple owned text and image soft interrupts, press Alt+q, and verify the server atomically confirms removal before the draft-first composer merge occurs exactly once in original queue order."
+    tasks:
+      - id: "T010"
+        title: "Add failing server queue tests for complete owned recall, ordering, images, and committed persistence"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Tests recall one and multiple currently queued User messages owned by the requester and return exact text and ordered images in queue order."
+          - "The queue mutation and post-recall persistence snapshot agree exactly, and success is not emitted when locking or persistence prevents authoritative commit."
+          - "Complete and confirmed-empty unavailable outcomes contain exact candidate identities and do not use queue indexes or client-provided payloads as authority."
+
+      - id: "T011"
+        title: "Add failing TUI tests for authoritative result correlation and deterministic draft-first composer merge"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/part_01.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Tests require Alt+q to leave composer text, draft images, and local recall queue unchanged while a server recall is pending."
+          - "A current authoritative complete result preserves the existing draft first, inserts one newline between non-empty text segments, appends recalled message text in queue order, and appends recalled images after draft images in message order."
+          - "Image-only, empty-text, multiple-image, and repeated-result fixtures preserve content exactly once and never apply an uncorrelated result."
+
+      - id: "T012"
+        title: "Implement mutex-atomic stable partition recall on the authoritative queue"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/state.rs"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "Expose recall through SessionControlHandle and perform one stable partition while holding the existing SoftInterruptQueue mutex."
+          - "Collect selected messages in original queue order, rebuild remaining entries in original order, and produce a typed immutable result from the same decision point."
+          - "The helper accepts authoritative requester identity and candidate IDs, and never trusts content, positions, or connection-local guesses."
+
+      - id: "T013"
+        title: "Handle recall requests, commit remaining queue persistence, and emit the exact authoritative result"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T006", "T007", "T012"]
+        acceptance_criteria:
+          - "Validate the subscribed client identity, operation identity, and candidate identities before invoking the queue helper."
+          - "Persist the remaining authoritative queue through the existing overwrite path before emitting SoftInterruptsRecalled; on validation, lock, or persistence failure emit a visible error and no recalled content."
+          - "Route the result only to the requesting client and classify complete versus confirmed-empty unavailable from the exact committed mutation."
+
+      - id: "T014"
+        title: "Add remote backend transport support for recall requests and dedicated results"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/backend.rs"
+        dependencies: ["T006", "T013"]
+        acceptance_criteria:
+          - "Send RecallSoftInterrupts with a transport request ID, stable operation ID, and ordered known candidate IDs through the existing JSON-lines backend."
+          - "Decode and deliver SoftInterruptsRecalled without converting it to Ack or a synthetic message event."
+          - "Transport rejection, malformed events, disconnect, and timeout remain distinguishable and carry no composer mutation."
+
+      - id: "T015"
+        title: "Implement server-first Alt+q recall and authoritative composer application"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app.rs, crates/jcode-tui/src/tui/app/input.rs, crates/jcode-tui/src/tui/app/remote/key_handling.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs"
+        dependencies: ["T011", "T014"]
+        acceptance_criteria:
+          - "Track known server-queued message identities and one in-flight operation, route local and remote Alt+q to the server before touching editable or local queued content, and show an immediate non-destructive pending notice."
+          - "Validate request and operation identity, apply only the ordered messages in the authoritative result, and implement the documented draft-first text and image merge rule exactly once."
+          - "Successful recall makes all confirmed content editable and shows a clear success outcome without changing the existing local fallback helper."
+
+  - number: 4
+    title: "User Story 2 - Preserve unrelated interrupts"
+    purpose: "Select solely verified owned User messages while preserving every other client, system, background, unowned, and ineligible queue entry in relative order."
+    story_reference: "US-002"
+    independent_test: "Populate an interleaved queue with owned, other-client, unowned, system, and background entries, request recall, and compare both the recalled result and the untouched remaining queue order."
+    tasks:
+      - id: "T016"
+        title: "Add failing mixed-queue authorization and stable-order tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "An interleaved queue recalls only candidate User messages whose owner exactly matches the verified requester."
+          - "Other-client, missing-owner, mismatched-owner, System, BackgroundTask, noncandidate, and legacy messages remain byte-equivalent and in the same relative order."
+          - "Unavailable identities reveal no other-client content, image data, or queue-wide sensitive payload."
+
+      - id: "T017"
+        title: "Add failing mixed-queue persistence tests for preserved unrelated entries"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-002"
+        file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
+        dependencies: ["T015"]
+        acceptance_criteria:
+          - "Post-recall persisted files contain every unrelated message once, in original relative order, with unchanged source, ownership, urgency, text, and image fields."
+          - "Legacy unowned and other-client records never become owned through load, overwrite, or reconnect."
+          - "Reloading the persisted remaining queue reproduces the same eligibility and ordering decisions."
+
+      - id: "T018"
+        title: "Enforce exact owner and User-source eligibility while preserving all unrelated queue state"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/state.rs, crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T016", "T017"]
+        acceptance_criteria:
+          - "Select a message only when its stable ID is requested, source is SoftInterruptSource::User, and owner exactly equals the current verified client_instance_id."
+          - "Fail closed for absent, stale, mismatched, legacy, malformed, or unverifiable ownership and preserve those entries without movement."
+          - "Complete, partial, unavailable, and rejection classifications do not leak or alter unrelated client or system state."
+
+      - id: "T019"
+        title: "Add failing requester-only event routing and privacy-safe lifecycle logging tests"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T018"]
+        acceptance_criteria:
+          - "Only the connection associated with the verified requesting client receives the recall result; other subscribed clients receive no result or recalled payload."
+          - "Missing ownership and mismatched requester cases produce explicit handled errors with no queue mutation."
+          - "Logs contain bounded IDs, counts, outcome, and latency but never message text, image bytes, another client's payload, or full sensitive identity values."
+
+      - id: "T020"
+        title: "Finalize requester-only routing and redacted recall lifecycle telemetry"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs, crates/jcode-app-core/src/server/client_lifecycle_logging.rs"
+        dependencies: ["T019"]
+        acceptance_criteria:
+          - "Associate each result with the exact requester transport and stable client identity without broadcasting it to the session."
+          - "Surface unavailable, rejected, and failed authorization outcomes clearly while preserving the queue."
+          - "All ownership, mixed-source, mixed-client, event-routing, and logging privacy tests pass."
+
+  - number: 5
+    title: "User Story 3 - Handle recall races safely"
+    purpose: "Make recall idempotent across consumption, cancellation, retries, reconnects, duplicate results, partial availability, and transport failure."
+    story_reference: "US-003"
+    independent_test: "Race recall with consumption, cancellation, persistence failure, response loss, reconnect retry, and duplicate delivery, then prove each message has one authoritative state and only current confirmed content reaches the composer once."
+    tasks:
+      - id: "T021"
+        title: "Add failing server race, partial-result, idempotency, conflict, and eviction tests"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs, crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Forced interleavings make consumed, canceled, still queued, and confirmed recalled mutually exclusive final states for every message."
+          - "Identical retries by verified client and operation ID return the immutable cached result without a second queue mutation; conflicting reuse is rejected with the original result intact."
+          - "Partial results contain only still-available confirmed messages plus unavailable candidate identities in deterministic order."
+          - "A bounded per-session operation cache has deterministic count and payload-byte eviction behavior plus an actionable expired/unavailable reconciliation result."
+
+      - id: "T022"
+        title: "Add failing TUI tests for one in-flight operation, reconnect retry, partial application, and failure immutability"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/part_01.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs"
+        dependencies: ["T020"]
+        acceptance_criteria:
+          - "Repeated Alt+q presses coalesce while one operation is pending and cannot create duplicate requests or contradictory notices."
+          - "Timeout, rejection, malformed or stale result, disconnect, and unknown outcome preserve composer text/images and the local recall queue byte-for-byte."
+          - "Reconnect retries retain the same operation ID, accept the matching cached result, apply it once, and ignore duplicate or already-applied completions."
+          - "A partial result applies only returned messages and shows a distinct partial indication that does not claim unavailable content was restored."
+
+      - id: "T023"
+        title: "Implement bounded authoritative recall operation caching and conflict-safe replay"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/server/state.rs, crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T021"]
+        acceptance_criteria:
+          - "Cache completed results per session keyed by verified client and operation identity, bounded by deterministic operation count and retained payload bytes."
+          - "Return the same immutable result for identical replay, reject conflicting message sets for a reused operation ID, and never mutate the queue twice."
+          - "Serialize injection, consumption, cancellation, and recall through the existing queue lock and expose explicit partial or unavailable outcomes for changed candidate state and cache expiry."
+
+      - id: "T024"
+        title: "Implement reconnect reconciliation, duplicate suppression, partial notices, and failure-safe TUI state"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/app.rs, crates/jcode-tui/src/tui/app/remote/key_handling.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs"
+        dependencies: ["T022", "T023"]
+        acceptance_criteria:
+          - "Retain one in-flight operation across transport reconnect, retry unresolved operations with the same operation ID, and correlate the current transport request ID separately."
+          - "Keep a bounded applied-operation set so duplicate or replayed authoritative results cannot insert text or images twice."
+          - "Show distinct pending, complete, partial, unavailable, rejected, timeout, disconnect, malformed, stale, and failed notices while mutating the composer only for current confirmed content."
+
+      - id: "T025"
+        title: "Add and run the deterministic 10,000-iteration recall race stress harness"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/server/client_actions_tests.rs, specs/022-recall-soft-interrupts/validation.md"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "Exercise seeded interleavings of enqueue, consume, cancel, recall, retry, persistence commit, response loss, and reconnect for at least 10,000 iterations."
+          - "Assert zero duplicated messages, zero lost or reordered unrelated messages, zero unconfirmed composer insertions, and exactly one final state per candidate."
+          - "Record the exact command, seed strategy, iteration count, candidate revision, elapsed time, and result in validation.md; failures print a reproducible seed and minimal state summary without payload leakage."
+
+  - number: 6
+    title: "User Story 4 - Retain established cancellation and local recall behavior"
+    purpose: "Preserve CancelSoftInterrupts and local Alt+q queue editing while adding deterministic draft merging, fallback, and explicit capability coverage."
+    story_reference: "US-004"
+    independent_test: "Run established cancellation and local Alt+q scenarios before and after server recall, including drafts and images, and verify unchanged outcomes whenever the server confirms no owned messages."
+    tasks:
+      - id: "T026"
+        title: "Add failing compatibility tests for cancellation overlap, confirmed-empty local fallback, drafts, and images"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/app/tests/remote_startup_input_02/part_01.rs, crates/jcode-app-core/src/server/client_actions_tests.rs"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "Existing CancelSoftInterrupts scenarios retain their queue and user-visible semantics when no recall is requested, and canceled messages never reappear as confirmed recalls."
+          - "Only a confirmed empty unavailable server result invokes the unchanged retrieve_queued_message_for_edit path; timeout, rejection, disconnect, malformed, or pending results do not consume local recall state."
+          - "Existing local Alt+q queue cycling remains identical, and successful server recall combines existing draft text/images deterministically without replacing or dropping either source."
+          - "When neither queue has content, Alt+q changes no content and shows a clear non-destructive unavailable indication."
+
+      - id: "T027"
+        title: "Finalize cancellation coexistence, confirmed-empty local fallback, and user-visible outcome behavior"
+        status: "Pending"
+        type: "implementation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "crates/jcode-tui/src/tui/app/input.rs, crates/jcode-tui/src/tui/app/remote/key_handling.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs, crates/jcode-app-core/src/server/client_lifecycle.rs"
+        dependencies: ["T025", "T026"]
+        acceptance_criteria:
+          - "Keep CancelSoftInterrupts as its existing distinct all-pending cancellation action and serialize overlap with recall at the authoritative queue boundary."
+          - "Invoke local recall only after a current confirmed empty unavailable result and preserve the existing local helper and cycling order unchanged."
+          - "Success, partial, unavailable, rejected, timeout, disconnect, and failure notices are concise, distinguishable, non-destructive, and do not claim unconfirmed restoration."
+
+      - id: "T028"
+        title: "Add explicit harness and Rust SDK capability coverage for the new wire request"
+        status: "Pending"
+        type: "test"
+        parallel: true
+        story_id: "US-004"
+        file_path: "crates/jcode-harness-api/src/harness_api_tests/capability_coverage.rs, crates/jcode-harness-api/src/requests.rs, crates/jcode-sdk/src/client.rs"
+        dependencies: ["T024"]
+        acceptance_criteria:
+          - "Inspect current public control-request policy and either add a typed additive Rust harness/SDK recall method with focused tests or classify recall explicitly and testably as TUI-only."
+          - "CancelSoftInterrupts coverage and public wire compatibility remain unchanged, with no silent capability drift."
+          - "Do not add, vendor, generate, or modify a Go SDK implementation in this repository; record any external jcode-go follow-up as maintainer-directed separate work."
+
+      - id: "T029"
+        title: "Document Alt+q server-first recall, ownership, merge, fallback, and protocol semantics"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "docs/KEYBINDINGS.md, docs/PROTOCOL.md"
+        dependencies: ["T027", "T028"]
+        acceptance_criteria:
+          - "Document that Alt+q requests server-owned recall first, permits at most one in-flight operation, and mutates editable content only after authoritative confirmation."
+          - "Document exact owner and User-source eligibility, complete/partial/unavailable outcomes, idempotent operation identity, reconnect behavior, and fail-closed legacy ownership."
+          - "Document the deterministic draft-first text/newline and image ordering rule, confirmed-empty local fallback, unchanged cancellation semantics, and all non-destructive notices."
+
+  - number: 7
+    title: "Polish & Cross-Cutting Concerns"
+    purpose: "Close the focused acceptance matrix, latency and runtime truth checks, repository guardrails, and reviewable delivery evidence."
+    tasks:
+      - id: "T030"
+        title: "Run the complete focused recall acceptance matrix, latency measurement, and isolated-socket runtime workflow"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/022-recall-soft-interrupts/validation.md"
+        dependencies: ["T029"]
+        acceptance_criteria:
+          - "Run exact runtime model, protocol serde, persistence, queue action, lifecycle, TUI input, server-event, cancellation, local fallback, harness capability, and 10,000-iteration race tests serially and record results against FR-001..FR-015 and NFR-001..NFR-005."
+          - "Measure request-to-confirmed-outcome or clear pending/failure indication under normal local conditions and verify at least 95 percent of attempts are indicated within 500 ms, recording sample count, p50, p95, maximum, hardware, profile, and candidate revision."
+          - "Build the candidate TUI binary, resolve the actual executable identity, and run it against a unique isolated socket with interleaved owned, other-client, unowned, system, background, text, image, cancellation, partial/unavailable, reconnect retry, and local fallback scenarios."
+          - "Record exact commands and evidence, prove no personal configuration or shared daemon mutation, and separate any reproducible unrelated baseline failure from feature regressions."
+
+      - id: "T031"
+        title: "Run formatting, focused affected-crate checks, coordinated TUI build, and repository guardrails"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/022-recall-soft-interrupts/validation.md"
+        dependencies: ["T030"]
+        acceptance_criteria:
+          - "Run rustfmt/check-format, focused cargo check and test commands for jcode-agent-runtime, jcode-protocol, jcode-base, jcode-app-core, jcode-harness-api, jcode-sdk, and jcode-tui with Cargo-heavy work serialized."
+          - "Run a coordinated selfdev TUI build and scripts/check_guardrails.sh, plus the repository's dependency-boundary and autospec artifact validators where applicable."
+          - "Confirm no new dependency, duplicate protocol or queue path, composer redesign, logging payload leak, incompatible persistence migration, or accidental Go SDK code was introduced."
+          - "Record candidate binary identity, commands, pass/fail output, and any proven unrelated baseline issue without weakening acceptance criteria."
+
+      - id: "T032"
+        title: "Review feature-owned diff and prepare the integration handoff with complete evidence"
+        status: "Pending"
+        type: "documentation"
+        parallel: false
+        story_id: null
+        file_path: "specs/022-recall-soft-interrupts/validation.md"
+        dependencies: ["T031"]
+        acceptance_criteria:
+          - "Inspect git status and diff, preserve unrelated worktree changes, and include only feature-owned protocol, runtime, persistence, server, TUI, tests, documentation, tasks, and validation files."
+          - "Summarize the authoritative ownership boundary, atomicity and idempotency guarantees, compatibility behavior, public capability decision, test matrix, stress result, latency result, isolated runtime proof, and remaining risks."
+          - "Provide the reviewed commit identity and integration instructions without switching the root checkout, modifying personal configuration, or installing/reloading a shared build before merge."
+
+dependencies:
+  user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002", "US-003", "US-004"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003", "US-004"]
+    - story_id: "US-003"
+      depends_on: ["US-001", "US-002"]
+      blocks: ["US-004"]
+    - story_id: "US-004"
+      depends_on: ["US-001", "US-002", "US-003"]
+      blocks: []
+
+  phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+
+parallel_execution:
+  - phase: 2
+    parallel_groups:
+      - tasks: ["T002", "T003", "T004"]
+        rationale: "Runtime model, protocol serde, and persistence compatibility tests touch separate crates and depend only on the frozen baseline."
+  - phase: 3
+    parallel_groups:
+      - tasks: ["T010", "T011"]
+        rationale: "Authoritative server queue tests and TUI composer-application tests target separate boundaries after foundational ownership is available."
+  - phase: 4
+    parallel_groups:
+      - tasks: ["T016", "T017"]
+        rationale: "Mixed-queue server authorization tests and persisted remaining-order tests use separate crates and validate complementary ownership boundaries."
+  - phase: 5
+    parallel_groups:
+      - tasks: ["T021", "T022"]
+        rationale: "Server race/idempotency tests and TUI reconnect/duplicate tests can be authored independently against the established recall contract."
+  - phase: 6
+    parallel_groups:
+      - tasks: ["T026", "T028"]
+        rationale: "Cancellation/local fallback compatibility tests and public harness capability coverage touch separate surfaces after race-safe recall exists."
+
+implementation_strategy:
+  mvp_scope:
+    phases: [1, 2, 3, 4, 5]
+    description: "Setup, compatible identity and wire foundation, owned server recall and composer restoration, strict unrelated-message preservation, and race-safe idempotent reconciliation."
+    validation: "Run focused protocol, persistence, queue, lifecycle, and TUI tests plus the 10,000-iteration race harness; confirm only server-authoritative owned User messages reach the composer once and all unrelated queue entries remain ordered."
+  incremental_delivery:
+    - milestone: "Compatible Recall Contracts Ready"
+      phases: [1, 2]
+      deliverable: "Queued user messages can carry stable fail-closed ownership, persistence remains legacy-compatible, and additive request/result contracts serialize correctly."
+    - milestone: "Owned Recall Happy Path Ready"
+      phases: [1, 2, 3]
+      deliverable: "Alt+q can authoritatively remove still-queued owned messages and restore ordered text and images after confirmation."
+    - milestone: "Ownership-Safe Recall Ready"
+      phases: [1, 2, 3, 4]
+      deliverable: "Other clients, unowned records, and system/background interrupts remain untouched and ordered with requester-only results."
+    - milestone: "Race-Safe MVP Complete"
+      phases: [1, 2, 3, 4, 5]
+      deliverable: "Recall is partial-result aware, idempotent across retries and reconnects, duplicate-safe in the TUI, and proven across 10,000 forced race iterations."
+    - milestone: "Compatibility Complete"
+      phases: [1, 2, 3, 4, 5, 6]
+      deliverable: "CancelSoftInterrupts, local Alt+q recall, deterministic draft merging, user notices, public capability coverage, and documentation are complete."
+    - milestone: "Delivery Evidence Complete"
+      phases: [1, 2, 3, 4, 5, 6, 7]
+      deliverable: "Focused checks, latency target, coordinated build, guardrails, isolated-socket runtime proof, and reviewed integration evidence are recorded."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-01T09:01:15Z"
+  artifact_type: "tasks"
