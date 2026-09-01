@@ -131,7 +131,7 @@ fn queued_editor_boundary_and_conflict_preserve_complete_composer_draft() {
         assert_eq!(app.status_notice(), Some(expected_notice.to_string()));
         assert!(app.remote_queued_message_editor.is_active());
         if outcome == crate::protocol::QueuedMessageEditorOutcome::Conflict {
-            assert!(app.remote_queued_message_editor.has_pending_operation());
+            assert!(!app.remote_queued_message_editor.has_pending_operation());
         }
     }
 }
@@ -439,6 +439,23 @@ fn local_queued_editor_enter_commits_or_deletes_only_the_selection_and_records_h
 }
 
 #[test]
+fn local_queued_editor_expands_placeholders_in_every_retained_draft_before_cleanup() {
+    let mut app = create_test_app();
+    let pasted = "one\ntwo\nthree\nfour\nfive".to_string();
+    app.pasted_contents.push(pasted.clone());
+    app.queued_messages = vec!["[pasted 5 lines]".to_string(), "selected".to_string()];
+    app.queued_message_images = vec![Vec::new(), Vec::new()];
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("start editor");
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .expect("finish editor");
+
+    assert_eq!(app.queued_messages, [pasted, "selected".to_string()]);
+    assert!(app.pasted_contents.is_empty());
+}
+
+#[test]
 fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_terminal_result() {
     let mut app = create_test_app();
     app.input = "remote edited draft".to_string();
@@ -606,6 +623,21 @@ fn local_queue_recovery_keeps_interleave_images_aligned() {
     assert_eq!(app.queued_messages, ["recover me"]);
     assert_eq!(app.queued_message_images, [images]);
     assert!(app.interleave_images.is_empty());
+}
+
+#[test]
+fn blank_interleave_recovery_discards_detached_images() {
+    let mut app = create_test_app();
+    app.interleave_message = Some("   ".to_string());
+    app.interleave_images = vec![("image/png".to_string(), "detached".to_string())];
+
+    assert!(!super::remote::recover_local_interleave_to_queue_for_test(
+        &mut app,
+        "blank interleave",
+    ));
+    assert!(app.interleave_images.is_empty());
+    assert!(app.queued_messages.is_empty());
+    assert!(app.queued_message_images.is_empty());
 }
 
 #[test]

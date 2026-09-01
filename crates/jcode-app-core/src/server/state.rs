@@ -158,6 +158,7 @@ struct QueuedMessageEditorCoordinator {
     completed: VecDeque<CompletedQueuedMessageEditorOperation>,
     grace_tokens: HashMap<String, u64>,
     next_grace_token: u64,
+    next_enqueue_sequence: u64,
 }
 
 type SharedQueuedMessageEditorCoordinator = Arc<StdMutex<QueuedMessageEditorCoordinator>>;
@@ -835,18 +836,20 @@ pub(super) fn session_event_fanout_sender_with_fallback(
     tx
 }
 
-pub(super) fn enqueue_soft_interrupt(
+fn enqueue_soft_interrupt(
     queue: &SoftInterruptQueue,
+    coordinator: &SharedQueuedMessageEditorCoordinator,
     content: String,
     images: Vec<(String, String)>,
     urgent: bool,
     source: SoftInterruptSource,
 ) -> bool {
-    enqueue_soft_interrupt_owned(queue, content, images, urgent, source, None)
+    enqueue_soft_interrupt_owned(queue, coordinator, content, images, urgent, source, None)
 }
 
-pub(super) fn enqueue_soft_interrupt_owned(
+fn enqueue_soft_interrupt_owned(
     queue: &SoftInterruptQueue,
+    coordinator: &SharedQueuedMessageEditorCoordinator,
     content: String,
     images: Vec<(String, String)>,
     urgent: bool,
@@ -855,14 +858,23 @@ pub(super) fn enqueue_soft_interrupt_owned(
 ) -> bool {
     let content_bytes = content.len();
     let content_chars = content.chars().count();
+    let Ok(mut coordinator) = coordinator.lock() else {
+        crate::logging::warn(&format!(
+            "SOFT_INTERRUPT_QUEUE_PUSH_FAILED source={:?} urgent={} content_bytes={} content_chars={} reason=editor_lock_poisoned",
+            source, urgent, content_bytes, content_chars
+        ));
+        return false;
+    };
     if let Ok(mut pending) = queue.lock() {
         let pending_before = pending.len();
-        let enqueue_sequence = pending
+        let queued_max = pending
             .iter()
             .filter_map(|message| message.enqueue_sequence)
             .max()
-            .unwrap_or(0)
-            .saturating_add(1);
+            .unwrap_or(0);
+        coordinator.next_enqueue_sequence = coordinator.next_enqueue_sequence.max(queued_max);
+        coordinator.next_enqueue_sequence = coordinator.next_enqueue_sequence.saturating_add(1);
+        let enqueue_sequence = coordinator.next_enqueue_sequence;
         pending.push(SoftInterruptMessage {
             content,
             images,
@@ -957,7 +969,14 @@ impl SessionControlHandle {
         urgent: bool,
         source: SoftInterruptSource,
     ) -> bool {
-        enqueue_soft_interrupt(&self.soft_interrupt_queue, content, images, urgent, source)
+        enqueue_soft_interrupt(
+            &self.soft_interrupt_queue,
+            &self.queued_message_editor,
+            content,
+            images,
+            urgent,
+            source,
+        )
     }
 
     pub fn queue_owned_soft_interrupt(
@@ -970,6 +989,7 @@ impl SessionControlHandle {
     ) -> bool {
         let queued = enqueue_soft_interrupt_owned(
             &self.soft_interrupt_queue,
+            &self.queued_message_editor,
             content,
             images,
             urgent,
@@ -1146,6 +1166,9 @@ impl SessionControlHandle {
                         .filter_map(|message| message.enqueue_sequence)
                         .max()
                         .unwrap_or(0);
+                    coordinator.next_enqueue_sequence = coordinator
+                        .next_enqueue_sequence
+                        .max(snapshot_queue_sequence);
                     let eligible: HashSet<usize> = eligible_indices.into_iter().collect();
                     let mut held = Vec::new();
                     let mut remaining = Vec::with_capacity(queue.len() - eligible.len());
@@ -1567,8 +1590,16 @@ pub(super) async fn queue_soft_interrupt_for_session(
     queues: &SessionInterruptQueues,
     sessions: &super::SessionAgents,
 ) -> bool {
+    let coordinator = queued_message_editor_for_session(session_id);
     if let Some(queue) = queues.read().await.get(session_id).cloned() {
-        return enqueue_soft_interrupt(&queue, content, Vec::new(), urgent, source);
+        return enqueue_soft_interrupt(
+            &queue,
+            &coordinator,
+            content,
+            Vec::new(),
+            urgent,
+            source,
+        );
     }
 
     let queue = {
@@ -1583,7 +1614,14 @@ pub(super) async fn queue_soft_interrupt_for_session(
 
     if let Some(queue) = queue {
         register_session_interrupt_queue(queues, session_id, queue.clone()).await;
-        enqueue_soft_interrupt(&queue, content, Vec::new(), urgent, source)
+        enqueue_soft_interrupt(
+            &queue,
+            &coordinator,
+            content,
+            Vec::new(),
+            urgent,
+            source,
+        )
     } else {
         let session_exists = {
             let guard = sessions.read().await;
@@ -1594,18 +1632,42 @@ pub(super) async fn queue_soft_interrupt_for_session(
             return false;
         }
 
-        crate::soft_interrupt_store::append(
-            session_id,
-            SoftInterruptMessage {
+        let persist = || -> anyhow::Result<()> {
+            let mut coordinator = coordinator
+                .lock()
+                .map_err(|_| anyhow::anyhow!("queued message editor authority is unavailable"))?;
+            let mut envelope = crate::soft_interrupt_store::load_envelope(session_id)?;
+            let persisted_max = envelope
+                .dispatchable
+                .iter()
+                .filter_map(|message| message.enqueue_sequence)
+                .chain(
+                    envelope
+                        .reservations
+                        .iter()
+                        .map(|reservation| reservation.snapshot_queue_sequence),
+                )
+                .max()
+                .unwrap_or(0);
+            coordinator.next_enqueue_sequence =
+                coordinator.next_enqueue_sequence.max(persisted_max);
+            coordinator.next_enqueue_sequence =
+                coordinator.next_enqueue_sequence.saturating_add(1);
+            envelope.dispatchable.push(
+                SoftInterruptMessage {
                 content,
                 images: Vec::new(),
                 urgent,
                 source,
-                message_id: None,
+                message_id: Some(crate::id::new_id("soft_interrupt")),
                 owner_client_instance_id: None,
-                enqueue_sequence: None,
-            },
-        )
+                enqueue_sequence: Some(coordinator.next_enqueue_sequence),
+                }
+                .into(),
+            );
+            crate::soft_interrupt_store::overwrite_envelope(session_id, &envelope)
+        };
+        persist()
         .map(|_| true)
         .unwrap_or_else(|err| {
             crate::logging::warn(&format!(

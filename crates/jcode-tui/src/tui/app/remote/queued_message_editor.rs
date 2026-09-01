@@ -143,6 +143,7 @@ pub(super) fn handle_server_result(
     if placement == QueuedMessageEditorPlacement::NotApplied
         || outcome == QueuedMessageEditorOutcome::Conflict
     {
+        app.remote_queued_message_editor.complete_operation(true);
         app.set_status_notice(
             server_message
                 .unwrap_or("Queued message changed; your draft was not applied")

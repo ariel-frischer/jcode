@@ -1593,11 +1593,14 @@ pub(super) fn finish_queued_message_edit(app: &mut App) -> bool {
     let selected_is_empty = editor.held[editor.selected_index].content.is_empty()
         && editor.held[editor.selected_index].images.is_empty();
     if !selected_is_empty {
-        let selected = &mut editor.held[editor.selected_index];
-        app.record_prompt_history(&selected.content);
-        selected.content = expand_paste_placeholders(app, &selected.content);
-        app.pasted_contents.clear();
+        app.record_prompt_history(&editor.held[editor.selected_index].content);
     }
+    for (index, draft) in editor.held.iter_mut().enumerate() {
+        if index != editor.selected_index || !selected_is_empty {
+            draft.content = expand_paste_placeholders(app, &draft.content);
+        }
+    }
+    app.pasted_contents.clear();
 
     normalize_queued_message_images(app);
     let arrivals = std::mem::take(&mut app.queued_messages);

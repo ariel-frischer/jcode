@@ -163,6 +163,7 @@ pub(super) fn recover_local_interleave_to_queue(app: &mut App, reason: &str) -> 
     let Some(interleave) = app.interleave_message.take() else {
         return false;
     };
+    let images = std::mem::take(&mut app.interleave_images);
     if interleave.trim().is_empty() {
         return false;
     }
@@ -171,7 +172,6 @@ pub(super) fn recover_local_interleave_to_queue(app: &mut App, reason: &str) -> 
         "Recovering unsent interleave into queued follow-ups after {}",
         reason
     ));
-    let images = std::mem::take(&mut app.interleave_images);
     app.queued_messages.insert(0, interleave);
     app.queued_message_images.insert(0, images);
     true

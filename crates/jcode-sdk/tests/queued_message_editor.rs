@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use jcode_harness_api::{
     API_VERSION_MAJOR, ApiEvent, ApiRequest, ClientFrame, QUEUED_MESSAGE_NAVIGATION_CAPABILITY,
     QueuedMessageEditorDirection, QueuedMessageEditorDraft, QueuedMessageEditorOperation,

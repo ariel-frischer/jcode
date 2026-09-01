@@ -236,6 +236,51 @@ fn start_reserves_only_verified_owned_user_records_and_selects_newest() {
 }
 
 #[test]
+fn post_snapshot_enqueue_keeps_a_monotonic_sequence_after_held_queue_drains() {
+    let (control, queue) = control_with(vec![owned_user("held", 41)]);
+    let started = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "sequence-navigation",
+            "sequence-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start");
+    let selected = started.selection.expect("selection");
+    assert!(queue.lock().expect("queue lock").is_empty());
+
+    assert!(control.queue_owned_soft_interrupt(
+        "post-snapshot".to_string(),
+        Vec::new(),
+        false,
+        SoftInterruptSource::User,
+        Some(OWNER_CLIENT_ID),
+    ));
+    assert_eq!(
+        queue.lock().expect("queue lock")[0].enqueue_sequence,
+        Some(42),
+    );
+
+    control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "sequence-navigation",
+            "sequence-finish",
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id: selected.message_id,
+                draft: RecallableSoftInterrupt {
+                    content: "held edited".to_string(),
+                    images: Vec::new(),
+                },
+            },
+        )
+        .expect("finish");
+    let pending = queue.lock().expect("queue lock");
+    assert_eq!(pending[0].content, "held edited");
+    assert_eq!(pending[1].content, "post-snapshot");
+}
+
+#[test]
 fn matching_replay_returns_equivalent_outcome_without_second_reservation() {
     let (control, queue) = control_with(vec![owned_user("only", 1)]);
     let first = control
