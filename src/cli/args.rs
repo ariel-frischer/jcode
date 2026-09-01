@@ -177,6 +177,14 @@ pub(crate) enum Command {
         #[arg(long, conflicts_with = "json")]
         ndjson: bool,
 
+        /// Stop after this many completed turns and bound each turn's tool loop.
+        /// If JCODE_RUN_AUTO_POKE_MAX_TURNS is also set, the lower limit stops first;
+        /// equal limits stop here before another auto-poke is scheduled.
+        // Keep this as text so validation stays in the run preflight before any
+        // provider initialization and can later share one resolver with other sources.
+        #[arg(long, value_name = "N")]
+        max_turns: Option<String>,
+
         /// The message to send
         message: String,
     },

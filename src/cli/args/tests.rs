@@ -620,6 +620,7 @@ fn run_json_subcommand_parses() {
             json,
             ndjson,
             message,
+            ..
         }) => {
             assert!(json);
             assert!(!ndjson);
@@ -637,6 +638,7 @@ fn run_ndjson_subcommand_parses() {
             json,
             ndjson,
             message,
+            ..
         }) => {
             assert!(!json);
             assert!(ndjson);
@@ -853,4 +855,14 @@ fn api_bridge_socket_flags_do_not_collide() {
         ),
         "`--socket` after api-bridge must bind the daemon socket, never the API socket"
     );
+}
+
+#[test]
+fn run_max_turns_preserves_the_raw_value_for_preflight_validation() {
+    let args = Args::try_parse_from(["jcode", "run", "--max-turns", " 3 ", "hello"])
+        .expect("--max-turns should parse");
+    let Some(Command::Run { max_turns, .. }) = args.command else {
+        panic!("expected run command");
+    };
+    assert_eq!(max_turns.as_deref(), Some(" 3 "));
 }

@@ -82,7 +82,6 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     // One-time config migration: force idle_animation off for all existing
     // users; anyone re-enabling it afterwards keeps their choice.
     crate::config::Config::migrate_idle_animation_off_once();
-
     if let Some(profile_name) = args
         .provider_profile
         .as_deref()
@@ -122,7 +121,6 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     {
         crate::config::invalidate_config_cache();
     }
-
     match args.command {
         Some(Command::Serve {
             temporary_server,
@@ -234,6 +232,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             message,
             json,
             ndjson,
+            max_turns,
         }) => {
             commands::run_single_message_command(
                 &args.provider,
@@ -242,6 +241,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                 &message,
                 json,
                 ndjson,
+                max_turns.as_deref(),
             )
             .await?;
         }

@@ -696,6 +696,9 @@ jcode dictate
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
+Bound non-interactive agent runs with `jcode run --max-turns N`. See
+[Non-interactive run safety](docs/RUN_SAFETY.md) for the output contract and a quick validation.
+
 <div align="center">
 
   <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/workflow.mp4">
