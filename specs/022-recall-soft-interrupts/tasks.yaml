@@ -40,7 +40,7 @@ phases:
           - "Run the focused tests and observe expected missing-contract failures."
       - id: "T003"
         title: "Add failing authoritative queue and replay tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"

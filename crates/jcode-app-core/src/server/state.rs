@@ -760,3 +760,7 @@ pub(super) async fn queue_soft_interrupt_for_session(
         })
     }
 }
+
+#[cfg(test)]
+#[path = "state_tests/soft_interrupt_recall.rs"]
+mod soft_interrupt_recall_tests;
