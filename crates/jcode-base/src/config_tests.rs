@@ -6,33 +6,17 @@ use super::{
 use std::ffi::OsString;
 use std::path::Path;
 
+#[path = "config_tests/provider_defaults.rs"]
+mod provider_defaults;
+#[path = "config_tests/session_profiles.rs"]
+mod session_profiles;
+
 fn restore_env_var(key: &str, previous: Option<OsString>) {
     if let Some(previous) = previous {
         crate::env::set_var(key, previous);
     } else {
         crate::env::remove_var(key);
     }
-}
-
-#[test]
-fn test_openai_reasoning_effort_defaults_to_low() {
-    assert_eq!(
-        ProviderConfig::default().openai_reasoning_effort.as_deref(),
-        Some("low")
-    );
-}
-
-#[test]
-fn test_openai_fast_mode_defaults_to_priority() {
-    assert_eq!(
-        ProviderConfig::default().openai_service_tier.as_deref(),
-        Some("priority")
-    );
-}
-
-#[test]
-fn preserve_reasoning_context_defaults_to_enabled() {
-    assert!(ProviderConfig::default().preserve_reasoning_context);
 }
 
 #[test]

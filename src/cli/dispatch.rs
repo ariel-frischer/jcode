@@ -83,45 +83,23 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     // users; anyone re-enabling it afterwards keeps their choice.
     crate::config::Config::migrate_idle_animation_off_once();
 
-    if let Some(profile_name) = args
-        .provider_profile
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        provider_catalog::apply_named_provider_profile_env(profile_name)?;
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_NAME", profile_name);
-        crate::env::set_var("JCODE_PROVIDER_PROFILE_ACTIVE", "1");
-        args.provider = ProviderChoice::OpenaiCompatible;
-    }
+    let selected_session_profile = if args.profile.is_some() {
+        match args.command.as_ref() {
+            None
+            | Some(Command::Run { .. })
+            | Some(Command::Repl)
+            | Some(Command::Serve { .. }) => {
+                super::profile::apply_selected_profile_to_args(&mut args)?
+            }
+            _ => anyhow::bail!(
+                "--profile applies to interactive sessions, `jcode run`, `jcode repl`, and `jcode serve`"
+            ),
+        }
+    } else {
+        None
+    };
 
-    if let Some(tool_profile) = args.tool_profile.as_deref() {
-        crate::env::set_var("JCODE_TOOL_PROFILE", tool_profile);
-    }
-    if let Some(tools) = args.tools.as_deref() {
-        crate::env::set_var("JCODE_TOOLS", tools);
-    }
-    if let Some(disabled_tools) = args.disabled_tools.as_deref() {
-        crate::env::set_var("JCODE_DISABLED_TOOLS", disabled_tools);
-    }
-    if args.disable_base_tools {
-        crate::env::set_var("JCODE_DISABLE_BASE_TOOLS", "1");
-    }
-    if let Some(mcp_tools) = args.mcp_tools.as_deref() {
-        crate::env::set_var("JCODE_MCP_TOOLS", mcp_tools);
-    }
-    if let Some(threshold) = args.mcp_tools_token_threshold {
-        crate::env::set_var("JCODE_MCP_TOOLS_TOKEN_THRESHOLD", threshold.to_string());
-    }
-    if args.tool_profile.is_some()
-        || args.tools.is_some()
-        || args.disabled_tools.is_some()
-        || args.disable_base_tools
-        || args.mcp_tools.is_some()
-        || args.mcp_tools_token_threshold.is_some()
-    {
-        crate::config::invalidate_config_cache();
-    }
+    super::profile::apply_agent_session_options(&mut args)?;
 
     match args.command {
         Some(Command::Serve {
@@ -231,17 +209,16 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             }
         },
         Some(Command::Run {
-            message,
+            ref message,
             json,
             ndjson,
         }) => {
-            commands::run_single_message_command(
-                &args.provider,
-                args.model.as_deref(),
-                args.resume.as_deref(),
-                &message,
+            super::profile::run_profiled_single_message(
+                &args,
+                message,
                 json,
                 ndjson,
+                selected_session_profile,
             )
             .await?;
         }
@@ -959,6 +936,12 @@ async fn run_default_command(args: Args) -> Result<()> {
             std::time::Duration::from_secs(5),
         )
         .await;
+    }
+
+    if server_running && args.profile.is_some() {
+        anyhow::bail!(
+            "the selected --profile cannot replace settings in an already-running server; stop it with `jcode server stop`, then launch again"
+        );
     }
 
     if server_running && explicit_provider_or_model {

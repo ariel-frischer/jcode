@@ -52,10 +52,18 @@ jcode --quiet model list --verbose
 jcode --quiet run --json "Reply with exactly OK"
 ```
 
+Named session profiles are global session options and work in plain and JSON one-shot runs:
+
+```bash
+jcode --quiet --profile review run --json "Review this change"
+jcode --quiet --profile review run "Review this change"
+```
+
 ## Stream one prompt as NDJSON
 
 ```bash
 jcode --quiet run --ndjson "Reply with exactly OK"
+jcode --quiet --profile review run --ndjson "Review this change"
 ```
 
 Typical event types:

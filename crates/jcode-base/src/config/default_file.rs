@@ -314,6 +314,24 @@ bing_market = "en-US"
 # set engine = "searxng" or add it to fallback_engines.
 # searxng_url = "https://searx.example.org"
 
+# Named session profiles apply to interactive sessions, `jcode run`, `jcode repl`,
+# and explicitly started `jcode serve` sessions.
+# Resolution is field-by-field: explicit invocation > environment > selected
+# profile > unprofiled config > built-in default. Static values are checked when
+# strict run config loads; installed provider/model/profile/tool/skill references
+# are checked only when selected. Resolution is per-run and never rewrites this file.
+# `provider` and `provider_profile` are competing provider selectors. The
+# higher-precedence selector wins; defining both at one precedence is an error.
+[profiles.review]
+provider = "openrouter"
+model = "openai/gpt-5.6"
+reasoning_effort = "high"
+tool_profile = "minimal"
+tools = ["read", "agentgrep"]
+disabled_tools = ["bash"]
+skills = ["pr-reviewer"]
+instructions = "Review correctness, security, and regression risk."
+
 [tools]
 # Controls which built-in tools are sent to the model.
 # Profiles: "full" (default), "acp", "minimal"/"lite", or "none".
@@ -748,6 +766,21 @@ mod tests {
             template.contains("/colors"),
             "the template should point at the /colors command"
         );
+    }
+
+    #[test]
+    fn default_config_template_documents_session_profile_scope_and_valid_example() {
+        let template = Config::default_config_file_contents();
+        assert!(template.contains("interactive sessions, `jcode run`, `jcode repl`,"));
+        assert!(template.contains("# and explicitly started `jcode serve` sessions."));
+
+        let config = toml::from_str::<Config>(&template).expect("template must parse");
+        let review = config
+            .profiles
+            .get("review")
+            .expect("review profile example");
+        assert_eq!(review.provider.as_deref(), Some("openrouter"));
+        assert_eq!(review.provider_profile, None);
     }
 
     /// Uncommenting the documented color example must actually work, which is

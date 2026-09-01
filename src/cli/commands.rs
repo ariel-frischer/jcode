@@ -12,6 +12,7 @@ use crate::{browser, gateway, memory, session, storage, tui};
 
 use super::{output::terminal_title, terminal::init_tui_runtime};
 
+mod cloud_sessions;
 mod menubar;
 mod provider_setup;
 mod report_info;
@@ -26,6 +27,7 @@ pub(crate) use super::auth_test::{
 pub use super::auth_test::{
     run_auth_test_command, run_auth_test_context_audit_command, run_auth_test_coverage_command,
 };
+use cloud_sessions::{append_common_jade_args, cloud_sessions_helper_override};
 pub use menubar::{ensure_menubar_helper_running, run_menubar_command};
 pub(crate) use provider_setup::{ProviderAddOptions, run_provider_add_command};
 pub use restart::{
@@ -1192,35 +1194,6 @@ fn cloud_sessions_helper_env(config: &CloudSessionsConfig) -> Vec<(&'static str,
         env.push(("JADE_API_TOKEN_ID", api_token_id));
     }
     env
-}
-
-fn cloud_sessions_helper_override(action: &CloudSessionsSubcommand) -> Option<String> {
-    match action {
-        CloudSessionsSubcommand::Configure { .. }
-        | CloudSessionsSubcommand::Status { .. }
-        | CloudSessionsSubcommand::Sync { .. } => None,
-        CloudSessionsSubcommand::Upload { helper, .. }
-        | CloudSessionsSubcommand::UploadLatest { helper, .. }
-        | CloudSessionsSubcommand::List { helper, .. }
-        | CloudSessionsSubcommand::Verify { helper, .. }
-        | CloudSessionsSubcommand::Dashboard { helper, .. }
-        | CloudSessionsSubcommand::View { helper, .. } => helper.clone(),
-    }
-}
-
-fn append_common_jade_args(
-    args: &mut Vec<String>,
-    user_id: String,
-    profile: Option<String>,
-    region: Option<String>,
-) {
-    args.extend(["--user-id".to_string(), user_id]);
-    if let Some(profile) = profile {
-        args.extend(["--profile".to_string(), profile]);
-    }
-    if let Some(region) = region {
-        args.extend(["--region".to_string(), region]);
-    }
 }
 
 #[cfg(test)]
@@ -2445,17 +2418,18 @@ Re-run with `--force` if you really want to stop the server.";
 }
 
 pub async fn run_single_message_command(
-    choice: &super::provider_init::ProviderChoice,
-    model: Option<&str>,
+    choice: super::provider_init::ProviderChoice,
+    model: Option<String>,
     resume_session: Option<&str>,
     message: &str,
     emit_json: bool,
     emit_ndjson: bool,
+    run_profile: Option<super::profile::ResolvedRunProfile>,
 ) -> Result<()> {
     let provider = if emit_json || emit_ndjson {
-        super::provider_init::init_provider_quiet(choice, model).await?
+        super::provider_init::init_provider_quiet(&choice, model.as_deref()).await?
     } else {
-        super::provider_init::init_provider_for_validation(choice, model).await?
+        super::provider_init::init_provider_for_validation(&choice, model.as_deref()).await?
     };
     let registry = crate::tool::Registry::new(provider.clone()).await;
     // Load MCP servers from ~/.jcode/mcp.json so headless `jcode run` has the
@@ -2477,7 +2451,28 @@ pub async fn run_single_message_command(
         // the agent runs. Warm runs skip this entirely and stay instant. (#390)
         wait_for_cold_cache_mcp_tools(&registry).await;
     }
-    let mut agent = crate::agent::Agent::new(provider.clone(), registry);
+    if let Some(profile) = run_profile.as_ref() {
+        let available_tools = registry.tool_names().await;
+        super::profile::validate_selected_tool_references(profile, &available_tools)?;
+    }
+    let mut agent = if let Some(profile) = run_profile.as_ref() {
+        crate::agent::Agent::new_with_tool_selection(
+            provider.clone(),
+            registry,
+            profile.tools.selection(),
+        )
+    } else {
+        crate::agent::Agent::new(provider.clone(), registry)
+    };
+    if let Some(effort) = run_profile
+        .as_ref()
+        .and_then(super::profile::selected_reasoning_effort)
+    {
+        agent.set_reasoning_effort(effort)?;
+    }
+    if let Some(profile) = run_profile.as_ref() {
+        agent.set_session_prompt_overlay(profile.prompt_overlay.clone());
+    }
     if let Err(error) = restore_agent_session_if_requested(&mut agent, resume_session) {
         agent.mark_closed();
         return Err(error);

@@ -382,6 +382,11 @@ Useful environment overrides for these endpoints:
 
 For details on self-hosting, local runtimes, and the exact config file shape, see below.
 
+#### Named session profiles
+
+Reuse provider, model, tool, skill, and instruction settings in the TUI or a
+one-shot run with `jcode --profile NAME`. See [Named session profiles](docs/SESSION_PROFILES.md).
+
 #### Self-hosted OpenAI-compatible endpoints, including vLLM
 
 For agents and scripts, the preferred path is the one-shot provider profile command. It writes a named profile to `~/.jcode/config.toml`, stores secrets in jcode's private app config directory when requested, and prints exact run/validation commands:

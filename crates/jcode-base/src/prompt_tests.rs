@@ -1,5 +1,45 @@
 use super::*;
 
+#[test]
+fn session_profile_overlay_is_trusted_system_prompt_content() {
+    let mut split = SplitSystemPrompt {
+        static_part: "global and project guidance".to_string(),
+        dynamic_part: "memory context".to_string(),
+    };
+    SessionPromptOverlay {
+        instructions: Some("review carefully".to_string()),
+        selected_skills: vec![
+            ("pr-reviewer".to_string(), "skill prompt one".to_string()),
+            ("security".to_string(), "skill prompt two".to_string()),
+        ],
+    }
+    .append_to_split(&mut split);
+
+    let guidance = split
+        .static_part
+        .find("global and project guidance")
+        .unwrap();
+    let instructions = split.static_part.find("review carefully").unwrap();
+    let first_skill = split.static_part.find("skill prompt one").unwrap();
+    let second_skill = split.static_part.find("skill prompt two").unwrap();
+    assert!(guidance < instructions);
+    assert!(instructions < first_skill);
+    assert!(first_skill < second_skill);
+    assert_eq!(split.dynamic_part, "memory context");
+}
+
+#[test]
+fn empty_session_profile_overlay_preserves_prompt_bytes() {
+    let mut split = SplitSystemPrompt {
+        static_part: "static".to_string(),
+        dynamic_part: "dynamic".to_string(),
+    };
+    let before = split.clone();
+    SessionPromptOverlay::default().append_to_split(&mut split);
+    assert_eq!(split.static_part, before.static_part);
+    assert_eq!(split.dynamic_part, before.dynamic_part);
+}
+
 /// Verify the default system prompt does NOT identify as "Claude Code"
 /// It's fine to say "powered by Claude" but not "Claude Code" (Anthropic's product)
 #[test]

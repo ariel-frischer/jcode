@@ -1,5 +1,4 @@
 use anyhow::Result;
-use clap::Parser;
 use std::process::Command as ProcessCommand;
 
 use crate::{
@@ -277,7 +276,7 @@ pub fn register_external_provider_runtimes() {
 }
 
 fn parse_and_prepare_args() -> Result<Args> {
-    let args = Args::parse();
+    let args = Args::parse_with_provenance();
     startup_profile::mark("args_parse");
 
     if let Some(chord) = args.spawn_hotkey.as_deref() {

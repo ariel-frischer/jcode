@@ -13,6 +13,14 @@ files, so you can tune agent behavior without rebuilding.
 5. Prompt overlay — `./.jcode/prompt-overlay.md` and `~/.jcode/prompt-overlay.md`.
 6. Preferred tools — `./.jcode/preferred-tools.md` and `~/.jcode/preferred-tools.md`.
 7. Memory and the active skill prompt (dynamic, not cached).
+8. Selected session-profile instructions, followed by the profile-selected skill
+   prompts (dynamic and session-local).
+
+For headless `jcode run --profile NAME`, profile instructions are added after the
+normal global and project guidance and before profile-selected skill content. The
+selected skills are resolved into the new Agent only and do not mutate the shared
+skill registry or another session. The user message remains the final message sent
+after all system-prompt layers.
 
 ## Adding guidance (most common)
 

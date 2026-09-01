@@ -69,6 +69,30 @@ static WORKING_GIT_STATE_CACHE: LazyLock<StdMutex<HashMap<PathBuf, Option<GitSta
     LazyLock::new(|| StdMutex::new(HashMap::new()));
 const STREAM_KEEPALIVE_PONG_ID: u64 = 0;
 
+fn session_prompt_overlay_from_env() -> crate::prompt::SessionPromptOverlay {
+    let encoded = match std::env::var(crate::prompt::SESSION_PROMPT_OVERLAY_ENV) {
+        Ok(encoded) => encoded,
+        Err(std::env::VarError::NotPresent) => {
+            return crate::prompt::SessionPromptOverlay::default();
+        }
+        Err(error) => {
+            logging::warn(&format!(
+                "Ignoring invalid session profile prompt overlay environment: {error}"
+            ));
+            return crate::prompt::SessionPromptOverlay::default();
+        }
+    };
+    match serde_json::from_str(&encoded) {
+        Ok(overlay) => overlay,
+        Err(error) => {
+            logging::warn(&format!(
+                "Ignoring malformed session profile prompt overlay: {error}"
+            ));
+            crate::prompt::SessionPromptOverlay::default()
+        }
+    }
+}
+
 fn stable_hash_str(value: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     value.hash(&mut hasher);
@@ -237,6 +261,8 @@ pub struct Agent {
     mcp_late_register_resolved: bool,
     /// Override system prompt (used by ambient mode to inject a custom prompt)
     system_prompt_override: Option<String>,
+    /// Immutable instructions and skill prompts selected for this Agent only.
+    session_prompt_overlay: crate::prompt::SessionPromptOverlay,
     /// AGENTS.md is session bootstrap input. Keep the captured text stable so
     /// tool writes do not mutate the provider's cacheable prefix mid-session.
     agents_md_snapshot: (Option<String>, crate::prompt::ContextInfo),
@@ -320,6 +346,7 @@ impl Agent {
             locked_tools: None,
             mcp_late_register_resolved: false,
             system_prompt_override: None,
+            session_prompt_overlay: session_prompt_overlay_from_env(),
             agents_md_snapshot,
             memory_enabled: crate::config::config().features.memory,
             rewind_undo_snapshot: None,
@@ -377,6 +404,34 @@ impl Agent {
         working_dir: Option<&str>,
     ) -> Self {
         let tool_selection = crate::config::config().tools.selection();
+        Self::new_with_initial_working_dir_and_tools(
+            provider,
+            registry,
+            working_dir,
+            tool_selection,
+        )
+    }
+
+    /// Create a one-shot Agent with a caller-resolved, session-local tool policy.
+    pub fn new_with_tool_selection(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        tool_selection: crate::config::ToolSelection,
+    ) -> Self {
+        Self::new_with_initial_working_dir_and_tools(provider, registry, None, tool_selection)
+    }
+
+    /// Attach caller-resolved prompt context without mutating shared skill state.
+    pub fn set_session_prompt_overlay(&mut self, overlay: crate::prompt::SessionPromptOverlay) {
+        self.session_prompt_overlay = overlay;
+    }
+
+    fn new_with_initial_working_dir_and_tools(
+        provider: Arc<dyn Provider>,
+        registry: Registry,
+        working_dir: Option<&str>,
+        tool_selection: crate::config::ToolSelection,
+    ) -> Self {
         let mut session = Session::create(None, None);
         if let Some(working_dir) = working_dir {
             session.working_dir = Some(working_dir.to_string());

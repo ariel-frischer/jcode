@@ -2,6 +2,41 @@ use super::*;
 use crate::cli::provider_init::ProviderChoice;
 
 #[test]
+fn session_profile_and_reasoning_effort_are_global_session_options() {
+    let args = Args::try_parse_from_with_provenance([
+        "jcode",
+        "--reasoning-effort",
+        "high",
+        "--profile",
+        "review",
+        "run",
+        "inspect",
+    ])
+    .expect("run profile and global reasoning override should parse");
+    assert_eq!(args.reasoning_effort.as_deref(), Some("high"));
+    assert_eq!(args.profile.as_deref(), Some("review"));
+    assert!(matches!(args.command, Some(Command::Run { .. })));
+
+    let interactive = Args::try_parse_from_with_provenance(["jcode", "--profile", "review"])
+        .expect("interactive profile should parse");
+    assert_eq!(interactive.profile.as_deref(), Some("review"));
+    assert!(interactive.command.is_none());
+}
+
+#[test]
+fn provider_parser_default_is_not_an_explicit_profile_override() {
+    let omitted = Args::try_parse_from_with_provenance(["jcode", "run", "inspect"]).unwrap();
+    assert_eq!(omitted.provider, ProviderChoice::Auto);
+    assert!(!omitted.provider_was_explicit);
+
+    let explicit =
+        Args::try_parse_from_with_provenance(["jcode", "--provider", "auto", "run", "inspect"])
+            .unwrap();
+    assert_eq!(explicit.provider, ProviderChoice::Auto);
+    assert!(explicit.provider_was_explicit);
+}
+
+#[test]
 fn server_start_and_internal_keepalive_parse() {
     let args = Args::try_parse_from(["jcode", "server", "start", "--json"])
         .expect("server start should parse");
@@ -853,4 +888,26 @@ fn api_bridge_socket_flags_do_not_collide() {
         ),
         "`--socket` after api-bridge must bind the daemon socket, never the API socket"
     );
+}
+
+#[test]
+fn session_and_cloud_provider_profile_flags_do_not_collide() {
+    let args = Args::try_parse_from([
+        "jcode",
+        "cloud",
+        "sessions",
+        "upload-latest",
+        "--profile",
+        "aws-prod",
+    ])
+    .expect("cloud profile should parse");
+
+    let Some(Command::Cloud(command)) = args.command else {
+        panic!("expected cloud command");
+    };
+    let CloudCommand::Sessions { action } = command;
+    let CloudSessionsCommand::UploadLatest { jade, .. } = action else {
+        panic!("expected upload-latest command");
+    };
+    assert_eq!(jade.profile.as_deref(), Some("aws-prod"));
 }
