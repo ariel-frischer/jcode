@@ -576,6 +576,17 @@ pub(super) fn enqueue_soft_interrupt(
     urgent: bool,
     source: SoftInterruptSource,
 ) -> bool {
+    enqueue_soft_interrupt_owned(queue, content, images, urgent, source, None)
+}
+
+pub(super) fn enqueue_soft_interrupt_owned(
+    queue: &SoftInterruptQueue,
+    content: String,
+    images: Vec<(String, String)>,
+    urgent: bool,
+    source: SoftInterruptSource,
+    owner_client_instance_id: Option<&str>,
+) -> bool {
     let content_bytes = content.len();
     let content_chars = content.chars().count();
     if let Ok(mut pending) = queue.lock() {
@@ -585,8 +596,8 @@ pub(super) fn enqueue_soft_interrupt(
             images,
             urgent,
             source,
-            message_id: None,
-            owner_client_instance_id: None,
+            message_id: Some(crate::id::new_id("soft_interrupt")),
+            owner_client_instance_id: owner_client_instance_id.map(str::to_string),
         });
         crate::logging::info(&format!(
             "SOFT_INTERRUPT_QUEUE_PUSH source={:?} urgent={} content_bytes={} content_chars={} pending_before={} pending_after={}",
@@ -669,6 +680,24 @@ impl SessionControlHandle {
         source: SoftInterruptSource,
     ) -> bool {
         enqueue_soft_interrupt(&self.soft_interrupt_queue, content, images, urgent, source)
+    }
+
+    pub fn queue_owned_soft_interrupt(
+        &self,
+        content: String,
+        images: Vec<(String, String)>,
+        urgent: bool,
+        source: SoftInterruptSource,
+        owner_client_instance_id: Option<&str>,
+    ) -> bool {
+        enqueue_soft_interrupt_owned(
+            &self.soft_interrupt_queue,
+            content,
+            images,
+            urgent,
+            source,
+            owner_client_instance_id,
+        )
     }
 
     pub fn clear_soft_interrupts(&self) {

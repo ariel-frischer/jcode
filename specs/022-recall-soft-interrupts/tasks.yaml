@@ -97,7 +97,7 @@ phases:
           - "Focused queue and replay tests pass."
       - id: "T007"
         title: "Bind ownership and handle requester-only recall"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
