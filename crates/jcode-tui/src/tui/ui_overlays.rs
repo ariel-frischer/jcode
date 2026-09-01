@@ -579,7 +579,10 @@ pub(super) fn draw_help_overlay(frame: &mut Frame, area: Rect, scroll: usize, ap
         "Ctrl+Enter / Cmd+Enter",
         "Use opposite send mode while processing",
     ));
-    lines.push(key_entry("Ctrl+Up", "Retrieve pending message for editing"));
+    lines.push(key_entry(
+        &alt("Q"),
+        "Take back newest queued message for editing",
+    ));
     lines.push(key_entry("Ctrl+Tab / Ctrl+T", "Toggle queue mode"));
     lines.push(key_entry(
         "Ctrl+R",

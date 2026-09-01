@@ -399,9 +399,14 @@ pub(super) fn build_registry(inputs: &RegistryInputs<'_>) -> Vec<KnownHotkey> {
         "insert a newline",
     ));
     out.push(KnownHotkey::new(
+        alt('q'),
+        "queued_message_edit",
+        "take back the newest queued message for editing",
+    ));
+    out.push(KnownHotkey::new(
         key(KeyCode::Up, KeyModifiers::CONTROL),
         "prompt_recall",
-        "recall queued prompt / prompt history",
+        "walk prompt history backward",
     ));
     out.push(KnownHotkey::quiet(
         key(KeyCode::Down, KeyModifiers::CONTROL),

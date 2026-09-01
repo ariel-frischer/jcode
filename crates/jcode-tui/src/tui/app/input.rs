@@ -1479,46 +1479,27 @@ pub(super) fn queue_message(app: &mut App) {
     app.queued_messages.push(prepared.expanded);
 }
 
-pub(super) fn retrieve_pending_message_for_edit(app: &mut App) -> bool {
+pub(super) fn retrieve_queued_message_for_edit(app: &mut App) -> bool {
     if !app.input.is_empty() {
         return false;
     }
 
-    let mut parts: Vec<String> = Vec::new();
-    let mut had_pending = false;
+    let Some(message) = app.queued_messages.pop() else {
+        return false;
+    };
 
-    if !app.pending_soft_interrupts.is_empty() {
-        parts.extend(std::mem::take(&mut app.pending_soft_interrupts));
-        app.pending_soft_interrupt_requests.clear();
-        had_pending = true;
+    app.input = message;
+    app.cursor_pos = app.input.len();
+    if !app.has_queued_followups() {
+        app.pending_queued_dispatch = false;
     }
-    if let Some(msg) = app.interleave_message.take()
-        && !msg.is_empty()
-    {
-        app.pending_images.append(&mut app.interleave_images);
-        parts.push(msg);
-        had_pending = true;
-    }
-    if !app.queued_messages.is_empty() {
-        parts.extend(std::mem::take(&mut app.queued_messages));
-        if !app.has_queued_followups() {
-            app.pending_queued_dispatch = false;
-        }
-        had_pending = true;
-    }
-
-    if !parts.is_empty() {
-        app.input = parts.join("\n\n");
-        app.cursor_pos = app.input.len();
-        let count = parts.len();
-        app.set_status_notice(format!(
-            "Retrieved {} pending message{} for editing",
-            count,
-            if count == 1 { "" } else { "s" }
-        ));
-    }
-
-    had_pending
+    let remaining = app.queued_messages.len();
+    app.set_status_notice(if remaining == 0 {
+        "Took back queued message for editing".to_string()
+    } else {
+        format!("Took back queued message for editing ({remaining} still queued)")
+    });
+    true
 }
 
 pub(super) fn send_action(app: &App, alternate_shortcut: bool) -> SendAction {
@@ -2071,10 +2052,6 @@ pub(super) fn handle_control_key(app: &mut App, code: KeyCode) -> bool {
             }
             true
         }
-        KeyCode::Up => {
-            retrieve_pending_message_for_edit(app);
-            true
-        }
         _ => false,
     }
 }
@@ -2177,6 +2154,10 @@ pub(super) fn delete_input_word_back(app: &mut App) {
 
 pub(super) fn handle_alt_key(app: &mut App, code: KeyCode) -> bool {
     match code {
+        KeyCode::Char('q') => {
+            retrieve_queued_message_for_edit(app);
+            true
+        }
         // Alt/Option+Left/Right move by word, matching Alt+B / Alt+F.
         KeyCode::Left | KeyCode::Char('b') => {
             app.cursor_pos = app.find_word_boundary_back();
@@ -3091,17 +3072,9 @@ impl App {
         self.normalize_diagram_state();
         let diagram_available = self.diagram_available();
 
-        // Ctrl / Alt(Option) / Cmd(Super) + Up all recall queued/pending messages
-        // for editing and then walk prompt history. We accept any of the three
-        // single modifiers so the gesture works regardless of which one a given
-        // terminal forwards (some send Option as Alt, some forward Command as
-        // Super), without the user having to rebind anything.
+        // Modified Up/Down explicitly walk prompt history even in a draft. Queued
+        // messages use Alt+Q so arrow keys never remove work from the queue.
         if code == KeyCode::Up && is_prompt_recall_modifier(modifiers) {
-            if retrieve_pending_message_for_edit(self) {
-                return Ok(());
-            }
-            // Normalize to CONTROL so handle_prompt_history_navigation takes its
-            // explicit-history path (jump straight into history even mid-draft).
             handle_prompt_history_navigation(self, KeyCode::Up, KeyModifiers::CONTROL);
             return Ok(());
         }
@@ -3394,8 +3367,8 @@ impl App {
     /// Retrieve all pending unsent messages into the input for editing.
     /// Priority: pending soft interrupts first, then interleave, then queued.
     /// Returns true if pending soft interrupts were retrieved (caller should cancel on server).
-    pub(super) fn retrieve_pending_message_for_edit(&mut self) -> bool {
-        retrieve_pending_message_for_edit(self)
+    pub(super) fn retrieve_queued_message_for_edit(&mut self) -> bool {
+        retrieve_queued_message_for_edit(self)
     }
 
     pub(super) fn send_action(&self, shift: bool) -> SendAction {
