@@ -684,8 +684,10 @@ fn render_core_line(core: &[&TopBarField], width: usize) -> String {
         let right_width = width
             .saturating_sub(separator_width)
             .saturating_sub(left_width);
-        let left = truncate_display_width(&values[0], left_width.max(1));
-        let right = truncate_display_width(&values[1], right_width.max(1));
+        let left = field_text_that_fits(core[0], left_width.max(1))
+            .unwrap_or_else(|| truncate_display_width(&values[0], left_width.max(1)));
+        let right = field_text_that_fits(core[1], right_width.max(1))
+            .unwrap_or_else(|| truncate_display_width(&values[1], right_width.max(1)));
         return format!("{left}{TOP_BAR_SEPARATOR}{right}");
     }
     truncate_display_width(&joined, width)
@@ -1042,6 +1044,15 @@ mod tests {
 
         assert_eq!(full, "OpenAI 7-day ▰▰▰▰▰▰▰▱▱▱ 66% left");
         assert_eq!(compact, "▰▰▰▰▱▱");
+
+        let context = TopBarContext::new(
+            "dolphin",
+            ProviderCreditState::from_usage_info("OpenAI", Some(&usage), false, false, false),
+        );
+        let constrained = select_top_bar_layout(Some(&context), true, 40, 20, 8);
+        let rendered = constrained.lines.iter().map(line_text).collect::<String>();
+        assert!(rendered.contains("▰▰▰▰▱▱"), "rendered: {rendered:?}");
+        assert!(!rendered.contains("% left"), "rendered: {rendered:?}");
     }
 
     #[test]
