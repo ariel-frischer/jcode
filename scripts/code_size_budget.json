@@ -71,7 +71,7 @@
     "crates/jcode-tui/src/tui/app/debug_bench.rs": 1284,
     "crates/jcode-tui/src/tui/app/helpers.rs": 1406,
     "crates/jcode-tui/src/tui/app/inline_interactive.rs": 4563,
-    "crates/jcode-tui/src/tui/app/input.rs": 4084,
+    "crates/jcode-tui/src/tui/app/input.rs": 4066,
     "crates/jcode-tui/src/tui/app/model_context.rs": 1943,
     "crates/jcode-tui/src/tui/app/navigation.rs": 1976,
     "crates/jcode-tui/src/tui/app/onboarding_flow_control.rs": 1766,
@@ -89,13 +89,13 @@
     "crates/jcode-tui/src/tui/mod.rs": 1988,
     "crates/jcode-tui/src/tui/session_picker.rs": 2453,
     "crates/jcode-tui/src/tui/session_picker/loading.rs": 3038,
-    "crates/jcode-tui/src/tui/ui.rs": 3747,
+    "crates/jcode-tui/src/tui/ui.rs": 3727,
     "crates/jcode-tui/src/tui/ui_frame_metrics.rs": 1438,
     "crates/jcode-tui/src/tui/ui_header.rs": 1758,
-    "crates/jcode-tui/src/tui/ui_inline_image.rs": 1791,
+    "crates/jcode-tui/src/tui/ui_inline_image.rs": 1783,
     "crates/jcode-tui/src/tui/ui_inline_interactive.rs": 1268,
     "crates/jcode-tui/src/tui/ui_input.rs": 3191,
-    "crates/jcode-tui/src/tui/ui_messages.rs": 4478,
+    "crates/jcode-tui/src/tui/ui_messages.rs": 4399,
     "crates/jcode-tui/src/tui/ui_pinned.rs": 2046,
     "crates/jcode-tui/src/tui/ui_prepare.rs": 2675,
     "crates/jcode-tui/src/tui/ui_tools.rs": 1683,
@@ -106,7 +106,7 @@
     "src/cli/commands.rs": 3482,
     "src/cli/dispatch.rs": 1448,
     "src/cli/login.rs": 1414,
-    "src/cli/provider_init.rs": 1900
+    "src/cli/provider_init.rs": 1727
   },
   "version": 1
 }
