@@ -26,14 +26,15 @@ impl Config {
         request: Option<&jcode_config_types::WebSearchPolicyOverride>,
     ) -> anyhow::Result<Option<super::ResolvedWebSearchPolicy>> {
         let persisted = &self.websearch.resilience;
-        let enabled = resolve_bool(
-            request.and_then(|v| v.enabled),
+        let operator_enabled = resolve_bool(
+            None,
             &[
                 "JCODE_WEBSEARCH_RESILIENCE_ENABLED",
                 "JCODE_WEBSEARCH_ENABLED",
             ],
             persisted.enabled,
         );
+        let enabled = operator_enabled && request.and_then(|v| v.enabled).unwrap_or(true);
         if !enabled {
             return Ok(None);
         }
@@ -349,7 +350,7 @@ mod websearch_policy_precedence_tests {
     }
 
     #[test]
-    fn resolves_each_field_request_then_environment_then_persisted_then_default() {
+    fn resolves_subcontrols_request_then_environment_then_persisted_then_default() {
         let _lock = crate::storage::lock_test_env();
         let _environment = with_clean_environment();
         let mut config = Config::default();
@@ -426,7 +427,8 @@ mod websearch_policy_precedence_tests {
     fn invalid_request_values_fail_before_network_work() {
         let _lock = crate::storage::lock_test_env();
         let _environment = with_clean_environment();
-        let config = Config::default();
+        let mut config = Config::default();
+        config.websearch.resilience.enabled = true;
         let request = WebSearchPolicyOverride {
             enabled: Some(true),
             attempt_timeout_ms: Some(60_001),
@@ -445,6 +447,7 @@ mod websearch_policy_precedence_tests {
         config.websearch.resilience.enabled = false;
         config.websearch.resilience.attempt_timeout_ms = 50;
         let request = WebSearchPolicyOverride {
+            enabled: Some(true),
             health_cooldown_ms: Some(500),
             ..WebSearchPolicyOverride::default()
         };
@@ -453,6 +456,53 @@ mod websearch_policy_precedence_tests {
             config
                 .resolve_websearch_policy(Some(&request))
                 .expect("disabled resilience must leave legacy configuration inert")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn request_cannot_enable_operator_disabled_resilience() {
+        let _lock = crate::storage::lock_test_env();
+        let _environment = with_clean_environment();
+        let mut config = Config::default();
+        let request_enabled = WebSearchPolicyOverride {
+            enabled: Some(true),
+            ..WebSearchPolicyOverride::default()
+        };
+
+        assert!(
+            config
+                .resolve_websearch_policy(Some(&request_enabled))
+                .unwrap()
+                .is_none()
+        );
+
+        config.websearch.resilience.enabled = true;
+        crate::env::set_var("JCODE_WEBSEARCH_RESILIENCE_ENABLED", "false");
+        assert!(
+            config
+                .resolve_websearch_policy(Some(&request_enabled))
+                .unwrap()
+                .is_none()
+        );
+
+        config.websearch.resilience.enabled = false;
+        crate::env::set_var("JCODE_WEBSEARCH_RESILIENCE_ENABLED", "true");
+        assert!(
+            config
+                .resolve_websearch_policy(Some(&request_enabled))
+                .unwrap()
+                .is_some()
+        );
+
+        let request_disabled = WebSearchPolicyOverride {
+            enabled: Some(false),
+            ..WebSearchPolicyOverride::default()
+        };
+        assert!(
+            config
+                .resolve_websearch_policy(Some(&request_disabled))
+                .unwrap()
                 .is_none()
         );
     }
