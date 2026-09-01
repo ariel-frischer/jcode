@@ -85,21 +85,105 @@ fn recall_replay_returns_same_result_without_a_second_removal() {
         message("owned-old", SoftInterruptSource::User, Some("client-a")),
         message("owned-new", SoftInterruptSource::User, Some("client-a")),
     ]));
-    let control = control(queue.clone());
+    let first_control = control(queue.clone());
 
-    let first = control
+    let first = first_control
         .recall_soft_interrupt("client-a", "stable-operation")
         .expect("first recall should return newest message");
     assert_eq!(first.content, "owned-new");
     assert_eq!(queued_contents(&queue), vec!["owned-old"]);
 
-    let replay = control
+    let reconnect_control = control(queue.clone());
+    let replay = reconnect_control
         .recall_soft_interrupt("client-a", "stable-operation")
-        .expect("replay should return the completed operation result");
+        .expect("reconnect replay should return the completed operation result");
     assert_eq!(replay, first);
     assert_eq!(
         queued_contents(&queue),
         vec!["owned-old"],
         "replaying an operation must not remove another message"
+    );
+}
+
+#[test]
+fn recall_replay_preserves_an_authoritative_empty_result() {
+    let queue = Arc::new(Mutex::new(Vec::new()));
+    let first_control = SessionControlHandle::new(
+        "session-empty-replay-tests",
+        queue.clone(),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+    assert!(
+        first_control
+            .recall_soft_interrupt("client-a", "empty-operation")
+            .is_none()
+    );
+
+    queue
+        .lock()
+        .expect("soft interrupt queue lock")
+        .push(message(
+            "arrived-later",
+            SoftInterruptSource::User,
+            Some("client-a"),
+        ));
+    let reconnect_control = SessionControlHandle::new(
+        "session-empty-replay-tests",
+        queue.clone(),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+
+    assert!(
+        reconnect_control
+            .recall_soft_interrupt("client-a", "empty-operation")
+            .is_none(),
+        "the same operation must replay its original empty result"
+    );
+    assert_eq!(queued_contents(&queue), vec!["arrived-later"]);
+}
+
+#[test]
+fn recall_replay_record_is_bounded_per_session() {
+    let queue = Arc::new(Mutex::new(
+        (0..=SOFT_INTERRUPT_REPLAY_CAPACITY)
+            .map(|index| {
+                message(
+                    &format!("owned-{index}"),
+                    SoftInterruptSource::User,
+                    Some("bounded-client"),
+                )
+            })
+            .collect(),
+    ));
+    let control = SessionControlHandle::new(
+        "session-bounded-replay-tests",
+        queue,
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+
+    for index in 0..=SOFT_INTERRUPT_REPLAY_CAPACITY {
+        assert!(
+            control
+                .recall_soft_interrupt("bounded-client", &format!("operation-{index}"))
+                .is_some()
+        );
+    }
+
+    let replay = control
+        .soft_interrupt_replay
+        .lock()
+        .expect("soft interrupt replay lock");
+    assert_eq!(replay.completed.len(), SOFT_INTERRUPT_REPLAY_CAPACITY);
+    assert!(replay.get("bounded-client", "operation-0").is_none());
+    assert!(
+        replay
+            .get(
+                "bounded-client",
+                &format!("operation-{}", SOFT_INTERRUPT_REPLAY_CAPACITY)
+            )
+            .is_some()
     );
 }

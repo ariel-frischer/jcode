@@ -84,7 +84,7 @@ phases:
           - "Focused contract and persistence tests pass."
       - id: "T006"
         title: "Implement newest-owned atomic recall and bounded replay"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"
