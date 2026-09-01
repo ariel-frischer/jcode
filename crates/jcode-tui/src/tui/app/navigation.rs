@@ -1791,6 +1791,18 @@ impl App {
         }
 
         if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
+            && let Some(target) = crate::tui::ui::top_bar_copy_target_at(mouse.column, mouse.row)
+        {
+            let success = super::helpers::copy_to_clipboard(&target.content);
+            self.set_status_notice(if success {
+                "Copied session info".to_string()
+            } else {
+                "Failed to copy session info".to_string()
+            });
+            finish_mouse_event!(false, "top_bar_copy_click");
+        }
+
+        if matches!(mouse.kind, MouseEventKind::Up(MouseButton::Left))
             && let Some(target) = crate::tui::ui::visible_copy_target_at(mouse.column, mouse.row)
         {
             let success = super::helpers::copy_to_clipboard(&target.content);
