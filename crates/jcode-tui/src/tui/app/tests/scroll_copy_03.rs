@@ -1029,6 +1029,148 @@ fn first_visible_content_line(text: &str) -> String {
         .to_string()
 }
 
+/// Capture the first few rows owned by the transcript rather than the persistent
+/// top bar. The layout rectangle is intentionally used here so a bar height
+/// change cannot make the test accidentally compare chrome to transcript text.
+fn transcript_anchor_rows(
+    terminal: &ratatui::Terminal<ratatui::backend::TestBackend>,
+) -> Vec<String> {
+    let Some(layout) = crate::tui::ui::last_layout_snapshot() else {
+        return Vec::new();
+    };
+    let buffer = terminal.backend().buffer();
+    (layout.messages_area.y
+        ..layout
+            .messages_area
+            .y
+            .saturating_add(layout.messages_area.height))
+        .take(3)
+        .map(|y| {
+            (layout.messages_area.x
+                ..layout
+                    .messages_area
+                    .x
+                    .saturating_add(layout.messages_area.width))
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn top_bar_updates_preserve_scrolled_transcript_and_multiline_input() {
+    let _render_lock = scroll_render_test_lock();
+    crate::tui::ui::clear_test_render_state_for_tests();
+
+    let (mut app, mut terminal) = create_scroll_test_app(100, 24, 0, 80);
+    render_and_snap(&app, &mut terminal);
+    let max_scroll = crate::tui::ui::last_max_scroll();
+    assert!(
+        max_scroll > 8,
+        "expected a scrollable transcript, got {max_scroll}"
+    );
+
+    app.auto_scroll_paused = true;
+    app.scroll_offset = (max_scroll / 3).max(1);
+    render_and_snap(&app, &mut terminal);
+    let anchor_before = transcript_anchor_rows(&terminal);
+    let scroll_before = crate::tui::ui::last_resolved_chat_scroll();
+
+    app.input = "draft line one\ndraft line two 🌊".to_string();
+    app.cursor_pos = "draft line one\ndraft line two ".len();
+    let pasted = "inserted line\nwith combining e\u{301}";
+    app.handle_paste(pasted.to_string());
+    let expected_input = format!("draft line one\ndraft line two {pasted}🌊");
+    let expected_cursor = "draft line one\ndraft line two ".len() + pasted.len();
+
+    // A usage refresh changes top-bar-visible state and the display-only usage
+    // card, but must not change the user's paused transcript or draft.
+    app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+        results: Vec::new(),
+        completed: 0,
+        total: 2,
+        done: false,
+        from_cache: false,
+    });
+    render_and_snap(&app, &mut terminal);
+
+    assert_eq!(app.input, expected_input);
+    assert_eq!(app.cursor_pos, expected_cursor);
+    assert!(app.auto_scroll_paused);
+    assert_eq!(app.scroll_offset, scroll_before);
+    assert_eq!(crate::tui::ui::last_resolved_chat_scroll(), scroll_before);
+    assert_eq!(transcript_anchor_rows(&terminal), anchor_before);
+
+    app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+        results: vec![crate::usage::ProviderUsage {
+            provider_name: "OpenAI".to_string(),
+            limits: vec![crate::usage::UsageLimit {
+                name: "5h".to_string(),
+                usage_percent: 25.0,
+                resets_at: None,
+            }],
+            extra_info: Vec::new(),
+            hard_limit_reached: false,
+            error: None,
+            last_used_unix_secs: None,
+        }],
+        completed: 2,
+        total: 2,
+        done: true,
+        from_cache: false,
+    });
+    render_and_snap(&app, &mut terminal);
+
+    assert_eq!(app.input, expected_input);
+    assert_eq!(app.cursor_pos, expected_cursor);
+    assert!(app.auto_scroll_paused);
+    assert_eq!(app.scroll_offset, scroll_before);
+    assert_eq!(crate::tui::ui::last_resolved_chat_scroll(), scroll_before);
+    assert_eq!(transcript_anchor_rows(&terminal), anchor_before);
+}
+
+#[test]
+fn top_bar_height_changes_keep_paused_scroll_and_input_context_stable() {
+    let _render_lock = scroll_render_test_lock();
+    crate::tui::ui::clear_test_render_state_for_tests();
+
+    let (mut app, _) = create_scroll_test_app(160, 24, 0, 80);
+    app.auto_scroll_paused = true;
+    app.scroll_offset = 2;
+    app.input = "multiline draft\nsecond line".to_string();
+    app.cursor_pos = "multiline draft\nsecond ".len();
+    let input_before = app.input.clone();
+    let cursor_before = app.cursor_pos;
+
+    // At one fixed width these dimensions exercise suppressed, one-, two-, and
+    // three-row selections while keeping transcript wrapping unchanged.
+    for height in [8, 9, 12, 16, 24] {
+        let backend = ratatui::backend::TestBackend::new(160, height);
+        let mut terminal = ratatui::Terminal::new(backend).expect("terminal");
+        render_and_snap(&app, &mut terminal);
+
+        assert_eq!(app.input, input_before);
+        assert_eq!(app.cursor_pos, cursor_before);
+        assert!(app.auto_scroll_paused);
+        assert_eq!(app.scroll_offset, 2);
+        assert_eq!(
+            crate::tui::ui::last_resolved_chat_scroll(),
+            2.min(crate::tui::ui::last_max_scroll())
+        );
+        let layout = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
+        assert!(
+            layout.input_area.is_some(),
+            "input area must remain allocated at {height} rows"
+        );
+        assert!(layout.top_bar_row_count <= 3);
+        if let Some(top_bar) = layout.top_bar_area {
+            assert!(top_bar.y + top_bar.height <= layout.messages_area.y);
+        }
+    }
+}
+
 /// Reproduction harness for the intermittent "can't scroll" report.
 ///
 /// Mimics the real event loop: render a frame (so LAST_MAX_SCROLL reflects the

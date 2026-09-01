@@ -244,6 +244,13 @@ fn header_model_display_name(model: &str, provider_name: &str) -> String {
     }
 }
 
+/// Model display name shared by persistent top-bar context and the header.
+/// This is formatting only and does not inspect credentials or perform I/O.
+pub(crate) fn top_bar_model_display_name(model: &str, provider_name: &str) -> Option<String> {
+    let model = model.trim();
+    (!model.is_empty()).then(|| header_model_display_name(model, provider_name))
+}
+
 /// Extract the version from a Claude model id, e.g. "claude-opus-4-6" -> "4.6",
 /// "claude-3-5-sonnet-latest" -> "3.5", "claude-haiku-4.5" -> "4.5". Snapshot
 /// dates (6+ digit runs) are ignored.
@@ -994,6 +1001,28 @@ pub(super) fn build_header_sections(
     )
 }
 
+/// Build the header content that is allowed inside the scrollable transcript.
+///
+/// Once an active session has a persistent top bar, the rich identity rows are
+/// duplicate chrome rather than conversation content. Keep the secondary
+/// startup details (auth inventory, MCPs, skills, working directory) available,
+/// but remove the identity section. The direct header builders remain intact so
+/// startup and disabled-top-bar callers retain their established behavior.
+pub(super) fn build_transcript_header_sections(
+    app: &dyn TuiState,
+    width: u16,
+) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
+    let (persistent, secondary) = build_header_sections(app, width);
+    if app.top_bar_enabled()
+        && crate::tui::ui_top_bar::top_bar_width_is_usable(width)
+        && app.top_bar_context().is_some()
+    {
+        (Vec::new(), secondary)
+    } else {
+        (persistent, secondary)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1102,6 +1131,17 @@ mod tests {
 
         assert_eq!(persistent, build_persistent_header(&app, 80));
         assert_eq!(secondary, build_header_lines(&app, 80));
+    }
+
+    #[test]
+    fn narrow_terminal_keeps_rich_identity_header_when_top_bar_is_suppressed() {
+        let app = create_test_app();
+        let (persistent, _) = build_transcript_header_sections(&app, 24);
+
+        assert!(
+            !persistent.is_empty(),
+            "the scrollable identity header must remain when the top bar cannot fit"
+        );
     }
 
     #[test]

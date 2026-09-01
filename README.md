@@ -52,6 +52,12 @@ The clearest examples of my custom delta include:
   keeping picker loading off the input path. The composer also has an `@`-based
   fuzzy picker rooted at the session workspace, configurable ignore paths,
   responsive discovery, and expansion of selected files into model context.
+- **Persistent adaptive session bar:** active sessions keep identity, provider
+  credit or usage, model, authentication, reasoning, and connection context in
+  dedicated top chrome instead of relying on scroll position. The bar uses one
+  or two rows normally, expands to at most three when useful, and suppresses
+  itself before crowding chat on constrained terminals. Set
+  `[display] top_bar = false` to restore the previous bar-free layout.
 - **Clickable inline document previews:** click a file shown in an inline
   tool/diff preview or an `@filepath` mention to open or collapse it in the
   TUI. The fork fixes relative- and home-directory path resolution, detects

@@ -544,6 +544,35 @@ impl App {
             WidgetProviderKind::Unknown => None,
         }
     }
+
+    /// Return freshness state for the top-bar credit snapshot without doing
+    /// network or credential I/O. The shared usage accessors are deliberately
+    /// non-blocking and schedule refreshes when their cache is cold or stale.
+    fn top_bar_usage_state(
+        &self,
+        route: WidgetRouteInfo,
+        auth_method: crate::tui::info_widget::AuthMethod,
+    ) -> (bool, bool) {
+        let report_pending = self.usage_report_refreshing;
+
+        match route.provider {
+            WidgetProviderKind::Anthropic
+                if auth_method == crate::tui::info_widget::AuthMethod::AnthropicOAuth =>
+            {
+                let usage = crate::usage::get_sync();
+                let pending = report_pending || usage.fetched_at.is_none();
+                (usage.is_stale() && !pending, pending)
+            }
+            WidgetProviderKind::OpenAI
+                if auth_method == crate::tui::info_widget::AuthMethod::OpenAIOAuth =>
+            {
+                let usage = crate::usage::get_openai_usage_sync();
+                let pending = report_pending || usage.fetched_at.is_none();
+                (usage.is_stale() && !pending, pending)
+            }
+            _ => (false, report_pending),
+        }
+    }
 }
 
 impl crate::tui::TuiState for App {
@@ -1671,6 +1700,69 @@ impl crate::tui::TuiState for App {
             },
             git_info: gather_git_info(),
         }
+    }
+
+    fn top_bar_context(&self) -> Option<crate::tui::TopBarContext> {
+        let session = self.session_display_name()?;
+        let (provider_name, model) = if self.is_remote {
+            (
+                self.remote_header_provider_name(),
+                self.effective_remote_provider_model(),
+            )
+        } else {
+            (
+                Some(self.provider.display_name()),
+                Some(self.provider.model().to_string()),
+            )
+        };
+        let route = self.widget_route_info(model.as_deref());
+        let auth_method = self.widget_auth_method(route);
+        let usage_info = self.widget_usage_info(route, auth_method);
+        let (stale, pending) = self.top_bar_usage_state(route, auth_method);
+        let data = crate::tui::info_widget::InfoWidgetData {
+            model: model.clone(),
+            reasoning_effort: if self.is_remote {
+                self.remote_reasoning_effort.clone()
+            } else {
+                self.provider.reasoning_effort()
+            },
+            usage_info,
+            usage_display_used: crate::config::config().display.usage_display_used(),
+            provider_name: provider_name.clone(),
+            auth_method,
+            ..Default::default()
+        };
+        let mut context = crate::tui::ui_top_bar::context_from_info_widget_data_with_state(
+            Some(&session),
+            &data,
+            stale,
+            pending,
+        )?;
+
+        if let Some(model) = model.as_deref()
+            && let Some(display_name) = crate::tui::top_bar_model_display_name(
+                model,
+                provider_name.as_deref().unwrap_or_default(),
+            )
+        {
+            context = context.with_model_label(display_name);
+        }
+        if let Some(server) = self.remote_server_short_name.as_deref() {
+            context = context.with_server_label(server);
+        }
+        context = context.with_client_label("jcode");
+        if let Some(connection) = self.connection_type.as_deref() {
+            context = context.with_connection_label(connection);
+        }
+        let version = if self.is_remote {
+            self.remote_server_version.as_deref()
+        } else {
+            Some(jcode_build_meta::version())
+        };
+        if let Some(version) = version {
+            context = context.with_version_label(version);
+        }
+        Some(context)
     }
 
     fn workspace_mode_enabled(&self) -> bool {

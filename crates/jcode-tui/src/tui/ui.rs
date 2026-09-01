@@ -16,6 +16,7 @@ use super::ui_diff::{
     DiffLineKind, ParsedDiffLine, collect_diff_lines, diff_add_color, diff_change_counts_for_tool,
     diff_del_color, generate_diff_lines_from_tool_input, tint_span_with_diff_color,
 };
+use super::ui_top_bar::{render_top_bar, select_top_bar_layout};
 use super::visual_debug::{
     self, FrameCaptureBuilder, ImageRegionCapture, InfoWidgetCapture, MarginsCapture,
     MessageCapture, RenderTimingCapture,
@@ -1425,7 +1426,7 @@ use frame_metrics::{
     note_chat_layout, note_full_prep_built, note_full_prep_cache_hit, note_full_prep_cache_lookup,
     note_full_prep_cache_miss, note_full_prep_phase_metrics, note_full_prep_request,
     note_prep_aspect, note_prep_overflow, note_prep_prepare_at, note_prep_restage,
-    note_viewport_metrics, reset_frame_perf_stats, viewport_stability_hash,
+    note_top_bar_metrics, note_viewport_metrics, reset_frame_perf_stats, viewport_stability_hash,
 };
 pub(crate) use frame_metrics::{
     DrawCallAttribution, FrameInputAttribution, frame_input_attribution_snapshot,
@@ -1452,6 +1453,10 @@ pub struct LayoutSnapshot {
     pub diagram_area: Option<Rect>,
     pub diff_pane_area: Option<Rect>,
     pub input_area: Option<Rect>,
+    #[allow(dead_code)] // Read by focused layout tests and visual-debug snapshots.
+    pub top_bar_area: Option<Rect>,
+    #[allow(dead_code)] // Read by focused layout tests and visual-debug snapshots.
+    pub top_bar_row_count: u16,
 }
 
 #[cfg(not(test))]
@@ -1468,6 +1473,24 @@ pub fn record_layout_snapshot(
     diff_pane_area: Option<Rect>,
     input_area: Option<Rect>,
 ) {
+    record_layout_snapshot_with_top_bar(
+        messages_area,
+        diagram_area,
+        diff_pane_area,
+        input_area,
+        None,
+        0,
+    );
+}
+
+fn record_layout_snapshot_with_top_bar(
+    messages_area: Rect,
+    diagram_area: Option<Rect>,
+    diff_pane_area: Option<Rect>,
+    input_area: Option<Rect>,
+    top_bar_area: Option<Rect>,
+    top_bar_row_count: u16,
+) {
     #[cfg(test)]
     {
         TEST_LAST_LAYOUT.with(|snapshot| {
@@ -1476,6 +1499,8 @@ pub fn record_layout_snapshot(
                 diagram_area,
                 diff_pane_area,
                 input_area,
+                top_bar_area,
+                top_bar_row_count,
             });
         });
         return;
@@ -1488,6 +1513,8 @@ pub fn record_layout_snapshot(
                 diagram_area,
                 diff_pane_area,
                 input_area,
+                top_bar_area,
+                top_bar_row_count,
             });
         }
     }
@@ -1505,6 +1532,11 @@ pub fn last_layout_snapshot() -> Option<LayoutSnapshot> {
             .ok()
             .and_then(|snapshot| *snapshot)
     }
+}
+
+#[cfg(test)]
+pub(crate) fn rects_overlap_for_tests(first: Rect, second: Rect) -> bool {
+    rects_overlap(first, second)
 }
 
 /// The one lock guarding process-global render state in tests.
@@ -2700,6 +2732,31 @@ pub fn draw(frame: &mut Frame, app: &dyn TuiState) {
     // is reclaimed even when no image widget renders again.
     crate::tui::mermaid::render_pending_terminal_image_cleanup(frame.buffer_mut());
 }
+
+/// Split persistent session chrome from the content surface before any
+/// transcript or pane geometry is computed.
+///
+/// Keeping this operation as a pure rectangle transformation is intentional:
+/// changing the top-bar height must never rewrite `scroll_offset`, input bytes,
+/// or cursor state. The content surface retains its original x/width and only
+/// moves down by the rows actually reserved for the bar.
+fn split_top_bar_surface(area: Rect, requested_rows: u16) -> (Option<Rect>, Rect) {
+    let rows = requested_rows.min(area.height);
+    let top_bar_area = (rows > 0).then_some(Rect {
+        x: area.x,
+        y: area.y,
+        width: area.width,
+        height: rows,
+    });
+    let session_area = Rect {
+        x: area.x,
+        y: area.y.saturating_add(rows),
+        width: area.width,
+        height: area.height.saturating_sub(rows),
+    };
+    (top_bar_area, session_area)
+}
+
 fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     let area = frame.area().intersection(*frame.buffer_mut().area());
     if area.width == 0 || area.height == 0 {
@@ -2801,6 +2858,47 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     } else {
         None
     };
+
+    // Allocate persistent session chrome first. The remaining rectangle is the
+    // only surface handed to panes, transcript, status, and input, so the bar
+    // cannot draw over any of those regions.
+    let top_bar_derivation_start = Instant::now();
+    let top_bar_context = app.top_bar_context();
+    let top_bar_derivation_elapsed = top_bar_derivation_start.elapsed();
+    let top_bar_selection_start = Instant::now();
+    let top_bar_layout = select_top_bar_layout(
+        top_bar_context.as_ref(),
+        app.top_bar_enabled(),
+        area.width,
+        area.height,
+        8,
+    );
+    let top_bar_selection_elapsed = top_bar_selection_start.elapsed();
+    let top_bar_render_start = Instant::now();
+    let (top_bar_area, session_area) = split_top_bar_surface(area, top_bar_layout.row_count);
+    if let Some(top_bar_area) = top_bar_area {
+        clear_area(frame, top_bar_area);
+        render_top_bar(frame, top_bar_area, &top_bar_layout);
+    }
+    note_top_bar_metrics(
+        top_bar_derivation_elapsed,
+        top_bar_selection_elapsed,
+        top_bar_render_start.elapsed(),
+        &top_bar_layout,
+    );
+    if let Some(ref mut capture) = debug_capture {
+        capture.render_order.push("draw_top_bar".to_string());
+        capture.layout.top_bar_area = top_bar_area.map(Into::into);
+        capture.layout.top_bar_row_count = top_bar_layout.row_count;
+        capture.layout.top_bar_visible_fields = top_bar_layout
+            .visible_fields
+            .iter()
+            .map(|field| format!("{field:?}"))
+            .collect();
+        capture.layout.top_bar_suppression_reason = top_bar_layout
+            .suppression_reason
+            .map(|reason| format!("{reason:?}"));
+    }
     let swarm_page_active = app.swarm_panel_full_page();
 
     // Check diagram display mode and get active diagrams early so we can
@@ -2854,12 +2952,15 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             crate::config::DiagramPanePosition::Side => {
                 const MIN_DIAGRAM_WIDTH: u16 = 24;
                 const MIN_CHAT_WIDTH: u16 = 20;
-                let max_diagram = area.width.saturating_sub(MIN_CHAT_WIDTH);
+                let max_diagram = session_area.width.saturating_sub(MIN_CHAT_WIDTH);
                 if max_diagram >= MIN_DIAGRAM_WIDTH {
                     let ratio = app.diagram_pane_ratio().clamp(25, 100) as u32;
-                    let ratio_target = ((area.width as u32 * ratio) / 100) as u16;
-                    let needed =
-                        estimate_pinned_diagram_pane_width(diagram, area.height, MIN_DIAGRAM_WIDTH);
+                    let ratio_target = ((session_area.width as u32 * ratio) / 100) as u16;
+                    let needed = estimate_pinned_diagram_pane_width(
+                        diagram,
+                        session_area.height,
+                        MIN_DIAGRAM_WIDTH,
+                    );
                     // The configured ratio is the upper bound for the pane so the
                     // transcript (which still renders the diagram inline) is never
                     // crushed. Shrink below the ratio when a diagram is narrow
@@ -2870,38 +2971,38 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
                         .min(needed.max(MIN_DIAGRAM_WIDTH))
                         .max(MIN_DIAGRAM_WIDTH)
                         .min(max_diagram);
-                    let chat_width = area.width.saturating_sub(diagram_width);
+                    let chat_width = session_area.width.saturating_sub(diagram_width);
                     if diagram_width > 0 && chat_width > 0 {
                         let chat = Rect {
-                            x: area.x,
-                            y: area.y,
+                            x: session_area.x,
+                            y: session_area.y,
                             width: chat_width,
-                            height: area.height,
+                            height: session_area.height,
                         };
                         let diag = Rect {
-                            x: area.x + chat_width,
-                            y: area.y,
+                            x: session_area.x + chat_width,
+                            y: session_area.y,
                             width: diagram_width,
-                            height: area.height,
+                            height: session_area.height,
                         };
                         (chat, Some(diag))
                     } else {
-                        (area, None)
+                        (session_area, None)
                     }
                 } else {
-                    (area, None)
+                    (session_area, None)
                 }
             }
             crate::config::DiagramPanePosition::Top => {
                 const MIN_DIAGRAM_HEIGHT: u16 = 6;
                 const MIN_CHAT_HEIGHT: u16 = 8;
-                let max_diagram = area.height.saturating_sub(MIN_CHAT_HEIGHT);
+                let max_diagram = session_area.height.saturating_sub(MIN_CHAT_HEIGHT);
                 if max_diagram >= MIN_DIAGRAM_HEIGHT {
                     let ratio = app.diagram_pane_ratio().clamp(20, 100) as u32;
-                    let ratio_target = ((area.height as u32 * ratio) / 100) as u16;
+                    let ratio_target = ((session_area.height as u32 * ratio) / 100) as u16;
                     let needed = estimate_pinned_diagram_pane_height(
                         diagram,
-                        area.width,
+                        session_area.width,
                         MIN_DIAGRAM_HEIGHT,
                     );
                     // Cap the pane at the configured ratio so the transcript keeps
@@ -2911,31 +3012,31 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
                         .min(needed.max(MIN_DIAGRAM_HEIGHT))
                         .max(MIN_DIAGRAM_HEIGHT)
                         .min(max_diagram);
-                    let chat_height = area.height.saturating_sub(diagram_height);
+                    let chat_height = session_area.height.saturating_sub(diagram_height);
                     if diagram_height > 0 && chat_height > 0 {
                         let diag = Rect {
-                            x: area.x,
-                            y: area.y,
-                            width: area.width,
+                            x: session_area.x,
+                            y: session_area.y,
+                            width: session_area.width,
                             height: diagram_height,
                         };
                         let chat = Rect {
-                            x: area.x,
-                            y: area.y + diagram_height,
-                            width: area.width,
+                            x: session_area.x,
+                            y: session_area.y + diagram_height,
+                            width: session_area.width,
                             height: chat_height,
                         };
                         (chat, Some(diag))
                     } else {
-                        (area, None)
+                        (session_area, None)
                     }
                 } else {
-                    (area, None)
+                    (session_area, None)
                 }
             }
         }
     } else {
-        (area, None)
+        (session_area, None)
     };
 
     let needs_side_pane = has_right_side_pane_content;
@@ -3351,8 +3452,43 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     if let Some(ref mut capture) = debug_capture {
         capture.layout.messages_area = Some(messages_area.into());
         capture.layout.diagram_area = diagram_area.map(|r| r.into());
+        capture.layout.top_bar_area = top_bar_area.map(Into::into);
+        capture.layout.top_bar_row_count = top_bar_layout.row_count;
+        capture.layout.top_bar_visible_fields = top_bar_layout
+            .visible_fields
+            .iter()
+            .map(|field| format!("{field:?}"))
+            .collect();
+        capture.layout.top_bar_suppression_reason = top_bar_layout
+            .suppression_reason
+            .map(|reason| format!("{reason:?}"));
+        if let Some(top_bar_area) = top_bar_area {
+            capture.check(
+                !rects_overlap(top_bar_area, messages_area),
+                "top bar overlaps messages area",
+            );
+            if let Some(diagram_area) = diagram_area {
+                capture.check(
+                    !rects_overlap(top_bar_area, diagram_area),
+                    "top bar overlaps diagram area",
+                );
+            }
+            if let Some(diff_pane_area) = diff_pane_area {
+                capture.check(
+                    !rects_overlap(top_bar_area, diff_pane_area),
+                    "top bar overlaps diff pane area",
+                );
+            }
+        }
     }
-    record_layout_snapshot(messages_area, diagram_area, diff_pane_area, Some(chunks[7]));
+    record_layout_snapshot_with_top_bar(
+        messages_area,
+        diagram_area,
+        diff_pane_area,
+        Some(chunks[7]),
+        top_bar_area,
+        top_bar_layout.row_count,
+    );
 
     let margins = if onboarding_welcome {
         onboarding::draw_onboarding_welcome(frame, app, messages_area);

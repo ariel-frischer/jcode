@@ -9,6 +9,19 @@ const SLOW_DRAW_ATTRIBUTION_THRESHOLD_MS: f64 = 40.0;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub(crate) struct FramePerfStats {
+    /// Time deriving the presentation-safe top-bar context from existing TUI
+    /// state. This must remain a non-blocking read-only path.
+    pub top_bar_derivation_ms: f64,
+    /// Time selecting the deterministic top-bar field set and row count.
+    pub top_bar_selection_ms: f64,
+    /// Time clearing and rendering the already-selected top-bar layout.
+    pub top_bar_render_ms: f64,
+    /// Safe, bounded layout metadata used to attribute top-bar work in slow
+    /// frame diagnostics without retaining user-provided labels.
+    pub top_bar_row_count: u16,
+    pub top_bar_visible_field_count: usize,
+    pub top_bar_visible_fields: Vec<String>,
+    pub top_bar_suppression_reason: Option<String>,
     pub full_prep_requests: usize,
     pub full_prep_hits: usize,
     pub full_prep_oversized_hits: usize,
@@ -246,6 +259,7 @@ pub(crate) fn record_draw_call_attribution(sample: DrawCallAttribution) {
 }
 
 const DRAW_CALL_HISTORY_MAX_SAMPLES: usize = 240;
+const MAX_TOP_BAR_METRIC_FIELDS: usize = 6;
 
 static DRAW_CALL_HISTORY: OnceLock<Mutex<VecDeque<DrawCallAttribution>>> = OnceLock::new();
 
@@ -506,6 +520,31 @@ fn frame_perf_stats_snapshot() -> FramePerfStats {
 
 pub(super) fn note_full_prep_request() {
     with_frame_perf_stats_mut(|stats| stats.full_prep_requests += 1);
+}
+
+pub(super) fn note_top_bar_metrics(
+    derivation_elapsed: Duration,
+    selection_elapsed: Duration,
+    render_elapsed: Duration,
+    layout: &crate::tui::ui_top_bar::TopBarLayout,
+) {
+    with_frame_perf_stats_mut(|stats| {
+        stats.top_bar_derivation_ms += duration_ms(derivation_elapsed);
+        stats.top_bar_selection_ms += duration_ms(selection_elapsed);
+        stats.top_bar_render_ms += duration_ms(render_elapsed);
+        stats.top_bar_row_count = layout.row_count;
+        stats.top_bar_visible_field_count =
+            layout.visible_fields.len().min(MAX_TOP_BAR_METRIC_FIELDS);
+        stats.top_bar_visible_fields = layout
+            .visible_fields
+            .iter()
+            .take(MAX_TOP_BAR_METRIC_FIELDS)
+            .map(|field| format!("{field:?}"))
+            .collect();
+        stats.top_bar_suppression_reason = layout
+            .suppression_reason
+            .map(|reason| format!("{reason:?}"));
+    });
 }
 
 pub(super) fn note_full_prep_cache_lookup(elapsed: Duration) {
@@ -1434,5 +1473,46 @@ mod draw_call_tests {
         let other = vec![Line::from("hello world!"), Line::from("second line")];
         let c = viewport_stability_hash(&other, &[1], 80, 2);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn top_bar_metrics_record_bounded_timing_and_safe_layout_metadata() {
+        use ratatui::text::Line;
+
+        reset_frame_perf_stats();
+        let layout = crate::tui::ui_top_bar::TopBarLayout {
+            row_count: 2,
+            lines: vec![Line::from("session"), Line::from("credit")],
+            visible_fields: vec![
+                crate::tui::ui_top_bar::TopBarFieldKind::Session,
+                crate::tui::ui_top_bar::TopBarFieldKind::Credit,
+            ],
+            suppression_reason: None,
+        };
+
+        note_top_bar_metrics(
+            Duration::from_millis(1),
+            Duration::from_millis(2),
+            Duration::from_millis(3),
+            &layout,
+        );
+
+        let stats = frame_perf_stats_snapshot();
+        assert_eq!(stats.top_bar_derivation_ms, 1.0);
+        assert_eq!(stats.top_bar_selection_ms, 2.0);
+        assert_eq!(stats.top_bar_render_ms, 3.0);
+        assert_eq!(stats.top_bar_row_count, 2);
+        assert_eq!(stats.top_bar_visible_field_count, 2);
+        assert_eq!(
+            stats.top_bar_visible_fields,
+            vec!["Session".to_string(), "Credit".to_string()]
+        );
+        assert_eq!(stats.top_bar_suppression_reason, None);
+
+        let encoded = serde_json::to_value(&stats).expect("frame metrics should serialize");
+        assert_eq!(encoded["top_bar_visible_field_count"], 2);
+        assert_eq!(encoded["top_bar_visible_fields"][0], "Session");
+        assert!(!encoded.to_string().contains("session"));
+        assert!(!encoded.to_string().contains("credit"));
     }
 }

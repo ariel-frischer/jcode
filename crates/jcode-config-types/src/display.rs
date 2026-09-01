@@ -42,6 +42,9 @@ pub struct DisplayConfig {
     pub emoji: bool,
     /// Center all content (default: false)
     pub centered: bool,
+    /// Keep the adaptive session top bar visible when space permits (default: true).
+    #[serde(default = "default_true")]
+    pub top_bar: bool,
     /// Show thinking/reasoning content by default (default: true)
     pub show_thinking: bool,
     /// How to display reasoning/thinking content (off/full/current).
@@ -155,6 +158,7 @@ impl Default for DisplayConfig {
             debug_socket: false,
             emoji: true,
             centered: false,
+            top_bar: true,
             show_thinking: true,
             reasoning_display: Some(ReasoningDisplayMode::Full),
             diagram_mode: DiagramDisplayMode::default(),
@@ -278,5 +282,55 @@ mod tests {
         let used: DisplayConfig =
             serde_json::from_str(r#"{"usage_display":"used"}"#).expect("display config");
         assert!(used.usage_display_used());
+    }
+
+    #[test]
+    fn top_bar_defaults_to_enabled_when_missing() {
+        let default = DisplayConfig::default();
+        assert!(default.top_bar);
+
+        let missing: DisplayConfig = toml::from_str("").expect("missing display config");
+        assert!(missing.top_bar);
+        assert_eq!(missing.queue_mode, default.queue_mode);
+        assert_eq!(missing.usage_display, default.usage_display);
+    }
+
+    #[test]
+    fn top_bar_preserves_explicit_true_and_false_values() {
+        let enabled: DisplayConfig =
+            toml::from_str("top_bar = true\n").expect("explicitly enabled top bar should parse");
+        assert!(enabled.top_bar);
+
+        let disabled: DisplayConfig =
+            toml::from_str("top_bar = false\n").expect("explicitly disabled top bar should parse");
+        assert!(!disabled.top_bar);
+    }
+
+    #[test]
+    fn top_bar_round_trips_without_changing_unrelated_display_settings() {
+        for expected in [true, false] {
+            let mut config = DisplayConfig::default();
+            config.top_bar = expected;
+            config.queue_mode = true;
+            config.usage_display = "used".to_string();
+
+            let encoded = toml::to_string(&config).expect("display config should serialize");
+            let decoded: DisplayConfig =
+                toml::from_str(&encoded).expect("serialized display config should parse");
+
+            assert_eq!(decoded.top_bar, expected);
+            assert!(decoded.queue_mode);
+            assert!(decoded.usage_display_used());
+        }
+    }
+
+    #[test]
+    fn disabling_top_bar_is_only_a_presentation_preference() {
+        let disabled: DisplayConfig = toml::from_str("top_bar = false\n").unwrap();
+        let default = DisplayConfig::default();
+
+        assert!(!disabled.top_bar);
+        assert_eq!(disabled.queue_mode, default.queue_mode);
+        assert_eq!(disabled.usage_display, default.usage_display);
     }
 }

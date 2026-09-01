@@ -1054,6 +1054,7 @@ fn header_prep_signature(app: &dyn TuiState, width: u16) -> u64 {
     app.is_canary().hash(&mut hasher);
     app.server_update_available().hash(&mut hasher);
     app.mcp_servers().hash(&mut hasher);
+    app.top_bar_enabled().hash(&mut hasher);
     app.connected_clients().hash(&mut hasher);
     app.server_sessions().len().hash(&mut hasher);
     app.working_dir().hash(&mut hasher);
@@ -1073,7 +1074,8 @@ fn header_prep_signature(app: &dyn TuiState, width: u16) -> u64 {
 
 fn prepare_header_cached(app: &dyn TuiState, width: u16) -> Arc<PreparedMessages> {
     let build = || {
-        let (mut all_header_lines, secondary_lines) = header::build_header_sections(app, width);
+        let (mut all_header_lines, secondary_lines) =
+            header::build_transcript_header_sections(app, width);
         all_header_lines.extend(secondary_lines);
         Arc::new(wrap_lines(all_header_lines, &[], &[], &[], width))
     };

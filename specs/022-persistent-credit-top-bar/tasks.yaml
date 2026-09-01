@@ -1,0 +1,501 @@
+tasks:
+    branch: "022-persistent-credit-top-bar"
+    created: "2026-09-01"
+    spec_path: "specs/022-persistent-credit-top-bar/spec.yaml"
+    plan_path: "specs/022-persistent-credit-top-bar/plan.yaml"
+summary:
+    total_tasks: 29
+    total_phases: 7
+    parallel_opportunities: 11
+    estimated_complexity: "high"
+phases:
+    - number: 1
+      title: "Setup"
+      purpose: "Establish a trustworthy baseline and deterministic fixtures for the existing TUI layout, configuration, usage, and interaction paths."
+      tasks:
+        - id: "T001"
+          title: "Record the bar-free TUI baseline and feature validation matrix"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "specs/022-persistent-credit-top-bar/validation.md"
+          dependencies: []
+          acceptance_criteria:
+            - "Record the current branch and base revision, the focused config and TUI test commands, the existing generated-config output, and any unrelated baseline failures before implementation."
+            - "Capture the current layout invariants for transcript, panes, scrollbars, overlays, status, inline UI, input, scroll position, and cursor position at narrow, short, standard, wide, and roomy terminal sizes."
+            - "Define the test fixture matrix for known, pending, stale, unavailable, and not-applicable provider credit states, safe authentication labels, long and Unicode-heavy identifiers, provider switches, rapid updates, and disabled configuration."
+            - "State that user configuration, the shared daemon, provider endpoints, protocol contracts, and lower-level usage sources must not be modified as part of the feature."
+        - id: "T002"
+          title: "Prepare reusable top-bar TestBackend, state, geometry, and interaction fixtures"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/ui_tests/top_bar.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Create deterministic helpers for active sessions, safe session/header context, each ProviderCreditState, terminal width and height, pane and overlay combinations, scroll anchors, multiline input, status rows, and cursor positions."
+            - "Fixtures use existing TuiState, App, usage-cache, and TestBackend seams rather than creating a second provider or credit source."
+            - "Helpers can compare rectangle bounds, visible fields, row count, suppression reason, transcript anchors, input bytes, and logical cursor positions without relying on sleeps or the shared daemon."
+            - "Register any new test module through the existing TUI test module structure without changing production behavior."
+    - number: 2
+      title: "Foundational"
+      purpose: "Define the additive configuration, privacy-safe presentation contracts, existing-data adapters, and renderer boundary required by every user story."
+      tasks:
+        - id: "T003"
+          title: "Add failing display.top_bar configuration and persistence contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-config-types/src/display.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Tests require DisplayConfig to decode an omitted top_bar field as enabled, preserve explicit top_bar = true, and preserve explicit top_bar = false."
+            - "Tests require the effective default to be true and the existing display fields, serde names, and unrelated defaults to remain unchanged."
+            - "Tests cover TOML serialization and deserialization round trips for absent, true, and false values without introducing a CLI, environment, or session override."
+            - "Tests assert that disabling the preference changes only presentation allocation and does not remove access to session or usage data."
+        - id: "T004"
+          title: "Add failing pure top-bar contract tests for credit states, priorities, privacy, and width safety"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/ui_top_bar.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Tests define TopBarContext, ProviderCreditState, TopBarField, and TopBarLayout expectations including required session and credit fields, zero-to-three rows, visible fields, and suppression reasons."
+            - "Tests distinguish known, pending, stale, unavailable, and not-applicable credit states and reject any representation that fabricates a zero balance for unknown or unsupported data."
+            - "Tests require session and credit to outrank provider/model, auth/reasoning, server/client, and version/connection fields during compaction or removal."
+            - "Tests reject raw credentials, tokens, full sensitive identifiers, and raw provider error strings from renderer-facing context while accepting safe provider and authentication labels."
+            - "Tests require every emitted candidate and line to be display-width bounded without splitting combining text, emoji, or wide Unicode characters."
+        - id: "T005"
+          title: "Add failing TuiState and usage-source adapter privacy tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/app/tests/commands_accounts_02/part_01.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Tests require the renderer-facing adapter to reuse active session, server, client, model, provider, safe auth, reasoning, UsageData, OpenAIUsageData, UsageInfo, timestamps, stale flags, errors, hard-limit flags, limits, cost, and in-flight progress already available to the App."
+            - "Tests prove adapter derivation performs no credential-file read, network request, provider billing request, or blocking operation from the render path."
+            - "Tests cover unsupported providers, malformed usage, provider errors, absent usage, and safe authentication status without exposing raw error or credential material."
+            - "Tests prove source values remain available when the top bar is disabled or suppressed."
+        - id: "T006"
+          title: "Add failing layout-boundary and deterministic selection contract tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/ui_tests/top_bar.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Tests require top-bar bounds to be selected before pane, transcript, scrollbar, status, inline UI, input, and active-session overlay bounds."
+            - "Tests require a useful conversation area to retain at least one transcript row, operable input, and required status chrome before optional rows are reserved."
+            - "Tests require deterministic field selection and row count for unchanged context and terminal geometry across repeated refreshes."
+            - "Tests require replacement surfaces to retain their existing ownership while active-session overlays are bounded to the remaining content rectangle."
+        - id: "T007"
+          title: "Implement the serde-defaulted display.top_bar preference"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-config-types/src/display.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Add a single persisted bool field named top_bar under DisplayConfig with a documented effective default of true."
+            - "Absent configuration and explicit true enable the adaptive bar, while explicit false is authoritative and reserves zero rows."
+            - "The field is additive, serde-compatible with existing TOML, and does not add protocol, provider, environment, CLI, or per-session configuration paths."
+            - "All configuration contract tests from T003 pass."
+        - id: "T008"
+          title: "Document top-bar default and expose its effective setting in config output"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/config/default_file.rs"
+          dependencies: ["T003", "T007"]
+          acceptance_criteria:
+            - "The generated TOML template documents that display.top_bar defaults to true and that false is the simple opt-out."
+            - "The template remains valid TOML and retains all existing display configuration comments and examples."
+            - "The existing display configuration summary reports only the effective non-secret top-bar setting and does not expose credentials or transient layout state."
+            - "Template and display-summary regressions cover omitted, true, and false values."
+        - id: "T009"
+          title: "Implement presentation-only top-bar context, credit, field, layout, and sanitization types"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/ui_top_bar.rs"
+          dependencies: ["T004", "T007"]
+          acceptance_criteria:
+            - "Define the planned TopBarContext, ProviderCreditState, TopBarField, TopBarLayout, field-kind, and suppression representations with transient presentation ownership in jcode-tui."
+            - "Normalize existing usage sources into distinct known, pending, stale, unavailable, and not-applicable states, retaining only trustworthy summaries and freshness metadata."
+            - "Implement safe provider and authentication labels that omit tokens, secrets, full sensitive account identifiers, and raw provider errors."
+            - "Keep the types independent of server, protocol, SDK, provider billing, and persisted session contracts, and make all displayed lines eligible for display-cell-aware bounds checks."
+            - "The pure contract tests from T004 pass."
+        - id: "T010"
+          title: "Expose non-blocking existing session and usage accessors through TuiState"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/app/tui_state.rs"
+          dependencies: ["T005", "T009"]
+          acceptance_criteria:
+            - "Expose the minimal renderer-facing accessors needed for session label, server/client context, model, provider, safe auth, reasoning, usage freshness, credit summaries, and in-flight progress."
+            - "Adapters read existing App and cache state only and perform no blocking I/O or network work during frame derivation."
+            - "Accessors preserve source data and existing update cadence when top_bar is false or when the adaptive selector suppresses the bar."
+            - "Usage states and safe labels satisfy the privacy and malformed-data tests from T005."
+        - id: "T011"
+          title: "Wire the minimal top-bar module and renderer-facing boundary"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/mod.rs"
+          dependencies: ["T009", "T010"]
+          acceptance_criteria:
+            - "Register ui_top_bar.rs and expose only the minimal types or accessors required by the existing TUI renderer and tests."
+            - "Keep adaptive layout and transient presentation state in jcode-tui while preserving dependency direction from app-core and usage types upward."
+            - "No endpoint, protocol message, server contract, SDK type, or duplicate usage cache is introduced."
+            - "The workspace compiles through the module boundary with the top-bar contract tests enabled."
+    - number: 3
+      title: "User Story 1 - See session identity and credit usage at a glance"
+      purpose: "Populate the persistent-bar snapshot from current session and provider sources, refresh it as values change, and represent every credit state without misleading data."
+      story_reference: "US-001"
+      independent_test: "Open a deterministic active-session fixture with identity and each credit state, render it, change session/provider/usage values, and verify that the visible safe identity and credit state update without new input, network work, or provider-visible transcript messages."
+      tasks:
+        - id: "T012"
+          title: "Add failing active-session identity, credit-state, refresh, and privacy regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/tests/commands_accounts_02/part_01.rs"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "An active fixture requires the top-bar snapshot to show a recognizable session label and provider credit known, pending, stale, unavailable, or not-applicable state from existing sources."
+            - "Changing session, provider, model, authentication status, reasoning, usage value, freshness, or in-flight state requires the next normal TUI update to expose the matching current value without reopening the session."
+            - "Tests prove the bar never replaces unknown, unsupported, malformed, or failed usage with zero and never shows raw credentials or provider error text."
+            - "Tests prove credit and identity updates do not append or alter provider-visible transcript messages and do not require user entry of source data."
+        - id: "T013"
+          title: "Implement current TopBarContext derivation from existing session, header, auth, reasoning, and usage data"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/tui_state.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "Derive the active snapshot from the existing session identity and ui_header.rs-safe formatting seams plus existing provider and usage caches."
+            - "Prioritize session identity and ProviderCreditState while retaining optional server, client, provider, model, safe auth, and reasoning fields when available."
+            - "Normalize subscription, cost-based, token-only, unsupported, absent, stale, pending, and malformed sources without issuing renderer-path requests."
+            - "Switching active provider or model cannot retain a misleading previous provider label or credit summary."
+            - "The T012 identity, credit, and privacy tests pass."
+        - id: "T014"
+          title: "Refresh top-bar-visible identity and credit state from existing update events"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/model_context.rs"
+          dependencies: ["T012", "T013"]
+          acceptance_criteria:
+            - "Existing provider usage progress, cache freshness, session, model, auth, reasoning, and context-change events update or invalidate the top-bar snapshot at the normal source cadence."
+            - "Rapid usage changes remain readable and eventually converge to current source state without adding provider-visible transcript content."
+            - "Pending and stale transitions retain explicit semantics and never fabricate a numeric balance."
+            - "No unrelated transcript preparation or credential lookup is invalidated for a top-bar-only update."
+            - "The complete US-001 independent test passes."
+    - number: 4
+      title: "User Story 2 - Keep the conversation readable on every terminal"
+      purpose: "Select deterministic full, compact, or hidden fields and allocate a width-safe zero-to-three-row first-class region without overlapping existing session chrome."
+      story_reference: "US-002"
+      independent_test: "Render the same context through narrow, short, standard, wide, and roomy TestBackend dimensions with panes, scrollbars, overlays, status, inline UI, and multiline input, then inspect row count, field priority, line widths, and all region bounds."
+      tasks:
+        - id: "T015"
+          title: "Add failing pure size-table, Unicode-width, and 100-refresh determinism tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/ui_top_bar.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Tests cover narrow, short, standard, wide, and roomy widths and heights, including zero-row suppression when the remaining conversation area would become unusable."
+            - "Tests require one or two rows at standard sizes, no more than three rows anywhere, and three rows only when the remaining session surface remains usable."
+            - "Tests require session identity and credit state to survive every supported shown layout before lower-priority fields are compacted or hidden."
+            - "Long paths, identifiers, emoji, combining marks, and East Asian wide glyphs are truncated at character boundaries and every emitted line fits its display-cell width."
+            - "For fixed context and geometry, 100 consecutive selections produce identical row count, visible fields, lines, and suppression outcome."
+        - id: "T016"
+          title: "Add failing TestBackend region-coexistence and no-overlap tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/ui_tests/top_bar.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Rendered tests cover narrow, short, standard, wide, and roomy dimensions with transcript, panes, native scrollbars, overlays, status, inline UI, and multiline input."
+            - "Every visible region has distinct non-overlapping bounds, all text fits its assigned rectangle, and required input/status controls remain operable."
+            - "The top-bar rectangle is allocated before pane and chat layout, while replacement surfaces preserve their existing full-screen ownership."
+            - "The tests inspect captured row count, visible fields, suppression reason, and bounds rather than relying only on visual screenshots."
+        - id: "T017"
+          title: "Implement deterministic priority selection, compact variants, Unicode truncation, and top-bar rendering"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/ui_top_bar.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Implement pure width and height selection with explicit full, compact, and hidden variants and stable field priorities."
+            - "Preserve session and credit as immutable highest-priority fields whenever a useful bar is shown, and suppress the bar before violating minimum transcript/input/status allocation."
+            - "Use unicode-width-aware measurement and character-boundary truncation for every candidate and assert that rendered lines fit their target width."
+            - "Render known, pending, stale, unavailable, and not-applicable credit states with understandable safe labels and no fabricated zero values."
+            - "The T015 pure size, Unicode, and determinism tests pass."
+        - id: "T018"
+          title: "Allocate and render the top bar as first-class session chrome"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/ui.rs"
+          dependencies: ["T016", "T017"]
+          acceptance_criteria:
+            - "Select the top-bar row count from the full session geometry, split the usable surface into top-bar and remaining-content rectangles, and run existing pane/chat layout inside the remaining rectangle."
+            - "Reserve zero to three rows with one or two rows as the normal result, preserving minimum transcript, status, inline UI, input, scrollbar, and required chrome allocations."
+            - "Render the bar in its own rectangle before transcript and pane content, with no overlap or late draw-over behavior."
+            - "Preserve existing replacement-surface behavior and make active-session overlays use remaining-content bounds."
+            - "The T016 TestBackend overlap and coexistence tests pass."
+        - id: "T019"
+          title: "Separate persistent active-session chrome from the rich scrollable header"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-tui/src/tui/ui_prepare.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "When the top bar is enabled, omit duplicate persistent identity lines from the scrollable PreparedChatFrame while retaining non-duplicate startup content as appropriate."
+            - "When the top bar is disabled or suppressed, preserve the existing rich scrollable header path and bar-free layout behavior."
+            - "Reuse ui_header.rs formatting for model, session, server/client, connection, and safe authentication context rather than creating a second formatter."
+            - "Prepared transcript content is not rebuilt for every top-bar refresh."
+        - id: "T020"
+          title: "Extend visual-debug layout capture with top-bar diagnostics"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-tui-visual-debug/src/lib.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "Capture top-bar bounds, row count, visible fields, suppression reason, and overlap diagnostics alongside existing layout snapshots."
+            - "The capture remains backward-compatible for sessions with the feature disabled and does not include secrets or raw provider errors."
+            - "Debug output is sufficient to verify all size-matrix and coexistence assertions without changing production layout ownership."
+    - number: 5
+      title: "User Story 3 - Maintain stable chat interaction"
+      purpose: "Keep transcript anchors, composed input, cursor context, and all existing session regions stable while top-bar data, row count, or terminal geometry changes."
+      story_reference: "US-003"
+      independent_test: "Scroll to an earlier transcript position, type and paste multiline content, resize repeatedly, trigger credit and identity updates, and render with panes, overlays, scrollbars, status, and input while comparing the visible anchor and editor state before and after."
+      tasks:
+        - id: "T021"
+          title: "Add failing scroll-anchor, typing, paste, resize, and cursor stability regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/tests/scroll_copy_03.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "When scrolled away from the newest message, single-line typing, multiline typing, single-line paste, multiline paste, and top-bar refresh preserve the same visible transcript anchor unless the user explicitly scrolls or submits an intentional action."
+            - "Changing top-bar height across zero, one, two, and three rows during resize preserves transcript anchor semantics rather than changing transcript indices or snapping to the bottom."
+            - "Composed input bytes, multiline structure, selection state, and logical cursor position remain unchanged through identity, credit, reasoning, and terminal-size updates."
+            - "Repeated resize and paste sequences complete without crashes, lost input, unexpected scroll jumps, or hidden required input controls."
+        - id: "T022"
+          title: "Add failing pane, scrollbar, overlay, status, inline-UI, and input coexistence regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/ui_tests/top_bar_interaction.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "Render active-session combinations containing panes, scrollbars, active-session overlays, replacement surfaces, status rows, inline UI, and multiline input."
+            - "Tests require every region to retain distinct usable bounds while top-bar content and row count change."
+            - "Tests prove overlays do not cover the bar or input, scrollbars remain attached to transcript bounds, and status/input chrome is not displaced into an unusable area."
+            - "Tests compare enabled and suppressed layouts without changing existing replacement-surface ownership."
+        - id: "T023"
+          title: "Add failing rapid-update, stale-to-fresh, provider-switch, and malformed-data interaction tests"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/tests/commands_accounts_02/part_01.rs"
+          dependencies: ["T021", "T022"]
+          acceptance_criteria:
+            - "Rapid credit updates during streaming and repeated requests keep the TUI readable and converge to the current source state without input loss or scroll movement."
+            - "Tests cover stale-to-fresh transitions, pending completion, provider/model/auth/reasoning switches, unsupported providers, missing usage, malformed usage, and safe provider errors."
+            - "Across repeated refreshes, no stale previous-provider value, fabricated zero, raw secret, raw credential-bearing error, or provider-visible transcript message appears."
+            - "The App and TestBackend remain operable with zero crashes and no blocking render-path work."
+        - id: "T024"
+          title: "Implement stable scroll geometry and targeted top-bar invalidation"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/ui.rs"
+          dependencies: ["T021", "T022", "T023"]
+          acceptance_criteria:
+            - "Keep top-bar height outside transcript line accounting and preserve existing distance-from-bottom, resolved-scroll, visible-line, and history-anchor semantics when viewport height changes."
+            - "Never mutate scroll_offset, composed input, or logical cursor position merely because top-bar content changes, a usage update arrives, or terminal size changes."
+            - "Invalidate or rebuild only the small top-bar snapshot and layout inputs on session, provider, model, auth, reasoning, usage progress, freshness, configuration, and terminal-size changes, without invalidating unrelated transcript preparation."
+            - "The T021, T022, and T023 interaction regressions pass with no overlap, input loss, scroll jump, or crash."
+    - number: 6
+      title: "User Story 4 - Disable the top bar when desired"
+      purpose: "Provide an exact boolean opt-out that reserves no rows, restores the bar-free conversation geometry, and leaves session and usage behavior unchanged."
+      story_reference: "US-004"
+      independent_test: "Run equivalent TestBackend sessions with display.top_bar omitted, true, and false at identical dimensions, then compare visible bar rows, conversation bounds, existing rich header behavior, source data availability, and session behavior."
+      tasks:
+        - id: "T025"
+          title: "Add failing disabled, enabled, default, and exact-row-reclamation regressions"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/ui_tests/top_bar.rs"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Omitted and explicit true configuration enable adaptive behavior subject to space safety, while explicit false renders no top-bar rows and reserves zero height."
+            - "The false layout gives the conversation the same usable area as the existing bar-free layout at identical dimensions, including transcript, panes, status, input, overlays, and scrollbars."
+            - "Disabling the bar preserves existing rich scrollable header behavior, session identity sources, usage caches, session behavior, and provider messages."
+            - "Tests cover the disabled option in a very small terminal and confirm that no top-bar content or stale layout snapshot remains visible."
+        - id: "T026"
+          title: "Implement the canonical top-bar preference gate and bar-free layout path"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/ui.rs"
+          dependencies: ["T025"]
+          acceptance_criteria:
+            - "Resolve one effective display.top_bar boolean from persisted configuration with the documented default true and use it for both row reservation and rendering."
+            - "When false, bypass top-bar selection and drawing, reserve zero rows, and route the existing bar-free layout and rich header path unchanged."
+            - "When true or absent, retain the adaptive selector and its zero-to-three-row suppression rules."
+            - "The preference gate does not delete, mutate, or hide underlying session, authentication, reasoning, or usage data, and all T025 comparisons pass."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Protect the interactive budget, run repository guardrails, and verify behavior against the newly built TUI binary without disturbing the shared daemon."
+      tasks:
+        - id: "T027"
+          title: "Attribute top-bar derivation, selection, and render work in frame metrics"
+          status: "Completed"
+          type: "refactor"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-tui/src/tui/ui_frame_metrics.rs"
+          dependencies: ["T026"]
+          acceptance_criteria:
+            - "Record top-bar derivation, selection, and rendering cost through the existing frame-metrics path without introducing blocking auth, filesystem, or network work."
+            - "Keep the fixed candidate set and invalidation scope bounded and verify unchanged context and geometry do not oscillate across 100 refreshes."
+            - "Measure or report repeated typing and multiline-paste responsiveness against the 100 ms target, with at least 95% of eligible observations remaining visually responsive."
+            - "Metrics remain safe and non-secret and do not alter transcript, input, scroll, or usage behavior."
+        - id: "T028"
+          title: "Run focused package tests, formatting, TUI build, and repository guardrails"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/022-persistent-credit-top-bar/validation.md"
+          dependencies: ["T027"]
+          acceptance_criteria:
+            - "Run focused jcode-config-types tests, focused jcode-tui top-bar/usage/layout/scroll/input tests, and the relevant visual-debug checks serially."
+            - "Run Rust formatting, the relevant TUI build, and scripts/check_guardrails.sh serially on the resource-constrained development machine."
+            - "Record commands, pass/fail outcomes, and any unrelated pre-existing failures without changing user configuration or hiding failures."
+            - "Confirm all functional requirements and plan deliverables have a corresponding passing focused check or an explicitly documented platform limitation."
+        - id: "T029"
+          title: "Run isolated-socket runtime and debug-socket smoke verification"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/022-persistent-credit-top-bar/validation.md"
+          dependencies: ["T028"]
+          acceptance_criteria:
+            - "Use the newly built TUI binary with an isolated socket and verify its resolved executable identity before exercising it."
+            - "Exercise live scrollback, typing, single-line and multiline paste, resize, credit or identity refresh, pane/overlay coexistence, and display.top_bar = false behavior without restarting or reopening the session for updates."
+            - "Capture debug-socket or visual-debug frames showing top-bar bounds, row count, visible fields, suppression reasons, stable transcript/input state, and zero overlap at representative terminal sizes."
+            - "Do not disturb the shared daemon or caller session, and record runtime commands and evidence in validation.md."
+user_story_order:
+    - story_id: "US-001"
+      depends_on: []
+      blocks: ["US-002"]
+    - story_id: "US-002"
+      depends_on: ["US-001"]
+      blocks: ["US-003"]
+    - story_id: "US-003"
+      depends_on: ["US-002"]
+      blocks: ["US-004"]
+    - story_id: "US-004"
+      depends_on: ["US-003"]
+      blocks: []
+phase_order:
+    - phase: 1
+      blocks: [2]
+    - phase: 2
+      blocks: [3]
+    - phase: 3
+      blocks: [4]
+    - phase: 4
+      blocks: [5]
+    - phase: 5
+      blocks: [6]
+    - phase: 6
+      blocks: [7]
+    - phase: 7
+      blocks: []
+parallel_execution:
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T003", "T004", "T005", "T006"]
+          rationale: "Configuration, pure presentation, source-adapter, and layout contract tests use separate files or independent fixture sections and all depend only on setup."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T015", "T016"]
+          rationale: "Pure selector tests and rendered region tests can be authored independently before implementation."
+        - tasks: ["T019", "T020"]
+          rationale: "Header/prepared-transcript separation and visual-debug capture touch separate modules after the layout integration."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T021", "T022"]
+          rationale: "Scroll/editor regressions and region-interaction regressions use separate test files."
+    - phase: 7
+      parallel_groups:
+        - tasks: ["T027"]
+          rationale: "Frame-metrics instrumentation is isolated from the already completed story behavior and can be reviewed independently before validation."
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "Setup, additive configuration and presentation contracts, current identity and credit derivation, deterministic adaptive rendering, and first-class non-overlapping session layout."
+        validation: "Run the focused config and TUI pure tests, the TestBackend size and no-overlap matrix, and an isolated runtime smoke proving identity and credit remain visible without covering chat."
+    incremental_delivery:
+        - milestone: "Foundation Ready"
+          phases: [1, 2]
+          deliverable: "A documented default-enabled opt-out contract, privacy-safe top-bar data model, deterministic fixtures, and non-blocking existing-data adapters are ready for story work."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "An active TUI can show current session identity and provider credit state in an adaptive one-to-three-row bar with no layout overlap and with the existing rich header path preserved when disabled or suppressed."
+        - milestone: "Interaction Stable"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Typing, paste, scrollback, resize, usage updates, panes, overlays, scrollbars, status, and input retain stable anchors and usable bounds."
+        - milestone: "Release Validated"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "The opt-out path, performance budget, repository guardrails, and isolated newly-built-binary runtime evidence are complete."
+_meta:
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-09-01T04:50:21Z"
+    artifact_type: "tasks"
