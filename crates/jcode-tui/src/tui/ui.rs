@@ -241,6 +241,7 @@ thread_local! {
     static TEST_LAST_LAYOUT: RefCell<Option<LayoutSnapshot>> = const { RefCell::new(None) };
     static TEST_LAST_STATUS_AREA: RefCell<Option<Rect>> = const { RefCell::new(None) };
     static TEST_VISIBLE_COPY_TARGETS: RefCell<Vec<VisibleCopyTarget>> = RefCell::new(Vec::new());
+    static TEST_TOP_BAR_COPY_TARGET: RefCell<Option<TopBarCopyTarget>> = const { RefCell::new(None) };
     static TEST_VISIBLE_EXPAND_EDIT_BADGE: Cell<bool> = const { Cell::new(false) };
     static TEST_VISIBLE_EXPAND_EDIT_BADGE_LINE: Cell<Option<usize>> = const { Cell::new(None) };
     static TEST_VISIBLE_EXPAND_EDIT_BADGE_RECT: Cell<Option<Rect>> = const { Cell::new(None) };
@@ -596,12 +597,20 @@ pub(crate) struct VisibleCopyTarget {
     pub badge_rect: Option<Rect>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct TopBarCopyTarget {
+    pub content: String,
+    pub badge_rect: Rect,
+}
+
 // Copy badges intentionally avoid h/j/k/l so they never shadow vi-style
 // movement keys while the user is scanning visible actions.
 const COPY_BADGE_KEYS: [char; 12] = ['s', 'd', 'f', 'g', 'w', 'e', 'r', 't', 'x', 'c', 'v', 'b'];
 
 #[cfg(not(test))]
 static VISIBLE_COPY_TARGETS: OnceLock<Mutex<Vec<VisibleCopyTarget>>> = OnceLock::new();
+#[cfg(not(test))]
+static TOP_BAR_COPY_TARGET: OnceLock<Mutex<Option<TopBarCopyTarget>>> = OnceLock::new();
 
 #[cfg(not(test))]
 static VISIBLE_EXPAND_EDIT_BADGE: OnceLock<Mutex<bool>> = OnceLock::new();
@@ -615,6 +624,53 @@ static VISIBLE_EXPAND_EDIT_BADGE_RECT: OnceLock<Mutex<Option<Rect>>> = OnceLock:
 #[cfg(not(test))]
 fn visible_copy_targets_state() -> &'static Mutex<Vec<VisibleCopyTarget>> {
     VISIBLE_COPY_TARGETS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+#[cfg(not(test))]
+fn top_bar_copy_target_state() -> &'static Mutex<Option<TopBarCopyTarget>> {
+    TOP_BAR_COPY_TARGET.get_or_init(|| Mutex::new(None))
+}
+
+fn set_top_bar_copy_target(target: Option<TopBarCopyTarget>) {
+    #[cfg(test)]
+    {
+        TEST_TOP_BAR_COPY_TARGET.with(|state| *state.borrow_mut() = target);
+        return;
+    }
+    #[cfg(not(test))]
+    {
+        *top_bar_copy_target_state()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = target;
+    }
+}
+
+pub(crate) fn top_bar_copy_target_at(column: u16, row: u16) -> Option<TopBarCopyTarget> {
+    let contains = |target: &TopBarCopyTarget| {
+        column >= target.badge_rect.x
+            && column < target.badge_rect.x.saturating_add(target.badge_rect.width)
+            && row >= target.badge_rect.y
+            && row < target.badge_rect.y.saturating_add(target.badge_rect.height)
+    };
+    #[cfg(test)]
+    {
+        TEST_TOP_BAR_COPY_TARGET.with(|state| {
+            state
+                .borrow()
+                .as_ref()
+                .filter(|target| contains(target))
+                .cloned()
+        })
+    }
+    #[cfg(not(test))]
+    {
+        top_bar_copy_target_state()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .filter(|target| contains(target))
+            .cloned()
+    }
 }
 
 #[cfg(not(test))]
@@ -1633,6 +1689,7 @@ fn clear_test_render_state_locked() {
         *snapshot.borrow_mut() = None;
     });
     set_visible_copy_targets(Vec::new());
+    set_top_bar_copy_target(None);
     clear_copy_viewport_snapshot();
 
     TEST_PROMPT_VIEWPORT_STATE.with(|state| {
@@ -2795,6 +2852,7 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     begin_frame_resource_sample();
 
     clear_copy_viewport_snapshot();
+    set_top_bar_copy_target(None);
 
     // Clear full frame to prevent stale cells from prior layouts.
     // This is critical on macOS terminals where ratatui's diff-based updates
@@ -2918,6 +2976,15 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             rendered_lines.len(),
             top_bar_area,
         );
+        if let (Some(context), Some(badge_rect)) = (
+            top_bar_context.as_ref(),
+            crate::tui::ui_top_bar::top_bar_clipboard_rect(&rendered_lines, top_bar_area),
+        ) {
+            set_top_bar_copy_target(Some(TopBarCopyTarget {
+                content: context.clipboard_text(),
+                badge_rect,
+            }));
+        }
     }
     note_top_bar_metrics(
         top_bar_derivation_elapsed,

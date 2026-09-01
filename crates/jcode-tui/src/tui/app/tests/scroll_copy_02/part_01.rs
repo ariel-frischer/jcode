@@ -755,6 +755,43 @@ fn test_top_bar_mouse_drag_auto_copies_and_keeps_highlight() {
 }
 
 #[test]
+fn test_clicking_top_bar_clipboard_icon_copies_clean_session_summary() {
+    let _render_lock = scroll_render_test_lock();
+    let clipboard = CapturedClipboard::new();
+    let (mut app, mut terminal) = create_copy_test_app();
+    render_and_snap(&app, &mut terminal);
+
+    let buffer = terminal.backend().buffer();
+    let area = *buffer.area();
+    let icon = (0..area.height).find_map(|row| {
+        let line = (0..area.width)
+            .map(|column| buffer[(column, row)].symbol())
+            .collect::<String>();
+        line.find('📋')
+            .map(|byte| (line[..byte].chars().count() as u16, row))
+    });
+    let (column, row) = icon.expect("top-bar clipboard icon must be visible");
+
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_mouse_event(MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::empty(),
+        });
+    }
+
+    let copied = clipboard.text().expect("session summary copied");
+    assert!(copied.starts_with("Session: test\n"), "copied: {copied:?}");
+    assert!(copied.contains("Provider:"), "copied: {copied:?}");
+    assert!(!copied.contains('📋'), "copied summary must be clean: {copied:?}");
+    assert_eq!(app.status_notice(), Some("Copied session info".to_string()));
+}
+
+#[test]
 fn test_side_panel_mouse_drag_extracts_expected_text() {
     let _render_lock = scroll_render_test_lock();
     let mut app = create_test_app();

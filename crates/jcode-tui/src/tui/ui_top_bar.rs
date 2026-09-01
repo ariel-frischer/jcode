@@ -23,6 +23,7 @@ pub(crate) struct ProviderCreditState {
     pub(crate) secondary_summary: Option<String>,
     pub(crate) fetched_at: Option<std::time::Instant>,
     primary_remaining_ratio: Option<f32>,
+    primary_window_label: Option<String>,
 }
 
 impl ProviderCreditState {
@@ -38,6 +39,7 @@ impl ProviderCreditState {
             secondary_summary: secondary_summary.and_then(|value| sanitize_label(&value)),
             fetched_at: Some(std::time::Instant::now()),
             primary_remaining_ratio: None,
+            primary_window_label: None,
         }
     }
 
@@ -65,6 +67,7 @@ impl ProviderCreditState {
             secondary_summary: secondary_summary.and_then(|value| sanitize_label(&value)),
             fetched_at: None,
             primary_remaining_ratio: None,
+            primary_window_label: None,
         }
     }
 
@@ -76,6 +79,7 @@ impl ProviderCreditState {
             secondary_summary: None,
             fetched_at: None,
             primary_remaining_ratio: None,
+            primary_window_label: None,
         }
     }
 
@@ -149,6 +153,10 @@ impl ProviderCreditState {
             Self::known(provider, primary_summary, secondary_summary)
         };
         state.primary_remaining_ratio = subscription_remaining_ratio(usage);
+        state.primary_window_label = usage
+            .primary_limit_label
+            .as_deref()
+            .and_then(sanitize_label);
         state.fetched_at = None;
         state
     }
@@ -288,14 +296,15 @@ impl TopBarContext {
         if !self.session_label.is_empty() {
             fields.push(TopBarField::new(
                 TopBarFieldKind::Session,
-                format!("◉ {}", self.session_label),
-                Some(format!("◉ {}", self.session_label)),
+                format!("📋  ◉ {}", self.session_label),
+                Some(format!("📋 ◉ {}", self.session_label)),
             ));
         }
+        let (credit_full, credit_compact) = self.credit_labels();
         fields.push(TopBarField::new(
             TopBarFieldKind::Credit,
-            self.credit_label(true),
-            Some(self.credit_label(false)),
+            credit_full,
+            Some(credit_compact),
         ));
         if self.provider_label.is_some() || self.model_label.is_some() {
             fields.push(TopBarField::new(
@@ -352,33 +361,60 @@ impl TopBarContext {
         fields
     }
 
-    fn credit_label(&self, include_provider: bool) -> String {
+    pub(crate) fn clipboard_text(&self) -> String {
+        let mut lines = vec![format!("Session: {}", self.session_label)];
+        push_clipboard_field(&mut lines, "Provider", self.provider_label.as_deref());
+        push_clipboard_field(&mut lines, "Model", self.model_label.as_deref());
+        push_clipboard_field(&mut lines, "Auth", self.auth_label.as_deref());
+        push_clipboard_field(&mut lines, "Reasoning", self.reasoning_label.as_deref());
+        push_clipboard_field(&mut lines, "Credit", self.credit.summary().as_deref());
+        push_clipboard_field(&mut lines, "Server", self.server_label.as_deref());
+        push_clipboard_field(&mut lines, "Client", self.client_label.as_deref());
+        push_clipboard_field(&mut lines, "Connection", self.connection_label.as_deref());
+        push_clipboard_field(&mut lines, "Version", self.version_label.as_deref());
+        lines.join("\n")
+    }
+
+    fn credit_labels(&self) -> (String, String) {
+        if let Some(remaining_ratio) = self.credit.primary_remaining_ratio {
+            let percent = (remaining_ratio.clamp(0.0, 1.0) * 100.0).round() as u16;
+            let label = self
+                .credit
+                .primary_window_label
+                .as_deref()
+                .unwrap_or("quota");
+            return (
+                format!(
+                    "{} {} {} {}% left",
+                    self.credit.provider,
+                    label,
+                    credit_progress_text(remaining_ratio, 10),
+                    percent
+                ),
+                credit_progress_text(remaining_ratio, 6),
+            );
+        }
+
         let summary = self
             .credit
             .summary()
             .unwrap_or_else(|| "unavailable".to_string());
-        let progress = self
-            .credit
-            .primary_remaining_ratio
-            .map(credit_progress_text)
-            .unwrap_or_default();
-        let prefix = if include_provider {
-            format!("{} ", self.credit.provider)
-        } else {
-            String::new()
-        };
-        format!("{prefix}{summary}{progress}")
+        (format!("{} {summary}", self.credit.provider), summary)
     }
 }
 
-fn credit_progress_text(remaining_ratio: f32) -> String {
-    const CELLS: usize = 6;
-    let used_ratio = 1.0 - remaining_ratio.clamp(0.0, 1.0);
-    let filled = (used_ratio * CELLS as f32).round() as usize;
+fn push_clipboard_field(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value.filter(|value| !value.is_empty()) {
+        lines.push(format!("{label}: {value}"));
+    }
+}
+
+fn credit_progress_text(remaining_ratio: f32, cells: usize) -> String {
+    let filled = (remaining_ratio.clamp(0.0, 1.0) * cells as f32).round() as usize;
     format!(
-        "  {}{}",
+        "{}{}",
         "▰".repeat(filled),
-        "▱".repeat(CELLS.saturating_sub(filled))
+        "▱".repeat(cells.saturating_sub(filled))
     )
 }
 
@@ -648,8 +684,10 @@ fn render_core_line(core: &[&TopBarField], width: usize) -> String {
         let right_width = width
             .saturating_sub(separator_width)
             .saturating_sub(left_width);
-        let left = truncate_display_width(&values[0], left_width.max(1));
-        let right = truncate_display_width(&values[1], right_width.max(1));
+        let left = field_text_that_fits(core[0], left_width.max(1))
+            .unwrap_or_else(|| truncate_display_width(&values[0], left_width.max(1)));
+        let right = field_text_that_fits(core[1], right_width.max(1))
+            .unwrap_or_else(|| truncate_display_width(&values[1], right_width.max(1)));
         return format!("{left}{TOP_BAR_SEPARATOR}{right}");
     }
     truncate_display_width(&joined, width)
@@ -731,7 +769,14 @@ fn styled_top_bar_field(kind: TopBarFieldKind, text: &str) -> Vec<Span<'static>>
         return vec![Span::styled(text.to_string(), Style::default().fg(base))];
     };
     let prefix = &text[..progress_start];
-    let progress = &text[progress_start..];
+    let progress_and_suffix = &text[progress_start..];
+    let progress_end = progress_and_suffix
+        .char_indices()
+        .find(|(_, character)| !matches!(character, '▰' | '▱'))
+        .map(|(index, _)| index)
+        .unwrap_or(progress_and_suffix.len());
+    let progress = &progress_and_suffix[..progress_end];
+    let suffix = &progress_and_suffix[progress_end..];
     let filled_len = progress
         .chars()
         .take_while(|character| *character == '▰')
@@ -751,6 +796,7 @@ fn styled_top_bar_field(kind: TopBarFieldKind, text: &str) -> Vec<Span<'static>>
             progress[filled_bytes..].to_string(),
             Style::default().fg(Color::Rgb(50, 50, 60)),
         ),
+        Span::styled(suffix.to_string(), Style::default().fg(base).bold()),
     ]
 }
 
@@ -771,8 +817,35 @@ fn credit_status_color(text: &str) -> Color {
             Color::Rgb(100, 200, 100)
         }
     } else {
-        Color::Rgb(140, 180, 255)
+        let filled = text.chars().filter(|character| *character == '▰').count();
+        let empty = text.chars().filter(|character| *character == '▱').count();
+        if filled + empty == 0 {
+            Color::Rgb(140, 180, 255)
+        } else {
+            let remaining_percent = filled * 100 / (filled + empty);
+            if remaining_percent <= 20 {
+                Color::Rgb(255, 100, 100)
+            } else if remaining_percent <= 50 {
+                Color::Rgb(255, 200, 100)
+            } else {
+                Color::Rgb(100, 200, 100)
+            }
+        }
     }
+}
+
+pub(crate) fn top_bar_clipboard_rect(lines: &[Line<'static>], area: Rect) -> Option<Rect> {
+    lines.iter().enumerate().find_map(|(line_index, line)| {
+        let text = line_text(line);
+        let byte = text.find('📋')?;
+        let x_offset = text[..byte].width() as u16;
+        Some(Rect::new(
+            area.x.saturating_add(x_offset),
+            area.y.saturating_add(line_index as u16),
+            UnicodeWidthChar::width('📋').unwrap_or(1) as u16,
+            1,
+        ))
+    })
 }
 
 /// Convert the existing info-widget snapshot into a safe active-session context.
@@ -948,6 +1021,38 @@ mod tests {
             assert_ne!(state.status, ProviderCreditStatus::Known);
             assert_ne!(state.primary_summary.as_deref(), Some("0% left"));
         }
+    }
+
+    #[test]
+    fn subscription_credit_uses_a_percentage_bar_with_glyph_only_fallback() {
+        let usage = UsageInfo {
+            provider: UsageProvider::OpenAI,
+            primary_limit_label: Some("7-day".to_string()),
+            five_hour: 0.34,
+            available: true,
+            ..Default::default()
+        };
+        let credit =
+            ProviderCreditState::from_usage_info("OpenAI", Some(&usage), false, false, false);
+        let field = TopBarContext::new("dolphin", credit)
+            .fields()
+            .into_iter()
+            .find(|field| field.kind == TopBarFieldKind::Credit)
+            .expect("credit field");
+        let full = line_text(&field.full);
+        let compact = line_text(field.compact.as_ref().expect("compact credit"));
+
+        assert_eq!(full, "OpenAI 7-day ▰▰▰▰▰▰▰▱▱▱ 66% left");
+        assert_eq!(compact, "▰▰▰▰▱▱");
+
+        let context = TopBarContext::new(
+            "dolphin",
+            ProviderCreditState::from_usage_info("OpenAI", Some(&usage), false, false, false),
+        );
+        let constrained = select_top_bar_layout(Some(&context), true, 40, 20, 8);
+        let rendered = constrained.lines.iter().map(line_text).collect::<String>();
+        assert!(rendered.contains("▰▰▰▰▱▱"), "rendered: {rendered:?}");
+        assert!(!rendered.contains("% left"), "rendered: {rendered:?}");
     }
 
     #[test]
