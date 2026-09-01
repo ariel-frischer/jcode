@@ -53,7 +53,7 @@ phases:
           - "Run the focused tests and observe expected missing-behavior failures."
       - id: "T004"
         title: "Add failing remote Alt+q state-machine tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-003"
