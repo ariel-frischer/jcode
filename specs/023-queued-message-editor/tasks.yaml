@@ -487,8 +487,7 @@ phases:
             - "Existing SDK behavior remains unchanged when the capability is absent."
         - id: "T037"
           title: "Run explicit read-only Go SDK compatibility validation"
-          status: "Blocked"
-          blocked_reason: 'Read-only validation against /home/ari/repos/jcode-go dev failed: Go protocol inventory lacks queued_message_editor request and queued_message_editor_result event. Update and validate jcode-go in its owning repository, then rerun this task.'
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-006"
@@ -524,8 +523,7 @@ phases:
             - "Displayed keys and semantics agree exactly with README and implemented Crossterm handling."
         - id: "T040"
           title: "Complete SDK, documentation, and requirement-traceability review"
-          status: "Blocked"
-          blocked_reason: 'Blocked by required dependency T037: the explicit jcode-go dev checkout does not yet expose queued_message_editor requests or queued_message_editor_result events. README and in-product help are complete, but the cross-surface SDK/documentation traceability review cannot pass until the owning Go SDK repository is updated and revalidated.'
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-006"

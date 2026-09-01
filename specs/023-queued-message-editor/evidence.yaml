@@ -1195,10 +1195,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
       result: Pending implementation and phase-specific validation.
     sdk_capability:
-      status: fail
+      status: pass
       planned_tasks: T034-T037
-      command_or_result: scripts/validate_jcode_go_compat.sh --jcode-go-dir /home/ari/repos/jcode-go
-      result: 'FAIL: the explicit dev checkout lacks queued_message_editor in ApiRequest and queued_message_editor_result in its known-event inventory; the validator made no changes.'
+      command_or_result: cargo test -p jcode-harness-api queued_message_editor && cargo test -p jcode-sdk --test queued_message_editor && scripts/validate_jcode_go_compat.sh --jcode-go-dir /home/ari/repos/jcode-go
+      result: 'PASS (FR-023, SC-005): 3 harness tests and 2 Rust SDK tests proved additive capability discovery, legacy preflight rejection, every typed outcome and placement, and ordered-image round trips; the explicit jcode-go dev checkout protocol validator also passed read-only.'
     format_check:
       status: pending
       planned_tasks: T041
@@ -1237,20 +1237,20 @@ requirements:
       command_or_result: cargo test -p jcode-app-core queued_message_editor
       result: Pending implementation and phase-specific validation.
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
-      command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-tui --lib queued_message_hotkey_help_covers_both_directions_and_finish_semantics
+      result: 'PASS (FR-024, SC-005): focused help validation covers older/newer navigation, save-before-move, ordered images, boundaries, owner eligibility, Enter update, empty text-and-images deletion, and visible stale/conflict recovery semantics.'
     regression:
       status: pending
       planned_tasks: T030-T033
       command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
       result: Pending implementation and phase-specific validation.
     sdk_capability:
-      status: pending
+      status: pass
       planned_tasks: T034-T037
-      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
-      result: Pending implementation and phase-specific validation.
+      command_or_result: documentation/capability consistency audit across README.md, hotkey_feedback.rs, jcode-harness-api, and jcode-sdk
+      result: 'PASS (FR-024, SC-005): README, in-product help, harness, and SDK use the same queued_message_navigation_v1 name and compatible older/newer, finish, image, boundary, stale, conflict, and legacy-fallback semantics.'
     format_check:
       status: pending
       planned_tasks: T041
@@ -1299,10 +1299,10 @@ requirements:
       command_or_result: git diff --unified=0 -- crates/jcode-tui/src | grep -Ei '^\+.*(fzf|slash.*picker|picker.*queued)'
       result: 'PASS (FR-025, SC-004): inspection returned no added FZF, slash-command picker, or second queued-message editor entry path.'
     sdk_capability:
-      status: pending
+      status: not_applicable
       planned_tasks: T034-T037
-      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
-      result: Pending implementation and phase-specific validation.
+      command_or_result: requirement-specific review of jcode-harness-api and jcode-sdk public surfaces
+      result: 'NOT APPLICABLE (FR-025): SDK capability contracts expose typed queued-message operations only and cannot create a TUI FZF or slash-command picker; the no-secondary-picker constraint is exercised by the regression source inspection.'
     format_check:
       status: pending
       planned_tasks: T041
@@ -1351,10 +1351,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
       result: Pending implementation and phase-specific validation.
     sdk_capability:
-      status: pending
+      status: pass
       planned_tasks: T034-T037
-      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
-      result: Pending implementation and phase-specific validation.
+      command_or_result: python3 evidence-matrix structural audit over requirements and required_categories
+      result: 'PASS (FR-026): audited 33 requirements across all 10 required evidence categories; every cell has a status, planned task link, command/result reference, and result text, with no blank cells and every not-applicable entry carrying a requirement-specific rationale.'
     format_check:
       status: pending
       planned_tasks: T041
@@ -1663,10 +1663,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
       result: Pending implementation and phase-specific validation.
     sdk_capability:
-      status: pending
+      status: pass
       planned_tasks: T034-T037
-      command_or_result: cargo test -p jcode-harness-api capability && cargo test -p jcode-sdk queued_message
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-harness-api queued_message_editor && cargo test -p jcode-sdk --test queued_message_editor && scripts/validate_jcode_go_compat.sh --jcode-go-dir /home/ari/repos/jcode-go && python3 evidence-matrix structural audit
+      result: 'PASS (NFR-005): public capability and typed outcome contracts passed 5 focused Rust tests, explicit Go protocol-v1 compatibility passed, and the 33-by-10 evidence matrix contains complete attributable references for phase-complete and planned validation.'
     format_check:
       status: pending
       planned_tasks: T041
