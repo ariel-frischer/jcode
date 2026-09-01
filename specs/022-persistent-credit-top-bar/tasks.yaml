@@ -170,7 +170,7 @@ phases:
       tasks:
         - id: "T012"
           title: "Add failing active-session identity, credit-state, refresh, and privacy regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"
@@ -183,7 +183,7 @@ phases:
             - "Tests prove credit and identity updates do not append or alter provider-visible transcript messages and do not require user entry of source data."
         - id: "T013"
           title: "Implement current TopBarContext derivation from existing session, header, auth, reasoning, and usage data"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -197,7 +197,7 @@ phases:
             - "The T012 identity, credit, and privacy tests pass."
         - id: "T014"
           title: "Refresh top-bar-visible identity and credit state from existing update events"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"

@@ -188,6 +188,115 @@ fn app_top_bar_context_reuses_existing_session_sources() {
 }
 
 #[test]
+fn top_bar_context_preserves_pending_and_stale_credit_semantics() {
+    let data = crate::tui::info_widget::InfoWidgetData {
+        provider_name: Some("anthropic".to_string()),
+        model: Some("claude-sonnet-4".to_string()),
+        usage_info: Some(crate::tui::info_widget::UsageInfo {
+            provider: crate::tui::info_widget::UsageProvider::Anthropic,
+            primary_limit_label: Some("5-hour".to_string()),
+            five_hour: 0.42,
+            available: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let stale = crate::tui::ui_top_bar::context_from_info_widget_data_with_state(
+        Some("dolphin"),
+        &data,
+        true,
+        false,
+    )
+    .expect("stale usage should retain session identity");
+    assert_eq!(
+        stale.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Stale
+    );
+    assert!(stale.credit.summary().is_some());
+
+    let pending = crate::tui::ui_top_bar::context_from_info_widget_data_with_state(
+        Some("dolphin"),
+        &data,
+        false,
+        true,
+    )
+    .expect("pending usage should retain session identity");
+    assert_eq!(
+        pending.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Pending
+    );
+    assert_eq!(pending.credit.summary().as_deref(), Some("pending"));
+}
+
+#[test]
+fn top_bar_usage_refresh_is_pending_without_mutating_provider_messages() {
+    let mut app = create_test_app();
+    let provider_messages_before = app.materialized_provider_messages();
+
+    app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+        results: Vec::new(),
+        completed: 0,
+        total: 1,
+        done: false,
+        from_cache: false,
+    });
+
+    let context = crate::tui::TuiState::top_bar_context(&app)
+        .expect("active session should retain a top-bar context while refreshing");
+    assert_eq!(
+        context.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Pending
+    );
+    assert_eq!(
+        app.materialized_provider_messages().len(),
+        provider_messages_before.len(),
+        "usage refresh must not append provider-visible transcript content"
+    );
+
+    app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+        results: Vec::new(),
+        completed: 1,
+        total: 1,
+        done: true,
+        from_cache: false,
+    });
+    let settled = crate::tui::TuiState::top_bar_context(&app)
+        .expect("active session should retain a top-bar context after refresh");
+    assert_ne!(
+        settled.credit.status,
+        crate::tui::ui_top_bar::ProviderCreditStatus::Pending
+    );
+}
+
+#[test]
+fn top_bar_context_refreshes_remote_provider_model_and_reasoning_sources() {
+    let mut app = crate::tui::app::App::new_for_remote(Some(
+        "session_dolphin_1234567890".to_string(),
+    ));
+    app.remote_provider_name = Some("OpenAI".to_string());
+    app.remote_provider_model = Some("gpt-5.4".to_string());
+    app.remote_reasoning_effort = Some("low".to_string());
+
+    let first = crate::tui::TuiState::top_bar_context(&app).expect("remote context");
+    assert_eq!(first.session_label, "dolphin");
+    assert_eq!(first.provider_label.as_deref(), Some("OpenAI"));
+    assert_eq!(first.model_label.as_deref(), Some("GPT-5.4"));
+    assert_eq!(first.reasoning_label.as_deref(), Some("low"));
+
+    app.remote_provider_name = Some("Anthropic".to_string());
+    app.remote_provider_model = Some("claude-sonnet-4".to_string());
+    app.remote_reasoning_effort = Some("high".to_string());
+
+    let updated = crate::tui::TuiState::top_bar_context(&app).expect("updated remote context");
+    assert_eq!(updated.provider_label.as_deref(), Some("Anthropic"));
+    assert_eq!(updated.model_label.as_deref(), Some("Claude 4 Sonnet"));
+    assert_eq!(updated.reasoning_label.as_deref(), Some("high"));
+    assert_ne!(updated.provider_label, first.provider_label);
+    assert_ne!(updated.model_label, first.model_label);
+}
+
+#[test]
 fn test_usage_with_suffix_does_not_open_picker_preview() {
     let mut app = create_test_app();
 

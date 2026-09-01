@@ -68,6 +68,7 @@ pub mod terminal_setup;
 pub mod test_harness;
 pub mod theme_detect;
 mod ui;
+pub(crate) use ui::header::top_bar_model_display_name;
 mod ui_diff;
 pub(crate) mod ui_top_bar;
 pub use ui_top_bar::TopBarContext;

@@ -82,12 +82,16 @@ impl ProviderCreditState {
         usage_display_used: bool,
     ) -> Self {
         let provider = provider.as_ref();
+        // A refresh in flight must win over the last flattened snapshot. The
+        // info widget can legitimately retain an available value while a
+        // provider report is being refreshed, but the top bar must not present
+        // that value as settled until the refresh completes.
+        if pending {
+            return Self::pending(provider);
+        }
+
         let Some(usage) = usage else {
-            return if pending {
-                Self::pending(provider)
-            } else {
-                Self::not_applicable(provider)
-            };
+            return Self::not_applicable(provider);
         };
 
         if !usage.available {
@@ -427,19 +431,33 @@ pub(crate) fn context_from_info_widget_data(
     session_label: Option<&str>,
     data: &InfoWidgetData,
 ) -> Option<TopBarContext> {
+    context_from_info_widget_data_with_state(session_label, data, false, false)
+}
+
+/// Convert the existing info-widget snapshot while preserving the caller's
+/// non-blocking freshness state.
+pub(crate) fn context_from_info_widget_data_with_state(
+    session_label: Option<&str>,
+    data: &InfoWidgetData,
+    stale: bool,
+    pending: bool,
+) -> Option<TopBarContext> {
     let session_label = session_label.filter(|label| !label.trim().is_empty())?;
     let provider = data.provider_name.as_deref().unwrap_or("provider");
     let credit = ProviderCreditState::from_usage_info(
         provider,
         data.usage_info.as_ref(),
-        false,
-        false,
+        stale,
+        pending,
         data.usage_display_used,
     );
-    let mut context = TopBarContext::new(session_label, credit)
-        .with_provider_label(provider)
-        .with_model_label(data.model.as_deref().unwrap_or_default())
-        .with_auth_method(data.auth_method);
+    let mut context = TopBarContext::new(session_label, credit).with_auth_method(data.auth_method);
+    if let Some(provider) = data.provider_name.as_deref() {
+        context = context.with_provider_label(provider);
+    }
+    if let Some(model) = data.model.as_deref() {
+        context = context.with_model_label(model);
+    }
     if let Some(reasoning) = data.reasoning_effort.as_deref() {
         context = context.with_reasoning_label(reasoning);
     }

@@ -244,6 +244,13 @@ fn header_model_display_name(model: &str, provider_name: &str) -> String {
     }
 }
 
+/// Model display name shared by persistent top-bar context and the header.
+/// This is formatting only and does not inspect credentials or perform I/O.
+pub(crate) fn top_bar_model_display_name(model: &str, provider_name: &str) -> Option<String> {
+    let model = model.trim();
+    (!model.is_empty()).then(|| header_model_display_name(model, provider_name))
+}
+
 /// Extract the version from a Claude model id, e.g. "claude-opus-4-6" -> "4.6",
 /// "claude-3-5-sonnet-latest" -> "3.5", "claude-haiku-4.5" -> "4.5". Snapshot
 /// dates (6+ digit runs) are ignored.

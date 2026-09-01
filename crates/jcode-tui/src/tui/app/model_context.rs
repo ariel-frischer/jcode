@@ -1140,6 +1140,8 @@ impl App {
     }
 
     pub(super) fn handle_usage_report(&mut self, results: Vec<crate::usage::ProviderUsage>) {
+        // `top_bar_context` reads this display-only signal on the next frame;
+        // usage reports never become provider-visible transcript messages.
         self.usage_report_refreshing = false;
         self.clear_usage_transient_ui();
         self.upsert_usage_display_card(Self::format_usage_display_card(
@@ -1160,6 +1162,9 @@ impl App {
         &mut self,
         progress: crate::usage::ProviderUsageProgress,
     ) {
+        // Keep the top-bar credit state pending until the final provider
+        // result lands. The inline usage card remains the only transient UI
+        // updated by these progress events.
         self.usage_report_refreshing = !progress.done;
         self.clear_usage_transient_ui();
         self.upsert_usage_display_card(Self::format_usage_display_card(
