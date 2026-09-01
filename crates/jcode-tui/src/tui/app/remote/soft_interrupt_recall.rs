@@ -57,6 +57,13 @@ impl SoftInterruptRecallState {
         }
     }
 
+    fn pending_operation_id(&self) -> Option<&str> {
+        match &self.status {
+            RecallStatus::Pending { operation_id } => Some(operation_id),
+            RecallStatus::Idle | RecallStatus::Ready { .. } => None,
+        }
+    }
+
     #[cfg(test)]
     pub(super) fn is_pending(&self) -> bool {
         matches!(self.status, RecallStatus::Pending { .. })
@@ -128,6 +135,26 @@ impl SoftInterruptRecallState {
         self.completed_operation_id = Some(operation_id.to_string());
         self.status = RecallStatus::Idle;
     }
+}
+
+/// Retry an unresolved operation after the transport reconnects. The stable
+/// operation identity lets the server replay the first result rather than
+/// removing another queued message when the original response was lost.
+pub(in crate::tui::app) async fn retry_pending_after_reconnect(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+) -> anyhow::Result<bool> {
+    let Some(operation_id) = app
+        .remote_soft_interrupt_recall
+        .pending_operation_id()
+        .map(str::to_owned)
+    else {
+        return Ok(false);
+    };
+
+    remote.recall_soft_interrupt(&operation_id).await?;
+    app.set_status_notice("Retrying queued message recall...");
+    Ok(true)
 }
 
 fn composer_is_empty(app: &App) -> bool {

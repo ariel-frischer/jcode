@@ -50,6 +50,8 @@ use session_persistence::{
     persist_swarm_status_snapshot,
 };
 pub(super) use soft_interrupt_recall::SoftInterruptRecallState;
+#[cfg(test)]
+pub(super) use soft_interrupt_recall::retry_pending_after_reconnect;
 use workspace::{handle_workspace_command, handle_workspace_navigation_key};
 
 // Re-export the remote input dispatch helpers for sibling modules/tests that go

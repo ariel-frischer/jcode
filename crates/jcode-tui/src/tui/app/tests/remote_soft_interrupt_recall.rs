@@ -186,6 +186,69 @@ fn remote_soft_interrupt_recall_failed_stale_and_disconnect_preserve_state() {
 }
 
 #[test]
+fn remote_soft_interrupt_recall_response_loss_retries_same_operation_and_applies_once() {
+    use tokio::io::AsyncBufReadExt;
+
+    let mut app = create_test_app();
+    app.pending_soft_interrupts = vec!["server pending".to_string()];
+    let operation_id = recall_operation_id(remote_alt_q_request(&mut app));
+    let original_pending = app.pending_soft_interrupts.clone();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+
+    rt.block_on(async {
+        let mut reconnected = crate::tui::backend::RemoteConnection::dummy();
+        let peer = reconnected
+            .take_dummy_peer()
+            .expect("dummy remote should retain peer stream");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        assert!(
+            super::remote::retry_pending_after_reconnect(&mut app, &mut reconnected)
+            .await
+            .expect("pending recall should retry after reconnect")
+        );
+
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line))
+            .await
+            .expect("retry should send a recall request")
+            .expect("retry request should be readable by peer");
+        assert_eq!(
+            recall_operation_id(serde_json::from_str(&line).expect("valid retry request")),
+            operation_id
+        );
+    });
+
+    assert_eq!(app.pending_soft_interrupts, original_pending);
+    let message = crate::protocol::RecallableSoftInterrupt {
+        content: "replayed result".to_string(),
+        images: vec![("image/png".to_string(), "cG5n".to_string())],
+    };
+    let event = crate::protocol::ServerEvent::SoftInterruptRecalled {
+        id: 2,
+        operation_id,
+        message: Some(message.clone()),
+    };
+    let mut remote = {
+        let _guard = rt.enter();
+        crate::tui::backend::RemoteConnection::dummy()
+    };
+
+    super::remote::handle_server_event(&mut app, event.clone(), &mut remote);
+    assert_eq!(app.input, message.content);
+    assert_eq!(app.pending_images, message.images);
+    assert!(app.pending_soft_interrupts.is_empty());
+
+    app.input.clear();
+    app.cursor_pos = 0;
+    app.pending_images.clear();
+    super::remote::handle_server_event(&mut app, event, &mut remote);
+    assert!(app.input.is_empty());
+    assert!(app.pending_images.is_empty());
+}
+
+#[test]
 fn remote_soft_interrupt_recall_preserves_immediate_local_queue_recall() {
     let mut app = create_test_app();
     app.queued_messages = vec!["first".to_string(), "second".to_string()];

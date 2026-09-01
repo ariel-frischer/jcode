@@ -169,7 +169,7 @@ phases:
           - "Composer blocking, images, repeated key, unavailable result, and local fallback are exercised where the debug/runtime harness supports them."
       - id: "T012"
         title: "Polish, independently review, integrate, install, and verify live"
-        status: "Pending"
+        status: "InProgress"
         type: "documentation"
         parallel: false
         story_id: "US-004"

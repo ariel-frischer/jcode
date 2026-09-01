@@ -74,3 +74,21 @@ Completed on 2026-09-01 with the coordinated selfdev TUI build and a disposable 
 | Composer blocking | PASS; lowercase Alt+Q with `T011-FAST-OLDER-PRESERVED` still in the composer left the input byte-equivalent |
 
 The PTY debug channel supports text input and key injection but not attaching an image fixture or forcing a transport response-loss result. Exact ordered image restoration, unavailable/stale/duplicate result immutability, and established local fallback are therefore covered by the focused T010 protocol/server/TUI and regression tests rather than duplicated in this runtime probe. Scratch evidence was recorded in `t011-runtime-acceptance.txt` during the run.
+
+## T012 independent review and polish
+
+The first independent static safety review found one landing blocker: the TUI retained a stable pending recall operation across disconnect, but no reconnect path resent it, so the server replay cache was unreachable after response loss. The repair adds a post-connect retry for `Pending` state only, reusing the original operation ID. `Idle` and already-authoritative `Ready` states are not resent, and transport write failures propagate through the existing reconnect error path.
+
+| Check | Result |
+|---|---|
+| Independent full-feature safety review | BLOCKED initially only on unreachable disconnect replay; no separate cross-client, system/background, duplication, image, local Alt+Q, or cancellation blocker reported |
+| Independent repair review | PASS; reconnect retry is reachable, Pending-only, stable-ID, failure-visible, and duplicate-result safe |
+| `cargo test -p jcode-tui --lib tui::app::remote::soft_interrupt_recall::tests::` | PASS, 5 state and wire-request tests |
+| `cargo test -p jcode-tui --lib remote_soft_interrupt_recall_` | PASS, 6 remote Alt+Q tests including response-loss retry |
+| `cargo test -p jcode-app-core --lib recall_` | PASS, 6 authoritative selection, replay, ownership, and requester-routing tests |
+| `cargo check -p jcode-tui` | PASS with the same three unrelated pre-existing TUI warnings recorded under T010 |
+| `cargo fmt --all` and `git diff --check` | PASS |
+
+The deterministic reconnect regression sends an initial operation, simulates response loss, resends through a new transport, asserts the exact same operation identity, preserves local pending tracking until the authoritative result, applies the exact text/images once, and ignores a duplicate result. Server tests separately prove the same operation replay returns the cached result without a second queue removal.
+
+Known bounded residuals are explicit rather than landing blockers: replay is process-local and capped at 64 completed operations per session, so daemon restart or later cache eviction cannot reconcile an arbitrarily old lost response. Local pending-count reconciliation retains the existing content-based bookkeeping because the public recalled payload intentionally contains exact user text/images rather than internal queue metadata; authoritative server ownership and one-message removal remain ID-based.
