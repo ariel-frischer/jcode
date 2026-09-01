@@ -469,6 +469,156 @@ fn queued_editor_result_is_delivered_only_to_verified_requester_and_release_rest
     assert_eq!(restored[1].content, "second");
 }
 
+#[test]
+fn cancellation_keeps_held_editor_records_recoverable_and_remains_idempotent() {
+    let session_id = format!("queued-editor-cancel-{:032x}", rand::random::<u128>());
+    let message = |content: &str,
+                   source: SoftInterruptSource,
+                   message_id: Option<&str>,
+                   owner: Option<&str>,
+                   sequence: u64| jcode_agent_runtime::SoftInterruptMessage {
+        content: content.to_string(),
+        images: vec![("image/png".to_string(), format!("{content}-image"))],
+        urgent: false,
+        source,
+        message_id: message_id.map(str::to_string),
+        owner_client_instance_id: owner.map(str::to_string),
+        enqueue_sequence: Some(sequence),
+    };
+    let queue = Arc::new(std::sync::Mutex::new(vec![
+        message(
+            "owned-user",
+            SoftInterruptSource::User,
+            Some("owned-user-id"),
+            Some("editor-owner"),
+            1,
+        ),
+        message(
+            "other-user",
+            SoftInterruptSource::User,
+            Some("other-user-id"),
+            Some("other-owner"),
+            2,
+        ),
+        message("legacy-user", SoftInterruptSource::User, None, None, 3),
+        message(
+            "system",
+            SoftInterruptSource::System,
+            Some("system-id"),
+            Some("editor-owner"),
+            4,
+        ),
+        message(
+            "background",
+            SoftInterruptSource::BackgroundTask,
+            Some("background-id"),
+            Some("editor-owner"),
+            5,
+        ),
+    ]));
+    let control = SessionControlHandle::new(
+        session_id,
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+
+    let started = control
+        .queued_message_editor(
+            "editor-owner",
+            "cancel-navigation",
+            "cancel-start",
+            crate::protocol::QueuedMessageEditorOperation::Start,
+        )
+        .expect("start owner editor");
+    assert_eq!(
+        started
+            .selection
+            .as_ref()
+            .map(|selection| selection.message_id.as_str()),
+        Some("owned-user-id")
+    );
+    assert_eq!(queue.lock().expect("queue lock").len(), 4);
+
+    assert!(control.clear_soft_interrupts());
+    assert!(control.clear_soft_interrupts());
+    assert!(queue.lock().expect("queue lock").is_empty());
+
+    assert!(
+        control
+            .queued_message_editor(
+                "other-owner",
+                "cancel-navigation",
+                "foreign-release",
+                crate::protocol::QueuedMessageEditorOperation::Release,
+            )
+            .is_err()
+    );
+    assert!(queue.lock().expect("queue lock").is_empty());
+
+    let released = control
+        .queued_message_editor(
+            "editor-owner",
+            "cancel-navigation",
+            "owner-release",
+            crate::protocol::QueuedMessageEditorOperation::Release,
+        )
+        .expect("release owner editor");
+    assert_eq!(
+        released.outcome,
+        crate::protocol::QueuedMessageEditorOutcome::Released
+    );
+    let restored = queue.lock().expect("queue lock");
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].message_id.as_deref(), Some("owned-user-id"));
+    assert_eq!(restored[0].content, "owned-user");
+    assert_eq!(restored[0].images[0].1, "owned-user-image");
+}
+
+#[test]
+fn legacy_recall_remains_available_without_starting_an_editor_session() {
+    let session_id = format!("queued-editor-legacy-{:032x}", rand::random::<u128>());
+    let queue = Arc::new(std::sync::Mutex::new(vec![
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "older".to_string(),
+            images: Vec::new(),
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("legacy-older".to_string()),
+            owner_client_instance_id: Some("legacy-client".to_string()),
+            enqueue_sequence: Some(1),
+        },
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "newest".to_string(),
+            images: vec![("image/png".to_string(), "newest-image".to_string())],
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("legacy-newest".to_string()),
+            owner_client_instance_id: Some("legacy-client".to_string()),
+            enqueue_sequence: Some(2),
+        },
+    ]));
+    let control = SessionControlHandle::new(
+        session_id,
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+
+    let recalled = control
+        .recall_soft_interrupt("legacy-client", "legacy-recall-operation")
+        .expect("legacy recall result");
+    assert_eq!(recalled.content, "newest");
+    assert_eq!(recalled.images[0].1, "newest-image");
+    assert_eq!(queue.lock().expect("queue lock")[0].content, "older");
+
+    let replay = control
+        .recall_soft_interrupt("legacy-client", "legacy-recall-operation")
+        .expect("legacy recall replay");
+    assert_eq!(replay, recalled);
+    assert_eq!(queue.lock().expect("queue lock").len(), 1);
+}
+
 #[tokio::test]
 async fn refreshed_session_control_handle_does_not_wait_for_busy_agent_lock() {
     let provider: Arc<dyn Provider> = Arc::new(PanicOnForkProvider {

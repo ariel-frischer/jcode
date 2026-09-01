@@ -397,7 +397,7 @@ phases:
       tasks:
         - id: "T030"
           title: "Add focused one-shot Alt+Q, Enter, history, and capability-fallback regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -409,7 +409,7 @@ phases:
             - "A newer TUI against a peer without queued_message_navigation_v1 uses only legacy one-shot recall and never sends editor operations."
         - id: "T031"
           title: "Add CancelSoftInterrupts and mixed-entry compatibility regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-005"
@@ -421,7 +421,7 @@ phases:
             - "An older client against a navigation-capable server retains legacy recall and queue behavior."
         - id: "T032"
           title: "Preserve capability-gated legacy backend behavior"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-005"
@@ -433,7 +433,7 @@ phases:
             - "Capability state changes or reconnects cannot silently switch or corrupt an active recoverable draft."
         - id: "T033"
           title: "Pass the complete legacy and excluded-entry regression matrix"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-005"

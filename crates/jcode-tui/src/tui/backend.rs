@@ -238,6 +238,7 @@ pub struct RemoteConnection {
     _dummy_peer: Option<Stream>,
     session_id: Option<String>,
     client_instance_id: Option<String>,
+    queued_message_navigation_supported: bool,
     next_request_id: u64,
     tool_diff: RemoteDiffTracker,
     /// Bytes pulled from the socket that have not yet been split into complete
@@ -260,6 +261,7 @@ pub struct RemoteConnection {
 }
 
 const DETACHED_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+pub const QUEUED_MESSAGE_NAVIGATION_CAPABILITY: &str = "queued_message_navigation_v1";
 const MAX_STRAY_REMOTE_PROTOCOL_LINES: usize = 32;
 /// Hard cap for one newline-delimited server event. History events can be large
 /// because they may contain images, but an authenticated or compromised peer
@@ -335,6 +337,7 @@ impl RemoteConnection {
             _dummy_peer: None,
             session_id: None,
             client_instance_id: client_instance_id.map(str::to_string),
+            queued_message_navigation_supported: false,
             next_request_id: 1,
             tool_diff: RemoteDiffTracker::default(),
             read_buffer: Vec::new(),
@@ -956,6 +959,11 @@ impl RemoteConnection {
         operation_id: &str,
         operation: crate::protocol::QueuedMessageEditorOperation,
     ) -> Result<u64> {
+        if !self.queued_message_navigation_supported {
+            anyhow::bail!(
+                "server does not advertise {QUEUED_MESSAGE_NAVIGATION_CAPABILITY}; queued message editor request was not sent"
+            );
+        }
         let id = self.next_request_id;
         self.next_request_id += 1;
         self.send_request(Request::QueuedMessageEditor {
@@ -1336,6 +1344,7 @@ impl RemoteConnection {
             _dummy_peer: Some(b),
             session_id: None,
             client_instance_id: None,
+            queued_message_navigation_supported: false,
             next_request_id: 1,
             tool_diff: RemoteDiffTracker::default(),
             read_buffer: Vec::new(),
@@ -1356,6 +1365,16 @@ impl RemoteConnection {
     #[cfg(test)]
     pub(crate) fn next_request_id_for_test(&self) -> u64 {
         self.next_request_id
+    }
+
+    /// Replace the server-advertised capability snapshot for this connection.
+    ///
+    /// Reconnects start fail-closed. A capable server must advertise the token
+    /// again before any queued-message editor operation can leave the client.
+    pub fn apply_server_capabilities(&mut self, capabilities: &[String]) {
+        self.queued_message_navigation_supported = capabilities
+            .iter()
+            .any(|capability| capability == QUEUED_MESSAGE_NAVIGATION_CAPABILITY);
     }
 
     /// Set session ID

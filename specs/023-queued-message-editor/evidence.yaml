@@ -982,10 +982,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui queued_message_editor
       result: Pending implementation and phase-specific validation.
     regression:
-      status: pending
+      status: pass
       planned_tasks: T030-T033
-      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-app-core --lib cancellation_keeps_held_editor_records_recoverable_and_remains_idempotent
+      result: 'PASS (FR-019, SC-004): cancellation stayed idempotent, held editor records remained recoverable, and cross-owner release was rejected without mutation.'
     sdk_capability:
       status: pending
       planned_tasks: T034-T037
@@ -1034,10 +1034,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui queued_message_editor
       result: Pending implementation and phase-specific validation.
     regression:
-      status: pending
+      status: pass
       planned_tasks: T030-T033
-      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-tui --lib queued_editor && cargo test -p jcode-tui --lib legacy_alt_q
+      result: 'PASS (FR-020, SC-004): traversal created no premature history entry; ordinary Enter committed once and empty deletion added no history entry.'
     sdk_capability:
       status: pending
       planned_tasks: T034-T037
@@ -1294,10 +1294,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui queued_message_editor
       result: Pending implementation and phase-specific validation.
     regression:
-      status: pending
+      status: pass
       planned_tasks: T030-T033
-      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
-      result: Pending implementation and phase-specific validation.
+      command_or_result: git diff --unified=0 -- crates/jcode-tui/src | grep -Ei '^\+.*(fzf|slash.*picker|picker.*queued)'
+      result: 'PASS (FR-025, SC-004): inspection returned no added FZF, slash-command picker, or second queued-message editor entry path.'
     sdk_capability:
       status: pending
       planned_tasks: T034-T037
@@ -1710,10 +1710,10 @@ requirements:
       command_or_result: cargo test -p jcode-tui queued_message_editor
       result: Pending implementation and phase-specific validation.
     regression:
-      status: pending
+      status: pass
       planned_tasks: T030-T033
-      command_or_result: cargo test -p jcode-tui remote_soft_interrupt_recall && cargo test -p jcode-app-core soft_interrupt_recall
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-tui --lib remote_soft_interrupt_recall && cargo test -p jcode-app-core --lib legacy_recall_remains_available_without_starting_an_editor_session
+      result: 'PASS (NFR-006, SC-004): legacy RecallSoftInterrupt remained newest-first and replay-safe; unsupported editor requests stayed client-side and legacy queue behavior remained intact.'
     sdk_capability:
       status: pending
       planned_tasks: T034-T037

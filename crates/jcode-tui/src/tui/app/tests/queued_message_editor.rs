@@ -199,6 +199,67 @@ fn queue_local_draft(app: &mut App, content: &str, images: Vec<(String, String)>
 }
 
 #[test]
+fn legacy_alt_q_entry_still_selects_newest_and_enter_keeps_history_policy() {
+    let mut app = create_test_app();
+    queue_local_draft(&mut app, "older", Vec::new());
+    queue_local_draft(&mut app, "newest", Vec::new());
+    let history_before_recall = app.persisted_prompt_history.clone().unwrap_or_default();
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("legacy Alt+q entry");
+
+    assert_eq!(app.input, "newest");
+    assert!(app.queued_messages.is_empty());
+    assert_eq!(
+        app.persisted_prompt_history.as_deref().unwrap_or_default(),
+        history_before_recall
+    );
+
+    app.input = "newest edited".to_string();
+    app.cursor_pos = app.input.len();
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .expect("commit recalled draft");
+
+    assert_eq!(app.queued_messages, ["older", "newest edited"]);
+    let history_after_commit = app.persisted_prompt_history.as_deref().unwrap_or_default();
+    assert_eq!(history_after_commit.len(), history_before_recall.len() + 1);
+    assert_eq!(history_after_commit.last().map(String::as_str), Some("newest edited"));
+}
+
+#[test]
+fn legacy_remote_alt_q_fallback_sends_recall_instead_of_editor_operation() {
+    use tokio::io::AsyncBufReadExt;
+
+    let mut app = create_test_app();
+    app.pending_soft_interrupts = vec!["server pending".to_string()];
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+    runtime.block_on(async {
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        let peer = remote.take_dummy_peer().expect("dummy peer");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        app.handle_remote_key(KeyCode::Char('q'), KeyModifiers::ALT, &mut remote)
+            .await
+            .expect("legacy Alt+q fallback");
+
+        let mut line = String::new();
+        reader.read_line(&mut line).await.expect("read request");
+        let request: crate::protocol::Request =
+            serde_json::from_str(&line).expect("decode request");
+        assert!(matches!(
+            request,
+            crate::protocol::Request::RecallSoftInterrupt { .. }
+        ));
+    });
+
+    assert!(app.input.is_empty());
+    assert_eq!(app.pending_soft_interrupts, ["server pending"]);
+    assert!(!app.remote_queued_message_editor.is_active());
+}
+
+#[test]
 fn local_queued_editor_moves_older_and_newer_while_preserving_saved_images() {
     let mut app = create_test_app();
     let oldest_images = vec![("image/png".to_string(), "oldest-image".to_string())];
@@ -395,6 +456,9 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
         use tokio::io::AsyncBufReadExt;
 
         let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        remote.apply_server_capabilities(&[
+            crate::tui::backend::QUEUED_MESSAGE_NAVIGATION_CAPABILITY.to_string(),
+        ]);
         let peer = remote.take_dummy_peer().expect("dummy peer");
         let (reader, _writer) = peer.into_split();
         let mut reader = tokio::io::BufReader::new(reader);
@@ -452,6 +516,9 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
         ));
 
         let mut reconnected = crate::tui::backend::RemoteConnection::dummy();
+        reconnected.apply_server_capabilities(&[
+            crate::tui::backend::QUEUED_MESSAGE_NAVIGATION_CAPABILITY.to_string(),
+        ]);
         let retry_peer = reconnected.take_dummy_peer().expect("retry dummy peer");
         let (retry_reader, _retry_writer) = retry_peer.into_split();
         let mut retry_reader = tokio::io::BufReader::new(retry_reader);
@@ -484,6 +551,42 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
         assert_eq!(app.input, "remote edited draft");
         assert_eq!(app.pending_images, expected_images);
     });
+}
+
+#[test]
+fn unsupported_remote_editor_never_sends_and_preserves_the_recoverable_draft() {
+    let mut app = create_test_app();
+    app.input = "recoverable unsupported draft".to_string();
+    app.cursor_pos = app.input.len();
+    app.pending_images = vec![("image/png".to_string(), "draft-image".to_string())];
+    app.remote_queued_message_editor
+        .activate_for_test("unsupported-navigation", "unsupported-selected");
+    let original_images = app.pending_images.clone();
+
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        remote.apply_server_capabilities(&[
+            crate::tui::backend::QUEUED_MESSAGE_NAVIGATION_CAPABILITY.to_string(),
+        ]);
+        remote.apply_server_capabilities(&[]);
+        let error = super::remote::handle_remote_key(
+            &mut app,
+            KeyCode::Enter,
+            KeyModifiers::empty(),
+            &mut remote,
+        )
+        .await
+        .expect_err("legacy peer must reject editor operation locally");
+
+        assert!(error.to_string().contains("queued_message_navigation_v1"));
+        assert_eq!(remote.next_request_id_for_test(), 1);
+    });
+
+    assert_eq!(app.input, "recoverable unsupported draft");
+    assert_eq!(app.pending_images, original_images);
+    assert!(app.remote_queued_message_editor.is_active());
+    assert!(app.remote_queued_message_editor.has_pending_operation());
 }
 
 #[test]
