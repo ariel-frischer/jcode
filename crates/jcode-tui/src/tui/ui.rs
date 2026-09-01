@@ -80,6 +80,9 @@ mod pinned_ui;
 pub(crate) mod prepare;
 #[path = "ui_smoothness.rs"]
 mod smoothness;
+#[path = "ui_test_state.rs"]
+#[cfg(test)]
+mod test_state;
 #[path = "ui_todo_changes.rs"]
 mod todo_changes;
 #[path = "ui_tools.rs"]
@@ -561,10 +564,10 @@ use status_support::{
 };
 use theme_support::{
     accent_color, activity_indicator, activity_indicator_frame_index, ai_color, ai_text,
-    animated_tool_color, asap_color, blend_color, dim_color, file_link_color, header_icon_color,
-    header_name_color, header_session_color, pending_color, prompt_entry_bg_color,
-    prompt_entry_color, prompt_entry_shimmer_color, queued_color, rainbow_prompt_color,
-    system_message_color, tool_color, user_bg, user_color, user_text,
+    asap_color, blend_color, dim_color, file_link_color, header_icon_color, header_name_color,
+    header_session_color, pending_color, prompt_entry_bg_color, prompt_entry_color,
+    prompt_entry_shimmer_color, queued_color, rainbow_prompt_color, system_message_color,
+    tool_color, user_bg, user_color, user_text,
 };
 
 pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};
@@ -1570,30 +1573,7 @@ pub(crate) fn clear_test_render_state_for_tests() {
 /// The actual reset, run with the render-state lock held.
 #[cfg(test)]
 fn clear_test_render_state_locked() {
-    set_last_max_scroll(0);
-    set_pinned_pane_total_lines(0);
-    set_last_diff_pane_effective_scroll(0);
-    set_last_diff_pane_max_scroll(0);
-    set_last_total_wrapped_lines(0);
-    set_last_resolved_chat_scroll(0);
-    TEST_TAIL_FOLLOW_SNAP_PENDING.with(|cell| cell.set(false));
-    update_user_prompt_positions(&[]);
-    // Flicker events recorded by sibling tests add a "⚠ flicker detected"
-    // notification line to subsequent renders, shifting every layout-sensitive
-    // assertion (click mapping, snapshot rows).
-    frame_metrics::clear_flicker_frame_history_for_tests();
-    TEST_LAST_LAYOUT.with(|snapshot| {
-        *snapshot.borrow_mut() = None;
-    });
-    TEST_LAST_STATUS_AREA.with(|snapshot| {
-        *snapshot.borrow_mut() = None;
-    });
-    set_visible_copy_targets(Vec::new());
-    clear_copy_viewport_snapshot();
-
-    TEST_PROMPT_VIEWPORT_STATE.with(|state| {
-        *state.borrow_mut() = PromptViewportState::default();
-    });
+    test_state::clear();
 }
 
 /// Test-only: render just the onboarding welcome screen into `area`, using the
