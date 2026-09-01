@@ -303,7 +303,7 @@ phases:
       tasks:
         - id: "T021"
           title: "Add failing scroll-anchor, typing, paste, resize, and cursor stability regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -316,7 +316,7 @@ phases:
             - "Repeated resize and paste sequences complete without crashes, lost input, unexpected scroll jumps, or hidden required input controls."
         - id: "T022"
           title: "Add failing pane, scrollbar, overlay, status, inline-UI, and input coexistence regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -329,7 +329,7 @@ phases:
             - "Tests compare enabled and suppressed layouts without changing existing replacement-surface ownership."
         - id: "T023"
           title: "Add failing rapid-update, stale-to-fresh, provider-switch, and malformed-data interaction tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-003"
@@ -342,7 +342,7 @@ phases:
             - "The App and TestBackend remain operable with zero crashes and no blocking render-path work."
         - id: "T024"
           title: "Implement stable scroll geometry and targeted top-bar invalidation"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"

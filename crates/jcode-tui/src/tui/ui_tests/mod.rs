@@ -151,6 +151,7 @@ struct TestState {
     swarm_panel_selected: usize,
     swarm_panel_focused: bool,
     swarm_panel_full_page: bool,
+    side_panel: crate::side_panel::SidePanelSnapshot,
     top_bar_enabled: bool,
 }
 
@@ -435,9 +436,7 @@ impl crate::tui::TuiState for TestState {
         false
     }
     fn side_panel(&self) -> &crate::side_panel::SidePanelSnapshot {
-        static EMPTY: std::sync::LazyLock<crate::side_panel::SidePanelSnapshot> =
-            std::sync::LazyLock::new(crate::side_panel::SidePanelSnapshot::default);
-        &EMPTY
+        &self.side_panel
     }
     fn pin_images(&self) -> bool {
         self.pin_images
@@ -542,5 +541,7 @@ mod swarm_buffer;
 mod tools;
 #[path = "top_bar.rs"]
 mod top_bar;
+#[path = "top_bar_interaction.rs"]
+mod top_bar_interaction;
 #[path = "websearch_tools.rs"]
 mod websearch_tools;

@@ -297,6 +297,60 @@ fn top_bar_context_refreshes_remote_provider_model_and_reasoning_sources() {
 }
 
 #[test]
+fn top_bar_rapid_usage_refreshes_keep_scrollback_and_draft_stable() {
+    let _render_lock = scroll_render_test_lock();
+    crate::tui::ui::clear_test_render_state_for_tests();
+
+    let (mut app, mut terminal) = create_scroll_test_app(100, 24, 0, 70);
+    app.auto_scroll_paused = true;
+    app.scroll_offset = 3;
+    app.input = "keep this draft\nwith its cursor".to_string();
+    app.cursor_pos = "keep this draft\nwith its ".len();
+    let input_before = app.input.clone();
+    let cursor_before = app.cursor_pos;
+    render_and_snap(&app, &mut terminal);
+    let scroll_before = crate::tui::ui::last_resolved_chat_scroll();
+    let provider_messages_before = app.materialized_provider_messages().len();
+
+    for completed in 0..4 {
+        app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+            results: Vec::new(),
+            completed,
+            total: 4,
+            done: false,
+            from_cache: completed > 0,
+        });
+        render_and_snap(&app, &mut terminal);
+        assert_eq!(app.input, input_before);
+        assert_eq!(app.cursor_pos, cursor_before);
+        assert!(app.auto_scroll_paused);
+        assert_eq!(crate::tui::ui::last_resolved_chat_scroll(), scroll_before);
+        assert_eq!(
+            app.materialized_provider_messages().len(),
+            provider_messages_before,
+            "usage progress must not become provider-visible transcript content"
+        );
+    }
+
+    app.handle_usage_report_progress(crate::usage::ProviderUsageProgress {
+        results: Vec::new(),
+        completed: 4,
+        total: 4,
+        done: true,
+        from_cache: false,
+    });
+    render_and_snap(&app, &mut terminal);
+    assert_eq!(app.input, input_before);
+    assert_eq!(app.cursor_pos, cursor_before);
+    assert_eq!(crate::tui::ui::last_resolved_chat_scroll(), scroll_before);
+    assert_eq!(
+        app.materialized_provider_messages().len(),
+        provider_messages_before,
+        "completed usage refresh must not append a provider message"
+    );
+}
+
+#[test]
 fn test_usage_with_suffix_does_not_open_picker_preview() {
     let mut app = create_test_app();
 

@@ -2730,6 +2730,31 @@ pub fn draw(frame: &mut Frame, app: &dyn TuiState) {
     // is reclaimed even when no image widget renders again.
     crate::tui::mermaid::render_pending_terminal_image_cleanup(frame.buffer_mut());
 }
+
+/// Split persistent session chrome from the content surface before any
+/// transcript or pane geometry is computed.
+///
+/// Keeping this operation as a pure rectangle transformation is intentional:
+/// changing the top-bar height must never rewrite `scroll_offset`, input bytes,
+/// or cursor state. The content surface retains its original x/width and only
+/// moves down by the rows actually reserved for the bar.
+fn split_top_bar_surface(area: Rect, requested_rows: u16) -> (Option<Rect>, Rect) {
+    let rows = requested_rows.min(area.height);
+    let top_bar_area = (rows > 0).then_some(Rect {
+        x: area.x,
+        y: area.y,
+        width: area.width,
+        height: rows,
+    });
+    let session_area = Rect {
+        x: area.x,
+        y: area.y.saturating_add(rows),
+        width: area.width,
+        height: area.height.saturating_sub(rows),
+    };
+    (top_bar_area, session_area)
+}
+
 fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     let area = frame.area().intersection(*frame.buffer_mut().area());
     if area.width == 0 || area.height == 0 {
@@ -2843,19 +2868,7 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         area.height,
         8,
     );
-    let top_bar_height = top_bar_layout.row_count.min(area.height);
-    let top_bar_area = (top_bar_height > 0).then_some(Rect {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: top_bar_height,
-    });
-    let session_area = Rect {
-        x: area.x,
-        y: area.y.saturating_add(top_bar_height),
-        width: area.width,
-        height: area.height.saturating_sub(top_bar_height),
-    };
+    let (top_bar_area, session_area) = split_top_bar_surface(area, top_bar_layout.row_count);
     if let Some(top_bar_area) = top_bar_area {
         clear_area(frame, top_bar_area);
         render_top_bar(frame, top_bar_area, &top_bar_layout);
