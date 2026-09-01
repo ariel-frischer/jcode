@@ -13,6 +13,7 @@ fn message(
         source,
         message_id: Some(format!("message-{content}")),
         owner_client_instance_id: owner_client_instance_id.map(str::to_string),
+        enqueue_sequence: None,
     }
 }
 

@@ -598,6 +598,7 @@ pub(super) fn enqueue_soft_interrupt_owned(
             source,
             message_id: Some(crate::id::new_id("soft_interrupt")),
             owner_client_instance_id: owner_client_instance_id.map(str::to_string),
+            enqueue_sequence: None,
         });
         crate::logging::info(&format!(
             "SOFT_INTERRUPT_QUEUE_PUSH source={:?} urgent={} content_bytes={} content_chars={} pending_before={} pending_after={}",
@@ -912,6 +913,7 @@ pub(super) async fn queue_soft_interrupt_for_session(
                 source,
                 message_id: None,
                 owner_client_instance_id: None,
+                enqueue_sequence: None,
             },
         )
         .map(|_| true)

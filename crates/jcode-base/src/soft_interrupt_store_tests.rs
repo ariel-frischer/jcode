@@ -71,6 +71,7 @@ fn append_take_and_clear_round_trip() {
             source: SoftInterruptSource::System,
             message_id: None,
             owner_client_instance_id: None,
+            enqueue_sequence: None,
         },
     )
     .expect("append first interrupt");
@@ -83,6 +84,7 @@ fn append_take_and_clear_round_trip() {
             source: SoftInterruptSource::BackgroundTask,
             message_id: None,
             owner_client_instance_id: None,
+            enqueue_sequence: None,
         },
     )
     .expect("append second interrupt");
@@ -106,6 +108,7 @@ fn append_take_and_clear_round_trip() {
             source: SoftInterruptSource::User,
             message_id: None,
             owner_client_instance_id: None,
+            enqueue_sequence: None,
         },
     )
     .expect("append later interrupt");
@@ -136,6 +139,7 @@ fn identity_and_owner_round_trip_while_legacy_entries_default_to_unowned() {
             source: SoftInterruptSource::User,
             message_id: Some("soft-interrupt-1".to_string()),
             owner_client_instance_id: Some("client-instance-1".to_string()),
+            enqueue_sequence: Some(1),
         },
     )
     .expect("append owned interrupt");
@@ -314,6 +318,7 @@ fn overwrite_emits_one_versioned_envelope_without_partial_temp_state() {
             source: SoftInterruptSource::User,
             message_id: Some("message-atomic".to_string()),
             owner_client_instance_id: Some("client-owner".to_string()),
+            enqueue_sequence: Some(1),
         }];
 
         overwrite(session_id, &messages).expect("overwrite versioned soft interrupt envelope");

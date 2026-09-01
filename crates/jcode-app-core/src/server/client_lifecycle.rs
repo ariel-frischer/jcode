@@ -1419,6 +1419,16 @@ pub(super) async fn handle_client(
                 );
             }
 
+            Request::QueuedMessageEditor { id, .. } => {
+                let _ = client_event_tx.send(ServerEvent::Error {
+                    id,
+                    message: "queued message navigation is not available on this server"
+                        .to_string(),
+                    retry_after_secs: None,
+                    provider_code: None,
+                });
+            }
+
             Request::BackgroundTool { id } => {
                 move_tool_to_background(id, &session_control, &client_event_tx);
             }

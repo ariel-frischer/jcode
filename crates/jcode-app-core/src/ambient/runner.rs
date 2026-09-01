@@ -111,6 +111,7 @@ impl AmbientRunnerHandle {
                 source: SoftInterruptSource::User,
                 message_id: None,
                 owner_client_instance_id: None,
+                enqueue_sequence: None,
             });
             logging::info(&format!(
                 "{} message injected into active ambient cycle: {}",

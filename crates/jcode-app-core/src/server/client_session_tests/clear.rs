@@ -157,6 +157,7 @@ async fn handle_clear_session_replaces_runtime_handles_and_updates_shutdown_regi
             source: jcode_agent_runtime::SoftInterruptSource::User,
             message_id: None,
             owner_client_instance_id: None,
+            enqueue_sequence: None,
         });
     old_background_signal.fire();
     old_cancel_signal.fire();

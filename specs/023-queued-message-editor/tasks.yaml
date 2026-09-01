@@ -1,680 +1,666 @@
 tasks:
-  branch: "023-queued-message-editor"
-  created: "2026-09-01"
-  spec_path: "specs/023-queued-message-editor/spec.yaml"
-  plan_path: "specs/023-queued-message-editor/plan.yaml"
-
+    branch: "023-queued-message-editor"
+    created: "2026-09-01"
+    spec_path: "specs/023-queued-message-editor/spec.yaml"
+    plan_path: "specs/023-queued-message-editor/plan.yaml"
 summary:
-  total_tasks: 42
-  total_phases: 9
-  parallel_opportunities: 17
-  estimated_complexity: "high"
-
+    total_tasks: 42
+    total_phases: 9
+    parallel_opportunities: 17
+    estimated_complexity: "high"
 phases:
-  - number: 1
-    title: "Setup"
-    purpose: "Freeze requirement traceability, artifact validity, and test fixtures before behavior changes."
-    tasks:
-      - id: "T001"
-        title: "Create the complete requirement-to-evidence matrix skeleton"
-        status: "Completed"
-        type: "documentation"
-        parallel: false
-        story_id: null
-        file_path: "specs/023-queued-message-editor/evidence.yaml"
-        dependencies: []
-        acceptance_criteria:
-          - "Create rows for FR-001 through FR-027 and NFR-001 through NFR-006."
-          - "Give every row protocol, persistence, server, TUI, regression, SDK capability, format/check, private-socket, installed-runtime, and cleanup cells."
-          - "Require each cell to contain a command/result reference or an explicit justified not-applicable rationale, with no blank cells."
-      - id: "T002"
-        title: "Add reusable ordered-image and mixed-queue test fixtures"
-        status: "Completed"
-        type: "test"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T001"]
-        acceptance_criteria:
-          - "Provide builders for owned User records, other-client records, unowned legacy records, System and BackgroundTask records, injected records, and post-snapshot arrivals."
-          - "Provide distinct multi-image payloads whose byte identity and order can be asserted across reservation, replay, restoration, and conflict paths."
-          - "Keep fixtures deterministic through stable message IDs, client IDs, operation IDs, and enqueue sequence values."
-      - id: "T003"
-        title: "Add additive queued-message editor protocol red tests"
-        status: "Completed"
-        type: "test"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-protocol/src/protocol_tests/queued_message_editor.rs"
-        dependencies: ["T001"]
-        acceptance_criteria:
-          - "Fail until start, move older/newer, finish, and release requests round-trip with navigation_session_id and operation_id."
-          - "Fail until started, moved, boundary, committed, deleted, released, stale_placement, conflict, and replay outcomes preserve ordered images and placement."
-          - "Prove legacy RecallSoftInterrupt JSON remains unchanged and malformed identities or operation shapes are rejected."
-      - id: "T004"
-        title: "Add versioned soft-interrupt persistence red tests"
-        status: "Completed"
-        type: "test"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
-        dependencies: ["T001"]
-        acceptance_criteria:
-          - "Fail until legacy array files load unchanged and the versioned envelope round-trips dispatchable records plus reservation recovery metadata."
-          - "Cover atomic overwrite, corrupt or unsupported versions, original-versus-working draft separation, restart recovery, and exactly-once abandoned-session restoration."
-          - "Assert text and ordered image bytes survive migration, persistence, and recovery."
-
-  - number: 2
-    title: "Foundational"
-    purpose: "Establish additive queue identity, wire contracts, and durable reservation storage required by every authoritative story."
-    tasks:
-      - id: "T005"
-        title: "Reuse landed queue identity/ownership/source and add minimal enqueue sequencing"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: null
-        file_path: "crates/jcode-agent-runtime/src/lib.rs"
-        dependencies: ["T002"]
-        acceptance_criteria:
-          - "Reuse the existing message_id, owner_client_instance_id, and SoftInterruptSource fields landed by jcode-c9u rather than creating parallel identity or ownership contracts."
-          - "Add only minimal optional monotonic enqueue sequencing needed to separate pre-snapshot survivors from post-snapshot arrivals."
-          - "Preserve serde compatibility for legacy records; legacy unowned records remain editor-ineligible without changing ordinary dispatch or cancellation behavior."
-      - id: "T006"
-        title: "Implement typed editor wire operations, outcomes, and selection payloads"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-protocol/src/wire.rs"
-        dependencies: ["T003"]
-        acceptance_criteria:
-          - "Add one queued_message_editor request family for start, move, finish, and release with stable session and operation identities."
-          - "Add one queued_message_editor_result event with explicit outcome, owner-safe selection, ordered images, availability flags, placement, and bounded message text."
-          - "All additions are serde-compatible and leave RecallSoftInterrupt and existing peers unchanged."
-      - id: "T007"
-        title: "Implement the legacy-compatible versioned queue and reservation envelope"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-base/src/soft_interrupt_store.rs"
-        dependencies: ["T004", "T005"]
-        acceptance_criteria:
-          - "Read existing array files and write a versioned envelope containing dispatchable queue records and active navigation recovery records."
-          - "Persist immutable original content and ordered images separately from transient working drafts in one atomic replacement."
-          - "Reject corrupt or unsafe state visibly and expose recovery data needed to restore abandoned reservations exactly once."
-      - id: "T008"
-        title: "Pass protocol and persistence compatibility suites"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: null
-        file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
-        dependencies: ["T005", "T006", "T007"]
-        acceptance_criteria:
-          - "The queued-message protocol fixtures and soft-interrupt persistence tests pass together."
-          - "Legacy arrays, legacy recall payloads, ordered images, atomic replacement, corrupt-state failure, and restart recovery are covered."
-          - "No test broadens editor eligibility to unowned or non-User records."
-
-  - number: 3
-    title: "User Story 2 - Safely edit authoritative server soft interrupts"
-    purpose: "Reserve and navigate only the requesting client's eligible authoritative messages with atomic, replay-safe, disconnect-safe ownership."
-    story_reference: "US-002"
-    independent_test: "Interleave owned queued User messages with excluded owners, legacy records, non-User sources, and injected work; start and replay navigation, move in both directions, disconnect, and verify only the eligible owned snapshot is held or restored exactly once."
-    tasks:
-      - id: "T009"
-        title: "Add failing authoritative eligibility, ownership, snapshot, and replay tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T008"]
-        acceptance_criteria:
-          - "Tests require start to atomically reserve only queued, non-injected, User-source records owned by the verified requester and select the newest snapshot item."
-          - "Tests reject cross-client continuation without disclosing held content and prove excluded records retain identity, content, state, and relative order."
-          - "Repeated operations with matching fingerprints return equivalent cached outcomes; conflicting operation_id reuse is rejected without mutation."
-      - id: "T010"
-        title: "Add failing requester delivery, disconnect, timeout, and shutdown recovery tests"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
-        dependencies: ["T008"]
-        acceptance_criteria:
-          - "Results are delivered only to the verified owning client and connection lifecycle binds the navigation session to that owner."
-          - "Transient disconnect begins a bounded owner reconnect grace period; matching reconnect resumes or replays without a second reservation."
-          - "Grace expiry, explicit abandonment, timeout, shutdown, and unsupported continuation release immutable originals exactly once and leave no active reservation."
-      - id: "T011"
-        title: "Implement the authoritative navigation coordinator and bounded replay cache"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/server/state.rs"
-        dependencies: ["T009"]
-        acceptance_criteria:
-          - "One session-scoped authority serializes start, save-and-move, release, ownership validation, persistence, and outcome recording."
-          - "Start captures an immutable oldest-to-newest eligible snapshot, reserves it atomically, selects newest, and excludes all later arrivals."
-          - "Replay keys include owner, Jcode session, navigation session, operation ID, and request fingerprint with bounded completed-outcome retention."
-      - id: "T012"
-        title: "Wire verified client ownership, editor dispatch, and abandonment release"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
-        dependencies: ["T010", "T011"]
-        acceptance_criteria:
-          - "Validate identities and operation shapes before invoking the coordinator and return typed owner-safe errors."
-          - "Route matching results only to the requester; retain the owner-scoped session during bounded reconnect grace and resume stable operations on matching reconnect."
-          - "Release immutable originals on grace expiry, explicit abandonment, timeout, or shutdown without applying uncommitted working drafts."
-      - id: "T013"
-        title: "Keep reserved snapshots outside dispatch and preserve atomic recovery persistence"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/agent/interrupts.rs"
-        dependencies: ["T007", "T011"]
-        acceptance_criteria:
-          - "Atomically removed held records remain in the authoritative reservation envelope and are absent from the dispatchable queue until commit, delete, or release."
-          - "Injected records have already left the queued-record domain and cannot re-enter a snapshot or be mutated by editor operations."
-          - "Queue persistence retains active recovery metadata and never serializes held originals or drafts as injected work."
-      - id: "T014"
-        title: "Pass the authoritative safety and recovery test matrix"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T012", "T013"]
-        acceptance_criteria:
-          - "Focused server and lifecycle tests pass for eligibility, owner isolation, atomic snapshot, replay, release, disconnect, timeout, restart, and dispatch exclusion."
-          - "Ordered images and durable originals are preserved through every tested path."
-          - "FR-006 through FR-010, FR-016, FR-018, FR-021, FR-022, NFR-001, NFR-002, and NFR-006 have direct evidence references."
-
-  - number: 4
-    title: "User Story 4 - Resolve concurrent queue changes visibly"
-    purpose: "Apply deterministic anchoring under dispatch and arrivals, or reject unsafe commits while preserving a recoverable draft."
-    story_reference: "US-004"
-    independent_test: "Remove both, one, or neither original anchor while new messages arrive and non-held work dispatches; finish or release and verify deterministic placement plus explicit stale or conflict feedback with no loss or duplication."
-    tasks:
-      - id: "T015"
-        title: "Add failing two-anchor, one-anchor, no-anchor, arrival, and conflict tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-004"
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T014"]
-        acceptance_criteria:
-          - "Tests cover exact restoration between two surviving anchors and stale best-effort placement adjacent to either sole surviving anchor on the original side."
-          - "With neither anchor, pre-snapshot survivors remain before held records and post-snapshot arrivals remain after them, each group preserving relative order."
-          - "Changed eligibility or unsafe selection causes a visible NotApplied conflict with the full owner draft recoverable and no queue mutation."
-      - id: "T016"
-        title: "Implement deterministic queue anchoring and conflict classification"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-004"
-        file_path: "crates/jcode-app-core/src/server/state.rs"
-        dependencies: ["T015"]
-        acceptance_criteria:
-          - "Capture nearest predecessor and successor identities plus snapshot_queue_sequence at start."
-          - "Restore by the documented two-anchor, one-anchor, and no-anchor matrix while preserving held, survivor, and arrival relative orders."
-          - "Return Exact, StaleBestEffort, or NotApplied and never report an unsafe or ambiguous mutation as ordinary success."
-      - id: "T017"
-        title: "Add failing TUI stale, conflict, boundary, and draft-recovery tests"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-004"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T014"]
-        acceptance_criteria:
-          - "Distinct visible feedback is required for exact movement, oldest/newest boundary, stale placement, conflict, replay, and release."
-          - "Boundary and conflict results leave composer text and ordered images unchanged."
-          - "Transport loss or conflict retains the complete draft and stable operation identity for retry or recovery."
-      - id: "T018"
-        title: "Apply authoritative outcomes without losing unresolved drafts"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-004"
-        file_path: "crates/jcode-tui/src/tui/app/remote/server_events.rs"
-        dependencies: ["T016", "T017"]
-        acceptance_criteria:
-          - "Apply only results matching the active navigation session and pending operation identity."
-          - "Map every boundary, stale, conflict, replay, release, commit, and delete outcome to distinct user-visible feedback."
-          - "Ignore stale or foreign results safely and preserve the active draft on all NotApplied or transport-recovery paths."
-      - id: "T019"
-        title: "Pass deterministic concurrency and visible-feedback tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-004"
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T016", "T018"]
-        acceptance_criteria:
-          - "All anchor survival combinations, dispatch races, post-snapshot arrivals, stale placement, conflict, and replay sequences produce deterministic outcomes."
-          - "No tested sequence loses, duplicates, repeatedly commits, discloses, or silently reorders a record."
-          - "FR-013 through FR-017 and NFR-003 have direct server and TUI evidence references."
-
-  - number: 5
-    title: "User Story 1 - Navigate and revise queued local messages"
-    purpose: "Replace index-only local recall with symmetric held-draft traversal that preserves exact text and ordered images."
-    story_reference: "US-001"
-    independent_test: "Queue three local messages with distinct ordered images, enter via Alt+Q, edit and traverse older/newer across boundaries, and verify each revisited draft and final queue order."
-    tasks:
-      - id: "T020"
-        title: "Add failing local older/newer, image, and boundary tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T008"]
-        acceptance_criteria:
-          - "Alt+Q entry selects the newest eligible local queued message under the existing one-shot conditions."
-          - "Each older or newer move saves current text and ordered images before changing selection, and revisiting restores the latest saved draft exactly."
-          - "Oldest and newest boundary actions keep selection, draft, images, and queue unchanged while showing boundary feedback."
-      - id: "T021"
-        title: "Implement the transient ordered local queued-message editor"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-tui/src/tui/app/input.rs"
-        dependencies: ["T020"]
-        acceptance_criteria:
-          - "Replace index-only local editing with an ordered held-draft session containing text, ordered images, selection, and original queue relationship."
-          - "Save before every move, support symmetric older/newer traversal, and treat images-only drafts as non-empty."
-          - "New local messages queued after editor start remain outside the active snapshot and retain arrival order."
-      - id: "T022"
-        title: "Route local Alt+Q and Alt+Shift+Q without changing other shortcuts"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-tui/src/tui/app/remote/key_handling.rs"
-        dependencies: ["T021"]
-        acceptance_criteria:
-          - "Lowercase Alt+Q enters or moves older and Alt+Shift+Q moves newer only while editing is active."
-          - "Key recognition works consistently through Crossterm modifier handling and does not shadow unrelated composer bindings."
-          - "Unsupported remote peers and non-editor states retain the established one-shot path."
-      - id: "T023"
-        title: "Pass independent local traversal and image-preservation tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T021", "T022"]
-        acceptance_criteria:
-          - "Three-message older/newer journeys, single-message boundaries, edits after revisiting, images-only drafts, and post-start arrivals pass."
-          - "Equivalent local composer-visible traversal semantics match authoritative mode where ownership does not apply."
-          - "FR-001 through FR-005 and FR-010 have direct local TUI evidence references."
-
-  - number: 6
-    title: "User Story 3 - Commit or delete one selected message"
-    purpose: "Make Enter the sole finish boundary, changing or deleting only the selected draft and restoring every other held message."
-    story_reference: "US-003"
-    independent_test: "Commit a non-empty selected draft and then delete a fully empty selected draft in local and authoritative modes; verify only the selection changes or disappears, all other held records retain relative order, and editing exits."
-    tasks:
-      - id: "T024"
-        title: "Add failing authoritative finish, commit, and delete tests"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
-        dependencies: ["T019"]
-        acceptance_criteria:
-          - "A non-empty text or images-only draft commits exactly the selected record, restores every other held record once, and closes the session."
-          - "A draft with neither text nor images deletes exactly the selected record, restores all others, and closes the session."
-          - "Replayed finish returns the recorded terminal result without a second commit, delete, restore, or history effect."
-      - id: "T025"
-        title: "Implement atomic authoritative finish semantics"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-app-core/src/server/state.rs"
-        dependencies: ["T024"]
-        acceptance_criteria:
-          - "Finish validates owner, active selection, lifecycle eligibility, operation fingerprint, and recoverable draft before mutation."
-          - "Non-empty drafts replace only the selected record; fully empty drafts remove only it; all other held records restore by the anchor rule."
-          - "Persistence, terminal outcome cache, and queue mutation become visible atomically."
-      - id: "T026"
-        title: "Add failing local and remote Enter finish tests"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-003"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T023"]
-        acceptance_criteria:
-          - "Enter commits text, images-only, and edited selected drafts in local and remote editor sessions."
-          - "Enter deletes only when both text and images are empty and restores every non-selected held item in relative order."
-          - "Successful finish exits editing; conflict or transport failure keeps the complete composer draft recoverable."
-      - id: "T027"
-        title: "Integrate local Enter commit and delete with established history policy"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-003"
-        file_path: "crates/jcode-tui/src/tui/app/input.rs"
-        dependencies: ["T026"]
-        acceptance_criteria:
-          - "During local editing, Enter saves the current draft, commits or deletes only the selected held item, restores all others, and exits."
-          - "Traversal alone creates no ordinary history entry and committed edits follow the existing history policy exactly once."
-          - "Outside editing, ordinary Enter behavior is untouched."
-      - id: "T028"
-        title: "Implement remote finish requests, stable retries, and recovery state"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-tui/src/tui/app/remote/soft_interrupt_recall.rs"
-        dependencies: ["T018", "T025", "T026"]
-        acceptance_criteria:
-          - "Maintain stable navigation session and operation IDs across response loss and reconnect retry."
-          - "Send the exact selected message ID, text, and ordered images for move and finish operations."
-          - "Exit only on committed, deleted, or released terminal outcomes; retain the draft and retry identity on conflict or transport failure."
-      - id: "T029"
-        title: "Pass local and authoritative commit/delete acceptance journeys"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T025", "T027", "T028"]
-        acceptance_criteria:
-          - "Local and server-backed non-empty commit, images-only commit, fully empty delete, replayed finish, and failure recovery tests pass."
-          - "Only the selected record changes or disappears and all other held records occur once in original relative order."
-          - "FR-011 and FR-012 have direct server and TUI evidence references."
-
-  - number: 7
-    title: "User Story 5 - Retain established keyboard and queue behavior"
-    purpose: "Prove the editor is additive and does not regress one-shot recall, cancellation, ordinary Enter, history, or legacy-peer behavior."
-    story_reference: "US-005"
-    independent_test: "With no active navigation session, run one-shot Alt+Q, CancelSoftInterrupts, ordinary Enter, composer history, legacy-client/new-server, and new-client/legacy-server scenarios and compare with the pre-feature contract."
-    tasks:
-      - id: "T030"
-        title: "Add focused one-shot Alt+Q, Enter, history, and capability-fallback regressions"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-005"
-        file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
-        dependencies: ["T029"]
-        acceptance_criteria:
-          - "Outside an active session, one-shot Alt+Q eligibility and newest-item selection remain unchanged."
-          - "Ordinary Enter and composer history behavior are byte-for-byte compatible, and traversal creates no premature history entry."
-          - "A newer TUI against a peer without queued_message_navigation_v1 uses only legacy one-shot recall and never sends editor operations."
-      - id: "T031"
-        title: "Add CancelSoftInterrupts and mixed-entry compatibility regressions"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-005"
-        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
-        dependencies: ["T029"]
-        acceptance_criteria:
-          - "CancelSoftInterrupts retains its prior eligibility, result shape, and idempotence with editor-capable records present."
-          - "Unowned legacy, other-client, System, BackgroundTask, non-User, held editor snapshots, and Injected records are not newly cancellable or editor-mutable."
-          - "An older client against a navigation-capable server retains legacy recall and queue behavior."
-      - id: "T032"
-        title: "Preserve capability-gated legacy backend behavior"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-005"
-        file_path: "crates/jcode-tui/src/tui/backend.rs"
-        dependencies: ["T030", "T031"]
-        acceptance_criteria:
-          - "Send typed editor operations only when the daemon advertises queued_message_navigation_v1."
-          - "Capability absence preserves existing RecallSoftInterrupt, Enter, history, and cancellation paths without optimistic unsupported requests."
-          - "Capability state changes or reconnects cannot silently switch or corrupt an active recoverable draft."
-      - id: "T033"
-        title: "Pass the complete legacy and excluded-entry regression matrix"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-005"
-        file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
-        dependencies: ["T030", "T031", "T032"]
-        acceptance_criteria:
-          - "Pre-feature one-shot recall, CancelSoftInterrupts, ordinary Enter, history, capable/legacy peer, and excluded-record tests all pass."
-          - "No picker, FZF, slash-command, or second editing path exists."
-          - "FR-019, FR-020, FR-025, NFR-006, and SC-004 have direct regression evidence references."
-
-  - number: 8
-    title: "User Story 6 - Understand and verify the navigation contract"
-    purpose: "Expose capability-safe SDK contracts and document the complete keyboard, eligibility, anchoring, and feedback behavior."
-    story_reference: "US-006"
-    independent_test: "Inspect daemon, harness, and Rust SDK capability discovery for capable and legacy peers, review README and in-product help for every required behavior, and verify every requirement has complete evidence categories."
-    tasks:
-      - id: "T034"
-        title: "Add failing harness and Rust SDK capability and outcome tests"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-006"
-        file_path: "crates/jcode-harness-api/src/harness_api_tests/queued_message_editor.rs"
-        dependencies: ["T033"]
-        acceptance_criteria:
-          - "Tests require queued_message_navigation_v1 discovery and typed success, boundary, stale, conflict, replay, and release representations."
-          - "Schema snapshots remain additive and legacy peers omit the capability without changing existing public shapes."
-          - "Capability contracts do not duplicate server ownership, anchoring, or mutation logic."
-      - id: "T035"
-        title: "Expose queued-message navigation through harness and Rust SDK surfaces"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-006"
-        file_path: "crates/jcode-harness-api/src/lib.rs"
-        dependencies: ["T034"]
-        acceptance_criteria:
-          - "Advertise the stable capability and expose all public outcome and placement categories needed by capability-aware clients."
-          - "Keep fields optional or additive where required for protocol-v1 and legacy-peer compatibility."
-          - "Use jcode-protocol as the authoritative wire contract rather than reimplementing queue semantics."
-      - id: "T036"
-        title: "Add Rust SDK capability discovery and typed outcome compatibility"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-006"
-        file_path: "crates/jcode-sdk/tests/queued_message_editor.rs"
-        dependencies: ["T034"]
-        acceptance_criteria:
-          - "Capability-aware SDK tests distinguish capable and legacy peers before operations are attempted."
-          - "Every required outcome, placement, selection, and ordered-image payload round-trips without terminal parsing."
-          - "Existing SDK behavior remains unchanged when the capability is absent."
-      - id: "T037"
-        title: "Run explicit read-only Go SDK compatibility validation"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-006"
-        file_path: "scripts/validate_jcode_go_compat.sh"
-        dependencies: ["T035", "T036"]
-        acceptance_criteria:
-          - "Run the validator only with an explicit absolute jcode-go dev checkout and record the command and result in evidence.yaml."
-          - "Verify protocol-v1 compatibility without adding or generating a Go implementation inside this repository."
-          - "If no checkout is available, record a justified blocked or not-applicable evidence entry rather than silently skipping."
-      - id: "T038"
-        title: "Document queued-message editor behavior in README"
-        status: "Pending"
-        type: "documentation"
-        parallel: true
-        story_id: "US-006"
-        file_path: "README.md"
-        dependencies: ["T033"]
-        acceptance_criteria:
-          - "Document Alt+Q older, Alt+Shift+Q newer, save-before-move, Enter commit, empty text-and-images deletion, and ordered-image preservation."
-          - "Document authoritative eligibility and ownership, stable snapshots, new-arrival exclusion, anchoring fallback, boundaries, stale placement, conflict recovery, and legacy fallback."
-          - "State that FZF and slash pickers are not part of the workflow."
-      - id: "T039"
-        title: "Add complete in-product queued-message editor help"
-        status: "Pending"
-        type: "documentation"
-        parallel: true
-        story_id: "US-006"
-        file_path: "crates/jcode-tui/src/tui/app/hotkey_feedback.rs"
-        dependencies: ["T033"]
-        acceptance_criteria:
-          - "Help exposes both directions, save-before-move, boundaries, Enter commit, empty deletion, images-only behavior, and how editing exits."
-          - "Help distinguishes local behavior from authoritative owner eligibility and explains stale/conflict feedback and recoverable drafts concisely."
-          - "Displayed keys and semantics agree exactly with README and implemented Crossterm handling."
-      - id: "T040"
-        title: "Complete SDK, documentation, and requirement-traceability review"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-006"
-        file_path: "specs/023-queued-message-editor/evidence.yaml"
-        dependencies: ["T037", "T038", "T039"]
-        acceptance_criteria:
-          - "FR-023, FR-024, FR-026, NFR-005, SC-005, and all previously implemented requirements link to focused evidence."
-          - "README, in-product help, wire capability, harness, and SDK surfaces use consistent names and behavior."
-          - "The matrix has no blank cells and every not-applicable entry has a requirement-specific rationale."
-
-  - number: 9
-    title: "Polish & Cross-Cutting Concerns"
-    purpose: "Prove performance, exactly-once reliability, repository quality, real-runtime behavior, installation behavior, and clean teardown."
-    tasks:
-      - id: "T041"
-        title: "Run serialized performance, reliability, quality, and runtime validation"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: null
-        file_path: "specs/023-queued-message-editor/evidence.yaml"
-        dependencies: ["T040"]
-        acceptance_criteria:
-          - "Measure 1,000-message local actions with at least 95% under 100 ms and normal server-backed actions with at least 95% visible within 1 second."
-          - "Run 1,000 mixed replay, reconnect, recovery, anchoring, and cross-client trials with zero loss, duplication, repeated commit, or excluded-record mutation."
-          - "Serially run focused protocol, persistence, server, lifecycle, TUI, harness, and SDK tests; cargo fmt check; affected package checks; Clippy as applicable; coordinated selfdev TUI build; and scripts/check_guardrails.sh."
-          - "Record exact commands, executable identity, results, durations, and any proven unrelated baseline failure in evidence.yaml."
-      - id: "T042"
-        title: "Validate private-socket and installed-runtime journeys, then clean all fixtures"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: null
-        file_path: "specs/023-queued-message-editor/evidence.yaml"
-        dependencies: ["T041"]
-        acceptance_criteria:
-          - "Use the newly built binary and a unique private socket for local and authoritative older/newer, boundary, commit, delete, replay, concurrency, reconnect, conflict, capability fallback, and disconnect-release journeys."
-          - "After integration policy permits, install and gracefully reload the actual served binary, verify its resolved executable identity, and repeat focused installed-runtime smoke scenarios."
-          - "Remove feature-created reservations, queued fixtures, temporary state, private sockets, and orphaned processes; verify unrelated baseline state is unchanged."
-          - "Close every evidence cell for FR-001 through FR-027 and NFR-001 through NFR-006, including FR-027 cleanup and SC-001 through SC-006 outcomes."
-
+    - number: 1
+      title: "Setup"
+      purpose: "Freeze requirement traceability, artifact validity, and test fixtures before behavior changes."
+      tasks:
+        - id: "T001"
+          title: "Create the complete requirement-to-evidence matrix skeleton"
+          status: "Completed"
+          type: "documentation"
+          parallel: false
+          story_id: null
+          file_path: "specs/023-queued-message-editor/evidence.yaml"
+          dependencies: []
+          acceptance_criteria:
+            - "Create rows for FR-001 through FR-027 and NFR-001 through NFR-006."
+            - "Give every row protocol, persistence, server, TUI, regression, SDK capability, format/check, private-socket, installed-runtime, and cleanup cells."
+            - "Require each cell to contain a command/result reference or an explicit justified not-applicable rationale, with no blank cells."
+        - id: "T002"
+          title: "Add reusable ordered-image and mixed-queue test fixtures"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Provide builders for owned User records, other-client records, unowned legacy records, System and BackgroundTask records, injected records, and post-snapshot arrivals."
+            - "Provide distinct multi-image payloads whose byte identity and order can be asserted across reservation, replay, restoration, and conflict paths."
+            - "Keep fixtures deterministic through stable message IDs, client IDs, operation IDs, and enqueue sequence values."
+        - id: "T003"
+          title: "Add additive queued-message editor protocol red tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-protocol/src/protocol_tests/queued_message_editor.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Fail until start, move older/newer, finish, and release requests round-trip with navigation_session_id and operation_id."
+            - "Fail until started, moved, boundary, committed, deleted, released, stale_placement, conflict, and replay outcomes preserve ordered images and placement."
+            - "Prove legacy RecallSoftInterrupt JSON remains unchanged and malformed identities or operation shapes are rejected."
+        - id: "T004"
+          title: "Add versioned soft-interrupt persistence red tests"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Fail until legacy array files load unchanged and the versioned envelope round-trips dispatchable records plus reservation recovery metadata."
+            - "Cover atomic overwrite, corrupt or unsupported versions, original-versus-working draft separation, restart recovery, and exactly-once abandoned-session restoration."
+            - "Assert text and ordered image bytes survive migration, persistence, and recovery."
+    - number: 2
+      title: "Foundational"
+      purpose: "Establish additive queue identity, wire contracts, and durable reservation storage required by every authoritative story."
+      tasks:
+        - id: "T005"
+          title: "Reuse landed queue identity/ownership/source and add minimal enqueue sequencing"
+          status: "Completed"
+          type: "implementation"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-agent-runtime/src/lib.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Reuse the existing message_id, owner_client_instance_id, and SoftInterruptSource fields landed by jcode-c9u rather than creating parallel identity or ownership contracts."
+            - "Add only minimal optional monotonic enqueue sequencing needed to separate pre-snapshot survivors from post-snapshot arrivals."
+            - "Preserve serde compatibility for legacy records; legacy unowned records remain editor-ineligible without changing ordinary dispatch or cancellation behavior."
+        - id: "T006"
+          title: "Implement typed editor wire operations, outcomes, and selection payloads"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-protocol/src/wire.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "Add one queued_message_editor request family for start, move, finish, and release with stable session and operation identities."
+            - "Add one queued_message_editor_result event with explicit outcome, owner-safe selection, ordered images, availability flags, placement, and bounded message text."
+            - "All additions are serde-compatible and leave RecallSoftInterrupt and existing peers unchanged."
+        - id: "T007"
+          title: "Implement the legacy-compatible versioned queue and reservation envelope"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/soft_interrupt_store.rs"
+          dependencies: ["T004", "T005"]
+          acceptance_criteria:
+            - "Read existing array files and write a versioned envelope containing dispatchable queue records and active navigation recovery records."
+            - "Persist immutable original content and ordered images separately from transient working drafts in one atomic replacement."
+            - "Reject corrupt or unsafe state visibly and expose recovery data needed to restore abandoned reservations exactly once."
+        - id: "T008"
+          title: "Pass protocol and persistence compatibility suites"
+          status: "Completed"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-base/src/soft_interrupt_store_tests.rs"
+          dependencies: ["T005", "T006", "T007"]
+          acceptance_criteria:
+            - "The queued-message protocol fixtures and soft-interrupt persistence tests pass together."
+            - "Legacy arrays, legacy recall payloads, ordered images, atomic replacement, corrupt-state failure, and restart recovery are covered."
+            - "No test broadens editor eligibility to unowned or non-User records."
+    - number: 3
+      title: "User Story 2 - Safely edit authoritative server soft interrupts"
+      purpose: "Reserve and navigate only the requesting client's eligible authoritative messages with atomic, replay-safe, disconnect-safe ownership."
+      story_reference: "US-002"
+      independent_test: "Interleave owned queued User messages with excluded owners, legacy records, non-User sources, and injected work; start and replay navigation, move in both directions, disconnect, and verify only the eligible owned snapshot is held or restored exactly once."
+      tasks:
+        - id: "T009"
+          title: "Add failing authoritative eligibility, ownership, snapshot, and replay tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Tests require start to atomically reserve only queued, non-injected, User-source records owned by the verified requester and select the newest snapshot item."
+            - "Tests reject cross-client continuation without disclosing held content and prove excluded records retain identity, content, state, and relative order."
+            - "Repeated operations with matching fingerprints return equivalent cached outcomes; conflicting operation_id reuse is rejected without mutation."
+        - id: "T010"
+          title: "Add failing requester delivery, disconnect, timeout, and shutdown recovery tests"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Results are delivered only to the verified owning client and connection lifecycle binds the navigation session to that owner."
+            - "Transient disconnect begins a bounded owner reconnect grace period; matching reconnect resumes or replays without a second reservation."
+            - "Grace expiry, explicit abandonment, timeout, shutdown, and unsupported continuation release immutable originals exactly once and leave no active reservation."
+        - id: "T011"
+          title: "Implement the authoritative navigation coordinator and bounded replay cache"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/server/state.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "One session-scoped authority serializes start, save-and-move, release, ownership validation, persistence, and outcome recording."
+            - "Start captures an immutable oldest-to-newest eligible snapshot, reserves it atomically, selects newest, and excludes all later arrivals."
+            - "Replay keys include owner, Jcode session, navigation session, operation ID, and request fingerprint with bounded completed-outcome retention."
+        - id: "T012"
+          title: "Wire verified client ownership, editor dispatch, and abandonment release"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+          dependencies: ["T010", "T011"]
+          acceptance_criteria:
+            - "Validate identities and operation shapes before invoking the coordinator and return typed owner-safe errors."
+            - "Route matching results only to the requester; retain the owner-scoped session during bounded reconnect grace and resume stable operations on matching reconnect."
+            - "Release immutable originals on grace expiry, explicit abandonment, timeout, or shutdown without applying uncommitted working drafts."
+        - id: "T013"
+          title: "Keep reserved snapshots outside dispatch and preserve atomic recovery persistence"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/agent/interrupts.rs"
+          dependencies: ["T007", "T011"]
+          acceptance_criteria:
+            - "Atomically removed held records remain in the authoritative reservation envelope and are absent from the dispatchable queue until commit, delete, or release."
+            - "Injected records have already left the queued-record domain and cannot re-enter a snapshot or be mutated by editor operations."
+            - "Queue persistence retains active recovery metadata and never serializes held originals or drafts as injected work."
+        - id: "T014"
+          title: "Pass the authoritative safety and recovery test matrix"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T012", "T013"]
+          acceptance_criteria:
+            - "Focused server and lifecycle tests pass for eligibility, owner isolation, atomic snapshot, replay, release, disconnect, timeout, restart, and dispatch exclusion."
+            - "Ordered images and durable originals are preserved through every tested path."
+            - "FR-006 through FR-010, FR-016, FR-018, FR-021, FR-022, NFR-001, NFR-002, and NFR-006 have direct evidence references."
+    - number: 4
+      title: "User Story 4 - Resolve concurrent queue changes visibly"
+      purpose: "Apply deterministic anchoring under dispatch and arrivals, or reject unsafe commits while preserving a recoverable draft."
+      story_reference: "US-004"
+      independent_test: "Remove both, one, or neither original anchor while new messages arrive and non-held work dispatches; finish or release and verify deterministic placement plus explicit stale or conflict feedback with no loss or duplication."
+      tasks:
+        - id: "T015"
+          title: "Add failing two-anchor, one-anchor, no-anchor, arrival, and conflict tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Tests cover exact restoration between two surviving anchors and stale best-effort placement adjacent to either sole surviving anchor on the original side."
+            - "With neither anchor, pre-snapshot survivors remain before held records and post-snapshot arrivals remain after them, each group preserving relative order."
+            - "Changed eligibility or unsafe selection causes a visible NotApplied conflict with the full owner draft recoverable and no queue mutation."
+        - id: "T016"
+          title: "Implement deterministic queue anchoring and conflict classification"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/state.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Capture nearest predecessor and successor identities plus snapshot_queue_sequence at start."
+            - "Restore by the documented two-anchor, one-anchor, and no-anchor matrix while preserving held, survivor, and arrival relative orders."
+            - "Return Exact, StaleBestEffort, or NotApplied and never report an unsafe or ambiguous mutation as ordinary success."
+        - id: "T017"
+          title: "Add failing TUI stale, conflict, boundary, and draft-recovery tests"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T014"]
+          acceptance_criteria:
+            - "Distinct visible feedback is required for exact movement, oldest/newest boundary, stale placement, conflict, replay, and release."
+            - "Boundary and conflict results leave composer text and ordered images unchanged."
+            - "Transport loss or conflict retains the complete draft and stable operation identity for retry or recovery."
+        - id: "T018"
+          title: "Apply authoritative outcomes without losing unresolved drafts"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-tui/src/tui/app/remote/server_events.rs"
+          dependencies: ["T016", "T017"]
+          acceptance_criteria:
+            - "Apply only results matching the active navigation session and pending operation identity."
+            - "Map every boundary, stale, conflict, replay, release, commit, and delete outcome to distinct user-visible feedback."
+            - "Ignore stale or foreign results safely and preserve the active draft on all NotApplied or transport-recovery paths."
+        - id: "T019"
+          title: "Pass deterministic concurrency and visible-feedback tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T016", "T018"]
+          acceptance_criteria:
+            - "All anchor survival combinations, dispatch races, post-snapshot arrivals, stale placement, conflict, and replay sequences produce deterministic outcomes."
+            - "No tested sequence loses, duplicates, repeatedly commits, discloses, or silently reorders a record."
+            - "FR-013 through FR-017 and NFR-003 have direct server and TUI evidence references."
+    - number: 5
+      title: "User Story 1 - Navigate and revise queued local messages"
+      purpose: "Replace index-only local recall with symmetric held-draft traversal that preserves exact text and ordered images."
+      story_reference: "US-001"
+      independent_test: "Queue three local messages with distinct ordered images, enter via Alt+Q, edit and traverse older/newer across boundaries, and verify each revisited draft and final queue order."
+      tasks:
+        - id: "T020"
+          title: "Add failing local older/newer, image, and boundary tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "Alt+Q entry selects the newest eligible local queued message under the existing one-shot conditions."
+            - "Each older or newer move saves current text and ordered images before changing selection, and revisiting restores the latest saved draft exactly."
+            - "Oldest and newest boundary actions keep selection, draft, images, and queue unchanged while showing boundary feedback."
+        - id: "T021"
+          title: "Implement the transient ordered local queued-message editor"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/input.rs"
+          dependencies: ["T020"]
+          acceptance_criteria:
+            - "Replace index-only local editing with an ordered held-draft session containing text, ordered images, selection, and original queue relationship."
+            - "Save before every move, support symmetric older/newer traversal, and treat images-only drafts as non-empty."
+            - "New local messages queued after editor start remain outside the active snapshot and retain arrival order."
+        - id: "T022"
+          title: "Route local Alt+Q and Alt+Shift+Q without changing other shortcuts"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/remote/key_handling.rs"
+          dependencies: ["T021"]
+          acceptance_criteria:
+            - "Lowercase Alt+Q enters or moves older and Alt+Shift+Q moves newer only while editing is active."
+            - "Key recognition works consistently through Crossterm modifier handling and does not shadow unrelated composer bindings."
+            - "Unsupported remote peers and non-editor states retain the established one-shot path."
+        - id: "T023"
+          title: "Pass independent local traversal and image-preservation tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T021", "T022"]
+          acceptance_criteria:
+            - "Three-message older/newer journeys, single-message boundaries, edits after revisiting, images-only drafts, and post-start arrivals pass."
+            - "Equivalent local composer-visible traversal semantics match authoritative mode where ownership does not apply."
+            - "FR-001 through FR-005 and FR-010 have direct local TUI evidence references."
+    - number: 6
+      title: "User Story 3 - Commit or delete one selected message"
+      purpose: "Make Enter the sole finish boundary, changing or deleting only the selected draft and restoring every other held message."
+      story_reference: "US-003"
+      independent_test: "Commit a non-empty selected draft and then delete a fully empty selected draft in local and authoritative modes; verify only the selection changes or disappears, all other held records retain relative order, and editing exits."
+      tasks:
+        - id: "T024"
+          title: "Add failing authoritative finish, commit, and delete tests"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/state_tests/queued_message_editor.rs"
+          dependencies: ["T019"]
+          acceptance_criteria:
+            - "A non-empty text or images-only draft commits exactly the selected record, restores every other held record once, and closes the session."
+            - "A draft with neither text nor images deletes exactly the selected record, restores all others, and closes the session."
+            - "Replayed finish returns the recorded terminal result without a second commit, delete, restore, or history effect."
+        - id: "T025"
+          title: "Implement atomic authoritative finish semantics"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/server/state.rs"
+          dependencies: ["T024"]
+          acceptance_criteria:
+            - "Finish validates owner, active selection, lifecycle eligibility, operation fingerprint, and recoverable draft before mutation."
+            - "Non-empty drafts replace only the selected record; fully empty drafts remove only it; all other held records restore by the anchor rule."
+            - "Persistence, terminal outcome cache, and queue mutation become visible atomically."
+        - id: "T026"
+          title: "Add failing local and remote Enter finish tests"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T023"]
+          acceptance_criteria:
+            - "Enter commits text, images-only, and edited selected drafts in local and remote editor sessions."
+            - "Enter deletes only when both text and images are empty and restores every non-selected held item in relative order."
+            - "Successful finish exits editing; conflict or transport failure keeps the complete composer draft recoverable."
+        - id: "T027"
+          title: "Integrate local Enter commit and delete with established history policy"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/input.rs"
+          dependencies: ["T026"]
+          acceptance_criteria:
+            - "During local editing, Enter saves the current draft, commits or deletes only the selected held item, restores all others, and exits."
+            - "Traversal alone creates no ordinary history entry and committed edits follow the existing history policy exactly once."
+            - "Outside editing, ordinary Enter behavior is untouched."
+        - id: "T028"
+          title: "Implement remote finish requests, stable retries, and recovery state"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/remote/soft_interrupt_recall.rs"
+          dependencies: ["T018", "T025", "T026"]
+          acceptance_criteria:
+            - "Maintain stable navigation session and operation IDs across response loss and reconnect retry."
+            - "Send the exact selected message ID, text, and ordered images for move and finish operations."
+            - "Exit only on committed, deleted, or released terminal outcomes; retain the draft and retry identity on conflict or transport failure."
+        - id: "T029"
+          title: "Pass local and authoritative commit/delete acceptance journeys"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T025", "T027", "T028"]
+          acceptance_criteria:
+            - "Local and server-backed non-empty commit, images-only commit, fully empty delete, replayed finish, and failure recovery tests pass."
+            - "Only the selected record changes or disappears and all other held records occur once in original relative order."
+            - "FR-011 and FR-012 have direct server and TUI evidence references."
+    - number: 7
+      title: "User Story 5 - Retain established keyboard and queue behavior"
+      purpose: "Prove the editor is additive and does not regress one-shot recall, cancellation, ordinary Enter, history, or legacy-peer behavior."
+      story_reference: "US-005"
+      independent_test: "With no active navigation session, run one-shot Alt+Q, CancelSoftInterrupts, ordinary Enter, composer history, legacy-client/new-server, and new-client/legacy-server scenarios and compare with the pre-feature contract."
+      tasks:
+        - id: "T030"
+          title: "Add focused one-shot Alt+Q, Enter, history, and capability-fallback regressions"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/app/tests/queued_message_editor.rs"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "Outside an active session, one-shot Alt+Q eligibility and newest-item selection remain unchanged."
+            - "Ordinary Enter and composer history behavior are byte-for-byte compatible, and traversal creates no premature history entry."
+            - "A newer TUI against a peer without queued_message_navigation_v1 uses only legacy one-shot recall and never sends editor operations."
+        - id: "T031"
+          title: "Add CancelSoftInterrupts and mixed-entry compatibility regressions"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T029"]
+          acceptance_criteria:
+            - "CancelSoftInterrupts retains its prior eligibility, result shape, and idempotence with editor-capable records present."
+            - "Unowned legacy, other-client, System, BackgroundTask, non-User, held editor snapshots, and Injected records are not newly cancellable or editor-mutable."
+            - "An older client against a navigation-capable server retains legacy recall and queue behavior."
+        - id: "T032"
+          title: "Preserve capability-gated legacy backend behavior"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-tui/src/tui/backend.rs"
+          dependencies: ["T030", "T031"]
+          acceptance_criteria:
+            - "Send typed editor operations only when the daemon advertises queued_message_navigation_v1."
+            - "Capability absence preserves existing RecallSoftInterrupt, Enter, history, and cancellation paths without optimistic unsupported requests."
+            - "Capability state changes or reconnects cannot silently switch or corrupt an active recoverable draft."
+        - id: "T033"
+          title: "Pass the complete legacy and excluded-entry regression matrix"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-005"
+          file_path: "crates/jcode-app-core/src/server/client_lifecycle_tests.rs"
+          dependencies: ["T030", "T031", "T032"]
+          acceptance_criteria:
+            - "Pre-feature one-shot recall, CancelSoftInterrupts, ordinary Enter, history, capable/legacy peer, and excluded-record tests all pass."
+            - "No picker, FZF, slash-command, or second editing path exists."
+            - "FR-019, FR-020, FR-025, NFR-006, and SC-004 have direct regression evidence references."
+    - number: 8
+      title: "User Story 6 - Understand and verify the navigation contract"
+      purpose: "Expose capability-safe SDK contracts and document the complete keyboard, eligibility, anchoring, and feedback behavior."
+      story_reference: "US-006"
+      independent_test: "Inspect daemon, harness, and Rust SDK capability discovery for capable and legacy peers, review README and in-product help for every required behavior, and verify every requirement has complete evidence categories."
+      tasks:
+        - id: "T034"
+          title: "Add failing harness and Rust SDK capability and outcome tests"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-006"
+          file_path: "crates/jcode-harness-api/src/harness_api_tests/queued_message_editor.rs"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "Tests require queued_message_navigation_v1 discovery and typed success, boundary, stale, conflict, replay, and release representations."
+            - "Schema snapshots remain additive and legacy peers omit the capability without changing existing public shapes."
+            - "Capability contracts do not duplicate server ownership, anchoring, or mutation logic."
+        - id: "T035"
+          title: "Expose queued-message navigation through harness and Rust SDK surfaces"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-006"
+          file_path: "crates/jcode-harness-api/src/lib.rs"
+          dependencies: ["T034"]
+          acceptance_criteria:
+            - "Advertise the stable capability and expose all public outcome and placement categories needed by capability-aware clients."
+            - "Keep fields optional or additive where required for protocol-v1 and legacy-peer compatibility."
+            - "Use jcode-protocol as the authoritative wire contract rather than reimplementing queue semantics."
+        - id: "T036"
+          title: "Add Rust SDK capability discovery and typed outcome compatibility"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-006"
+          file_path: "crates/jcode-sdk/tests/queued_message_editor.rs"
+          dependencies: ["T034"]
+          acceptance_criteria:
+            - "Capability-aware SDK tests distinguish capable and legacy peers before operations are attempted."
+            - "Every required outcome, placement, selection, and ordered-image payload round-trips without terminal parsing."
+            - "Existing SDK behavior remains unchanged when the capability is absent."
+        - id: "T037"
+          title: "Run explicit read-only Go SDK compatibility validation"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-006"
+          file_path: "scripts/validate_jcode_go_compat.sh"
+          dependencies: ["T035", "T036"]
+          acceptance_criteria:
+            - "Run the validator only with an explicit absolute jcode-go dev checkout and record the command and result in evidence.yaml."
+            - "Verify protocol-v1 compatibility without adding or generating a Go implementation inside this repository."
+            - "If no checkout is available, record a justified blocked or not-applicable evidence entry rather than silently skipping."
+        - id: "T038"
+          title: "Document queued-message editor behavior in README"
+          status: "Pending"
+          type: "documentation"
+          parallel: true
+          story_id: "US-006"
+          file_path: "README.md"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "Document Alt+Q older, Alt+Shift+Q newer, save-before-move, Enter commit, empty text-and-images deletion, and ordered-image preservation."
+            - "Document authoritative eligibility and ownership, stable snapshots, new-arrival exclusion, anchoring fallback, boundaries, stale placement, conflict recovery, and legacy fallback."
+            - "State that FZF and slash pickers are not part of the workflow."
+        - id: "T039"
+          title: "Add complete in-product queued-message editor help"
+          status: "Pending"
+          type: "documentation"
+          parallel: true
+          story_id: "US-006"
+          file_path: "crates/jcode-tui/src/tui/app/hotkey_feedback.rs"
+          dependencies: ["T033"]
+          acceptance_criteria:
+            - "Help exposes both directions, save-before-move, boundaries, Enter commit, empty deletion, images-only behavior, and how editing exits."
+            - "Help distinguishes local behavior from authoritative owner eligibility and explains stale/conflict feedback and recoverable drafts concisely."
+            - "Displayed keys and semantics agree exactly with README and implemented Crossterm handling."
+        - id: "T040"
+          title: "Complete SDK, documentation, and requirement-traceability review"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-006"
+          file_path: "specs/023-queued-message-editor/evidence.yaml"
+          dependencies: ["T037", "T038", "T039"]
+          acceptance_criteria:
+            - "FR-023, FR-024, FR-026, NFR-005, SC-005, and all previously implemented requirements link to focused evidence."
+            - "README, in-product help, wire capability, harness, and SDK surfaces use consistent names and behavior."
+            - "The matrix has no blank cells and every not-applicable entry has a requirement-specific rationale."
+    - number: 9
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Prove performance, exactly-once reliability, repository quality, real-runtime behavior, installation behavior, and clean teardown."
+      tasks:
+        - id: "T041"
+          title: "Run serialized performance, reliability, quality, and runtime validation"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/023-queued-message-editor/evidence.yaml"
+          dependencies: ["T040"]
+          acceptance_criteria:
+            - "Measure 1,000-message local actions with at least 95% under 100 ms and normal server-backed actions with at least 95% visible within 1 second."
+            - "Run 1,000 mixed replay, reconnect, recovery, anchoring, and cross-client trials with zero loss, duplication, repeated commit, or excluded-record mutation."
+            - "Serially run focused protocol, persistence, server, lifecycle, TUI, harness, and SDK tests; cargo fmt check; affected package checks; Clippy as applicable; coordinated selfdev TUI build; and scripts/check_guardrails.sh."
+            - "Record exact commands, executable identity, results, durations, and any proven unrelated baseline failure in evidence.yaml."
+        - id: "T042"
+          title: "Validate private-socket and installed-runtime journeys, then clean all fixtures"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/023-queued-message-editor/evidence.yaml"
+          dependencies: ["T041"]
+          acceptance_criteria:
+            - "Use the newly built binary and a unique private socket for local and authoritative older/newer, boundary, commit, delete, replay, concurrency, reconnect, conflict, capability fallback, and disconnect-release journeys."
+            - "After integration policy permits, install and gracefully reload the actual served binary, verify its resolved executable identity, and repeat focused installed-runtime smoke scenarios."
+            - "Remove feature-created reservations, queued fixtures, temporary state, private sockets, and orphaned processes; verify unrelated baseline state is unchanged."
+            - "Close every evidence cell for FR-001 through FR-027 and NFR-001 through NFR-006, including FR-027 cleanup and SC-001 through SC-006 outcomes."
 dependencies:
-  user_story_order:
-    - story_id: "US-002"
-      depends_on: []
-      blocks: ["US-004", "US-003", "US-005", "US-006"]
-    - story_id: "US-004"
-      depends_on: ["US-002"]
-      blocks: ["US-003", "US-005", "US-006"]
-    - story_id: "US-001"
-      depends_on: []
-      blocks: ["US-003", "US-005", "US-006"]
-    - story_id: "US-003"
-      depends_on: ["US-001", "US-002", "US-004"]
-      blocks: ["US-005", "US-006"]
-    - story_id: "US-005"
-      depends_on: ["US-001", "US-002", "US-003", "US-004"]
-      blocks: ["US-006"]
-    - story_id: "US-006"
-      depends_on: ["US-005"]
-      blocks: []
-  phase_order:
-    - phase: 1
-      blocks: [2]
-    - phase: 2
-      blocks: [3, 5]
-    - phase: 3
-      blocks: [4, 6]
-    - phase: 4
-      blocks: [6]
-    - phase: 5
-      blocks: [6]
-    - phase: 6
-      blocks: [7]
-    - phase: 7
-      blocks: [8]
-    - phase: 8
-      blocks: [9]
-    - phase: 9
-      blocks: []
-
+    user_story_order:
+        - story_id: "US-002"
+          depends_on: []
+          blocks: ["US-004", "US-003", "US-005", "US-006"]
+        - story_id: "US-004"
+          depends_on: ["US-002"]
+          blocks: ["US-003", "US-005", "US-006"]
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-003", "US-005", "US-006"]
+        - story_id: "US-003"
+          depends_on: ["US-001", "US-002", "US-004"]
+          blocks: ["US-005", "US-006"]
+        - story_id: "US-005"
+          depends_on: ["US-001", "US-002", "US-003", "US-004"]
+          blocks: ["US-006"]
+        - story_id: "US-006"
+          depends_on: ["US-005"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3, 5]
+        - phase: 3
+          blocks: [4, 6]
+        - phase: 4
+          blocks: [6]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: [8]
+        - phase: 8
+          blocks: [9]
+        - phase: 9
+          blocks: []
 parallel_execution:
-  - phase: 1
-    parallel_groups:
-      - tasks: ["T002", "T003", "T004"]
-        rationale: "Server fixtures, protocol red tests, and persistence red tests modify separate modules after the evidence skeleton exists."
-  - phase: 2
-    parallel_groups:
-      - tasks: ["T006", "T007"]
-        rationale: "Wire contract implementation and persistence envelope implementation are in separate crates once shared queue fields are defined."
-  - phase: 3
-    parallel_groups:
-      - tasks: ["T010", "T013"]
-        rationale: "Connection-lifecycle red tests and dispatch filtering touch separate modules while the coordinator contract is being established."
-  - phase: 4
-    parallel_groups:
-      - tasks: ["T017", "T016"]
-        rationale: "TUI outcome red tests can be written against the protocol contract while server anchoring is implemented."
-      - tasks: ["T018", "T016"]
-        rationale: "TUI result handling and server restoration logic are separate ownership layers with typed outcomes as their boundary."
-  - phase: 6
-    parallel_groups:
-      - tasks: ["T026", "T024"]
-        rationale: "TUI finish red tests and authoritative finish red tests exercise separate layers."
-      - tasks: ["T027", "T025"]
-        rationale: "Local Enter integration and server atomic finish implementation touch separate crates."
-  - phase: 7
-    parallel_groups:
-      - tasks: ["T030", "T031"]
-        rationale: "TUI keyboard/history regressions and server cancellation/lifecycle regressions are independent test surfaces."
-  - phase: 8
-    parallel_groups:
-      - tasks: ["T034", "T038", "T039"]
-        rationale: "Capability tests, README documentation, and in-product help can proceed independently after behavior is stable."
-      - tasks: ["T036", "T035"]
-        rationale: "Rust SDK tests and harness capability implementation are separate crates sharing the protocol contract."
-
+    - phase: 1
+      parallel_groups:
+        - tasks: ["T002", "T003", "T004"]
+          rationale: "Server fixtures, protocol red tests, and persistence red tests modify separate modules after the evidence skeleton exists."
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T006", "T007"]
+          rationale: "Wire contract implementation and persistence envelope implementation are in separate crates once shared queue fields are defined."
+    - phase: 3
+      parallel_groups:
+        - tasks: ["T010", "T013"]
+          rationale: "Connection-lifecycle red tests and dispatch filtering touch separate modules while the coordinator contract is being established."
+    - phase: 4
+      parallel_groups:
+        - tasks: ["T017", "T016"]
+          rationale: "TUI outcome red tests can be written against the protocol contract while server anchoring is implemented."
+        - tasks: ["T018", "T016"]
+          rationale: "TUI result handling and server restoration logic are separate ownership layers with typed outcomes as their boundary."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T026", "T024"]
+          rationale: "TUI finish red tests and authoritative finish red tests exercise separate layers."
+        - tasks: ["T027", "T025"]
+          rationale: "Local Enter integration and server atomic finish implementation touch separate crates."
+    - phase: 7
+      parallel_groups:
+        - tasks: ["T030", "T031"]
+          rationale: "TUI keyboard/history regressions and server cancellation/lifecycle regressions are independent test surfaces."
+    - phase: 8
+      parallel_groups:
+        - tasks: ["T034", "T038", "T039"]
+          rationale: "Capability tests, README documentation, and in-product help can proceed independently after behavior is stable."
+        - tasks: ["T036", "T035"]
+          rationale: "Rust SDK tests and harness capability implementation are separate crates sharing the protocol contract."
 implementation_strategy:
-  mvp_scope:
-    phases: [1, 2, 3, 4, 5, 6]
-    description: "Foundational contracts plus safe authoritative navigation, deterministic concurrency handling, local bidirectional traversal, and exact selected-message commit/delete."
-    validation: "Focused protocol, persistence, server, lifecycle, and TUI tests demonstrate older/newer traversal, ordered images, owner isolation, replay safety, anchoring, conflict recovery, and exact commit/delete in both local and authoritative modes."
-  incremental_delivery:
-    - milestone: "Contracts and Recovery Foundation Ready"
-      phases: [1, 2]
-      deliverable: "Additive wire contracts, stable queue identity, and legacy-compatible durable reservation persistence are test-defined and implemented."
-    - milestone: "Authoritative Safety Ready"
-      phases: [1, 2, 3, 4]
-      deliverable: "Owner-scoped server navigation is atomic, replay-safe, disconnect-safe, deterministic under concurrency, and visibly reports stale or conflict outcomes."
-    - milestone: "MVP Complete"
-      phases: [1, 2, 3, 4, 5, 6]
-      deliverable: "Users can navigate, revise, commit, or delete queued messages in local and authoritative modes without losing text, images, or queue relationships."
-    - milestone: "Compatibility and Discovery Complete"
-      phases: [1, 2, 3, 4, 5, 6, 7, 8]
-      deliverable: "Legacy workflows remain intact and capability-aware SDKs, README, and in-product help expose the stable contract."
-    - milestone: "Outcome Delivered"
-      phases: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-      deliverable: "Performance, reliability, guardrail, private-socket, installed-runtime, evidence, and cleanup gates all pass."
-
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5, 6]
+        description: "Foundational contracts plus safe authoritative navigation, deterministic concurrency handling, local bidirectional traversal, and exact selected-message commit/delete."
+        validation: "Focused protocol, persistence, server, lifecycle, and TUI tests demonstrate older/newer traversal, ordered images, owner isolation, replay safety, anchoring, conflict recovery, and exact commit/delete in both local and authoritative modes."
+    incremental_delivery:
+        - milestone: "Contracts and Recovery Foundation Ready"
+          phases: [1, 2]
+          deliverable: "Additive wire contracts, stable queue identity, and legacy-compatible durable reservation persistence are test-defined and implemented."
+        - milestone: "Authoritative Safety Ready"
+          phases: [1, 2, 3, 4]
+          deliverable: "Owner-scoped server navigation is atomic, replay-safe, disconnect-safe, deterministic under concurrency, and visibly reports stale or conflict outcomes."
+        - milestone: "MVP Complete"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Users can navigate, revise, commit, or delete queued messages in local and authoritative modes without losing text, images, or queue relationships."
+        - milestone: "Compatibility and Discovery Complete"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8]
+          deliverable: "Legacy workflows remain intact and capability-aware SDKs, README, and in-product help expose the stable contract."
+        - milestone: "Outcome Delivered"
+          phases: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+          deliverable: "Performance, reliability, guardrail, private-socket, installed-runtime, evidence, and cleanup gates all pass."
 _meta:
-  version: "1.0.0"
-  generator: "autospec"
-  generator_version: "autospec dev"
-  created: "2026-09-01T19:53:57Z"
-  artifact_type: "tasks"
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-09-01T19:53:57Z"
+    artifact_type: "tasks"

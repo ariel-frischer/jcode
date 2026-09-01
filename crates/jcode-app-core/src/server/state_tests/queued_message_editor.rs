@@ -12,7 +12,6 @@ pub(super) const RELEASE_OPERATION_ID: &str = "queued-editor-operation-release";
 #[derive(Debug, Clone)]
 pub(super) struct QueuedMessageFixture {
     pub(super) message: SoftInterruptMessage,
-    pub(super) enqueue_sequence: Option<u64>,
     pub(super) injected: bool,
 }
 
@@ -45,8 +44,8 @@ fn fixture(
             source,
             message_id: Some(format!("queued-editor-message-{label}")),
             owner_client_instance_id: owner_client_instance_id.map(str::to_string),
+            enqueue_sequence,
         },
-        enqueue_sequence,
         injected,
     }
 }
@@ -129,7 +128,7 @@ fn mixed_queue_fixtures_are_stable_distinct_and_image_ordered() {
         owned.message.owner_client_instance_id.as_deref(),
         Some(OWNER_CLIENT_ID)
     );
-    assert_eq!(owned.enqueue_sequence, Some(10));
+    assert_eq!(owned.message.enqueue_sequence, Some(10));
     assert_eq!(owned.message.images, ordered_images("owned"));
     assert_ne!(owned.message.images, other.message.images);
 
@@ -139,14 +138,14 @@ fn mixed_queue_fixtures_are_stable_distinct_and_image_ordered() {
     );
     assert_eq!(legacy.message.message_id, None);
     assert_eq!(legacy.message.owner_client_instance_id, None);
-    assert_eq!(legacy.enqueue_sequence, None);
+    assert_eq!(legacy.message.enqueue_sequence, None);
     assert!(matches!(system.message.source, SoftInterruptSource::System));
     assert!(matches!(
         background.message.source,
         SoftInterruptSource::BackgroundTask
     ));
     assert!(injected.injected);
-    assert_eq!(arrival.enqueue_sequence, Some(15));
+    assert_eq!(arrival.message.enqueue_sequence, Some(15));
 
     assert_eq!(NAVIGATION_SESSION_ID, "queued-editor-navigation-session");
     assert_eq!(START_OPERATION_ID, "queued-editor-operation-start");

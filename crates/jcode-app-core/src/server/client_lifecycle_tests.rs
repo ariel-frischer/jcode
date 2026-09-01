@@ -325,6 +325,7 @@ fn recall_without_verified_identity_fails_closed() {
             source: SoftInterruptSource::User,
             message_id: Some("message-1".to_string()),
             owner_client_instance_id: Some("verified-client".to_string()),
+            enqueue_sequence: Some(1),
         },
     ]));
     let control = SessionControlHandle::new(
@@ -358,6 +359,7 @@ fn recall_returns_exact_payload_only_to_requesting_client() {
             source: SoftInterruptSource::User,
             message_id: Some("message-2".to_string()),
             owner_client_instance_id: Some("requesting-client".to_string()),
+            enqueue_sequence: Some(1),
         },
     ]));
     let control = SessionControlHandle::new(
