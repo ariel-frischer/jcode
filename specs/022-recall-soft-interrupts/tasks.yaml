@@ -145,7 +145,7 @@ phases:
     tasks:
       - id: "T010"
         title: "Run focused and regression validation"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-004"

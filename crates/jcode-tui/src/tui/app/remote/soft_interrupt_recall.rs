@@ -57,6 +57,7 @@ impl SoftInterruptRecallState {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn is_pending(&self) -> bool {
         matches!(self.status, RecallStatus::Pending { .. })
     }
@@ -154,10 +155,10 @@ pub(super) async fn handle_alt_q(
     app: &mut App,
     remote: &mut RemoteConnection,
 ) -> anyhow::Result<()> {
-    if !composer_is_empty(app) {
+    if app.retrieve_queued_message_for_edit() {
         return Ok(());
     }
-    if app.retrieve_queued_message_for_edit() {
+    if !composer_is_empty(app) {
         return Ok(());
     }
     if let Some(message) = app.remote_soft_interrupt_recall.take_ready(true) {

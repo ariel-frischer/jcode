@@ -37,3 +37,23 @@ The shared daemon and installed launcher remain on the pre-fix binary until inte
 ## Known baseline evidence
 
 The initial broad guardrail run on the clean-base/prototype investigation failed existing all-feature check, Clippy/warning budget, quality ratchet provenance, oversized-file/test, panic-prone, and swallowed-error gates. The unsafe prototype was removed. Do not rerun the identical broad workflow until a complete candidate exists. New behavior and tests should use small modules/files instead of growing already oversized `input.rs`, `remote/key_handling.rs`, or `remote_startup_input_02/part_01.rs`.
+
+## T010 focused and regression validation
+
+Completed on 2026-09-01 in the isolated feature worktree.
+
+| Check | Result |
+|---|---|
+| `cargo test -p jcode-protocol recall` | PASS, 2 focused wire-contract tests |
+| `cargo test -p jcode-base soft_interrupt` | PASS, 2 persistence and legacy-default tests |
+| `cargo test -p jcode-app-core recall_` | PASS, 6 queue, replay, ownership, and requester-routing tests |
+| `cargo test -p jcode-tui soft_interrupt_recall` | PASS, 10 state-machine and remote Alt+Q tests |
+| `cargo test -p jcode-tui alt_q` | PASS, 4 established local and remote queue-recall tests |
+| `cargo test -p jcode-tui original_slot` | PASS, 2 local and remote original-slot restoration tests |
+| `cargo test -p jcode-app-core session_control_handle_does_not_wait_for_busy_agent_lock` | PASS, 2 control-path tests including clear-all soft-interrupt cancellation |
+| `cargo fmt --all -- --check` | PASS |
+| `cargo check -p jcode-protocol -p jcode-base -p jcode-app-core -p jcode-tui` | PASS |
+
+The first `original_slot` run exposed a feature-caused regression: remote Alt+Q applied the server-recall empty-composer gate before the established local queue helper, so a second local cycle was blocked. The final implementation calls the unchanged local helper first and applies empty-composer gating only before server recall. Both the original-slot regressions and all focused server-recall tests pass after this fix.
+
+The affected-crate check retains three unrelated pre-existing TUI warnings for `animated_tool_color` and `ImageExpandLevel::next`. The feature-specific test-only `is_pending` helper is gated with `cfg(test)` and no longer adds a production warning.
