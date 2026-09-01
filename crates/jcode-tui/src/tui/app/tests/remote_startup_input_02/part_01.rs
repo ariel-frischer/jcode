@@ -1569,39 +1569,40 @@ fn test_ctrl_a_keeps_home_behavior_when_input_present() {
 }
 
 #[test]
-fn test_retrieve_pending_message_edits_queued_message() {
+fn alt_q_takes_back_only_the_newest_queued_message_for_editing() {
     let mut app = create_test_app();
     app.queue_mode = true;
     app.is_processing = true;
 
-    // Type and queue a message
-    app.handle_key(KeyCode::Char('h'), KeyModifiers::empty())
-        .unwrap();
-    app.handle_key(KeyCode::Char('e'), KeyModifiers::empty())
-        .unwrap();
-    app.handle_key(KeyCode::Char('l'), KeyModifiers::empty())
-        .unwrap();
-    app.handle_key(KeyCode::Char('l'), KeyModifiers::empty())
-        .unwrap();
-    app.handle_key(KeyCode::Char('o'), KeyModifiers::empty())
-        .unwrap();
-    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
-        .unwrap();
+    for message in ["first", "second"] {
+        for c in message.chars() {
+            app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+                .unwrap();
+        }
+        app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+            .unwrap();
+    }
 
-    assert_eq!(app.queued_count(), 1);
+    assert_eq!(app.queued_count(), 2);
     assert!(app.input().is_empty());
 
-    app.handle_key(KeyCode::Up, KeyModifiers::CONTROL).unwrap();
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
 
-    assert_eq!(app.queued_count(), 0);
-    assert_eq!(app.input(), "hello");
-    assert_eq!(app.cursor_pos(), 5); // Cursor at end
+    assert_eq!(app.queued_messages(), &["first".to_string()]);
+    assert_eq!(app.input(), "second");
+    assert_eq!(app.cursor_pos(), 6);
+
+    app.handle_key(KeyCode::Esc, KeyModifiers::empty()).unwrap();
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
+
+    assert!(app.queued_messages().is_empty());
+    assert_eq!(app.input(), "first");
 }
 
 #[test]
-fn test_retrieve_pending_message_with_alt_and_super_up() {
-    // Ctrl+Up, Alt(Option)+Up and Cmd(Super)+Up must all recall a queued message
-    // so the gesture works regardless of which modifier the terminal forwards.
+fn modified_up_keeps_queued_messages_waiting() {
     for modifier in [
         KeyModifiers::CONTROL,
         KeyModifiers::ALT,
@@ -1623,10 +1624,47 @@ fn test_retrieve_pending_message_with_alt_and_super_up() {
 
         app.handle_key(KeyCode::Up, modifier).unwrap();
 
-        assert_eq!(app.queued_count(), 0, "modifier {modifier:?}");
-        assert_eq!(app.input(), "hello", "modifier {modifier:?}");
-        assert_eq!(app.cursor_pos(), 5, "modifier {modifier:?}");
+        assert_eq!(app.queued_count(), 1, "modifier {modifier:?}");
     }
+}
+
+#[test]
+fn alt_q_preserves_a_nonempty_composer_and_pending_work() {
+    let mut app = create_test_app();
+    app.queued_messages = vec!["waiting".to_string()];
+    app.interleave_message = Some("already sent".to_string());
+    app.pending_soft_interrupts = vec!["server pending".to_string()];
+    app.input = "current draft".to_string();
+    app.cursor_pos = app.input.len();
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
+
+    assert_eq!(app.input(), "current draft");
+    assert_eq!(app.queued_messages(), &["waiting".to_string()]);
+    assert_eq!(app.interleave_message.as_deref(), Some("already sent"));
+    assert_eq!(app.pending_soft_interrupts, ["server pending"]);
+}
+
+#[test]
+fn remote_alt_q_takes_back_one_queued_message_without_touching_interleave() {
+    let mut app = create_test_app();
+    app.queued_messages = vec!["first".to_string(), "second".to_string()];
+    app.interleave_message = Some("already sent".to_string());
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    rt.block_on(app.handle_remote_key(
+        KeyCode::Char('q'),
+        KeyModifiers::ALT,
+        &mut remote,
+    ))
+    .unwrap();
+
+    assert_eq!(app.input(), "second");
+    assert_eq!(app.queued_messages(), &["first".to_string()]);
+    assert_eq!(app.interleave_message.as_deref(), Some("already sent"));
 }
 
 #[test]

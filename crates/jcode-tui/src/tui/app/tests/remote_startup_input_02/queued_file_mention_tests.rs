@@ -1,5 +1,5 @@
 #[test]
-fn test_retrieve_pending_message_prefers_pending_interleave_for_editing() {
+fn take_back_queued_message_does_not_retract_interleave() {
     let mut app = create_test_app();
     app.is_processing = true;
     app.queue_mode = false; // Enter=interleave, Ctrl+Enter=queue
@@ -21,10 +21,10 @@ fn test_retrieve_pending_message_prefers_pending_interleave_for_editing() {
     assert_eq!(app.interleave_message.as_deref(), Some("urgent"));
     assert_eq!(app.queued_count(), 1);
 
-    app.retrieve_pending_message_for_edit();
+    app.retrieve_queued_message_for_edit();
 
-    assert_eq!(app.input(), "urgent\n\nlater");
-    assert_eq!(app.interleave_message.as_deref(), None);
+    assert_eq!(app.input(), "later");
+    assert_eq!(app.interleave_message.as_deref(), Some("urgent"));
     assert_eq!(app.queued_count(), 0);
 }
 
@@ -43,7 +43,7 @@ fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
         .unwrap();
     assert_eq!(app.queued_messages(), &["Inspect @notes.md".to_string()]);
 
-    app.retrieve_pending_message_for_edit();
+    app.retrieve_queued_message_for_edit();
 
     assert_eq!(app.input(), "Inspect @notes.md");
     assert!(!app.input().contains("private file contents"));
