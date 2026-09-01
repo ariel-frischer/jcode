@@ -1756,6 +1756,7 @@ impl CopyViewportSnapshot {
 
 #[derive(Clone, Default)]
 struct CopyViewportSnapshots {
+    top_bar: Option<CopyViewportSnapshot>,
     chat: Option<CopyViewportSnapshot>,
     side: Option<CopyViewportSnapshot>,
     input: Option<CopyViewportSnapshot>,
@@ -1793,6 +1794,7 @@ fn copy_snapshot_slot_mut(
     pane: crate::tui::CopySelectionPane,
 ) -> &mut Option<CopyViewportSnapshot> {
     match pane {
+        crate::tui::CopySelectionPane::TopBar => &mut snapshots.top_bar,
         crate::tui::CopySelectionPane::Chat => &mut snapshots.chat,
         crate::tui::CopySelectionPane::SidePane => &mut snapshots.side,
         crate::tui::CopySelectionPane::Input => &mut snapshots.input,
@@ -1805,6 +1807,7 @@ fn copy_snapshot_for_pane(pane: crate::tui::CopySelectionPane) -> Option<CopyVie
         TEST_COPY_VIEWPORT.with(|snapshots| {
             let snapshots = snapshots.borrow().clone();
             match pane {
+                crate::tui::CopySelectionPane::TopBar => snapshots.top_bar,
                 crate::tui::CopySelectionPane::Chat => snapshots.chat,
                 crate::tui::CopySelectionPane::SidePane => snapshots.side,
                 crate::tui::CopySelectionPane::Input => snapshots.input,
@@ -1815,6 +1818,7 @@ fn copy_snapshot_for_pane(pane: crate::tui::CopySelectionPane) -> Option<CopyVie
     {
         let snapshots = copy_viewport_state().lock().ok()?.clone();
         match pane {
+            crate::tui::CopySelectionPane::TopBar => snapshots.top_bar,
             crate::tui::CopySelectionPane::Chat => snapshots.chat,
             crate::tui::CopySelectionPane::SidePane => snapshots.side,
             crate::tui::CopySelectionPane::Input => snapshots.input,
@@ -2115,9 +2119,15 @@ pub(crate) fn copy_point_from_screen(
         TEST_COPY_VIEWPORT.with(|snapshots| {
             let snapshots = snapshots.borrow().clone();
             snapshots
-                .chat
+                .top_bar
                 .as_ref()
                 .and_then(|snapshot| copy_point_from_snapshot(snapshot, column, row))
+                .or_else(|| {
+                    snapshots
+                        .chat
+                        .as_ref()
+                        .and_then(|snapshot| copy_point_from_snapshot(snapshot, column, row))
+                })
                 .or_else(|| {
                     snapshots
                         .side
@@ -2136,9 +2146,15 @@ pub(crate) fn copy_point_from_screen(
     {
         let snapshots = copy_viewport_state().lock().ok()?.clone();
         snapshots
-            .chat
+            .top_bar
             .as_ref()
             .and_then(|snapshot| copy_point_from_snapshot(snapshot, column, row))
+            .or_else(|| {
+                snapshots
+                    .chat
+                    .as_ref()
+                    .and_then(|snapshot| copy_point_from_snapshot(snapshot, column, row))
+            })
             .or_else(|| {
                 snapshots
                     .side
@@ -2193,7 +2209,10 @@ pub(crate) fn copy_pane_vertical_edge_point(
 ) -> Option<(crate::tui::CopySelectionPoint, bool)> {
     // The prompt composer cannot be wheel-scrolled, so it has no browser-style
     // edge auto-scroll. Drags past its edge clamp via `copy_pane_drag_point`.
-    if pane == crate::tui::CopySelectionPane::Input {
+    if matches!(
+        pane,
+        crate::tui::CopySelectionPane::Input | crate::tui::CopySelectionPane::TopBar
+    ) {
         return None;
     }
     let snapshot = copy_snapshot_for_pane(pane)?;
@@ -2362,6 +2381,10 @@ pub(crate) fn input_pane_line_text(abs_line: usize) -> Option<String> {
     copy_pane_line_text(crate::tui::CopySelectionPane::Input, abs_line)
 }
 
+pub(crate) fn top_bar_line_text(abs_line: usize) -> Option<String> {
+    copy_pane_line_text(crate::tui::CopySelectionPane::TopBar, abs_line)
+}
+
 fn copy_pane_line_count(pane: crate::tui::CopySelectionPane) -> Option<usize> {
     Some(copy_snapshot_for_pane(pane)?.wrapped_plain_line_count())
 }
@@ -2376,6 +2399,10 @@ pub(crate) fn side_pane_line_count() -> Option<usize> {
 
 pub(crate) fn input_pane_line_count() -> Option<usize> {
     copy_pane_line_count(crate::tui::CopySelectionPane::Input)
+}
+
+pub(crate) fn top_bar_line_count() -> Option<usize> {
+    copy_pane_line_count(crate::tui::CopySelectionPane::TopBar)
 }
 
 pub(crate) fn copy_viewport_visible_range() -> Option<(usize, usize)> {
@@ -2878,7 +2905,19 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     let (top_bar_area, session_area) = split_top_bar_surface(area, top_bar_layout.row_count);
     if let Some(top_bar_area) = top_bar_area {
         clear_area(frame, top_bar_area);
-        render_top_bar(frame, top_bar_area, &top_bar_layout);
+        let rendered_lines = render_top_bar(
+            frame,
+            top_bar_area,
+            &top_bar_layout,
+            app.copy_selection_range(),
+        );
+        record_pane_snapshot_from_lines(
+            crate::tui::CopySelectionPane::TopBar,
+            &rendered_lines,
+            0,
+            rendered_lines.len(),
+            top_bar_area,
+        );
     }
     note_top_bar_metrics(
         top_bar_derivation_elapsed,

@@ -1,4 +1,5 @@
 use super::info_widget::{AuthMethod, InfoWidgetData, UsageInfo, UsageProvider};
+use super::ui::selection_highlight::highlight_line_selection;
 use ratatui::prelude::*;
 use ratatui::widgets::Paragraph;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -21,6 +22,7 @@ pub(crate) struct ProviderCreditState {
     pub(crate) primary_summary: Option<String>,
     pub(crate) secondary_summary: Option<String>,
     pub(crate) fetched_at: Option<std::time::Instant>,
+    primary_remaining_ratio: Option<f32>,
 }
 
 impl ProviderCreditState {
@@ -35,6 +37,7 @@ impl ProviderCreditState {
             primary_summary: primary_summary.and_then(|value| sanitize_label(&value)),
             secondary_summary: secondary_summary.and_then(|value| sanitize_label(&value)),
             fetched_at: Some(std::time::Instant::now()),
+            primary_remaining_ratio: None,
         }
     }
 
@@ -61,6 +64,7 @@ impl ProviderCreditState {
             primary_summary: primary_summary.and_then(|value| sanitize_label(&value)),
             secondary_summary: secondary_summary.and_then(|value| sanitize_label(&value)),
             fetched_at: None,
+            primary_remaining_ratio: None,
         }
     }
 
@@ -71,6 +75,7 @@ impl ProviderCreditState {
             primary_summary: None,
             secondary_summary: None,
             fetched_at: None,
+            primary_remaining_ratio: None,
         }
     }
 
@@ -143,6 +148,7 @@ impl ProviderCreditState {
         } else {
             Self::known(provider, primary_summary, secondary_summary)
         };
+        state.primary_remaining_ratio = subscription_remaining_ratio(usage);
         state.fetched_at = None;
         state
     }
@@ -159,6 +165,19 @@ impl ProviderCreditState {
                 ProviderCreditStatus::Known => None,
             })
     }
+}
+
+fn subscription_remaining_ratio(usage: &UsageInfo) -> Option<f32> {
+    if !matches!(
+        usage.provider,
+        UsageProvider::Anthropic | UsageProvider::OpenAI
+    ) || !usage.five_hour.is_finite()
+        || !(0.0..=1.0).contains(&usage.five_hour)
+        || (usage.primary_limit_label.is_none() && usage.five_hour == 0.0)
+    {
+        return None;
+    }
+    Some(1.0 - usage.five_hour)
 }
 
 fn usage_window_summary(label: Option<&str>, ratio: f32, used: bool) -> Option<String> {
@@ -275,16 +294,8 @@ impl TopBarContext {
         }
         fields.push(TopBarField::new(
             TopBarFieldKind::Credit,
-            format!(
-                "{} {}",
-                self.credit.provider,
-                self.credit.summary().unwrap_or_default()
-            ),
-            Some(
-                self.credit
-                    .summary()
-                    .unwrap_or_else(|| "unavailable".to_string()),
-            ),
+            self.credit_label(true),
+            Some(self.credit_label(false)),
         ));
         if self.provider_label.is_some() || self.model_label.is_some() {
             fields.push(TopBarField::new(
@@ -340,6 +351,35 @@ impl TopBarContext {
         }
         fields
     }
+
+    fn credit_label(&self, include_provider: bool) -> String {
+        let summary = self
+            .credit
+            .summary()
+            .unwrap_or_else(|| "unavailable".to_string());
+        let progress = self
+            .credit
+            .primary_remaining_ratio
+            .map(credit_progress_text)
+            .unwrap_or_default();
+        let prefix = if include_provider {
+            format!("{} ", self.credit.provider)
+        } else {
+            String::new()
+        };
+        format!("{prefix}{summary}{progress}")
+    }
+}
+
+fn credit_progress_text(remaining_ratio: f32) -> String {
+    const CELLS: usize = 6;
+    let used_ratio = 1.0 - remaining_ratio.clamp(0.0, 1.0);
+    let filled = (used_ratio * CELLS as f32).round() as usize;
+    format!(
+        "  {}{}",
+        "▰".repeat(filled),
+        "▱".repeat(CELLS.saturating_sub(filled))
+    )
 }
 
 fn join_labels(first: Option<&str>, second: Option<&str>, separator: &str) -> String {
@@ -616,18 +656,123 @@ fn render_core_line(core: &[&TopBarField], width: usize) -> String {
 }
 
 /// Render a selected layout into its already-allocated rectangle.
-pub(crate) fn render_top_bar(frame: &mut Frame, area: Rect, layout: &TopBarLayout) {
+pub(crate) fn render_top_bar(
+    frame: &mut Frame,
+    area: Rect,
+    layout: &TopBarLayout,
+    selection: Option<crate::tui::CopySelectionRange>,
+) -> Vec<Line<'static>> {
     if area.width == 0 || area.height == 0 || layout.row_count == 0 {
-        return;
+        return Vec::new();
     }
-    let lines = layout
+    let mut visible_fields = layout.visible_fields.iter().copied();
+    let mut lines = layout
         .lines
         .iter()
         .take(area.height as usize)
-        .cloned()
-        .map(|line| line.style(Style::default().fg(Color::Gray)))
+        .map(|line| {
+            let text = line_text(line);
+            let mut spans = Vec::new();
+            for (index, field) in text.split(TOP_BAR_SEPARATOR).enumerate() {
+                if index > 0 {
+                    spans.push(Span::styled(
+                        TOP_BAR_SEPARATOR,
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+                spans.extend(styled_top_bar_field(
+                    visible_fields
+                        .next()
+                        .unwrap_or(TopBarFieldKind::VersionConnection),
+                    field,
+                ));
+            }
+            Line::from(spans)
+        })
         .collect::<Vec<_>>();
-    frame.render_widget(Paragraph::new(lines), area);
+    if let Some(range) = selection.filter(|range| {
+        range.start.pane == crate::tui::CopySelectionPane::TopBar
+            && range.end.pane == crate::tui::CopySelectionPane::TopBar
+    }) {
+        for (line_index, line) in lines.iter_mut().enumerate() {
+            let start = if line_index == range.start.abs_line {
+                range.start.column
+            } else if line_index > range.start.abs_line && line_index <= range.end.abs_line {
+                0
+            } else {
+                continue;
+            };
+            let end = if line_index == range.end.abs_line {
+                range.end.column
+            } else {
+                line_text(line).width()
+            };
+            *line = highlight_line_selection(line, start, end);
+        }
+    }
+    frame.render_widget(Paragraph::new(lines.clone()), area);
+    lines
+}
+
+fn styled_top_bar_field(kind: TopBarFieldKind, text: &str) -> Vec<Span<'static>> {
+    let base = match kind {
+        TopBarFieldKind::Session => Color::Rgb(100, 200, 100),
+        TopBarFieldKind::Credit => credit_status_color(text),
+        TopBarFieldKind::ProviderModel => Color::Rgb(255, 150, 200),
+        TopBarFieldKind::AuthReasoning => Color::Rgb(140, 180, 255),
+        TopBarFieldKind::ServerClient => Color::Rgb(120, 200, 220),
+        TopBarFieldKind::VersionConnection => Color::Gray,
+    };
+    if kind != TopBarFieldKind::Credit {
+        return vec![Span::styled(text.to_string(), Style::default().fg(base))];
+    }
+
+    let Some(progress_start) = text.find(['▰', '▱']) else {
+        return vec![Span::styled(text.to_string(), Style::default().fg(base))];
+    };
+    let prefix = &text[..progress_start];
+    let progress = &text[progress_start..];
+    let filled_len = progress
+        .chars()
+        .take_while(|character| *character == '▰')
+        .count();
+    let filled_bytes = progress
+        .char_indices()
+        .nth(filled_len)
+        .map(|(index, _)| index)
+        .unwrap_or(progress.len());
+    vec![
+        Span::styled(prefix.to_string(), Style::default().fg(base).bold()),
+        Span::styled(
+            progress[..filled_bytes].to_string(),
+            Style::default().fg(base),
+        ),
+        Span::styled(
+            progress[filled_bytes..].to_string(),
+            Style::default().fg(Color::Rgb(50, 50, 60)),
+        ),
+    ]
+}
+
+fn credit_status_color(text: &str) -> Color {
+    if text.contains("unavailable") || text.contains("not applicable") {
+        Color::DarkGray
+    } else if text.contains("pending") || text.contains("stale") {
+        Color::Rgb(255, 200, 100)
+    } else if let Some(percent) = text
+        .split_whitespace()
+        .find_map(|part| part.strip_suffix('%')?.parse::<u16>().ok())
+    {
+        if percent <= 20 {
+            Color::Rgb(255, 100, 100)
+        } else if percent <= 50 {
+            Color::Rgb(255, 200, 100)
+        } else {
+            Color::Rgb(100, 200, 100)
+        }
+    } else {
+        Color::Rgb(140, 180, 255)
+    }
 }
 
 /// Convert the existing info-widget snapshot into a safe active-session context.

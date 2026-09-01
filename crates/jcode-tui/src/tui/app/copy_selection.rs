@@ -62,6 +62,7 @@ impl App {
 
     fn line_text(pane: crate::tui::CopySelectionPane, abs_line: usize) -> Option<String> {
         match pane {
+            crate::tui::CopySelectionPane::TopBar => crate::tui::ui::top_bar_line_text(abs_line),
             crate::tui::CopySelectionPane::Chat => {
                 crate::tui::ui::copy_viewport_line_text(abs_line)
             }
@@ -78,6 +79,7 @@ impl App {
 
     fn line_count(pane: crate::tui::CopySelectionPane) -> Option<usize> {
         match pane {
+            crate::tui::CopySelectionPane::TopBar => crate::tui::ui::top_bar_line_count(),
             crate::tui::CopySelectionPane::Chat => crate::tui::ui::copy_viewport_line_count(),
             crate::tui::CopySelectionPane::SidePane => crate::tui::ui::side_pane_line_count(),
             crate::tui::CopySelectionPane::Input => crate::tui::ui::input_pane_line_count(),
@@ -124,6 +126,8 @@ impl App {
 
     fn note_copy_selection_activity(&mut self, pane: crate::tui::CopySelectionPane) {
         match pane {
+            // The persistent bar is fixed chrome and has no scroll state.
+            crate::tui::CopySelectionPane::TopBar => {}
             crate::tui::CopySelectionPane::Chat => {
                 self.pause_chat_auto_scroll();
             }
@@ -485,6 +489,7 @@ impl App {
         upward: bool,
     ) -> bool {
         match pane {
+            crate::tui::CopySelectionPane::TopBar => return false,
             crate::tui::CopySelectionPane::Chat => {
                 self.enqueue_mouse_scroll(
                     super::MouseScrollTarget::Chat,
@@ -630,7 +635,13 @@ impl App {
                 // The composer is not wheel-scrollable: let wheel events over it
                 // fall through to the normal chat scroll handling.
                 point
-                    .filter(|point| point.pane != crate::tui::CopySelectionPane::Input)
+                    .filter(|point| {
+                        !matches!(
+                            point.pane,
+                            crate::tui::CopySelectionPane::Input
+                                | crate::tui::CopySelectionPane::TopBar
+                        )
+                    })
                     .map(|point| self.scroll_copy_selection_pane(point.pane, true))
                     .or_else(|| {
                         self.copy_selection_dragging
@@ -647,7 +658,13 @@ impl App {
                     return None;
                 }
                 point
-                    .filter(|point| point.pane != crate::tui::CopySelectionPane::Input)
+                    .filter(|point| {
+                        !matches!(
+                            point.pane,
+                            crate::tui::CopySelectionPane::Input
+                                | crate::tui::CopySelectionPane::TopBar
+                        )
+                    })
                     .map(|point| self.scroll_copy_selection_pane(point.pane, false))
                     .or_else(|| {
                         self.copy_selection_dragging
