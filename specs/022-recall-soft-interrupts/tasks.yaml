@@ -157,7 +157,7 @@ phases:
           - "Formatting and relevant Cargo checks pass or verified unrelated baseline failures are recorded once."
       - id: "T011"
         title: "Build and validate an isolated running workflow"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"

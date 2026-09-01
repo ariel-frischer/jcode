@@ -57,3 +57,20 @@ Completed on 2026-09-01 in the isolated feature worktree.
 The first `original_slot` run exposed a feature-caused regression: remote Alt+Q applied the server-recall empty-composer gate before the established local queue helper, so a second local cycle was blocked. The final implementation calls the unchanged local helper first and applies empty-composer gating only before server recall. Both the original-slot regressions and all focused server-recall tests pass after this fix.
 
 The affected-crate check retains three unrelated pre-existing TUI warnings for `animated_tool_color` and `ImageExpandLevel::next`. The feature-specific test-only `is_pending` helper is gated with `cfg(test)` and no longer adds a production warning.
+
+## T011 isolated running workflow
+
+Completed on 2026-09-01 with the coordinated selfdev TUI build and a disposable runtime directory. The shared daemon was not reloaded or used for acceptance.
+
+| Check | Result |
+|---|---|
+| Resolved executable | `/home/ari/repos/jcode/.worktrees/agent/jcode-c9u-alt-q-soft-queue/target/selfdev/jcode` |
+| Executable identity | `jcode v0.81.745-dev (3bea94631, dirty)`; SHA-256 `900974cb354eaa2605ed74942516f12b61ed771ff1cd2493d64fe2fe0ccc1b9c` |
+| Private server socket | `/home/ari/.jcode/scratch/t011-runtime-1788258012-3321343/jcode.sock` with sibling debug socket; isolated `JCODE_RUNTIME_DIR`, no shared-daemon reload |
+| Real TUI harness | PASS; the built executable ran in the PTY-backed tester and reported the same version and remote persistent connection |
+| Newest one-message recall | PASS; while a turn was processing, `T011-FAST-OLDER-PRESERVED` then `T011-FAST-NEWEST-RECALL` were queued and lowercase Alt+Q restored only `T011-FAST-NEWEST-RECALL` |
+| One in flight / repeated key | PASS; two immediate lowercase Alt+Q events produced one newest recall and did not skip to or consume the older message |
+| Unrelated pending preservation | PASS; after clearing the recalled composer, the next lowercase Alt+Q restored `T011-FAST-OLDER-PRESERVED`, proving it survived the first operation in order |
+| Composer blocking | PASS; lowercase Alt+Q with `T011-FAST-OLDER-PRESERVED` still in the composer left the input byte-equivalent |
+
+The PTY debug channel supports text input and key injection but not attaching an image fixture or forcing a transport response-loss result. Exact ordered image restoration, unavailable/stale/duplicate result immutability, and established local fallback are therefore covered by the focused T010 protocol/server/TUI and regression tests rather than duplicated in this runtime probe. Scratch evidence was recorded in `t011-runtime-acceptance.txt` during the run.
