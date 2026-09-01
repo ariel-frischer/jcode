@@ -77,7 +77,7 @@ introduced.
 
 ## Fallback order and precedence
 
-For resilience subcontrols, the effective value is resolved independently in
+For operational settings, the effective value is resolved independently in
 this order:
 
 1. request/session `resilience` override,
@@ -85,13 +85,10 @@ this order:
 3. persisted `[websearch.resilience]` value,
 4. built-in default.
 
-The master switch is an operator control and intentionally uses a stricter
-resolution path. Environment configuration overrides persisted configuration,
-which overrides the built-in `false` default. A request may set `enabled = false`
-to narrow an operator-enabled policy for one invocation, but `enabled = true`
-cannot activate resilient mode when the operator setting is false. This is the
-explicit control-boundary exception to the general request-first precedence.
-The request policy also cannot supply credentials or an endpoint.
+This precedence includes the master switch: a request may explicitly enable or
+disable resilient mode. The request policy cannot supply credentials or an
+endpoint, so enabling resilient mode does not cross the configuration-only
+SearXNG trust boundary.
 
 The fallback order has one explicit compatibility exception:
 
@@ -130,13 +127,11 @@ The supported environment candidates are:
 accepted compatibility aliases for the corresponding canonical environment
 settings.
 
-When the operator master switch is disabled, resilience subcontrols and the
+When the effective master switch is disabled, resilience subcontrols and the
 resilient trusted-endpoint policy are inert and the legacy path runs without
-validating them. Request `enabled = true` does not change that state. When
-resilient mode is operator-enabled, request `enabled = false` selects the legacy
-path for that invocation; other invalid request overrides fail before network
-work and invalid persisted policy is an actionable configuration failure.
-Invalid or empty environment candidates produce a value-free warning
+validating them. When resilient mode is enabled, invalid request overrides fail
+before network work and invalid persisted policy is an actionable configuration
+failure. Invalid or empty environment candidates produce a value-free warning
 and fall through to the next source. Unknown engine names and unsupported
 fallback entries are not silently accepted.
 
