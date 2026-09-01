@@ -59,6 +59,7 @@ fn active_session(credit: CreditFixture) -> TestState {
         ],
         input: "draft with\nmultiple lines".to_string(),
         cursor_pos: 10,
+        top_bar_enabled: true,
         ..Default::default()
     }
 }
@@ -136,4 +137,54 @@ fn top_bar_suppression_reserves_no_space_and_is_explicit() {
         assert!(layout.visible_fields.is_empty());
         assert_eq!(layout.suppression_reason, Some(reason));
     }
+}
+
+#[test]
+fn rendered_top_bar_regions_do_not_overlap_chat_or_required_chrome() {
+    let _guard = crate::tui::ui::render_state_test_lock();
+    for (width, height) in [(40, 12), (60, 16), (80, 24), (120, 32), (160, 48)] {
+        let state = active_session(CreditFixture::KnownSubscription);
+        let _ = render_state(&state, width, height);
+        let snapshot = crate::tui::ui::last_layout_snapshot().expect("layout snapshot");
+        if let Some(top_bar) = snapshot.top_bar_area {
+            assert_eq!(top_bar.y, 0);
+            assert_eq!(top_bar.width, width);
+            assert_eq!(top_bar.height, snapshot.top_bar_row_count);
+            assert!(top_bar.y + top_bar.height <= snapshot.messages_area.y);
+            assert!(!crate::tui::ui::rects_overlap_for_tests(
+                top_bar,
+                snapshot.messages_area
+            ));
+            if let Some(diagram) = snapshot.diagram_area {
+                assert!(!crate::tui::ui::rects_overlap_for_tests(top_bar, diagram));
+            }
+            if let Some(diff) = snapshot.diff_pane_area {
+                assert!(!crate::tui::ui::rects_overlap_for_tests(top_bar, diff));
+            }
+            if let Some(input) = snapshot.input_area {
+                assert!(!crate::tui::ui::rects_overlap_for_tests(top_bar, input));
+            }
+        }
+    }
+}
+
+#[test]
+fn disabling_rendered_top_bar_reclaims_the_original_top_rows() {
+    let _guard = crate::tui::ui::render_state_test_lock();
+    let enabled = active_session(CreditFixture::KnownSubscription);
+    let _ = render_state(&enabled, 120, 32);
+    let enabled_layout = crate::tui::ui::last_layout_snapshot().expect("enabled layout");
+
+    let mut disabled = enabled.clone();
+    disabled.top_bar_enabled = false;
+    let _ = render_state(&disabled, 120, 32);
+    let disabled_layout = crate::tui::ui::last_layout_snapshot().expect("disabled layout");
+
+    assert!(enabled_layout.top_bar_row_count > 0);
+    assert_eq!(disabled_layout.top_bar_row_count, 0);
+    assert!(disabled_layout.top_bar_area.is_none());
+    assert_eq!(
+        disabled_layout.messages_area.y,
+        enabled_layout.messages_area.y - enabled_layout.top_bar_row_count
+    );
 }

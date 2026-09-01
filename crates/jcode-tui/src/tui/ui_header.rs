@@ -1001,6 +1001,25 @@ pub(super) fn build_header_sections(
     )
 }
 
+/// Build the header content that is allowed inside the scrollable transcript.
+///
+/// Once an active session has a persistent top bar, the rich identity rows are
+/// duplicate chrome rather than conversation content. Keep the secondary
+/// startup details (auth inventory, MCPs, skills, working directory) available,
+/// but remove the identity section. The direct header builders remain intact so
+/// startup and disabled-top-bar callers retain their established behavior.
+pub(super) fn build_transcript_header_sections(
+    app: &dyn TuiState,
+    width: u16,
+) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
+    let (persistent, secondary) = build_header_sections(app, width);
+    if app.top_bar_enabled() && app.top_bar_context().is_some() {
+        (Vec::new(), secondary)
+    } else {
+        (persistent, secondary)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

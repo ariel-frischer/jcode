@@ -74,6 +74,14 @@ pub struct LayoutCapture {
     pub estimated_content_height: usize,
     /// Messages area
     pub messages_area: Option<RectCapture>,
+    /// Persistent session top-bar rectangle, when shown
+    pub top_bar_area: Option<RectCapture>,
+    /// Reserved top-bar rows for this frame
+    pub top_bar_row_count: u16,
+    /// Deterministically selected top-bar fields
+    pub top_bar_visible_fields: Vec<String>,
+    /// Why the top bar was suppressed, when it reserved no rows
+    pub top_bar_suppression_reason: Option<String>,
     /// Diagram area (pinned diagram pane)
     pub diagram_area: Option<RectCapture>,
     /// Status line area
@@ -613,6 +621,20 @@ fn write_frame(file: &mut File, frame: &FrameCapture) -> std::io::Result<()> {
         writeln!(
             file,
             "  messages_area: ({}, {}) {}x{}",
+            r.x, r.y, r.width, r.height
+        )?;
+    }
+    writeln!(
+        file,
+        "  top_bar: rows={} fields={:?} suppression={:?}",
+        frame.layout.top_bar_row_count,
+        frame.layout.top_bar_visible_fields,
+        frame.layout.top_bar_suppression_reason
+    )?;
+    if let Some(r) = frame.layout.top_bar_area {
+        writeln!(
+            file,
+            "  top_bar_area: ({}, {}) {}x{}",
             r.x, r.y, r.width, r.height
         )?;
     }

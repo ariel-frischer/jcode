@@ -1,5 +1,6 @@
 use super::info_widget::{AuthMethod, InfoWidgetData, UsageInfo, UsageProvider};
 use ratatui::prelude::*;
+use ratatui::widgets::Paragraph;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// The semantic freshness or availability of a provider credit snapshot.
@@ -426,6 +427,203 @@ impl TopBarLayout {
     }
 }
 
+const TOP_BAR_MIN_WIDTH: u16 = 32;
+const TOP_BAR_MIN_CONTENT_ROWS: u16 = 3;
+const TOP_BAR_SEPARATOR: &str = "  ·  ";
+
+/// Select the deterministic top-bar layout for one frame.
+///
+/// `minimum_content_rows` is the amount of vertical space the caller must keep
+/// for the conversation and its required chrome. The selector owns the
+/// zero-to-three-row policy, while the caller owns the actual rectangle split.
+pub(crate) fn select_top_bar_layout(
+    context: Option<&TopBarContext>,
+    enabled: bool,
+    width: u16,
+    height: u16,
+    minimum_content_rows: u16,
+) -> TopBarLayout {
+    if !enabled {
+        return TopBarLayout::suppressed(TopBarSuppression::Disabled);
+    }
+    let Some(context) = context.filter(|context| !context.session_label.is_empty()) else {
+        return TopBarLayout::suppressed(TopBarSuppression::NoSession);
+    };
+    if width < TOP_BAR_MIN_WIDTH {
+        return TopBarLayout::suppressed(TopBarSuppression::TooNarrow);
+    }
+
+    let remaining = height.saturating_sub(minimum_content_rows.max(TOP_BAR_MIN_CONTENT_ROWS));
+    if remaining == 0 {
+        return TopBarLayout::suppressed(TopBarSuppression::TooShort);
+    }
+
+    let max_rows: u16 = if width >= 140 && remaining >= 3 {
+        3
+    } else if width >= 64 && remaining >= 2 {
+        2
+    } else {
+        1
+    };
+    let fields = context.fields();
+    let core = fields
+        .iter()
+        .filter(|field| {
+            matches!(
+                field.kind,
+                TopBarFieldKind::Session | TopBarFieldKind::Credit
+            )
+        })
+        .collect::<Vec<_>>();
+    let optional = fields
+        .iter()
+        .filter(|field| {
+            !matches!(
+                field.kind,
+                TopBarFieldKind::Session | TopBarFieldKind::Credit
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut lines = Vec::with_capacity(max_rows as usize);
+    let mut visible_fields = Vec::with_capacity(fields.len());
+    let core_line = render_core_line(&core, width as usize);
+    if !core_line.is_empty() {
+        lines.push(Line::from(core_line));
+        visible_fields.extend(core.iter().map(|field| field.kind));
+    }
+
+    if max_rows >= 2 {
+        let mut optional_lines = Vec::new();
+        let optional_capacity = max_rows.saturating_sub(1) as usize;
+        for field in optional {
+            let Some(text) = field_text_that_fits(field, width as usize) else {
+                continue;
+            };
+            if let Some(last) = optional_lines.last_mut()
+                && append_field(last, &text, width as usize)
+            {
+                visible_fields.push(field.kind);
+                continue;
+            }
+            if optional_lines.len() >= optional_capacity {
+                continue;
+            }
+            optional_lines.push(text);
+            visible_fields.push(field.kind);
+        }
+        lines.extend(optional_lines.into_iter().map(Line::from));
+    } else if let Some(last) = lines.last_mut() {
+        // A one-row bar may show one optional field only when it fits without
+        // weakening the session/credit pair.
+        let mut line = line_text(last);
+        for field in optional {
+            let Some(text) = field_text_that_fits(field, width as usize) else {
+                continue;
+            };
+            if append_field(&mut line, &text, width as usize) {
+                *last = Line::from(line);
+                visible_fields.push(field.kind);
+                break;
+            }
+        }
+    }
+
+    let row_count = lines.len().min(3) as u16;
+    if row_count == 0 {
+        TopBarLayout::suppressed(TopBarSuppression::TooNarrow)
+    } else {
+        TopBarLayout {
+            row_count,
+            lines,
+            visible_fields,
+            suppression_reason: None,
+        }
+    }
+}
+
+fn field_text_that_fits(field: &TopBarField, width: usize) -> Option<String> {
+    let full = line_text(&field.full);
+    if full.width() <= width {
+        return Some(full);
+    }
+    field.compact.as_ref().map(line_text).map(|compact| {
+        if compact.width() <= width {
+            compact
+        } else {
+            truncate_display_width(&compact, width)
+        }
+    })
+}
+
+fn line_text(line: &Line<'static>) -> String {
+    line.spans
+        .iter()
+        .map(|span| span.content.as_ref())
+        .collect::<String>()
+}
+
+fn append_field(line: &mut String, field: &str, width: usize) -> bool {
+    let separator = if line.is_empty() { "" } else { TOP_BAR_SEPARATOR };
+    let candidate = format!("{line}{separator}{field}");
+    if candidate.width() > width {
+        return false;
+    }
+    line.push_str(separator);
+    line.push_str(field);
+    true
+}
+
+fn render_core_line(core: &[&TopBarField], width: usize) -> String {
+    if core.is_empty() || width == 0 {
+        return String::new();
+    }
+    let values = core
+        .iter()
+        .map(|field| field_text_that_fits(field, width))
+        .collect::<Option<Vec<_>>>();
+    let Some(values) = values else {
+        return String::new();
+    };
+    let joined = values.join(TOP_BAR_SEPARATOR);
+    if joined.width() <= width {
+        return joined;
+    }
+
+    // Keep both immutable core fields discoverable even on the one-row path.
+    // Split the available cells around the separator, then truncate each field
+    // independently so a long session name cannot erase the credit state.
+    if values.len() == 2 {
+        let separator_width = TOP_BAR_SEPARATOR.width();
+        let left_width = width
+            .saturating_sub(separator_width)
+            .saturating_add(1)
+            / 2;
+        let right_width = width
+            .saturating_sub(separator_width)
+            .saturating_sub(left_width);
+        let left = truncate_display_width(&values[0], left_width.max(1));
+        let right = truncate_display_width(&values[1], right_width.max(1));
+        return format!("{left}{TOP_BAR_SEPARATOR}{right}");
+    }
+    truncate_display_width(&joined, width)
+}
+
+/// Render a selected layout into its already-allocated rectangle.
+pub(crate) fn render_top_bar(frame: &mut Frame, area: Rect, layout: &TopBarLayout) {
+    if area.width == 0 || area.height == 0 || layout.row_count == 0 {
+        return;
+    }
+    let lines = layout
+        .lines
+        .iter()
+        .take(area.height as usize)
+        .cloned()
+        .map(|line| line.style(Style::default().fg(Color::Gray)))
+        .collect::<Vec<_>>();
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
 /// Convert the existing info-widget snapshot into a safe active-session context.
 pub(crate) fn context_from_info_widget_data(
     session_label: Option<&str>,
@@ -653,5 +851,68 @@ mod tests {
             line,
             Line::from(truncate_display_width("a very long session name", 8))
         );
+    }
+
+    #[test]
+    fn adaptive_selector_preserves_core_fields_across_size_table() {
+        let context = context();
+        let cases = [
+            (24, 12, 0, Some(TopBarSuppression::TooNarrow)),
+            (40, 12, 1, None),
+            (80, 24, 2, None),
+            (120, 32, 2, None),
+            (160, 48, 2, None),
+            (80, 8, 0, Some(TopBarSuppression::TooShort)),
+        ];
+
+        for (width, height, expected_rows, expected_suppression) in cases {
+            let layout = select_top_bar_layout(Some(&context), true, width, height, 8);
+            assert_eq!(layout.row_count, expected_rows, "size {width}x{height}");
+            assert_eq!(layout.suppression_reason, expected_suppression);
+            assert!(layout.lines.iter().all(|line| line.width() <= width as usize));
+            if expected_suppression.is_none() {
+                assert!(layout.visible_fields.contains(&TopBarFieldKind::Session));
+                assert!(layout.visible_fields.contains(&TopBarFieldKind::Credit));
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_selector_is_width_safe_for_unicode_and_long_labels() {
+        let context = TopBarContext::new(
+            "a-session-name-that-is-long-enough-to-wrap 👩‍💻",
+            ProviderCreditState::known(
+                "東京",
+                Some("5-hour 62% left".to_string()),
+                Some("weekly".to_string()),
+            ),
+        )
+        .with_model_label("claudé-sonnet-東京")
+        .with_reasoning_label("medium 👩‍💻")
+        .with_server_label("server-with-a-long-name")
+        .with_client_label("jcode");
+
+        for width in 24..=160 {
+            let layout = select_top_bar_layout(Some(&context), true, width, 48, 8);
+            assert!(layout.row_count <= 3);
+            assert!(layout.lines.iter().all(|line| line.width() <= width as usize));
+            for line in &layout.lines {
+                let text = line.to_string();
+                assert!(!text.ends_with('\u{200d}'));
+                assert!(!text.ends_with('\u{301}'));
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_selector_is_stable_for_one_hundred_unchanged_refreshes() {
+        let context = context();
+        let first = select_top_bar_layout(Some(&context), true, 120, 32, 8);
+        for _ in 0..100 {
+            assert_eq!(
+                select_top_bar_layout(Some(&context), true, 120, 32, 8),
+                first
+            );
+        }
     }
 }

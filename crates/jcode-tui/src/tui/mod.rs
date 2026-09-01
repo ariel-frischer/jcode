@@ -564,6 +564,15 @@ pub trait TuiState {
         None
     }
 
+    /// Whether the persistent session top bar may reserve space.
+    ///
+    /// The persisted display setting is resolved in one place here so render
+    /// fixtures and alternate TUI state implementations can provide a
+    /// deterministic preference without changing the renderer.
+    fn top_bar_enabled(&self) -> bool {
+        crate::config::config().display.top_bar
+    }
+
     /// Whether the inline swarm gallery band should be shown above the chat.
     /// Active when `agents.swarm_spawn_mode = inline` and the swarm has members.
     fn inline_swarm_gallery_active(&self) -> bool {

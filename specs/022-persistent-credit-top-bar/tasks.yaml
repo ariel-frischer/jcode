@@ -217,7 +217,7 @@ phases:
       tasks:
         - id: "T015"
           title: "Add failing pure size-table, Unicode-width, and 100-refresh determinism tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-002"
@@ -231,7 +231,7 @@ phases:
             - "For fixed context and geometry, 100 consecutive selections produce identical row count, visible fields, lines, and suppression outcome."
         - id: "T016"
           title: "Add failing TestBackend region-coexistence and no-overlap tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-002"
@@ -244,7 +244,7 @@ phases:
             - "The tests inspect captured row count, visible fields, suppression reason, and bounds rather than relying only on visual screenshots."
         - id: "T017"
           title: "Implement deterministic priority selection, compact variants, Unicode truncation, and top-bar rendering"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -258,7 +258,7 @@ phases:
             - "The T015 pure size, Unicode, and determinism tests pass."
         - id: "T018"
           title: "Allocate and render the top bar as first-class session chrome"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -272,7 +272,7 @@ phases:
             - "The T016 TestBackend overlap and coexistence tests pass."
         - id: "T019"
           title: "Separate persistent active-session chrome from the rich scrollable header"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-002"
@@ -285,7 +285,7 @@ phases:
             - "Prepared transcript content is not rebuilt for every top-bar refresh."
         - id: "T020"
           title: "Extend visual-debug layout capture with top-bar diagnostics"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-002"

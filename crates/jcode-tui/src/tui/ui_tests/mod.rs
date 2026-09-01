@@ -151,6 +151,7 @@ struct TestState {
     swarm_panel_selected: usize,
     swarm_panel_focused: bool,
     swarm_panel_full_page: bool,
+    top_bar_enabled: bool,
 }
 
 impl crate::tui::TuiState for TestState {
@@ -371,6 +372,15 @@ impl crate::tui::TuiState for TestState {
     }
     fn info_widget_data(&self) -> info_widget::InfoWidgetData {
         self.info_widget_data.clone()
+    }
+    fn top_bar_context(&self) -> Option<crate::tui::TopBarContext> {
+        crate::tui::ui_top_bar::context_from_info_widget_data(
+            self.info_widget_data.session_name.as_deref(),
+            &self.info_widget_data,
+        )
+    }
+    fn top_bar_enabled(&self) -> bool {
+        self.top_bar_enabled
     }
     fn render_streaming_markdown(&self, _width: usize) -> Vec<Line<'static>> {
         markdown::render_markdown_with_width(&self.streaming_text, Some(_width))
