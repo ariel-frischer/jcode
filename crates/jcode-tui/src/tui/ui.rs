@@ -16,11 +16,11 @@ use super::ui_diff::{
     DiffLineKind, ParsedDiffLine, collect_diff_lines, diff_add_color, diff_change_counts_for_tool,
     diff_del_color, generate_diff_lines_from_tool_input, tint_span_with_diff_color,
 };
+use super::ui_top_bar::{render_top_bar, select_top_bar_layout};
 use super::visual_debug::{
     self, FrameCaptureBuilder, ImageRegionCapture, InfoWidgetCapture, MarginsCapture,
     MessageCapture, RenderTimingCapture,
 };
-use super::ui_top_bar::{render_top_bar, select_top_bar_layout};
 use super::{DisplayMessage, DisplayMessageRoleExt, ProcessingStatus, TuiState};
 use crate::message::ToolCall;
 use ratatui::{prelude::*, widgets::Paragraph};
@@ -1426,7 +1426,7 @@ use frame_metrics::{
     note_chat_layout, note_full_prep_built, note_full_prep_cache_hit, note_full_prep_cache_lookup,
     note_full_prep_cache_miss, note_full_prep_phase_metrics, note_full_prep_request,
     note_prep_aspect, note_prep_overflow, note_prep_prepare_at, note_prep_restage,
-    note_viewport_metrics, reset_frame_perf_stats, viewport_stability_hash,
+    note_top_bar_metrics, note_viewport_metrics, reset_frame_perf_stats, viewport_stability_hash,
 };
 pub(crate) use frame_metrics::{
     DrawCallAttribution, FrameInputAttribution, frame_input_attribution_snapshot,
@@ -2860,7 +2860,10 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     // Allocate persistent session chrome first. The remaining rectangle is the
     // only surface handed to panes, transcript, status, and input, so the bar
     // cannot draw over any of those regions.
+    let top_bar_derivation_start = Instant::now();
     let top_bar_context = app.top_bar_context();
+    let top_bar_derivation_elapsed = top_bar_derivation_start.elapsed();
+    let top_bar_selection_start = Instant::now();
     let top_bar_layout = select_top_bar_layout(
         top_bar_context.as_ref(),
         app.top_bar_enabled(),
@@ -2868,11 +2871,19 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         area.height,
         8,
     );
+    let top_bar_selection_elapsed = top_bar_selection_start.elapsed();
+    let top_bar_render_start = Instant::now();
     let (top_bar_area, session_area) = split_top_bar_surface(area, top_bar_layout.row_count);
     if let Some(top_bar_area) = top_bar_area {
         clear_area(frame, top_bar_area);
         render_top_bar(frame, top_bar_area, &top_bar_layout);
     }
+    note_top_bar_metrics(
+        top_bar_derivation_elapsed,
+        top_bar_selection_elapsed,
+        top_bar_render_start.elapsed(),
+        &top_bar_layout,
+    );
     if let Some(ref mut capture) = debug_capture {
         capture.render_order.push("draw_top_bar".to_string());
         capture.layout.top_bar_area = top_bar_area.map(Into::into);

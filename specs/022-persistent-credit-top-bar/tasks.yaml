@@ -391,7 +391,7 @@ phases:
       tasks:
         - id: "T027"
           title: "Attribute top-bar derivation, selection, and render work in frame metrics"
-          status: "Pending"
+          status: "Completed"
           type: "refactor"
           parallel: true
           story_id: null
@@ -404,7 +404,7 @@ phases:
             - "Metrics remain safe and non-secret and do not alter transcript, input, scroll, or usage behavior."
         - id: "T028"
           title: "Run focused package tests, formatting, TUI build, and repository guardrails"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -417,7 +417,7 @@ phases:
             - "Confirm all functional requirements and plan deliverables have a corresponding passing focused check or an explicitly documented platform limitation."
         - id: "T029"
           title: "Run isolated-socket runtime and debug-socket smoke verification"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null

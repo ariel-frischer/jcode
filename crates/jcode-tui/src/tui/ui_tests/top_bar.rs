@@ -154,13 +154,8 @@ fn top_bar_default_and_explicit_true_preferences_select_the_same_adaptive_layout
         32,
         8,
     );
-    let explicit_true = crate::tui::ui_top_bar::select_top_bar_layout(
-        Some(&context),
-        true,
-        120,
-        32,
-        8,
-    );
+    let explicit_true =
+        crate::tui::ui_top_bar::select_top_bar_layout(Some(&context), true, 120, 32, 8);
 
     assert!(omitted.row_count > 0);
     assert_eq!(omitted, explicit_true);

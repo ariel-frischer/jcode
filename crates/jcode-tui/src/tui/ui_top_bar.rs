@@ -564,7 +564,11 @@ fn line_text(line: &Line<'static>) -> String {
 }
 
 fn append_field(line: &mut String, field: &str, width: usize) -> bool {
-    let separator = if line.is_empty() { "" } else { TOP_BAR_SEPARATOR };
+    let separator = if line.is_empty() {
+        ""
+    } else {
+        TOP_BAR_SEPARATOR
+    };
     let candidate = format!("{line}{separator}{field}");
     if candidate.width() > width {
         return false;
@@ -595,10 +599,7 @@ fn render_core_line(core: &[&TopBarField], width: usize) -> String {
     // independently so a long session name cannot erase the credit state.
     if values.len() == 2 {
         let separator_width = TOP_BAR_SEPARATOR.width();
-        let left_width = width
-            .saturating_sub(separator_width)
-            .saturating_add(1)
-            / 2;
+        let left_width = width.saturating_sub(separator_width).saturating_add(1) / 2;
         let right_width = width
             .saturating_sub(separator_width)
             .saturating_sub(left_width);
@@ -869,7 +870,12 @@ mod tests {
             let layout = select_top_bar_layout(Some(&context), true, width, height, 8);
             assert_eq!(layout.row_count, expected_rows, "size {width}x{height}");
             assert_eq!(layout.suppression_reason, expected_suppression);
-            assert!(layout.lines.iter().all(|line| line.width() <= width as usize));
+            assert!(
+                layout
+                    .lines
+                    .iter()
+                    .all(|line| line.width() <= width as usize)
+            );
             if expected_suppression.is_none() {
                 assert!(layout.visible_fields.contains(&TopBarFieldKind::Session));
                 assert!(layout.visible_fields.contains(&TopBarFieldKind::Credit));
@@ -895,7 +901,12 @@ mod tests {
         for width in 24..=160 {
             let layout = select_top_bar_layout(Some(&context), true, width, 48, 8);
             assert!(layout.row_count <= 3);
-            assert!(layout.lines.iter().all(|line| line.width() <= width as usize));
+            assert!(
+                layout
+                    .lines
+                    .iter()
+                    .all(|line| line.width() <= width as usize)
+            );
             for line in &layout.lines {
                 let text = line.to_string();
                 assert!(!text.ends_with('\u{200d}'));
