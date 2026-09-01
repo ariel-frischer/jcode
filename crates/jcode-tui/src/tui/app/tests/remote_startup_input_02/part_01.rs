@@ -1593,12 +1593,55 @@ fn alt_q_takes_back_only_the_newest_queued_message_for_editing() {
     assert_eq!(app.input(), "second");
     assert_eq!(app.cursor_pos(), 6);
 
-    app.handle_key(KeyCode::Esc, KeyModifiers::empty()).unwrap();
     app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
         .unwrap();
 
-    assert!(app.queued_messages().is_empty());
+    assert_eq!(app.queued_messages(), &["second".to_string()]);
     assert_eq!(app.input(), "first");
+}
+
+#[test]
+fn repeated_alt_q_cycles_older_messages_and_enter_restores_the_original_slot() {
+    let mut app = create_test_app();
+    app.queue_mode = true;
+    app.is_processing = true;
+    app.queued_messages = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
+    assert_eq!(app.input(), "third");
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
+    assert_eq!(app.input(), "second");
+    assert_eq!(app.queued_messages(), &["first".to_string(), "third".to_string()]);
+
+    app.input = "edited second".to_string();
+    app.cursor_pos = app.input.len();
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty()).unwrap();
+
+    assert!(app.input().is_empty());
+    assert_eq!(
+        app.queued_messages(),
+        &["first".to_string(), "edited second".to_string(), "third".to_string()]
+    );
+}
+
+#[test]
+fn clearing_a_recalled_message_then_enter_deletes_it_from_the_queue() {
+    let mut app = create_test_app();
+    app.queue_mode = true;
+    app.is_processing = true;
+    app.queued_messages = vec!["first".to_string(), "second".to_string()];
+
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .unwrap();
+    app.input.clear();
+    app.cursor_pos = 0;
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty()).unwrap();
+
+    assert_eq!(app.queued_messages(), &["first".to_string()]);
+    assert_eq!(app.status_notice(), Some("Deleted queued message".to_string()));
 }
 
 #[test]
@@ -1665,6 +1708,43 @@ fn remote_alt_q_takes_back_one_queued_message_without_touching_interleave() {
     assert_eq!(app.input(), "second");
     assert_eq!(app.queued_messages(), &["first".to_string()]);
     assert_eq!(app.interleave_message.as_deref(), Some("already sent"));
+}
+
+#[test]
+fn remote_enter_restores_an_edited_recalled_message_to_its_original_slot() {
+    let mut app = create_test_app();
+    app.queued_messages = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+
+    rt.block_on(app.handle_remote_key(
+        KeyCode::Char('q'),
+        KeyModifiers::ALT,
+        &mut remote,
+    ))
+    .unwrap();
+    rt.block_on(app.handle_remote_key(
+        KeyCode::Char('q'),
+        KeyModifiers::ALT,
+        &mut remote,
+    ))
+    .unwrap();
+    app.input = "edited second".to_string();
+    app.cursor_pos = app.input.len();
+
+    rt.block_on(app.handle_remote_key(
+        KeyCode::Enter,
+        KeyModifiers::empty(),
+        &mut remote,
+    ))
+    .unwrap();
+
+    assert_eq!(
+        app.queued_messages(),
+        &["first".to_string(), "edited second".to_string(), "third".to_string()]
+    );
+    assert!(app.input().is_empty());
 }
 
 #[test]
