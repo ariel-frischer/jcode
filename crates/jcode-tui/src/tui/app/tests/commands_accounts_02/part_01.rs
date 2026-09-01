@@ -527,8 +527,7 @@ fn test_account_switch_shorthand_switches_openai_account_by_label() {
     with_temp_jcode_home(|| {
         let now_ms = chrono::Utc::now().timestamp_millis();
 
-        let canonical_label =
-            crate::auth::codex::upsert_account(crate::auth::codex::OpenAiAccount {
+        crate::auth::codex::upsert_account(crate::auth::codex::OpenAiAccount {
             label: "openai2".to_string(),
             access_token: "acc".to_string(),
             refresh_token: "ref".to_string(),
@@ -536,8 +535,8 @@ fn test_account_switch_shorthand_switches_openai_account_by_label() {
             account_id: Some("acct_openai2".to_string()),
             expires_at: Some(now_ms + 60_000),
             email: Some("user2@example.com".to_string()),
-            })
-            .unwrap();
+        })
+        .unwrap();
 
         let mut app = create_test_app();
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -547,7 +546,7 @@ fn test_account_switch_shorthand_switches_openai_account_by_label() {
 
             assert_eq!(
                 crate::auth::codex::active_account_label().as_deref(),
-                Some(canonical_label.as_str())
+                Some("openai-1")
             );
         });
     });

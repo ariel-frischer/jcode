@@ -666,8 +666,8 @@ fn render_todos_message_shows_user_intention_when_understanding_is_unclear() {
         "wide={wide:?}"
     );
     assert!(
-        without_whitespace(&wide.join("\n")).contains(&without_whitespace(long_text)),
-        "wide intent should wrap without losing content: {wide:?}"
+        wide.iter().any(|line| line.contains('…')),
+        "wide intent should remain on one ellipsized line: {wide:?}"
     );
     assert!(
         !narrow

@@ -1326,7 +1326,7 @@ fn list_cli_providers_includes_auto_and_openai() {
             && provider.auth_kind.as_deref() == Some("OAuth")
     }));
     assert!(providers.iter().any(|provider| provider.id == "groq"));
-    assert!(providers.iter().any(|provider| provider.id == "orcarouter"));
+    assert!(providers.iter().any(|provider| provider.id == "xai"));
 }
 
 #[test]

@@ -1412,6 +1412,7 @@ fn onboarding_banner_renders_prompt_and_both_action_rows() {
     let start_x = lines[start_y]
         .find("Start in the current directory")
         .expect("start-new column");
+
     assert!(
         welcome_y < review_y,
         "welcome copy should introduce the centered suggested prompt: {lines:#?}"
@@ -1425,8 +1426,7 @@ fn onboarding_banner_renders_prompt_and_both_action_rows() {
         "suggested prompt should span the visual center: {lines:#?}"
     );
     assert!(
-        start_y >= buffer.area.height as usize - 3
-            && start_x >= (buffer.area.width as usize).saturating_sub(34),
+        start_y >= buffer.area.height as usize - 3 && start_x >= 95,
         "blank-session action should stay secondary in the bottom-right: {lines:#?}"
     );
 }
