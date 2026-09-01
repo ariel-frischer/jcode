@@ -1,27 +1,9 @@
 use super::*;
 use crate::message::ToolDefinition;
 
+mod system_reminder;
+
 impl App {
-    pub(super) fn append_current_turn_system_reminder(
-        &self,
-        split: &mut crate::prompt::SplitSystemPrompt,
-    ) {
-        let Some(reminder) = self
-            .current_turn_system_reminder
-            .as_ref()
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-        else {
-            return;
-        };
-
-        if !split.dynamic_part.is_empty() {
-            split.dynamic_part.push_str("\n\n");
-        }
-        split.dynamic_part.push_str("# System Reminder\n\n");
-        split.dynamic_part.push_str(reminder);
-    }
-
     /// Run turn with interactive input handling (redraws UI, accepts input during streaming)
     pub(super) async fn run_turn_interactive(
         &mut self,
@@ -370,6 +352,17 @@ impl App {
                                     }
                                     // Check for interleave request (Shift+Enter)
                                     if let Some(interleave_msg) = self.interleave_message.take() {
+                                        let expanded_interleave = match super::input::expand_file_mentions_for_submit(self, &interleave_msg) {
+                                            Ok(expanded) => expanded,
+                                            Err(notice) => {
+                                                self.input = interleave_msg;
+                                                self.cursor_pos = self.input.len();
+                                                self.pending_images.append(&mut self.interleave_images);
+                                                self.set_status_notice(notice.clone());
+                                                self.push_display_message(DisplayMessage::system(notice));
+                                                continue;
+                                            }
+                                        };
                                         // Save partial assistant response if any
                                         if !text_content.is_empty() || !tool_calls.is_empty() {
                                             // Complete any pending tool
@@ -426,7 +419,7 @@ impl App {
                                             }
                                         }
                                         // Add user's interleaved message
-                                        self.add_provider_message(Message::user(&interleave_msg));
+                                        self.add_provider_message(Message::user(&expanded_interleave));
                                         self.push_display_message(DisplayMessage {
                                             role: "user".to_string(),
                                             content: interleave_msg,

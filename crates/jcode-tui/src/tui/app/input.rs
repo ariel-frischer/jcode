@@ -1,5 +1,7 @@
 #![cfg_attr(test, allow(clippy::items_after_test_module))]
 
+mod auto_poke;
+
 use super::{
     App, ContentBlock, DisplayMessage, Message, ProcessingStatus, Role, SendAction, commands,
     ctrl_bracket_fallback_to_esc, is_context_limit_error, is_request_payload_too_large_error,
@@ -17,8 +19,6 @@ use ratatui::DefaultTerminal;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
-
-mod auto_poke;
 
 /// Streaming reasoning region, split out to keep this file under the
 /// code-size budget. See the module docs for the byte-offset invariant.
@@ -198,7 +198,7 @@ fn oversized_message_notice(size: usize) -> String {
     )
 }
 
-fn input_exceeds_submit_limit(input: &str) -> Option<String> {
+pub(super) fn input_exceeds_submit_limit(input: &str) -> Option<String> {
     let size = input.len();
     (size > MAX_SUBMITTED_TEXT_BYTES).then(|| oversized_message_notice(size))
 }
@@ -1415,6 +1415,21 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
     result
 }
 
+pub(super) use super::file_mentions::expand_file_mentions;
+
+pub(super) fn expand_file_mentions_for_submit(app: &App, input: &str) -> Result<String, String> {
+    let root = app.file_mention_root();
+    let expanded = expand_file_mentions(
+        input,
+        root.to_str(),
+        crate::config::config().file_mentions.enabled,
+    );
+    if let Some(notice) = input_exceeds_submit_limit(&expanded) {
+        return Err(notice);
+    }
+    Ok(expanded)
+}
+
 pub(super) fn queue_message(app: &mut App) {
     let prepared = take_prepared_input(app);
     app.queued_messages.push(prepared.expanded);
@@ -1595,176 +1610,6 @@ impl App {
         true
     }
 
-    pub(super) fn schedule_auto_poke_followup_if_needed(&mut self) -> bool {
-        if !self.auto_poke_incomplete_todos
-            || self.pending_queued_dispatch
-            || self.pending_turn
-            || self.has_queued_followups()
-        {
-            return false;
-        }
-
-        let todos = super::commands::poke_todos(self);
-        let todo_session_id = self
-            .remote_session_id
-            .as_deref()
-            .unwrap_or(&self.session.id)
-            .to_string();
-        if !todos.is_empty()
-            && crate::todo::take_long_session_review_if_due(&todo_session_id).unwrap_or(false)
-        {
-            self.push_display_message(DisplayMessage::system(
-                "🔍 Rechecking the plan and assessments after extended work...",
-            ));
-            self.queued_messages
-                .push(crate::todo::TODO_LONG_SESSION_REVIEW_MESSAGE.to_string());
-            self.pending_queued_dispatch = true;
-            return true;
-        }
-        let incomplete: Vec<_> = todos
-            .iter()
-            .filter(|todo| super::commands::is_incomplete_poke_todo(todo))
-            .cloned()
-            .collect();
-        if incomplete.is_empty() {
-            // Completing or removing a todo list ends the prior poke cycle. If
-            // equivalent work appears later, it is a new cycle and deserves
-            // one fresh nudge rather than being mistaken for the old stall.
-            self.last_auto_poke_fingerprint = None;
-            if todos.is_empty() {
-                // No todo list exists yet for this session. Auto-poke is armed
-                // by default (`features.auto_poke`), so disarming here would
-                // silently kill the feature for the whole session after the
-                // very first todo-free turn: every later turn that *does*
-                // leave incomplete todos would never be poked. Stay armed and
-                // simply do nothing this turn.
-                crate::logging::info("AUTO_POKE_DECISION action=idle reason=no_todos incomplete=0");
-                self.todo_final_response_requested = false;
-                return false;
-            }
-            // Deferred quality checks land here, once, instead of interrupting
-            // every todo write during the turn. Every point recorded during the
-            // turn is raised, including ones whose score later climbed: work
-            // done while the score was low never benefited from the assessment
-            // that arrived after it.
-            if self.deliver_deferred_gate_digest_if_needed() {
-                return true;
-            }
-            let goals = crate::todo::load_goals(&todo_session_id).unwrap_or_default();
-            let ownership_needs_followup =
-                !crate::todo::completed_groups_have_sufficient_delivery(&todos, &goals);
-            let gate_budget_left =
-                self.todo_completion_gate_attempts < Self::TODO_COMPLETION_GATE_MAX_ATTEMPTS;
-            if ownership_needs_followup && gate_budget_left {
-                self.todo_completion_gate_attempts =
-                    self.todo_completion_gate_attempts.saturating_add(1);
-                crate::telemetry::record_todo_gate(crate::telemetry::TodoGateKind::Ownership);
-                self.push_display_message(DisplayMessage::system(
-                    "🔍 Checking end-to-end ownership before finishing...",
-                ));
-                self.queued_messages
-                    .push(crate::todo::build_todo_ownership_continuation_message(
-                        &todos, &goals,
-                    ));
-                self.pending_queued_dispatch = true;
-                return true;
-            }
-            let confidence_summary = super::commands::todo_confidence_summary(&todos);
-            let confidence_label =
-                super::commands::format_todo_completion_confidence(confidence_summary);
-            let needs_spike_challenge = confidence_summary.confidence_spike_detected
-                && !self.todo_confidence_spike_challenged;
-            if (confidence_summary.completion_confidence_needs_validation || needs_spike_challenge)
-                && gate_budget_left
-            {
-                self.todo_completion_gate_attempts =
-                    self.todo_completion_gate_attempts.saturating_add(1);
-                let notice = if confidence_summary.completion_confidence_needs_validation {
-                    crate::telemetry::record_todo_gate(crate::telemetry::TodoGateKind::Completion);
-                    "🔍 Double-checking confidence for you..."
-                } else {
-                    self.todo_confidence_spike_challenged = true;
-                    crate::telemetry::record_todo_gate(
-                        crate::telemetry::TodoGateKind::ConfidenceSpike,
-                    );
-                    "🔍 Double-checking confidence jumps..."
-                };
-                self.push_display_message(DisplayMessage::system(notice));
-                // User-role content: reminder-only turns read as empty user
-                // messages and models answer instead of re-validating.
-                let summary = super::commands::build_todo_confidence_summary_message(&todos);
-                self.queued_messages.push(summary);
-                self.pending_queued_dispatch = true;
-                return true;
-            }
-            if (ownership_needs_followup
-                || confidence_summary.completion_confidence_needs_validation
-                || needs_spike_challenge)
-                && !gate_budget_left
-            {
-                // The gate keeps failing but the model is no longer making
-                // progress on it. Nudging again would loop forever, burning an
-                // API call per turn (observed live: an unattended session
-                // resent the same continuation every ~5s). Stop the cycle and
-                // surface the stall instead.
-                crate::logging::warn(&format!(
-                    "Todo completion gate exhausted after {} attempts; stopping auto-poke to avoid an infinite continuation loop",
-                    self.todo_completion_gate_attempts
-                ));
-                self.push_display_message(DisplayMessage::system(
-                    "⚠️ We nudged the agent several times but its validation still isn't holding up. We stopped poking; review the remaining todos yourself.",
-                ));
-                self.auto_poke_incomplete_todos = false;
-                self.todo_confidence_spike_challenged = false;
-                self.todo_completion_gate_attempts = 0;
-                self.todo_gate_digest_delivered = false;
-                self.pending_queued_dispatch = false;
-                return false;
-            }
-            return self.finish_completed_auto_poke_cycle(&confidence_label);
-        }
-
-        let poke_message = super::commands::build_poke_message(&incomplete);
-        self.todo_final_response_requested = false;
-        // Open work begins a new completion cycle. Keep the prior spike check
-        // latched until this point so the synthetic final-response turn cannot
-        // retrigger the same evidence gate against unchanged completed todos.
-        self.todo_confidence_spike_challenged = false;
-        let fingerprint =
-            serde_json::to_string(&incomplete).unwrap_or_else(|_| poke_message.clone());
-        if self.last_auto_poke_fingerprint.as_ref() == Some(&fingerprint) {
-            crate::logging::info(&format!(
-                "AUTO_POKE_DECISION action=idle reason=unchanged_todos incomplete={}",
-                incomplete.len()
-            ));
-            return false;
-        }
-
-        self.push_display_message(DisplayMessage::system(format!(
-            "👉 {} incomplete todo{}. We poked it for you. /poke off to stop.",
-            incomplete.len(),
-            if incomplete.len() == 1 { "" } else { "s" },
-        )));
-        // Auto-poke previously had no log trail, so a continuation that was
-        // queued but never dispatched looked identical in the logs to a silent
-        // model. Emit a decision line on every arm so the queue -> send handoff
-        // can be correlated with "Sending queued continuation message".
-        crate::logging::info(&format!(
-            "AUTO_POKE_DECISION action=queue_continuation incomplete={} queued_before={} is_processing={} pending_turn={}",
-            incomplete.len(),
-            self.queued_messages.len(),
-            self.is_processing,
-            self.pending_turn,
-        ));
-        // Open todos mean the model is still iterating; completion-gate
-        // exhaustion should only trip when the gate itself stops moving.
-        self.todo_completion_gate_attempts = 0;
-        self.last_auto_poke_fingerprint = Some(fingerprint);
-        self.queued_messages.push(poke_message);
-        self.pending_queued_dispatch = true;
-        true
-    }
-
     pub(super) fn schedule_queued_dispatch_after_interrupt(&mut self) {
         if self.has_queued_followups() {
             self.pending_queued_dispatch = true;
@@ -1857,7 +1702,18 @@ fn route_prompt_to_new_session_local(app: &mut App) -> bool {
     let prepared = take_prepared_input(app);
     let restored_raw = prepared.raw_input.clone();
     let restored_images = prepared.images.clone();
-    match commands::launch_prompt_in_new_session_local(app, prepared.expanded, prepared.images) {
+    let expanded = match expand_file_mentions_for_submit(app, &prepared.expanded) {
+        Ok(expanded) => expanded,
+        Err(notice) => {
+            app.input = restored_raw;
+            app.cursor_pos = app.input.len();
+            app.pending_images = restored_images;
+            app.set_status_notice(notice.clone());
+            app.push_display_message(DisplayMessage::system(notice));
+            return true;
+        }
+    };
+    match commands::launch_prompt_in_new_session_local(app, expanded, prepared.images) {
         Ok(_) => true,
         Err(error) => {
             app.input = restored_raw;
@@ -3767,8 +3623,22 @@ impl App {
         // Leaving the preview should happen as soon as the user acts on it.
         self.onboarding_preview_mode = false;
 
-        // Add the expanded user message to the transcript. The composer remains compact
-        // while editing, but sent turns should show the actual pasted content.
+        // Keep the transcript and persisted history readable while sending the
+        // referenced file contents only to the provider-facing message.
+        let display_input = input.clone();
+        input = match expand_file_mentions_for_submit(self, &input) {
+            Ok(expanded) => expanded,
+            Err(notice) => {
+                self.input = display_input;
+                self.cursor_pos = self.input.len();
+                self.set_status_notice(notice.clone());
+                self.push_display_message(DisplayMessage::system(notice));
+                return;
+            }
+        };
+
+        // Add the compact user message to the visible transcript. The provider
+        // receives the expanded content below.
         // Remember the typed prompt so we can restore it to the input box if this
         // turn fails (e.g. "token refresh needed"), instead of dropping it.
         self.last_submitted_input = Some(raw_input.clone());
@@ -3781,7 +3651,7 @@ impl App {
 
         self.push_display_message(DisplayMessage {
             role: "user".to_string(),
-            content: input.clone(),
+            content: display_input.clone(),
             tool_calls: vec![],
             duration_secs: None,
             title: None,
@@ -3806,7 +3676,7 @@ impl App {
             self.session.add_message(
                 Role::User,
                 vec![ContentBlock::Text {
-                    text: input.clone(),
+                    text: display_input.clone(),
                     cache_control: None,
                 }],
             );
@@ -3818,7 +3688,7 @@ impl App {
                 .map(|(media_type, data)| ContentBlock::Image { media_type, data })
                 .collect();
             blocks.push(ContentBlock::Text {
-                text: input.clone(),
+                text: display_input.clone(),
                 cache_control: None,
             });
             self.session.add_message(Role::User, blocks);
@@ -3896,7 +3766,19 @@ impl App {
                 merge_turn_reminders(reminder, mission_turn_reminder(&self.session.id));
 
             if has_combined {
-                self.add_provider_message(Message::user(&combined));
+                let expanded = match expand_file_mentions_for_submit(self, &combined) {
+                    Ok(expanded) => expanded,
+                    Err(notice) => {
+                        self.input = combined;
+                        self.cursor_pos = self.input.len();
+                        self.set_status_notice(notice.clone());
+                        self.push_display_message(DisplayMessage::system(notice));
+                        self.is_processing = false;
+                        self.status = ProcessingStatus::Idle;
+                        break;
+                    }
+                };
+                self.add_provider_message(Message::user(&expanded));
                 self.session.add_message(
                     Role::User,
                     vec![ContentBlock::Text {

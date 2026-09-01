@@ -1,0 +1,606 @@
+#[test]
+fn at_file_suggestions_use_session_cwd_ignore_vendor_content_and_accept_selection() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("src")).expect("src directory");
+        std::fs::create_dir_all(temp.path().join("node_modules/pkg"))
+            .expect("vendor directory");
+        std::fs::write(temp.path().join("src/main.rs"), "fn main() {}").expect("source file");
+        std::fs::write(temp.path().join("node_modules/pkg/index.js"), "")
+            .expect("vendor file");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+    app.input = "Explain @".to_string();
+    app.cursor_pos = app.input.len();
+
+    let suggestions = wait_for_file_mention_suggestions(&mut app);
+    assert!(
+        suggestions
+            .iter()
+            .any(|(value, _)| value == "Explain @src/"),
+        "expected src directory suggestion, got {suggestions:?}"
+    );
+    assert!(
+        suggestions
+            .iter()
+            .all(|(value, _)| !value.contains("node_modules")),
+        "vendor content leaked into @ suggestions: {suggestions:?}"
+    );
+
+    app.handle_key(
+        crossterm::event::KeyCode::Down,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("navigate suggestions");
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("accept suggestion");
+        assert!(app.input.starts_with("Explain @"));
+        assert!(app.input.ends_with('/') || app.input.ends_with("main.rs"));
+    });
+}
+
+#[test]
+fn file_mention_nested_directory_query_lists_only_direct_children() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills/local-skill"))
+            .expect("nested hidden skill directory");
+        std::fs::create_dir_all(temp.path().join("crates/example/src"))
+            .expect("unrelated nested src directory");
+        std::fs::create_dir_all(temp.path().join("src/bin")).expect("root source directory");
+        std::fs::write(temp.path().join(".agents/AGENTS.md"), "").expect("direct hidden file");
+        std::fs::write(
+            temp.path().join(".agents/skills/local-skill/SKILL.md"),
+            "",
+        )
+        .expect("nested skill file");
+        std::fs::write(temp.path().join("crates/example/src/lib.rs"), "")
+            .expect("unrelated source file");
+        std::fs::write(temp.path().join("src/lib.rs"), "")
+            .expect("direct root source file");
+        std::fs::write(temp.path().join("src/bin/tool.rs"), "")
+            .expect("nested root source file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@.agents/".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions
+                .iter()
+                .any(|(value, kind)| value == "@.agents/skills/" && *kind == "Directory"),
+            "expected direct skills directory, got {suggestions:?}"
+        );
+        assert!(suggestions
+            .iter()
+            .any(|(value, _)| value == "@.agents/AGENTS.md"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.ends_with("SKILL.md")),
+            "nested descendants should wait until their directory is selected: {suggestions:?}"
+        );
+
+        app.input = "@src/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/bin/"));
+        assert!(suggestions.iter().any(|(value, _)| value == "@src/lib.rs"));
+        assert!(
+            suggestions.iter().all(|(value, _)| {
+                !value.starts_with("@crates/") && !value.ends_with("bin/tool.rs")
+            }),
+            "src browsing must stay at the selected directory's direct children: {suggestions:?}"
+        );
+
+        app.input = "@missing/".to_owned();
+        app.cursor_pos = app.input.len();
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(
+            suggestions.is_empty(),
+            "a missing root-level directory must not jump roots: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
+fn configured_file_mention_ignore_hides_worktrees_but_keeps_hidden_project_files() {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\nignore = [\".worktrees/\"]\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join(".agents/skills"))
+            .expect("hidden project directory");
+        std::fs::create_dir_all(temp.path().join(".worktrees/agent/src"))
+            .expect("worktree directory");
+        std::fs::write(temp.path().join(".agents/skills/SKILL.md"), "")
+            .expect("hidden project file");
+        std::fs::write(temp.path().join(".worktrees/agent/src/lib.rs"), "")
+            .expect("worktree file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@.agents/"));
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.contains(".worktrees")),
+            "configured worktree ignore leaked into suggestions: {suggestions:?}"
+        );
+    });
+}
+
+#[test]
+fn tab_completes_an_active_file_mention_without_submitting() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "readme").expect("readme");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+    app.input = "Explain @README".to_owned();
+    app.cursor_pos = app.input.len();
+
+    let suggestions = wait_for_file_mention_suggestions(&mut app);
+    assert_eq!(suggestions[0].0, "Explain @README.md");
+    app.handle_key(
+        crossterm::event::KeyCode::Tab,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("complete file mention");
+
+        assert_eq!(app.input, "Explain @README.md");
+        assert!(app.queued_messages.is_empty());
+        assert!(!app.queue_mode);
+    });
+}
+
+#[test]
+fn repeated_tab_cycles_through_file_mention_suggestions() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("alpha.txt"), "").expect("alpha");
+        std::fs::write(temp.path().join("beta.txt"), "").expect("beta");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+    app.input = "@".to_owned();
+    app.cursor_pos = 1;
+    let suggestions = wait_for_file_mention_suggestions(&mut app);
+    assert!(suggestions.iter().any(|(value, _)| value == "@alpha.txt"));
+    assert!(suggestions.iter().any(|(value, _)| value == "@beta.txt"));
+
+    app.handle_key(
+        crossterm::event::KeyCode::Tab,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("complete first file mention");
+    assert_eq!(app.input, "@alpha.txt");
+
+    app.handle_key(
+        crossterm::event::KeyCode::Tab,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("cycle to second file mention");
+        assert_eq!(app.input, "@beta.txt");
+    });
+}
+
+#[test]
+fn file_mention_discovery_falls_back_to_the_launch_cwd() {
+    with_file_mentions_enabled(|| {
+        let mut app = create_test_app();
+        app.session.working_dir = None;
+        app.input = "@".to_owned();
+        app.cursor_pos = 1;
+
+    let _ = app.command_suggestions();
+    let request = app
+        .file_mention_discovery
+        .borrow()
+        .as_ref()
+        .expect("file mention discovery")
+        .request
+        .clone();
+
+        assert_eq!(request.root, std::env::current_dir().expect("launch cwd"));
+    });
+}
+
+#[test]
+fn remote_file_mention_picker_and_expansion_share_the_client_root() {
+    with_file_mentions_enabled(|| {
+        let session_root = tempfile::tempdir().expect("session root");
+        std::fs::write(session_root.path().join("Cargo.toml"), "wrong root")
+            .expect("session fixture");
+
+        let mut app = create_test_app();
+        app.is_remote = true;
+        app.session.working_dir = Some(session_root.path().to_string_lossy().into_owned());
+        app.input = "@Cargo.toml".to_owned();
+        app.cursor_pos = app.input.len();
+
+        let _ = app.command_suggestions();
+        let request = app
+            .file_mention_discovery
+            .borrow()
+            .as_ref()
+            .expect("file mention discovery")
+            .request
+            .clone();
+        let client_root = std::env::current_dir().expect("client cwd");
+        assert_eq!(request.root, client_root);
+
+        let expanded = super::input::expand_file_mentions_for_submit(&app, "@Cargo.toml")
+            .expect("expand remote file mention");
+        let expected = super::file_mentions::expand_file_mentions(
+            "@Cargo.toml",
+            client_root.to_str(),
+            true,
+        );
+        assert_eq!(expanded, expected);
+        assert!(!expanded.contains("wrong root"));
+    });
+}
+
+#[test]
+fn file_mention_suggestions_rank_candidates_globally_across_batches() {
+    with_file_mentions_enabled(|| {
+        let mut app = create_test_app();
+        app.input = "@rank".to_owned();
+        app.cursor_pos = app.input.len();
+        let root = std::env::current_dir().expect("cwd");
+        let request = super::file_mentions::FileMentionRequest {
+            root,
+            query: "rank".to_owned(),
+            ignore_patterns: Vec::new(),
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let generation = 99;
+        *app.file_mention_discovery.borrow_mut() =
+            Some(super::file_mentions::FileMentionDiscovery {
+                request,
+                generation,
+                receiver,
+                cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                candidates: Vec::new(),
+            });
+        sender
+            .send(super::file_mentions::FileMentionBatch {
+                generation,
+                candidates: (0..100)
+                    .map(|index| super::file_mentions::FileMentionCandidate {
+                        score: 1,
+                        path: format!("rank-low-{index:03}.txt"),
+                        is_dir: false,
+                    })
+                    .collect(),
+                done: false,
+            })
+            .expect("first batch");
+        sender
+            .send(super::file_mentions::FileMentionBatch {
+                generation,
+                candidates: vec![super::file_mentions::FileMentionCandidate {
+                    score: 100,
+                    path: "rank-best.txt".to_owned(),
+                    is_dir: false,
+                }],
+                done: true,
+            })
+            .expect("second batch");
+
+        assert!(app.poll_file_mention_discovery());
+        let suggestions = app.file_mention_suggestions(&app.input);
+
+        assert_eq!(suggestions.len(), 100);
+        assert_eq!(suggestions[0].0, "@rank-best.txt");
+    });
+}
+
+#[test]
+fn file_mention_discovery_prioritizes_files_directly_in_the_root() {
+    let _env_lock = crate::storage::lock_test_env();
+    let temp = tempfile::tempdir().expect("tempdir");
+    std::fs::create_dir_all(temp.path().join("nested")).expect("nested directory");
+    for index in 0..64 {
+        std::fs::write(
+            temp.path().join(format!("nested/fixture-{index:02}.txt")),
+            "",
+        )
+        .expect("nested fixture");
+    }
+    std::fs::write(temp.path().join("root-file.txt"), "").expect("root file");
+
+    let (receiver, _cancel) = super::file_mentions::start_file_mention_discovery_for_test(
+        temp.path().to_path_buf(),
+        String::new(),
+        Vec::new(),
+        11,
+    );
+    let first = receiver
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .expect("first file batch");
+
+    assert!(
+        first
+            .candidates
+            .iter()
+            .any(|candidate| candidate.path == "root-file.txt"),
+        "root-level file missing from first batch: {:?}",
+        first.candidates
+    );
+}
+
+#[test]
+fn file_mentions_default_enabled_and_can_be_disabled() {
+    let default_file_mentions = jcode_config_types::FileMentionsConfig::default();
+    assert!(default_file_mentions.enabled);
+    assert!(default_file_mentions.ignore.is_empty());
+
+    let omitted_enabled: crate::config::Config =
+        toml::from_str("[file_mentions]\nignore = [\"generated/\"]\n")
+            .expect("config with omitted enabled parses");
+    assert!(omitted_enabled.file_mentions.enabled);
+    assert_eq!(omitted_enabled.file_mentions.ignore, ["generated/"]);
+
+    with_temp_jcode_home(|| {
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "default contents").expect("readme");
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = 1;
+
+        let suggestions = wait_for_file_mention_suggestions(&mut app);
+        assert!(suggestions.iter().any(|(value, _)| value == "@README.md"));
+    });
+
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = false\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("README.md"), "disabled contents").expect("readme");
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "Explain @README.md".to_owned();
+        app.cursor_pos = app.input.len();
+
+        assert!(app.command_suggestions().is_empty());
+        assert!(app.file_mention_discovery.borrow().is_none());
+        assert_eq!(app.input, "Explain @README.md");
+        assert_eq!(
+            super::file_mentions::expand_file_mentions(
+                &app.input,
+                temp.path().to_str(),
+                false,
+            ),
+            "Explain @README.md"
+        );
+    });
+}
+
+#[test]
+fn submitted_file_mention_keeps_compact_display_and_expands_model_context() {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(temp.path().join("docs")).expect("docs directory");
+        std::fs::write(temp.path().join("docs/context.md"), "full context\n")
+            .expect("context file");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "Explain @docs/context.md".to_owned();
+        app.cursor_pos = app.input.len();
+
+        app.submit_input();
+
+        let displayed = app
+            .display_messages()
+            .iter()
+            .rev()
+            .find(|message| message.role == "user")
+            .expect("displayed user message");
+        assert_eq!(displayed.content, "Explain @docs/context.md");
+        let submitted = app.session.messages.last().expect("submitted message");
+        assert!(matches!(
+            submitted.content.as_slice(),
+            [ContentBlock::Text { text, .. }]
+                if text == "Explain @docs/context.md"
+        ));
+        let provider_messages = app.materialized_provider_messages();
+        let submitted = provider_messages.last().expect("provider user message");
+        assert!(matches!(
+            submitted.content.as_slice(),
+            [ContentBlock::Text { text, .. }]
+                if text == "Explain <file path=\"docs/context.md\">\nfull context\n\n</file>"
+        ));
+    });
+}
+
+#[test]
+fn historical_file_mention_provider_context_is_materialized_once() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let context_path = temp.path().join("context.md");
+        std::fs::write(&context_path, "original context").expect("original context");
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.session.add_message(
+            Role::User,
+            vec![ContentBlock::Text {
+                text: "Explain @context.md".to_owned(),
+                cache_control: None,
+            }],
+        );
+
+        let (first, _) = app.messages_for_provider();
+        let first_text = first
+            .last()
+            .and_then(|message| message.content.last())
+            .and_then(|block| match block {
+                ContentBlock::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("first provider text");
+        std::fs::write(&context_path, "mutated context").expect("mutated context");
+        let (second, _) = app.messages_for_provider();
+
+        let text = second
+            .last()
+            .and_then(|message| message.content.last())
+            .and_then(|block| match block {
+                ContentBlock::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .expect("provider text");
+        assert_eq!(text, first_text);
+        assert!(text.contains("original context"));
+        assert!(!text.contains("mutated context"));
+    });
+}
+
+#[test]
+fn queued_file_mention_stays_compact_when_retrieved_for_editing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("notes.md"), "private file contents")
+        .expect("write file mention fixture");
+    let mut app = create_test_app();
+    app.session.working_dir = Some(dir.path().to_string_lossy().into_owned());
+    app.is_processing = true;
+    app.queue_mode = true;
+    app.input = "Inspect @notes.md".to_string();
+    app.cursor_pos = app.input.len();
+
+    app.handle_key(
+        crossterm::event::KeyCode::Enter,
+        crossterm::event::KeyModifiers::empty(),
+    )
+    .expect("queue file mention");
+    assert_eq!(app.queued_messages(), &["Inspect @notes.md".to_string()]);
+
+    app.retrieve_pending_message_for_edit();
+
+    assert_eq!(app.input(), "Inspect @notes.md");
+    assert!(!app.input().contains("private file contents"));
+}
+
+#[test]
+fn stale_file_mention_generations_are_discarded() {
+    with_file_mentions_enabled(|| {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(temp.path().join("old-name.txt"), "").expect("old file");
+        std::fs::write(temp.path().join("new-name.txt"), "").expect("new file");
+
+    let mut app = create_test_app();
+    app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+    app.input = "@old".to_owned();
+    app.cursor_pos = app.input.len();
+    let _ = app.command_suggestions();
+    app.input = "@new".to_owned();
+    app.cursor_pos = app.input.len();
+
+    let suggestions = wait_for_file_mention_suggestions(&mut app);
+    assert!(
+        suggestions
+            .iter()
+            .any(|(value, _)| value == "@new-name.txt"),
+        "new query suggestions: {suggestions:?}"
+    );
+        assert!(
+            suggestions
+                .iter()
+                .all(|(value, _)| !value.contains("old-name"))
+        );
+    });
+}
+
+#[test]
+fn file_mention_discovery_is_batched_and_input_stays_within_budget() {
+    with_file_mentions_enabled(|| {
+        use std::time::{Duration, Instant};
+
+    let sizes = [32, 256, 1024];
+    for size in sizes {
+        let temp = tempfile::tempdir().expect("tempdir");
+        for index in 0..size {
+            std::fs::write(temp.path().join(format!("fixture-{index:04}.txt")), "")
+                .expect("fixture file");
+        }
+
+        let started = Instant::now();
+        let (receiver, _cancel) = super::file_mentions::start_file_mention_discovery_for_test(
+            temp.path().to_path_buf(),
+            String::new(),
+            Vec::new(),
+            7,
+        );
+        let first = receiver
+            .recv_timeout(Duration::from_millis(100))
+            .expect("first bounded file batch");
+        let first_batch_elapsed = started.elapsed();
+        assert!(first_batch_elapsed < Duration::from_millis(100));
+        assert!(first.candidates.len() <= 32);
+        assert!(!first.done || size <= 32);
+
+        let mut app = create_test_app();
+        app.session.working_dir = Some(temp.path().to_string_lossy().into_owned());
+        app.input = "@".to_owned();
+        app.cursor_pos = 1;
+        let input_started = Instant::now();
+        let _ = app.command_suggestions();
+        let input_elapsed = input_started.elapsed();
+        assert!(
+            input_elapsed < Duration::from_millis(50),
+            "input request exceeded 50 ms for fixture size {size}"
+        );
+        eprintln!(
+            "file mention benchmark: files={size} first_batch_ms={:.3} input_ms={:.3} batch={} done={}",
+            first_batch_elapsed.as_secs_f64() * 1000.0,
+            input_elapsed.as_secs_f64() * 1000.0,
+            first.candidates.len(),
+            first.done,
+        );
+        }
+    });
+}
+
+fn with_file_mentions_enabled<T>(f: impl FnOnce() -> T) -> T {
+    with_temp_jcode_home(|| {
+        write_test_config("[file_mentions]\nenabled = true\n");
+        crate::config::invalidate_config_cache();
+        f()
+    })
+}
+
+fn wait_for_file_mention_suggestions(app: &mut App) -> Vec<(String, &'static str)> {
+    use std::time::{Duration, Instant};
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let suggestions = app.command_suggestions();
+        if !suggestions.is_empty() || Instant::now() >= deadline {
+            return suggestions;
+        }
+        app.poll_file_mention_discovery();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}

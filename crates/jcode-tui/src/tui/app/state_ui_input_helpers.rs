@@ -1247,6 +1247,18 @@ impl App {
                 return Vec::new();
             }
         }
+        if !self.input.trim_start().starts_with('/') && self.input.contains('@') {
+            if !crate::config::config().file_mentions.enabled {
+                self.clear_file_mention_discovery();
+                return Vec::new();
+            }
+            let mentions = self.file_mention_suggestions(&self.input);
+            if !mentions.is_empty() {
+                return mentions;
+            }
+        } else {
+            self.clear_file_mention_discovery();
+        }
         self.get_suggestions_for(&self.input)
     }
 
@@ -1507,67 +1519,6 @@ impl App {
         ));
 
         prompts
-    }
-
-    /// Autocomplete current input - cycles through suggestions on repeated Tab
-    pub fn autocomplete(&mut self) -> bool {
-        // Get suggestions for current input
-        let current_suggestions = self.get_suggestions_for(&self.input);
-
-        // Check if we're continuing a tab cycle from a previous base
-        if let Some((ref base, idx)) = self.tab_completion_state.clone() {
-            let base_suggestions = self.get_suggestions_for(base);
-
-            // If current input is in base suggestions AND there are multiple options, continue cycling
-            if base_suggestions.len() > 1
-                && base_suggestions.iter().any(|(cmd, _)| cmd == &self.input)
-            {
-                let next_index = (idx + 1) % base_suggestions.len();
-                let (cmd, _) = &base_suggestions[next_index];
-                self.remember_input_undo_state();
-                self.input = cmd.clone();
-                self.cursor_pos = self.input.len();
-                self.tab_completion_state = Some((base.clone(), next_index));
-                return true;
-            }
-            // Otherwise, fall through to start a new cycle with current input
-        }
-
-        // Start fresh cycle with current input
-        if current_suggestions.is_empty() {
-            self.tab_completion_state = None;
-            return false;
-        }
-
-        // If only one suggestion and it matches exactly, add trailing space for commands
-        // that accept arguments, then we're done
-        if current_suggestions.len() == 1 && current_suggestions[0].0 == self.input {
-            if !self.input.ends_with(' ') && Self::command_accepts_args(&self.input) {
-                self.remember_input_undo_state();
-                self.input.push(' ');
-                self.cursor_pos = self.input.len();
-                return true;
-            }
-            self.tab_completion_state = None;
-            return false;
-        }
-
-        // Apply first suggestion and start tracking the cycle
-        let selected = self
-            .command_suggestion_selected
-            .min(current_suggestions.len().saturating_sub(1));
-        let (cmd, _) = &current_suggestions[selected];
-        let base = self.input.clone();
-        self.remember_input_undo_state();
-        self.input = cmd.clone();
-        // If unique match, add trailing space for arg-accepting commands
-        if current_suggestions.len() == 1 && Self::command_accepts_args(&self.input) {
-            self.input.push(' ');
-        }
-        self.cursor_pos = self.input.len();
-        self.tab_completion_state = Some((base, selected));
-        self.command_suggestion_selected = 0;
-        true
     }
 
     /// Reset tab completion state (call when user types/modifies input)

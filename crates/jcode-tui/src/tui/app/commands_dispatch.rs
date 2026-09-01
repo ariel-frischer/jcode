@@ -50,7 +50,7 @@ mod tests {
     fn both_entry_points_use_the_shared_dispatch_table() {
         for (path, source) in [
             ("input.rs", include_str!("input.rs")),
-            ("remote.rs", include_str!("remote.rs")),
+            ("remote/followups.rs", include_str!("remote/followups.rs")),
         ] {
             assert!(
                 source.contains("commands_dispatch::dispatch_local_command"),

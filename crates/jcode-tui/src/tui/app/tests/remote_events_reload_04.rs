@@ -1857,7 +1857,6 @@ fn test_debug_command_message_respects_queue_mode() {
     assert_eq!(submitted_message.role, crate::message::Role::User);
     assert_eq!(submitted_message.display_role, None);
     assert_eq!(submitted_message.content_preview(), "hello");
-
     // Reset for next test
     app.pending_turn = false;
     app.messages.clear();

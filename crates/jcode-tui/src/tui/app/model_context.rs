@@ -794,6 +794,7 @@ impl App {
                 .strip_oversized_images(crate::compaction::PAYLOAD_IMAGE_CHAR_BUDGET);
             if stripped > 0 {
                 self.messages.clear();
+                self.local_provider_messages = None;
                 self.reseed_compaction_from_provider_messages();
                 self.push_display_message(DisplayMessage::error(format!(
                     "Error: {} Dropped {} oversized image(s); you can retry.",
@@ -930,6 +931,7 @@ impl App {
         // next API call rebuilds from the reduced session, and reseed compaction
         // bookkeeping from the new provider view.
         self.messages.clear();
+        self.local_provider_messages = None;
         self.reseed_compaction_from_provider_messages();
 
         self.push_display_message(DisplayMessage::system(format!(

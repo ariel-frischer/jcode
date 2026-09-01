@@ -104,6 +104,15 @@ swarm_panel_focus = "alt+n"
 # By default Enter resumes in this terminal; Ctrl+Enter performs the alternate action.
 session_picker_enter = "current-terminal"
 
+[file_mentions]
+# Filesystem-backed `@` suggestions and provider-time expansion are enabled by default.
+# Set false to opt out.
+enabled = true
+# Additional gitignore-style patterns excluded from suggestions. These are additive
+# to the built-in generated/dependency directory exclusions documented in
+# docs/FILE_MENTIONS.md.
+# ignore = [".worktrees/", "private/", "*.generated.*"]
+
 [dictation]
 # External speech-to-text command.
 # The command should record/transcribe speech and print the final transcript to stdout.
@@ -724,6 +733,8 @@ mod tests {
             toml::from_str::<Config>(&template).expect("the shipped config template must parse");
         assert_eq!(config.tools.mcp_tools, McpToolsMode::Auto);
         assert_eq!(config.tools.mcp_tools_token_threshold, 8_000);
+        assert!(config.file_mentions.enabled);
+        assert!(template.contains("Set false to opt out."));
         assert!(
             config.display.show_thinking,
             "the shipped user config must request model reasoning"

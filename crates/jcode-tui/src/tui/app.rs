@@ -52,6 +52,7 @@ pub enum AppRuntimeMode {
 mod auth;
 mod auth_account_picker_saved_accounts;
 mod catchup;
+mod command_suggestions_cache;
 mod commands;
 mod commands_colors;
 mod commands_dispatch;
@@ -63,8 +64,11 @@ mod commands_review;
 mod conversation_state;
 mod copy_selection;
 mod debug;
+
+use command_suggestions_cache::*;
 mod dictation;
 mod event_wrappers;
+mod file_mentions;
 mod handterm_native_scroll;
 pub(crate) mod helpers;
 mod hotkey_feedback;
@@ -72,6 +76,7 @@ pub(crate) mod idle_animation_repaint;
 mod idle_heap_release;
 mod inline_interactive;
 mod input;
+mod input_completion;
 mod input_help;
 mod local;
 mod misc_ui;
@@ -655,48 +660,6 @@ pub(super) struct OvernightAutoPokeState {
     pub final_wrap_poked: bool,
 }
 
-#[derive(Clone, Debug, Default)]
-struct CommandCandidatesCache {
-    candidates: Vec<(String, &'static str)>,
-}
-
-/// Memoized result of [`App::command_suggestions`] for one exact input buffer.
-///
-/// The suggestion list is read up to eight times per rendered frame (input
-/// box, hint line, shell-mode routing, key handling, debug capture). Each
-/// uncached call re-ranks ~120 registered commands plus skills, allocating a
-/// lowercased `String` per candidate, and some prefixes (`/goals show `) hit
-/// the disk. Caching on the exact input plus the small amount of state that
-/// can change the answer collapses that to one computation per distinct
-/// input.
-#[derive(Clone, Debug)]
-struct CommandSuggestionsCache {
-    /// Exact (untrimmed) input buffer the suggestions were computed from.
-    input: String,
-    /// Guard state that changes the answer independently of `input`, so a
-    /// stale entry can never outlive a prompt/picker transition.
-    signature: CommandSuggestionsSignature,
-    /// Frame epoch the entry was built in. The suggestion list also depends on
-    /// mutable session data (rewind target count, model catalogs, skills,
-    /// goals on disk) that is impractical to enumerate in a signature, so the
-    /// memo is deliberately scoped to a single frame: it collapses the ~8
-    /// reads per frame into one computation and never survives into the next.
-    epoch: u64,
-    suggestions: Vec<(String, &'static str)>,
-}
-
-/// Non-input state that [`App::command_suggestions`] branches on before it
-/// ever consults the input buffer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CommandSuggestionsSignature {
-    pending_login: bool,
-    pending_account_input: bool,
-    pending_ssh_remote_name: bool,
-    /// `Some(kind)` while an inline picker preview is open, which suppresses
-    /// the textual suggestion list for the matching command.
-    inline_preview_kind: Option<crate::tui::PickerKind>,
-}
-
 /// Session-wide token and cache accounting accumulated across all turns.
 ///
 /// Grouped out of [`App`] to keep the cohesive token/cache totals together. The
@@ -834,6 +797,8 @@ pub struct App {
     skills: Arc<SkillRegistry>,
     mcp_manager: Arc<RwLock<McpManager>>,
     messages: Vec<Message>,
+    provider_messages_hydrated: bool,
+    local_provider_messages: Option<Vec<Message>>,
     session: Session,
     display_messages: Vec<DisplayMessage>,
     display_messages_version: u64,
@@ -849,6 +814,10 @@ pub struct App {
     /// Per-input memo for `command_suggestions()`; see
     /// [`CommandSuggestionsCache`].
     command_suggestions_cache: RefCell<Option<CommandSuggestionsCache>>,
+    /// Background filesystem discovery for the `@` file mention picker.
+    file_mention_discovery: RefCell<Option<file_mentions::FileMentionDiscovery>>,
+    /// Monotonic request generation used to reject stale worker batches.
+    file_mention_generation: std::cell::Cell<u64>,
     /// Monotonic frame counter bounding the lifetime of
     /// `command_suggestions_cache` to a single frame.
     command_suggestions_epoch: std::cell::Cell<u64>,
@@ -1540,9 +1509,9 @@ pub struct App {
     // After an interrupt, wait one redraw before auto-dispatching queued followups so
     // the queued preview can render in the interrupted state first.
     pending_queued_dispatch: bool,
-    // Tab completion state: (base_input, suggestion_index)
-    // base_input is the original input before cycling, suggestion_index is current position
-    tab_completion_state: Option<(String, usize)>,
+    // Tab completion state retains the original input and suggestion snapshot so
+    // repeated Tab can cycle file mentions even as the active query changes.
+    tab_completion_state: Option<input_completion::TabCompletionState>,
     // Selected row in the visible command suggestion list.
     command_suggestion_selected: usize,
     // Time when app started (for startup animations)

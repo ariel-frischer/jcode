@@ -696,6 +696,9 @@ jcode dictate
 jcode supports interactive TUI use, non-interactive runs, persistent server/client workflows,
 and hotkey-friendly dictation without requiring a bundled speech-to-text stack.
 
+The TUI includes responsive `@path` discovery and provider-time file expansion. See
+[File mentions](docs/FILE_MENTIONS.md) for configuration, limits, and remote-session behavior.
+
 <div align="center">
 
   <a href="https://github.com/1jehuang/jcode/releases/download/readme-assets/workflow.mp4">

@@ -37,6 +37,8 @@ fn cached_suggestions_match_uncached_across_input_mutations() {
     }
 }
 
+include!("file_mention_picker.rs");
+
 /// Typing must invalidate the memo even within a single frame, since the entry
 /// is keyed on the exact input buffer.
 #[test]

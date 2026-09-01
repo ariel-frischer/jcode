@@ -1,20 +1,52 @@
 use super::*;
 
 impl App {
+    fn expand_persisted_file_mentions(&self, mut messages: Vec<Message>) -> Vec<Message> {
+        let enabled = crate::config::config().file_mentions.enabled;
+        let root = self.file_mention_root();
+        let working_dir = root.to_str();
+        for message in &mut messages {
+            if !matches!(&message.role, Role::User) {
+                continue;
+            }
+            for block in &mut message.content {
+                if let ContentBlock::Text { text, .. } = block {
+                    *text = super::file_mentions::expand_file_mentions(text, working_dir, enabled);
+                }
+            }
+        }
+        messages
+    }
+
     pub(super) fn ensure_provider_messages_hydrated(&mut self) {
-        if !self.is_remote || !self.messages.is_empty() || self.session.messages.is_empty() {
+        if (self.is_remote && self.provider_messages_hydrated)
+            || (!self.is_remote && self.local_provider_messages.is_some())
+        {
             return;
         }
 
-        let provider_messages = self.session.messages_for_provider_uncached();
+        let provider_messages =
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached());
+        self.replace_provider_messages(provider_messages);
+    }
+
+    pub(super) fn replace_provider_messages_from_session(&mut self) {
+        let provider_messages =
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached());
         self.replace_provider_messages(provider_messages);
     }
 
     pub(super) fn materialized_provider_messages(&self) -> Vec<Message> {
-        if self.is_remote || !self.messages.is_empty() {
+        if self.is_remote && self.provider_messages_hydrated {
             self.messages.clone()
+        } else if !self.is_remote && !self.messages.is_empty() {
+            self.messages.clone()
+        } else if !self.is_remote {
+            self.local_provider_messages.clone().unwrap_or_else(|| {
+                self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
+            })
         } else {
-            self.session.messages_for_provider_uncached()
+            self.expand_persisted_file_mentions(self.session.messages_for_provider_uncached())
         }
     }
 
@@ -201,9 +233,11 @@ impl App {
     }
 
     pub(super) fn add_provider_message(&mut self, message: Message) {
+        self.ensure_provider_messages_hydrated();
         if self.is_remote {
-            self.ensure_provider_messages_hydrated();
             self.messages.push(message.clone());
+        } else if let Some(provider_messages) = self.local_provider_messages.as_mut() {
+            provider_messages.push(message.clone());
         }
         if self.is_remote || !self.provider.uses_jcode_compaction() {
             return;
@@ -215,7 +249,12 @@ impl App {
     }
 
     pub(super) fn replace_provider_messages(&mut self, messages: Vec<Message>) {
-        self.messages = messages;
+        if self.is_remote {
+            self.messages = messages;
+            self.provider_messages_hydrated = true;
+        } else {
+            self.local_provider_messages = Some(messages);
+        }
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();
@@ -224,6 +263,11 @@ impl App {
 
     pub(super) fn clear_provider_messages(&mut self) {
         self.messages.clear();
+        if self.is_remote {
+            self.provider_messages_hydrated = true;
+        } else {
+            self.local_provider_messages = Some(Vec::new());
+        }
         self.last_injected_memory_signature = None;
         self.reset_tool_output_tracking();
         self.reseed_compaction_from_provider_messages();
@@ -786,7 +830,9 @@ impl App {
                 };
                 if self.is_remote || !self.messages.is_empty() {
                     self.messages
-                        .insert(index + 1 + inserted + offset, inserted_message);
+                        .insert(index + 1 + inserted + offset, inserted_message.clone());
+                } else if let Some(provider_messages) = self.local_provider_messages.as_mut() {
+                    provider_messages.insert(index + 1 + inserted + offset, inserted_message);
                 }
                 self.session
                     .insert_message(index + 1 + inserted + offset, stored_message);
