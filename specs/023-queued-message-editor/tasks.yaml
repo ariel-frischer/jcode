@@ -199,7 +199,7 @@ phases:
       tasks:
         - id: "T015"
           title: "Add failing two-anchor, one-anchor, no-anchor, arrival, and conflict tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-004"
@@ -211,7 +211,7 @@ phases:
             - "Changed eligibility or unsafe selection causes a visible NotApplied conflict with the full owner draft recoverable and no queue mutation."
         - id: "T016"
           title: "Implement deterministic queue anchoring and conflict classification"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-004"
@@ -223,7 +223,7 @@ phases:
             - "Return Exact, StaleBestEffort, or NotApplied and never report an unsafe or ambiguous mutation as ordinary success."
         - id: "T017"
           title: "Add failing TUI stale, conflict, boundary, and draft-recovery tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-004"
@@ -235,7 +235,7 @@ phases:
             - "Transport loss or conflict retains the complete draft and stable operation identity for retry or recovery."
         - id: "T018"
           title: "Apply authoritative outcomes without losing unresolved drafts"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-004"
@@ -247,7 +247,7 @@ phases:
             - "Ignore stale or foreign results safely and preserve the active draft on all NotApplied or transport-recovery paths."
         - id: "T019"
           title: "Pass deterministic concurrency and visible-feedback tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-004"

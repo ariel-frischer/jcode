@@ -1571,6 +1571,8 @@ pub struct App {
     pending_soft_interrupt_requests: Vec<(u64, String)>,
     // One authoritative server-queue recall operation, retained across reconnect.
     remote_soft_interrupt_recall: remote::SoftInterruptRecallState,
+    // One owner-scoped queued-message editor session and its stable pending operation.
+    remote_queued_message_editor: remote::QueuedMessageEditorClientState,
     // Whether the current remote turn should trigger autoreview after completion.
     autoreview_after_current_turn: bool,
     // Whether the current remote turn should trigger autojudge after completion.

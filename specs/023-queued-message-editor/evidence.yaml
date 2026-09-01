@@ -660,15 +660,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -712,15 +712,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -764,15 +764,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -816,15 +816,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -868,15 +868,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -1544,15 +1544,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
       command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 11 focused authoritative tests: exact two-anchor restoration, both one-anchor sides, no-anchor survivor/arrival partitioning, conflict no-mutation, replay, ordered images, and disconnect release."
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
       command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      result: "Passed 3 focused TUI tests: matching session/operation enforcement, foreign/stale result rejection, boundary/conflict draft preservation, ordered images, and distinct stale/replay/release/commit/delete feedback."
     regression:
       status: pending
       planned_tasks: T030-T033

@@ -2515,6 +2515,23 @@ pub(in crate::tui::app) fn handle_server_event(
             message,
             ..
         } => super::soft_interrupt_recall::handle_server_result(app, &operation_id, message),
+        ServerEvent::QueuedMessageEditorResult {
+            navigation_session_id,
+            operation_id,
+            outcome,
+            selection,
+            placement,
+            message,
+            ..
+        } => super::queued_message_editor::handle_server_result(
+            app,
+            &navigation_session_id,
+            &operation_id,
+            outcome,
+            selection,
+            placement,
+            message.as_deref(),
+        ),
         ServerEvent::MemoryInjected {
             count,
             prompt,

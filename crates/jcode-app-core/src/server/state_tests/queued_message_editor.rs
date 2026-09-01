@@ -380,6 +380,221 @@ fn finish_commits_only_selected_and_restores_held_order_with_stale_anchor_feedba
 }
 
 #[test]
+fn finish_restores_between_two_surviving_anchors_exactly() {
+    let (control, queue) = control_with(vec![
+        other_client_user("predecessor", 1),
+        owned_user("older", 2),
+        owned_user("selected", 3),
+        other_client_user("successor", 4),
+    ]);
+    let selected = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "two-anchor-navigation",
+            "two-anchor-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start")
+        .selection
+        .expect("selection");
+
+    let result = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "two-anchor-navigation",
+            "two-anchor-finish",
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id: selected.message_id,
+                draft: RecallableSoftInterrupt {
+                    content: "exact committed edit".to_string(),
+                    images: ordered_images("exact-committed"),
+                },
+            },
+        )
+        .expect("finish");
+
+    assert_eq!(result.outcome, QueuedMessageEditorOutcome::Committed);
+    assert_eq!(result.placement, QueuedMessageEditorPlacement::Exact);
+    let pending = queue.lock().expect("queue lock");
+    let ids: Vec<_> = pending
+        .iter()
+        .map(|message| message.message_id.as_deref().expect("stable id"))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "queued-editor-message-predecessor",
+            "queued-editor-message-older",
+            "queued-editor-message-selected",
+            "queued-editor-message-successor",
+        ]
+    );
+    assert_eq!(pending[2].content, "exact committed edit");
+    assert_eq!(pending[2].images, ordered_images("exact-committed"));
+}
+
+#[test]
+fn finish_with_only_predecessor_anchor_restores_after_it_and_reports_stale() {
+    let (control, queue) = control_with(vec![
+        other_client_user("predecessor", 1),
+        owned_user("older", 2),
+        owned_user("selected", 3),
+        other_client_user("successor", 4),
+    ]);
+    let selected = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "predecessor-anchor-navigation",
+            "predecessor-anchor-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start")
+        .selection
+        .expect("selection");
+    queue.lock().expect("queue lock").remove(1);
+
+    let result = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "predecessor-anchor-navigation",
+            "predecessor-anchor-finish",
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id: selected.message_id,
+                draft: RecallableSoftInterrupt {
+                    content: "predecessor-side edit".to_string(),
+                    images: ordered_images("predecessor-side"),
+                },
+            },
+        )
+        .expect("finish");
+
+    assert_eq!(result.outcome, QueuedMessageEditorOutcome::StalePlacement);
+    assert_eq!(
+        result.placement,
+        QueuedMessageEditorPlacement::StaleBestEffort
+    );
+    let pending = queue.lock().expect("queue lock");
+    let ids: Vec<_> = pending
+        .iter()
+        .map(|message| message.message_id.as_deref().expect("stable id"))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "queued-editor-message-predecessor",
+            "queued-editor-message-older",
+            "queued-editor-message-selected",
+        ]
+    );
+}
+
+#[test]
+fn finish_without_anchors_restores_between_survivors_and_arrivals() {
+    let (control, queue) = control_with(vec![
+        other_client_user("predecessor", 1),
+        owned_user("older", 2),
+        other_client_user("pre-snapshot-survivor", 3),
+        owned_user("selected", 4),
+        other_client_user("successor", 5),
+    ]);
+    let selected = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "no-anchor-navigation",
+            "no-anchor-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start")
+        .selection
+        .expect("selection");
+    {
+        let mut pending = queue.lock().expect("queue lock");
+        pending.retain(|message| {
+            !matches!(
+                message.message_id.as_deref(),
+                Some("queued-editor-message-predecessor" | "queued-editor-message-successor")
+            )
+        });
+        pending.push(post_snapshot_arrival("arrival-one", 5).message);
+        pending.push(post_snapshot_arrival("arrival-two", 6).message);
+    }
+
+    let result = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "no-anchor-navigation",
+            "no-anchor-finish",
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id: selected.message_id,
+                draft: RecallableSoftInterrupt {
+                    content: "no-anchor edit".to_string(),
+                    images: ordered_images("no-anchor"),
+                },
+            },
+        )
+        .expect("finish");
+
+    assert_eq!(result.outcome, QueuedMessageEditorOutcome::StalePlacement);
+    let pending = queue.lock().expect("queue lock");
+    let ids: Vec<_> = pending
+        .iter()
+        .map(|message| message.message_id.as_deref().expect("stable id"))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "queued-editor-message-pre-snapshot-survivor",
+            "queued-editor-message-older",
+            "queued-editor-message-selected",
+            "queued-editor-message-arrival-one",
+            "queued-editor-message-arrival-two",
+        ]
+    );
+}
+
+#[test]
+fn unsafe_finish_selection_returns_recoverable_conflict_without_queue_mutation() {
+    let (control, queue) = control_with(vec![owned_user("older", 1), owned_user("selected", 2)]);
+    let selected = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "conflict-navigation",
+            "conflict-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start")
+        .selection
+        .expect("selection");
+    assert!(queue.lock().expect("queue lock").is_empty());
+
+    let conflict = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "conflict-navigation",
+            "conflict-finish",
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id: "queued-editor-message-not-selected".to_string(),
+                draft: RecallableSoftInterrupt {
+                    content: "must remain recoverable in the composer".to_string(),
+                    images: ordered_images("conflict-draft"),
+                },
+            },
+        )
+        .expect("conflict result");
+
+    assert_eq!(conflict.outcome, QueuedMessageEditorOutcome::Conflict);
+    assert_eq!(conflict.placement, QueuedMessageEditorPlacement::NotApplied);
+    assert_eq!(
+        conflict
+            .selection
+            .expect("recoverable selection")
+            .message_id,
+        selected.message_id
+    );
+    assert!(queue.lock().expect("queue lock").is_empty());
+}
+
+#[test]
 fn empty_finish_deletes_only_selected_and_images_only_finish_commits() {
     let (control, queue) = control_with(vec![owned_user("older", 1), owned_user("selected", 2)]);
     let selected = control

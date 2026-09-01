@@ -21,6 +21,7 @@ mod input_dispatch;
 pub(super) use followups::process_remote_followups;
 mod key_handling;
 mod queue_recovery;
+mod queued_message_editor;
 mod reconnect;
 mod server_event_handlers;
 mod server_events;
@@ -38,6 +39,7 @@ use queue_recovery::{
 };
 // Re-export for sibling modules and tests that access reconnect state and helpers
 // through `super::remote::*` without reaching into private submodules directly.
+pub(super) use queued_message_editor::QueuedMessageEditorClientState;
 #[allow(unused_imports)]
 pub(super) use reconnect::{
     ConnectOutcome, PostConnectOutcome, ReloadReconnectHints, RemoteRunState, connect_with_retry,
