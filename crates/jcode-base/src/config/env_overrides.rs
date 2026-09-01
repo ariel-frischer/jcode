@@ -1,3 +1,6 @@
+use super::websearch::{
+    parse_engine_order_candidate, warn_invalid_websearch_env, warn_invalid_websearch_env_field,
+};
 use super::*;
 
 impl Config {
@@ -526,6 +529,94 @@ impl Config {
             self.websearch.searxng_url = Some(v);
         }
 
+        // Opt-in resilient websearch policy. Invalid candidates are ignored
+        // with value-free warnings so persisted settings remain effective.
+        apply_env_bool(
+            &mut self.websearch.resilience.enabled,
+            &[
+                "JCODE_WEBSEARCH_RESILIENCE_ENABLED",
+                "JCODE_WEBSEARCH_ENABLED",
+            ],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.duckduckgo_enabled,
+            &["JCODE_WEBSEARCH_DUCKDUCKGO_ENABLED"],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.bing_enabled,
+            &["JCODE_WEBSEARCH_BING_ENABLED"],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.searxng_enabled,
+            &["JCODE_WEBSEARCH_SEARXNG_ENABLED"],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.fallback_enabled,
+            &["JCODE_WEBSEARCH_FALLBACK_ENABLED"],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.retries_enabled,
+            &["JCODE_WEBSEARCH_RETRIES_ENABLED"],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.health_suppression_enabled,
+            &[
+                "JCODE_WEBSEARCH_HEALTH_SUPPRESSION_ENABLED",
+                "JCODE_WEBSEARCH_HEALTH_ENABLED",
+            ],
+        );
+        apply_env_bool(
+            &mut self.websearch.resilience.diagnostics_enabled,
+            &["JCODE_WEBSEARCH_DIAGNOSTICS_ENABLED"],
+        );
+        apply_env_u64(
+            &mut self.websearch.resilience.attempt_timeout_ms,
+            &[
+                "JCODE_WEBSEARCH_ATTEMPT_TIMEOUT_MS",
+                "JCODE_WEBSEARCH_TIMEOUT_MS",
+            ],
+            jcode_config_types::WEBSEARCH_MIN_ATTEMPT_TIMEOUT_MS,
+            jcode_config_types::WEBSEARCH_MAX_ATTEMPT_TIMEOUT_MS,
+            "attempt_timeout_ms",
+        );
+        apply_env_u8(
+            &mut self.websearch.resilience.max_retries,
+            &["JCODE_WEBSEARCH_MAX_RETRIES"],
+            jcode_config_types::WEBSEARCH_MIN_RETRIES,
+            jcode_config_types::WEBSEARCH_MAX_RETRIES,
+            "max_retries",
+        );
+        apply_env_u8(
+            &mut self.websearch.resilience.health_failure_threshold,
+            &[
+                "JCODE_WEBSEARCH_HEALTH_FAILURE_THRESHOLD",
+                "JCODE_WEBSEARCH_HEALTH_THRESHOLD",
+            ],
+            jcode_config_types::WEBSEARCH_MIN_HEALTH_FAILURE_THRESHOLD,
+            jcode_config_types::WEBSEARCH_MAX_HEALTH_FAILURE_THRESHOLD,
+            "health_failure_threshold",
+        );
+        apply_env_u64(
+            &mut self.websearch.resilience.health_cooldown_ms,
+            &["JCODE_WEBSEARCH_HEALTH_COOLDOWN_MS"],
+            jcode_config_types::WEBSEARCH_MIN_HEALTH_COOLDOWN_MS,
+            jcode_config_types::WEBSEARCH_MAX_HEALTH_COOLDOWN_MS,
+            "health_cooldown_ms",
+        );
+        if let Ok(raw) = std::env::var("JCODE_WEBSEARCH_FALLBACK_ENGINES") {
+            if let Some(order) = parse_engine_order_candidate(&raw) {
+                self.websearch.fallback_engines = order;
+            } else {
+                warn_invalid_websearch_env("JCODE_WEBSEARCH_FALLBACK_ENGINES");
+            }
+        }
+        if let Ok(raw) = std::env::var("JCODE_WEBSEARCH_TRUSTED_SEARXNG_URL") {
+            match validate_trusted_searxng_url(&raw) {
+                Ok(url) => self.websearch.resilience.trusted_searxng_url = Some(url),
+                Err(_) => warn_invalid_websearch_env("JCODE_WEBSEARCH_TRUSTED_SEARXNG_URL"),
+            }
+        }
+
         if let Ok(v) = std::env::var("JCODE_TRUSTED_EXTERNAL_AUTH_SOURCES") {
             let mut source_ids = Vec::new();
             let mut source_paths = Vec::new();
@@ -824,6 +915,43 @@ fn parse_env_bool(raw: &str) -> Option<bool> {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),
         _ => None,
+    }
+}
+
+fn apply_env_bool(target: &mut bool, keys: &[&str]) {
+    for key in keys {
+        if let Ok(raw) = std::env::var(key) {
+            if let Some(value) = parse_env_bool(&raw) {
+                *target = value;
+            } else {
+                warn_invalid_websearch_env(key);
+            }
+            break;
+        }
+    }
+}
+
+fn apply_env_u64(target: &mut u64, keys: &[&str], min: u64, max: u64, field: &str) {
+    for key in keys {
+        if let Ok(raw) = std::env::var(key) {
+            match raw.trim().parse::<u64>() {
+                Ok(value) if (min..=max).contains(&value) => *target = value,
+                _ => warn_invalid_websearch_env_field(key, field),
+            }
+            break;
+        }
+    }
+}
+
+fn apply_env_u8(target: &mut u8, keys: &[&str], min: u8, max: u8, field: &str) {
+    for key in keys {
+        if let Ok(raw) = std::env::var(key) {
+            match raw.trim().parse::<u8>() {
+                Ok(value) if (min..=max).contains(&value) => *target = value,
+                _ => warn_invalid_websearch_env_field(key, field),
+            }
+            break;
+        }
     }
 }
 

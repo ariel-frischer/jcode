@@ -12,7 +12,7 @@ pub use jcode_config_types::{
     NamedProviderType, NativeScrollbarConfig, NotificationsConfig, OverscrollStatusMode,
     PowerConfig, ProviderConfig, ReasoningDisplayMode, SafetyConfig, SessionPickerResumeAction,
     SponsorsConfig, SwarmSpawnMode, SwarmStripLayout, TerminalConfig, UpdateChannel,
-    WebSearchConfig, WebSearchEngine,
+    WebSearchConfig, WebSearchEngine, WebSearchPolicyOverride, WebSearchResilienceConfig,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -182,6 +182,23 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_UPDATE_CHANNEL",
     "JCODE_WEBSEARCH_ENGINE",
     "JCODE_WEBSEARCH_FALLBACK_ENGINES",
+    "JCODE_WEBSEARCH_RESILIENCE_ENABLED",
+    "JCODE_WEBSEARCH_ENABLED",
+    "JCODE_WEBSEARCH_DUCKDUCKGO_ENABLED",
+    "JCODE_WEBSEARCH_BING_ENABLED",
+    "JCODE_WEBSEARCH_SEARXNG_ENABLED",
+    "JCODE_WEBSEARCH_FALLBACK_ENABLED",
+    "JCODE_WEBSEARCH_ATTEMPT_TIMEOUT_MS",
+    "JCODE_WEBSEARCH_TIMEOUT_MS",
+    "JCODE_WEBSEARCH_RETRIES_ENABLED",
+    "JCODE_WEBSEARCH_MAX_RETRIES",
+    "JCODE_WEBSEARCH_HEALTH_SUPPRESSION_ENABLED",
+    "JCODE_WEBSEARCH_HEALTH_ENABLED",
+    "JCODE_WEBSEARCH_HEALTH_FAILURE_THRESHOLD",
+    "JCODE_WEBSEARCH_HEALTH_THRESHOLD",
+    "JCODE_WEBSEARCH_HEALTH_COOLDOWN_MS",
+    "JCODE_WEBSEARCH_DIAGNOSTICS_ENABLED",
+    "JCODE_WEBSEARCH_TRUSTED_SEARXNG_URL",
     "JCODE_WORKSPACE_DOWN_KEY",
     "JCODE_WORKSPACE_LEFT_KEY",
     "JCODE_WORKSPACE_RIGHT_KEY",
@@ -549,6 +566,25 @@ pub struct Config {
     pub launch_hotkeys: LaunchHotkeysConfig,
 }
 
+/// Validated effective websearch settings for one tool invocation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedWebSearchPolicy {
+    pub enabled: bool,
+    pub duckduckgo_enabled: bool,
+    pub bing_enabled: bool,
+    pub searxng_enabled: bool,
+    pub fallback_order: Vec<WebSearchEngine>,
+    pub fallback_enabled: bool,
+    pub attempt_timeout_ms: u64,
+    pub retries_enabled: bool,
+    pub max_retries: u8,
+    pub health_suppression_enabled: bool,
+    pub health_failure_threshold: u8,
+    pub health_cooldown_ms: u64,
+    pub diagnostics_enabled: bool,
+    pub trusted_searxng_url: Option<String>,
+}
+
 /// Controls who owns autonomous wake execution.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -815,6 +851,9 @@ mod config_file;
 mod default_file;
 mod display_summary;
 mod env_overrides;
+mod websearch;
+
+pub use websearch::validate_trusted_searxng_url;
 
 #[cfg(test)]
 #[path = "config_tests.rs"]
