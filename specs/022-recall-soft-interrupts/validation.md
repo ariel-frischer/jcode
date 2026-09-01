@@ -92,3 +92,22 @@ The first independent static safety review found one landing blocker: the TUI re
 The deterministic reconnect regression sends an initial operation, simulates response loss, resends through a new transport, asserts the exact same operation identity, preserves local pending tracking until the authoritative result, applies the exact text/images once, and ignores a duplicate result. Server tests separately prove the same operation replay returns the cached result without a second queue removal.
 
 Known bounded residuals are explicit rather than landing blockers: replay is process-local and capped at 64 completed operations per session, so daemon restart or later cache eviction cannot reconcile an arbitrarily old lost response. Local pending-count reconciliation retains the existing content-based bookkeeping because the public recalled payload intentionally contains exact user text/images rather than internal queue metadata; authoritative server ownership and one-message removal remain ID-based.
+
+## T012 landing, installation, and live verification
+
+Completed on 2026-09-01 from the clean root integration checkout, which remained on `dev` throughout.
+
+| Check | Result |
+|---|---|
+| Feature candidate | `92435b185` on `agent/jcode-c9u-alt-q-soft-queue`, clean and explicitly committed |
+| Dev integration | PASS; conflict-free no-fast-forward merge `85f495abd` with root branch still `dev` and clean |
+| Fast release install | PASS; `scripts/install_release.sh --fast` installed `/home/ari/.jcode/builds/versions/85f495abd/jcode` |
+| Installed identity | PASS; launcher resolved to the versioned binary and reported `jcode v0.81.759-dev (85f495abd)` |
+| Graceful activation | PASS; installer reported the running server reloaded onto `85f495abd`; isolated-socket cleanup warning was correctly non-fatal and did not affect activation |
+| Installed real TUI harness | PASS; PTY tester used the exact installed version and established `websocket/persistent-reuse` |
+| Live newest-first recall | PASS; immediate lowercase Alt+Q restored `T012-ORDER-NEWEST-RECALL`, then after clearing the composer restored `T012-ORDER-OLDER-PRESERVED` |
+| Live repeated key | PASS; two immediate lowercase Alt+Q injections after fresh queueing restored only `T012-FAST-NEWEST-RECALL` and did not skip to the older message |
+| Live composer blocking | PASS; lowercase Alt+Q while `T012-FAST-NEWEST-RECALL` occupied the composer left it byte-equivalent |
+| Disposable runtime cleanup | PASS; tester stopped and private installed-binary verification server terminated without touching shared user sessions |
+
+The live acceptance used a disposable private socket and debug-enabled PTY tester launched through a scratch wrapper that explicitly selected the installed immutable binary and socket. Evidence files remain under `~/.jcode/scratch/t012-live-*`, including the reported version, first recall, blocked composer, repeated-key result, and ordered two-message recall.
