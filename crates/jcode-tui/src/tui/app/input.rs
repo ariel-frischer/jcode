@@ -1476,20 +1476,42 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
 
 pub(super) fn queue_message(app: &mut App) {
     let prepared = take_prepared_input(app);
-    app.queued_messages.push(prepared.expanded);
+    if let Some(index) = app.queued_message_edit_index.take() {
+        app.queued_messages
+            .insert(index.min(app.queued_messages.len()), prepared.expanded);
+        app.set_status_notice("Updated queued message");
+    } else {
+        app.queued_messages.push(prepared.expanded);
+    }
 }
 
 pub(super) fn retrieve_queued_message_for_edit(app: &mut App) -> bool {
-    if !app.input.is_empty() {
-        return false;
-    }
+    let (message, edit_index) = if let Some(current_index) = app.queued_message_edit_index {
+        if current_index == 0 {
+            app.set_status_notice("Already editing the oldest queued message");
+            return true;
+        }
 
-    let Some(message) = app.queued_messages.pop() else {
-        return false;
+        if !app.input.is_empty() {
+            let current = std::mem::take(&mut app.input);
+            app.queued_messages
+                .insert(current_index.min(app.queued_messages.len()), current);
+        }
+        let next_index = current_index - 1;
+        (app.queued_messages.remove(next_index), next_index)
+    } else {
+        if !app.input.is_empty() {
+            return false;
+        }
+        let Some(message) = app.queued_messages.pop() else {
+            return false;
+        };
+        (message, app.queued_messages.len())
     };
 
     app.input = message;
     app.cursor_pos = app.input.len();
+    app.queued_message_edit_index = Some(edit_index);
     if !app.has_queued_followups() {
         app.pending_queued_dispatch = false;
     }
@@ -1499,6 +1521,24 @@ pub(super) fn retrieve_queued_message_for_edit(app: &mut App) -> bool {
     } else {
         format!("Took back queued message for editing ({remaining} still queued)")
     });
+    true
+}
+
+pub(super) fn finish_queued_message_edit(app: &mut App) -> bool {
+    let Some(index) = app.queued_message_edit_index.take() else {
+        return false;
+    };
+
+    if app.input.is_empty() {
+        app.cursor_pos = 0;
+        app.clear_input_undo_history();
+        app.set_status_notice("Deleted queued message");
+    } else {
+        let prepared = take_prepared_input(app);
+        app.queued_messages
+            .insert(index.min(app.queued_messages.len()), prepared.expanded);
+        app.set_status_notice("Updated queued message");
+    }
     true
 }
 
@@ -1959,6 +1999,10 @@ fn route_prompt_to_new_session_local(app: &mut App) -> bool {
 
 pub(super) fn handle_alternate_enter(app: &mut App) {
     if app.activate_picker_from_preview() {
+        return;
+    }
+
+    if finish_queued_message_edit(app) {
         return;
     }
 
@@ -2753,6 +2797,9 @@ pub(super) fn handle_global_control_shortcuts(
 pub(super) fn handle_enter(app: &mut App) -> bool {
     promote_dropped_images(app);
     if app.activate_picker_from_preview() {
+        return true;
+    }
+    if finish_queued_message_edit(app) {
         return true;
     }
     if !app.input.is_empty() {

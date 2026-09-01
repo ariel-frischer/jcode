@@ -905,6 +905,10 @@ async fn handle_remote_key_internal(
             return Ok(());
         }
 
+        if input::finish_queued_message_edit(app) {
+            return Ok(());
+        }
+
         if !app.input.is_empty() {
             let prepared = input::take_prepared_input(app);
 
@@ -1015,6 +1019,9 @@ async fn handle_remote_key_internal(
         }
         KeyCode::Enter => {
             if app.activate_picker_from_preview() {
+                return Ok(());
+            }
+            if input::finish_queued_message_edit(app) {
                 return Ok(());
             }
             if !app.input.is_empty() {
