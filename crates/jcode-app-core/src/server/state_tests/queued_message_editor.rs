@@ -660,6 +660,91 @@ fn empty_finish_deletes_only_selected_and_images_only_finish_commits() {
     assert_eq!(pending[0].images, images);
 }
 
+#[test]
+fn replayed_finish_returns_recorded_result_without_mutating_the_restored_queue_again() {
+    let (control, queue) = control_with(vec![owned_user("older", 1), owned_user("selected", 2)]);
+    let selected = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "finish-replay-navigation",
+            "finish-replay-start",
+            QueuedMessageEditorOperation::Start,
+        )
+        .expect("start")
+        .selection
+        .expect("selection");
+    let finish = QueuedMessageEditorOperation::Finish {
+        selected_message_id: selected.message_id,
+        draft: RecallableSoftInterrupt {
+            content: "committed exactly once".to_string(),
+            images: ordered_images("finish-replay"),
+        },
+    };
+
+    let committed = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "finish-replay-navigation",
+            "finish-replay-operation",
+            finish.clone(),
+        )
+        .expect("finish");
+    assert_eq!(committed.outcome, QueuedMessageEditorOutcome::Committed);
+
+    let arrival = post_snapshot_arrival("after-finish", 2).message;
+    queue.lock().expect("queue lock").push(arrival.clone());
+    let queue_before_replay: Vec<_> = queue
+        .lock()
+        .expect("queue lock")
+        .iter()
+        .map(|message| {
+            (
+                message.message_id.clone(),
+                message.content.clone(),
+                message.images.clone(),
+            )
+        })
+        .collect();
+
+    let replay = control
+        .queued_message_editor(
+            OWNER_CLIENT_ID,
+            "finish-replay-navigation",
+            "finish-replay-operation",
+            finish,
+        )
+        .expect("replayed finish");
+    assert_eq!(replay.outcome, QueuedMessageEditorOutcome::Replay);
+    assert_eq!(replay.selection, committed.selection);
+    assert_eq!(replay.placement, committed.placement);
+    let queue_after_replay: Vec<_> = queue
+        .lock()
+        .expect("queue lock")
+        .iter()
+        .map(|message| {
+            (
+                message.message_id.clone(),
+                message.content.clone(),
+                message.images.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(queue_after_replay, queue_before_replay);
+    assert_eq!(
+        queue_before_replay
+            .iter()
+            .filter(|(_, content, _)| content == "committed exactly once")
+            .count(),
+        1
+    );
+    assert_eq!(
+        queue_before_replay
+            .last()
+            .and_then(|(id, _, _)| id.as_deref()),
+        arrival.message_id.as_deref()
+    );
+}
+
 #[tokio::test]
 async fn disconnect_grace_can_resume_or_release_immutable_originals_exactly_once() {
     let (control, queue) = control_with(vec![owned_user("held", 1)]);

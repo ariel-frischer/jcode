@@ -44,6 +44,8 @@ pub(super) fn recover_local_interleave_to_queue_for_test(app: &mut App, reason: 
 // Re-export for sibling modules and tests that access reconnect state and helpers
 // through `super::remote::*` without reaching into private submodules directly.
 pub(super) use queued_message_editor::QueuedMessageEditorClientState;
+#[cfg(test)]
+pub(super) use queued_message_editor::retry_pending_after_reconnect as retry_queued_message_editor_after_reconnect;
 #[allow(unused_imports)]
 pub(super) use reconnect::{
     ConnectOutcome, PostConnectOutcome, ReloadReconnectHints, RemoteRunState, connect_with_retry,

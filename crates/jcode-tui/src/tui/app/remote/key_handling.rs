@@ -1025,6 +1025,9 @@ async fn handle_remote_key_internal(
             if app.activate_picker_from_preview() {
                 return Ok(());
             }
+            if super::queued_message_editor::finish(app, remote).await? {
+                return Ok(());
+            }
             if input::finish_queued_message_edit(app) {
                 return Ok(());
             }

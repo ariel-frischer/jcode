@@ -949,6 +949,25 @@ impl RemoteConnection {
         Ok(id)
     }
 
+    /// Apply one stable owner-scoped queued-message editor operation.
+    pub async fn queued_message_editor(
+        &mut self,
+        navigation_session_id: &str,
+        operation_id: &str,
+        operation: crate::protocol::QueuedMessageEditorOperation,
+    ) -> Result<u64> {
+        let id = self.next_request_id;
+        self.next_request_id += 1;
+        self.send_request(Request::QueuedMessageEditor {
+            id,
+            navigation_session_id: navigation_session_id.to_string(),
+            operation_id: operation_id.to_string(),
+            operation,
+        })
+        .await?;
+        Ok(id)
+    }
+
     /// Split the current session - ask server to clone conversation into a new session
     pub async fn split(&mut self) -> Result<u64> {
         let id = self.next_request_id;

@@ -130,6 +130,9 @@ fn queued_editor_boundary_and_conflict_preserve_complete_composer_draft() {
         assert_eq!(app.pending_images, original_images);
         assert_eq!(app.status_notice(), Some(expected_notice.to_string()));
         assert!(app.remote_queued_message_editor.is_active());
+        if outcome == crate::protocol::QueuedMessageEditorOutcome::Conflict {
+            assert!(app.remote_queued_message_editor.has_pending_operation());
+        }
     }
 }
 
@@ -312,6 +315,175 @@ fn local_queued_editor_treats_images_only_drafts_as_non_empty() {
     assert_eq!(app.queued_messages, [""]);
     assert_eq!(app.queued_message_images, [images]);
     assert_eq!(app.status_notice(), Some("Updated queued message".to_string()));
+}
+
+#[test]
+fn local_queued_editor_enter_commits_or_deletes_only_the_selection_and_records_history_once() {
+    let mut app = create_test_app();
+    queue_local_draft(&mut app, "oldest", Vec::new());
+    queue_local_draft(&mut app, "middle", Vec::new());
+    queue_local_draft(&mut app, "newest", Vec::new());
+    let history_before_navigation = app
+        .persisted_prompt_history
+        .clone()
+        .unwrap_or_default();
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("start editor");
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("select middle");
+    assert_eq!(
+        app.persisted_prompt_history.as_deref().unwrap_or_default(),
+        history_before_navigation
+    );
+
+    app.input = "middle edited".to_string();
+    app.cursor_pos = app.input.len();
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .expect("commit selected draft");
+    assert_eq!(app.queued_messages, ["oldest", "middle edited", "newest"]);
+    let history_after_commit = app
+        .persisted_prompt_history
+        .as_deref()
+        .unwrap_or_default();
+    assert_eq!(history_after_commit.len(), history_before_navigation.len() + 1);
+    assert_eq!(
+        history_after_commit
+            .iter()
+            .filter(|entry| entry.as_str() == "middle edited")
+            .count(),
+        1
+    );
+    for entry in history_before_navigation {
+        assert!(history_after_commit.contains(&entry));
+    }
+    assert!(app.local_queued_message_editor.is_none());
+
+    let mut app = create_test_app();
+    queue_local_draft(&mut app, "oldest", Vec::new());
+    queue_local_draft(&mut app, "selected", Vec::new());
+    let history_before_delete = app.persisted_prompt_history.clone().unwrap_or_default();
+    app.handle_key(KeyCode::Char('q'), KeyModifiers::ALT)
+        .expect("start delete editor");
+    app.input.clear();
+    app.cursor_pos = 0;
+    app.pending_images.clear();
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .expect("delete selected draft");
+    assert_eq!(app.queued_messages, ["oldest"]);
+    assert_eq!(
+        app.persisted_prompt_history.as_deref().unwrap_or_default(),
+        history_before_delete
+    );
+    assert!(app.local_queued_message_editor.is_none());
+}
+
+#[test]
+fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_terminal_result() {
+    let mut app = create_test_app();
+    app.input = "remote edited draft".to_string();
+    app.cursor_pos = app.input.len();
+    app.pending_images = vec![
+        ("image/png".to_string(), "first".to_string()),
+        ("image/jpeg".to_string(), "second".to_string()),
+    ];
+    app.remote_queued_message_editor
+        .activate_for_test("remote-navigation", "remote-selected-message");
+    let expected_images = app.pending_images.clone();
+
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        use tokio::io::AsyncBufReadExt;
+
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        let peer = remote.take_dummy_peer().expect("dummy peer");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        super::remote::handle_remote_key(
+            &mut app,
+            KeyCode::Enter,
+            KeyModifiers::empty(),
+            &mut remote,
+        )
+        .await
+        .expect("send remote finish");
+
+        assert_eq!(app.input, "remote edited draft");
+        assert_eq!(app.pending_images, expected_images);
+        assert!(app.remote_queued_message_editor.is_active());
+        assert!(app.remote_queued_message_editor.has_pending_operation());
+
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("read finish request");
+        let request: crate::protocol::Request =
+            serde_json::from_str(&line).expect("decode finish request");
+        let (expected_navigation_session_id, expected_operation_id, expected_operation) =
+            match &request {
+                crate::protocol::Request::QueuedMessageEditor {
+                    navigation_session_id,
+                    operation_id,
+                    operation,
+                    ..
+                } => (
+                    navigation_session_id.clone(),
+                    operation_id.clone(),
+                    operation.clone(),
+                ),
+                other => panic!("expected queued editor request, got {other:?}"),
+            };
+        assert!(matches!(
+            request,
+            crate::protocol::Request::QueuedMessageEditor {
+                navigation_session_id,
+                operation_id,
+                operation: crate::protocol::QueuedMessageEditorOperation::Finish {
+                    selected_message_id,
+                    draft,
+                },
+                ..
+            } if navigation_session_id == "remote-navigation"
+                && !operation_id.is_empty()
+                && selected_message_id == "remote-selected-message"
+                && draft.content == "remote edited draft"
+                && draft.images == expected_images
+        ));
+
+        let mut reconnected = crate::tui::backend::RemoteConnection::dummy();
+        let retry_peer = reconnected.take_dummy_peer().expect("retry dummy peer");
+        let (retry_reader, _retry_writer) = retry_peer.into_split();
+        let mut retry_reader = tokio::io::BufReader::new(retry_reader);
+        assert!(
+            super::remote::retry_queued_message_editor_after_reconnect(
+                &mut app,
+                &mut reconnected,
+            )
+            .await
+            .expect("retry finish")
+        );
+        let mut retry_line = String::new();
+        retry_reader
+            .read_line(&mut retry_line)
+            .await
+            .expect("read retry request");
+        let retry: crate::protocol::Request =
+            serde_json::from_str(&retry_line).expect("decode retry request");
+        assert!(matches!(
+            retry,
+            crate::protocol::Request::QueuedMessageEditor {
+                navigation_session_id,
+                operation_id,
+                operation,
+                ..
+            } if navigation_session_id == expected_navigation_session_id
+                && operation_id == expected_operation_id
+                && operation == expected_operation
+        ));
+        assert_eq!(app.input, "remote edited draft");
+        assert_eq!(app.pending_images, expected_images);
+    });
 }
 
 #[test]

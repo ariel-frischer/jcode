@@ -556,15 +556,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
-      command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-app-core server::state::queued_message_editor_fixtures -- --nocapture
+      result: 12 focused authoritative editor tests passed, including non-empty and images-only commit, selected-only mutation, relative-order restoration, conflict recovery, and replayed finish exact-once behavior.
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
-      command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      command_or_result: JCODE_DEV_CARGO_ALLOW_ZERO_TESTS=1 cargo test -p jcode-tui queued_editor
+      result: 9 focused TUI editor tests passed, including local Enter commit, images-only commit, remote exact finish payload, reconnect retry identity, terminal feedback, and recoverable conflict state.
     regression:
       status: pending
       planned_tasks: T030-T033
@@ -608,15 +608,15 @@ requirements:
       command_or_result: cargo test -p jcode-base soft_interrupt_store_tests
       result: Pending implementation and phase-specific validation.
     server:
-      status: pending
+      status: pass
       planned_tasks: T009-T019,T024-T025,T029
-      command_or_result: cargo test -p jcode-app-core queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      command_or_result: cargo test -p jcode-app-core server::state::queued_message_editor_fixtures -- --nocapture
+      result: 12 focused authoritative editor tests passed, including fully empty selected-draft deletion, restoration of every non-selected held record once, and replay without a second delete or restore.
     tui:
-      status: pending
+      status: pass
       planned_tasks: T017-T023,T026-T029,T039
-      command_or_result: cargo test -p jcode-tui queued_message_editor
-      result: Pending implementation and phase-specific validation.
+      command_or_result: JCODE_DEV_CARGO_ALLOW_ZERO_TESTS=1 cargo test -p jcode-tui queued_editor
+      result: 9 focused TUI editor tests passed, including fully empty local deletion, unchanged non-selected order, no deletion history entry, remote finish payload preservation, and terminal delete feedback.
     regression:
       status: pending
       planned_tasks: T030-T033

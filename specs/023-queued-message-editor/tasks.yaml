@@ -319,7 +319,7 @@ phases:
       tasks:
         - id: "T024"
           title: "Add failing authoritative finish, commit, and delete tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-003"
@@ -331,7 +331,7 @@ phases:
             - "Replayed finish returns the recorded terminal result without a second commit, delete, restore, or history effect."
         - id: "T025"
           title: "Implement atomic authoritative finish semantics"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"
@@ -343,7 +343,7 @@ phases:
             - "Persistence, terminal outcome cache, and queue mutation become visible atomically."
         - id: "T026"
           title: "Add failing local and remote Enter finish tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-003"
@@ -355,7 +355,7 @@ phases:
             - "Successful finish exits editing; conflict or transport failure keeps the complete composer draft recoverable."
         - id: "T027"
           title: "Integrate local Enter commit and delete with established history policy"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-003"
@@ -367,7 +367,7 @@ phases:
             - "Outside editing, ordinary Enter behavior is untouched."
         - id: "T028"
           title: "Implement remote finish requests, stable retries, and recovery state"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-003"
@@ -379,7 +379,7 @@ phases:
             - "Exit only on committed, deleted, or released terminal outcomes; retain the draft and retry identity on conflict or transport failure."
         - id: "T029"
           title: "Pass local and authoritative commit/delete acceptance journeys"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-003"
