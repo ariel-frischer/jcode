@@ -54,6 +54,12 @@ const LEDGER: &[(&str, Disposition)] = &[
     ("InputShell", ClientInternal),
     ("Message", Covered),
     ("NotifyAuthChanged", Covered),
+    (
+        "RecallSoftInterrupt",
+        Gap(
+            "a client cannot recall one queued soft interrupt for editing without cancelling the rest",
+        ),
+    ),
     ("RefreshModels", ClientInternal),
     ("Reload", ClientInternal),
     ("RenameSession", Covered),
