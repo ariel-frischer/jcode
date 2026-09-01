@@ -28,7 +28,7 @@ phases:
           - "Record the isolated worktree branch, current binary caveat, and known baseline guardrail failures."
       - id: "T002"
         title: "Add failing additive contract and persistence tests"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-001"
