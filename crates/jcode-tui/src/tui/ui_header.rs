@@ -1013,7 +1013,10 @@ pub(super) fn build_transcript_header_sections(
     width: u16,
 ) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
     let (persistent, secondary) = build_header_sections(app, width);
-    if app.top_bar_enabled() && app.top_bar_context().is_some() {
+    if app.top_bar_enabled()
+        && crate::tui::ui_top_bar::top_bar_width_is_usable(width)
+        && app.top_bar_context().is_some()
+    {
         (Vec::new(), secondary)
     } else {
         (persistent, secondary)
@@ -1128,6 +1131,17 @@ mod tests {
 
         assert_eq!(persistent, build_persistent_header(&app, 80));
         assert_eq!(secondary, build_header_lines(&app, 80));
+    }
+
+    #[test]
+    fn narrow_terminal_keeps_rich_identity_header_when_top_bar_is_suppressed() {
+        let app = create_test_app();
+        let (persistent, _) = build_transcript_header_sections(&app, 24);
+
+        assert!(
+            !persistent.is_empty(),
+            "the scrollable identity header must remain when the top bar cannot fit"
+        );
     }
 
     #[test]

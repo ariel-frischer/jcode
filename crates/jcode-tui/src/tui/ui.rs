@@ -1453,7 +1453,9 @@ pub struct LayoutSnapshot {
     pub diagram_area: Option<Rect>,
     pub diff_pane_area: Option<Rect>,
     pub input_area: Option<Rect>,
+    #[allow(dead_code)] // Read by focused layout tests and visual-debug snapshots.
     pub top_bar_area: Option<Rect>,
+    #[allow(dead_code)] // Read by focused layout tests and visual-debug snapshots.
     pub top_bar_row_count: u16,
 }
 

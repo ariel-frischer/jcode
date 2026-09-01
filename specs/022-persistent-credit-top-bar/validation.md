@@ -121,3 +121,20 @@ a top-bar functional test failure. It remains visible for maintainer review.
 The private daemon, PTY client, sockets, and temporary config were terminated
 or removed at the end of each smoke. No persistent user configuration or shared
 daemon state was changed.
+
+### Inline review repair
+
+- Review found that width-based suppression removed the persistent top bar and
+  also omitted the rich scrollable identity header. This contradicted the
+  documented fallback contract for constrained terminals.
+- Added the failing regression
+  `narrow_terminal_keeps_rich_identity_header_when_top_bar_is_suppressed`, then
+  reused the selector's canonical minimum-width predicate in transcript-header
+  preparation.
+- `cargo test -p jcode-tui --lib top_bar -- --nocapture` now passes **28 tests**,
+  including the new narrow-terminal fallback and all prior top-bar interaction,
+  layout, usage, metrics, and opt-out checks.
+- Rebuilt the reviewed source as `target/selfdev/jcode` and verified SHA-256
+  `1bd35f2e2bf6be272c5e87a146a4186565e72b0462c583726a4dadf729460825`.
+  The reviewed binary completed a bounded `jcode run --no-update` smoke on a
+  fresh isolated Unix socket and returned the exact expected `TOPBAR_OK` result.

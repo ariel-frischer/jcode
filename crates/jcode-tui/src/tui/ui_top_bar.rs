@@ -228,6 +228,7 @@ impl TopBarContext {
         self
     }
 
+    #[cfg(test)]
     pub(crate) fn with_auth_label(mut self, value: impl AsRef<str>) -> Self {
         self.auth_label = safe_auth_text(value.as_ref());
         self
@@ -431,6 +432,10 @@ const TOP_BAR_MIN_WIDTH: u16 = 32;
 const TOP_BAR_MIN_CONTENT_ROWS: u16 = 3;
 const TOP_BAR_SEPARATOR: &str = "  ·  ";
 
+pub(crate) const fn top_bar_width_is_usable(width: u16) -> bool {
+    width >= TOP_BAR_MIN_WIDTH
+}
+
 /// Select the deterministic top-bar layout for one frame.
 ///
 /// `minimum_content_rows` is the amount of vertical space the caller must keep
@@ -449,7 +454,7 @@ pub(crate) fn select_top_bar_layout(
     let Some(context) = context.filter(|context| !context.session_label.is_empty()) else {
         return TopBarLayout::suppressed(TopBarSuppression::NoSession);
     };
-    if width < TOP_BAR_MIN_WIDTH {
+    if !top_bar_width_is_usable(width) {
         return TopBarLayout::suppressed(TopBarSuppression::TooNarrow);
     }
 
@@ -626,6 +631,7 @@ pub(crate) fn render_top_bar(frame: &mut Frame, area: Rect, layout: &TopBarLayou
 }
 
 /// Convert the existing info-widget snapshot into a safe active-session context.
+#[cfg(test)]
 pub(crate) fn context_from_info_widget_data(
     session_label: Option<&str>,
     data: &InfoWidgetData,
@@ -679,6 +685,7 @@ pub(crate) fn safe_auth_label(auth: AuthMethod) -> Option<String> {
     Some(label.to_string())
 }
 
+#[cfg(test)]
 fn safe_auth_text(value: &str) -> Option<String> {
     let value = sanitize_label(value)?;
     (!value.to_ascii_lowercase().contains("key=")).then_some(value)
@@ -746,6 +753,7 @@ pub(crate) fn truncate_display_width(value: &str, max_width: usize) -> String {
     output
 }
 
+#[cfg(test)]
 pub(crate) fn bounded_line(value: &str, max_width: usize) -> Line<'static> {
     Line::from(truncate_display_width(value, max_width))
 }
