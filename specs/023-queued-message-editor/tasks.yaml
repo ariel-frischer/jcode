@@ -69,7 +69,7 @@ phases:
     purpose: "Establish additive queue identity, wire contracts, and durable reservation storage required by every authoritative story."
     tasks:
       - id: "T005"
-        title: "Add stable queue identity, ownership, lifecycle, and enqueue sequence fields"
+        title: "Reuse landed queue identity/ownership/source and add minimal enqueue sequencing"
         status: "Pending"
         type: "implementation"
         parallel: false
@@ -77,9 +77,9 @@ phases:
         file_path: "crates/jcode-agent-runtime/src/lib.rs"
         dependencies: ["T002"]
         acceptance_criteria:
-          - "Represent stable message identity, optional verified owner, User/System/BackgroundTask source, Queued/Reserved/Injected lifecycle, and monotonic queue sequence."
-          - "Preserve serde compatibility for legacy records with missing ownership and identity metadata."
-          - "Make legacy unowned records ineligible for editor reservation without changing their ordinary dispatch or cancellation behavior."
+          - "Reuse the existing message_id, owner_client_instance_id, and SoftInterruptSource fields landed by jcode-c9u rather than creating parallel identity or ownership contracts."
+          - "Add only minimal optional monotonic enqueue sequencing needed to separate pre-snapshot survivors from post-snapshot arrivals."
+          - "Preserve serde compatibility for legacy records; legacy unowned records remain editor-ineligible without changing ordinary dispatch or cancellation behavior."
       - id: "T006"
         title: "Implement typed editor wire operations, outcomes, and selection payloads"
         status: "Pending"
@@ -145,8 +145,8 @@ phases:
         dependencies: ["T008"]
         acceptance_criteria:
           - "Results are delivered only to the verified owning client and connection lifecycle binds the navigation session to that owner."
-          - "Disconnect, timeout, shutdown, and unsupported continuation release immutable originals exactly once and leave no active reservation."
-          - "Reconnect replay can recover a completed result without repeating reservation or queue mutation."
+          - "Transient disconnect begins a bounded owner reconnect grace period; matching reconnect resumes or replays without a second reservation."
+          - "Grace expiry, explicit abandonment, timeout, shutdown, and unsupported continuation release immutable originals exactly once and leave no active reservation."
       - id: "T011"
         title: "Implement the authoritative navigation coordinator and bounded replay cache"
         status: "Pending"
@@ -169,10 +169,10 @@ phases:
         dependencies: ["T010", "T011"]
         acceptance_criteria:
           - "Validate identities and operation shapes before invoking the coordinator and return typed owner-safe errors."
-          - "Route matching results only to the requester and release abandoned sessions on disconnect, timeout, or shutdown recovery."
-          - "Reconnect retries use stable identities and do not apply uncommitted working drafts during release."
+          - "Route matching results only to the requester; retain the owner-scoped session during bounded reconnect grace and resume stable operations on matching reconnect."
+          - "Release immutable originals on grace expiry, explicit abandonment, timeout, or shutdown without applying uncommitted working drafts."
       - id: "T013"
-        title: "Prevent reserved records from dispatching or corrupting persistence snapshots"
+        title: "Keep reserved snapshots outside dispatch and preserve atomic recovery persistence"
         status: "Pending"
         type: "implementation"
         parallel: true
@@ -180,9 +180,9 @@ phases:
         file_path: "crates/jcode-app-core/src/agent/interrupts.rs"
         dependencies: ["T007", "T011"]
         acceptance_criteria:
-          - "Dispatch skips Reserved records while continuing normally for eligible non-held work."
-          - "Injected records remain immutable to editor operations and cannot re-enter a snapshot."
-          - "Queue persistence retains active recovery metadata and never serializes a reservation as injected work."
+          - "Atomically removed held records remain in the authoritative reservation envelope and are absent from the dispatchable queue until commit, delete, or release."
+          - "Injected records have already left the queued-record domain and cannot re-enter a snapshot or be mutated by editor operations."
+          - "Queue persistence retains active recovery metadata and never serializes held originals or drafts as injected work."
       - id: "T014"
         title: "Pass the authoritative safety and recovery test matrix"
         status: "Pending"
@@ -425,7 +425,7 @@ phases:
         dependencies: ["T029"]
         acceptance_criteria:
           - "CancelSoftInterrupts retains its prior eligibility, result shape, and idempotence with editor-capable records present."
-          - "Unowned legacy, other-client, System, BackgroundTask, non-User, Reserved, and Injected records are not newly cancellable or editor-mutable."
+          - "Unowned legacy, other-client, System, BackgroundTask, non-User, held editor snapshots, and Injected records are not newly cancellable or editor-mutable."
           - "An older client against a navigation-capable server retains legacy recall and queue behavior."
       - id: "T032"
         title: "Preserve capability-gated legacy backend behavior"

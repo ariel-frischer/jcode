@@ -123,8 +123,8 @@ requirements:
       description: "Authoritative operations MUST be idempotent and replay-safe for a stable navigation session and operation identity."
       acceptance_criteria: "Repeating any completed request one or more times returns an equivalent result and creates no additional mutation, item, reservation, dispatch, loss, or duplicate."
     - id: "FR-009"
-      description: "A disconnect or abandoned navigation session MUST release held messages without applying an uncommitted selected draft and MUST restore all authoritative held messages according to the anchoring rule."
-      acceptance_criteria: "Forced disconnect tests leave no durable reservation and restore each held server message exactly once with its pre-session content and images."
+      description: "A disconnect MUST enter a bounded reconnect grace period for the verified owner; owner reconnect and replay MAY resume the same navigation session during that grace period, while grace expiry or explicit abandonment MUST release held messages without applying an uncommitted selected draft and restore all authoritative held messages according to the anchoring rule."
+      acceptance_criteria: "Transient disconnect retains one recoverable owner-scoped session through the documented grace period; owner reconnect resumes without duplicate reservation, while grace expiry and explicit abandonment leave no durable reservation and restore each held server message exactly once with its pre-session content and images."
     - id: "FR-010"
       description: "Text and all attached images, including image order, MUST be preserved on navigation, save, commit, release, replay, reconnect recovery, and conflict paths."
       acceptance_criteria: "Distinct multi-image fixtures retain byte identity, count, and ordering through every supported path unless the user explicitly edits or removes them."
@@ -293,6 +293,8 @@ edge_cases:
     expected_behavior: "The selected change is applied at most once and every repeat returns an equivalent recorded outcome."
   - scenario: "A second client attempts to navigate or commit the first client's held message."
     expected_behavior: "The attempt is rejected without content disclosure, reservation change, reordering, or mutation."
+  - scenario: "The owning client disconnects transiently and reconnects within the recovery grace period."
+    expected_behavior: "The verified owner resumes the same navigation session and operation identities without a second reservation; grace expiry or explicit abandonment restores immutable originals exactly once."
   - scenario: "The server restarts while messages are held."
     expected_behavior: "Durable queued content is recovered exactly once, stale reservations are released, and no held item is injected by recovery."
   - scenario: "A held message becomes otherwise ineligible before commit."
@@ -308,7 +310,7 @@ assumptions:
   - "Newly queued messages are intentionally excluded from an already active navigation snapshot so navigation remains stable and replayable."
   - "A visible stale-placement notice may accompany a successful deterministic commit, while a conflict indicates that no safe commit was applied."
   - "Best-effort anchoring prioritizes no loss, no duplication, held-message relative order, pre-snapshot survivor order, and post-snapshot arrival order over recreating an impossible absolute position."
-  - "Timed-out or disconnected authoritative sessions are treated as abandoned and restore original durable content rather than uncommitted composer edits."
+  - "Transient transport disconnect preserves one owner-scoped navigation session for a bounded recovery grace period; expiry, explicit abandonment, shutdown recovery, or an unsupported owner continuation releases immutable originals exactly once."
 
 constraints:
   - "The feature extends bead jcode-egd and must remain compatible with the completed jcode-c9u one-shot server soft-interrupt recall behavior."
