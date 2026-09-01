@@ -40,6 +40,8 @@ pub enum ProviderChoice {
     #[value(alias = "302.ai")]
     Ai302,
     Baseten,
+    #[value(alias = "conifer-api")]
+    Conifer,
     Cortecs,
     #[value(alias = "cgc", alias = "comtegra-gpu-cloud")]
     Comtegra,
@@ -92,6 +94,8 @@ pub enum ProviderChoice {
     Chutes,
     #[value(alias = "cerebrascode", alias = "cerberascode")]
     Cerebras,
+    #[value(alias = "belvedir.ai", alias = "belvedir-ai")]
+    Belvedir,
     #[value(
         alias = "bailian",
         alias = "aliyun-bailian",
@@ -136,6 +140,7 @@ impl ProviderChoice {
             Self::Kimi => "kimi",
             Self::Ai302 => "302ai",
             Self::Baseten => "baseten",
+            Self::Conifer => "conifer",
             Self::Cortecs => "cortecs",
             Self::Comtegra => "comtegra",
             Self::Deepseek => "deepseek",
@@ -163,6 +168,7 @@ impl ProviderChoice {
             Self::Ollama => "ollama",
             Self::Chutes => "chutes",
             Self::Cerebras => "cerebras",
+            Self::Belvedir => "belvedir",
             Self::AlibabaCodingPlan => "alibaba-coding-plan",
             Self::OpenaiCompatible => "openai-compatible",
             Self::Cursor => "cursor",

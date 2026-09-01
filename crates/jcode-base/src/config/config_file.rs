@@ -26,6 +26,16 @@ impl Config {
         Ok(config)
     }
 
+    /// Load the on-disk config for a read-modify-write operation.
+    ///
+    /// Unlike [`Self::load`], this never converts a parse error into defaults.
+    /// Saving those defaults would destroy the user's existing config. It also
+    /// deliberately skips environment overrides so transient process settings
+    /// are not baked into the file as a side effect of changing one preference.
+    fn load_for_update() -> anyhow::Result<Self> {
+        Ok(Self::load_from_file_strict()?.unwrap_or_default())
+    }
+
     /// Load config from file only (no env overrides)
     fn load_from_file() -> Option<Self> {
         match Self::load_from_file_strict() {
@@ -118,7 +128,7 @@ impl Config {
     /// Update the copilot premium mode in the config file.
     /// Reloads, patches, and saves so it doesn't clobber other fields.
     pub fn set_copilot_premium(mode: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.copilot_premium = mode.map(|s| s.to_string());
         cfg.save()?;
         crate::logging::info(&format!(
@@ -131,7 +141,7 @@ impl Config {
     /// Update just the default model and provider in the config file.
     /// This reloads, patches, and saves so it doesn't clobber other fields.
     pub fn set_default_model(model: Option<&str>, provider: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.default_model = model.map(|s| s.to_string());
         cfg.provider.default_provider = provider.map(|s| s.to_string());
         cfg.save()?;
@@ -145,19 +155,19 @@ impl Config {
 
     /// Update just the default provider in the config file.
     pub fn set_default_provider(provider: Option<&str>) -> anyhow::Result<()> {
-        let cfg = Self::load();
+        let cfg = Self::load_for_update()?;
         Self::set_default_model(cfg.provider.default_model.as_deref(), provider)
     }
 
     /// Update just the default model in the config file.
     pub fn set_default_model_only(model: Option<&str>) -> anyhow::Result<()> {
-        let cfg = Self::load();
+        let cfg = Self::load_for_update()?;
         Self::set_default_model(model, cfg.provider.default_provider.as_deref())
     }
 
     /// Update the persisted OpenAI reasoning effort preference.
     pub fn set_openai_reasoning_effort(value: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.openai_reasoning_effort = value.map(|s| s.to_string());
         cfg.save()?;
         crate::logging::info(&format!(
@@ -169,7 +179,7 @@ impl Config {
 
     /// Update the persisted Anthropic reasoning effort preference.
     pub fn set_anthropic_reasoning_effort(value: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.anthropic_reasoning_effort = value.map(|s| s.to_string());
         cfg.save()?;
         crate::logging::info(&format!(
@@ -181,7 +191,7 @@ impl Config {
 
     /// Update the persisted OpenAI transport preference.
     pub fn set_openai_transport(value: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.openai_transport = value.map(|s| s.to_string());
         cfg.save()?;
         crate::logging::info(&format!(
@@ -193,7 +203,7 @@ impl Config {
 
     /// Update the persisted OpenAI service tier preference.
     pub fn set_openai_service_tier(value: Option<&str>) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.provider.openai_service_tier = value.map(|s| s.to_string());
         cfg.save()?;
         crate::logging::info(&format!(
@@ -205,7 +215,7 @@ impl Config {
 
     /// Update the persisted default alignment preference.
     pub fn set_display_centered(centered: bool) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.centered = centered;
         cfg.save()?;
         crate::logging::info(&format!("Saved display.centered to config: {}", centered));
@@ -214,7 +224,7 @@ impl Config {
 
     /// Update the persisted reasoning display mode preference.
     pub fn set_reasoning_display(mode: ReasoningDisplayMode) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.set_reasoning_display(mode);
         cfg.save()?;
         crate::logging::info(&format!(
@@ -226,7 +236,7 @@ impl Config {
 
     /// Update the persisted compact-notifications preference.
     pub fn set_compact_notifications(compact: bool) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.compact_notifications = compact;
         cfg.save()?;
         crate::logging::info(&format!(
@@ -238,7 +248,7 @@ impl Config {
 
     /// Update the persisted pinned-todos preference.
     pub fn set_pin_todos(pin: bool) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.pin_todos = pin;
         cfg.save()?;
         crate::logging::info(&format!("Saved display.pin_todos to config: {}", pin));
@@ -247,7 +257,7 @@ impl Config {
 
     /// Update the persisted show-agentgrep-output preference.
     pub fn set_show_agentgrep_output(show: bool) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.show_agentgrep_output = show;
         cfg.save()?;
         crate::logging::info(&format!(
@@ -259,7 +269,7 @@ impl Config {
 
     /// Update the persisted tool-call-details preference.
     pub fn set_tool_call_details(show: bool) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.display.tool_call_details = show;
         cfg.save()?;
         crate::logging::info(&format!(
@@ -278,7 +288,7 @@ impl Config {
         entries: Vec<jcode_config_types::LaunchHotkeyEntry>,
         enabled: bool,
     ) -> anyhow::Result<()> {
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         cfg.launch_hotkeys.entries = entries;
         cfg.launch_hotkeys.enabled = Some(enabled);
         cfg.launch_hotkeys.imported = true;
@@ -656,7 +666,7 @@ impl Config {
             anyhow::bail!("External auth source id cannot be empty");
         }
 
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         if !cfg
             .auth
             .trusted_external_sources
@@ -681,7 +691,7 @@ impl Config {
         path: &std::path::Path,
     ) -> anyhow::Result<()> {
         let entry = Self::trusted_external_auth_path_entry(source_id, path)?;
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         if !cfg
             .auth
             .trusted_external_source_paths
@@ -705,7 +715,7 @@ impl Config {
         path: &std::path::Path,
     ) -> anyhow::Result<()> {
         let entry = Self::trusted_external_auth_path_entry(source_id, path)?;
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         let before = cfg.auth.trusted_external_source_paths.len();
         cfg.auth
             .trusted_external_source_paths
@@ -727,7 +737,7 @@ impl Config {
         if source_id.is_empty() {
             return Ok(());
         }
-        let mut cfg = Self::load();
+        let mut cfg = Self::load_for_update()?;
         let before = cfg.auth.trusted_external_sources.len();
         cfg.auth
             .trusted_external_sources
@@ -740,5 +750,89 @@ impl Config {
             ));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod issue_1056_tests {
+    use super::Config;
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let previous = std::env::var_os(key);
+            crate::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(value) => crate::env::set_var(self.key, value),
+                None => crate::env::remove_var(self.key),
+            }
+            Config::invalidate_cache();
+        }
+    }
+
+    #[test]
+    fn effort_update_preserves_profile_with_capitalized_bearer_auth() {
+        let _lock = crate::storage::lock_test_env();
+        let home = tempfile::tempdir().unwrap();
+        let _home = EnvGuard::set("JCODE_HOME", home.path());
+        let path = home.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[provider]
+openai_reasoning_effort = "low"
+
+[providers.mistral]
+type = "openai-compatible"
+base_url = "https://api.mistral.ai/v1"
+auth = "Bearer"
+api_key_env = "MISTRAL_API_KEY"
+disable_reasoning_heuristics = true
+
+[[providers.mistral.models]]
+id = "mistral-medium-latest"
+reasoning = true
+reasoning_effort = "max"
+"#,
+        )
+        .unwrap();
+
+        Config::set_openai_reasoning_effort(Some("high")).unwrap();
+
+        let saved = std::fs::read_to_string(path).unwrap();
+        assert!(saved.contains("[providers.mistral]"));
+        assert!(saved.contains("mistral-medium-latest"));
+        let parsed = Config::load_strict().unwrap();
+        assert_eq!(
+            parsed.provider.openai_reasoning_effort.as_deref(),
+            Some("high")
+        );
+        assert_eq!(parsed.providers["mistral"].models.len(), 1);
+    }
+
+    #[test]
+    fn effort_update_refuses_to_overwrite_malformed_config() {
+        let _lock = crate::storage::lock_test_env();
+        let home = tempfile::tempdir().unwrap();
+        let _home = EnvGuard::set("JCODE_HOME", home.path());
+        let path = home.path().join("config.toml");
+        let original = "[providers.broken]\nauth = \"invalid-auth-mode\"\n";
+        std::fs::write(&path, original).unwrap();
+
+        let error = Config::set_openai_reasoning_effort(Some("high"))
+            .expect_err("a malformed config must block mutation");
+
+        assert!(error.to_string().contains("Failed to parse config file"));
+        assert_eq!(std::fs::read_to_string(path).unwrap(), original);
     }
 }

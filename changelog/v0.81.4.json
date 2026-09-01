@@ -1,0 +1,8 @@
+{
+  "version": "0.81.4",
+  "date": "2026-08-30",
+  "improvements": [
+    "Internal reliability and performance work",
+    "Named session profiles can configure provider, model, reasoning, tools, skills, and additive instructions across new TUI, run, repl, and explicitly started serve sessions"
+  ]
+}
