@@ -102,6 +102,12 @@ The clearest examples of my custom delta include:
   execution and one-shot result delivery, restored prompt state across resume,
   explicit socket handling during startup, and improvements to child-session
   handoff behavior.
+- **Bidirectional queued-message editing:** `Alt+Q` takes back the newest queued
+  user message and moves toward older held drafts, while `Alt+Shift+Q` moves
+  toward newer drafts. Text and ordered images are saved before each move, and
+  `Enter` updates or deletes exactly the selected queued message. See
+  [Queued-message editor](#queued-message-editor) for ownership, concurrency,
+  recovery, and compatibility details.
 - **Provider and session fixes:** OpenRouter reported-cost tracking and its
   downstream consumers, safer legacy provider-cost handling, redacted provider
   failure codes surfaced through the harness and Go SDK, fixes that prevent
@@ -138,6 +144,47 @@ absent here or that every item is enabled in every build. The commit history is
 the source of truth for the current fork delta. I will continue synchronizing
 with upstream while keeping these personal additions and fixes where they do
 not conflict with intentional upstream changes.
+
+### Queued-message editor
+
+When the composer is empty, press `Alt+Q` to take back the newest eligible
+queued user message. While the editor is active, `Alt+Q` first saves the current
+text and ordered images, then moves to the next older held message.
+`Alt+Shift+Q` performs the same save-before-move step toward the next newer held
+message. Reaching either boundary leaves the selection, text, and images
+unchanged and displays an oldest/newest boundary notice.
+
+Press `Enter` to finish editing. A draft containing text or one or more images
+updates only the selected queued message. A draft is deleted only when both its
+text and image list are empty, so an images-only draft is committed rather than
+deleted. Editing then exits, every other held message is restored once in its
+original relative order, and ordinary prompt history is not changed merely by
+navigating between drafts.
+
+Local queued messages and authoritative server soft interrupts use the same
+composer controls. Server-backed navigation is available only when the peer
+advertises `queued_message_navigation_v1`; otherwise Jcode retains the legacy
+one-shot `Alt+Q` behavior. An authoritative editing snapshot includes only
+queued, non-injected, `User`-source messages owned by the requesting client.
+Messages belonging to another client, unowned legacy records, system or
+background interrupts, non-`User` sources, and already injected work are never
+reserved, disclosed, reordered, or changed. Messages arriving after editing
+starts stay outside the stable snapshot and keep their arrival order.
+
+Held server messages cannot dispatch while editing is active. When editing
+finishes or is released, Jcode restores held messages between their nearest
+surviving predecessor and successor anchors. If one anchor disappeared, the
+messages remain adjacent to the surviving anchor on their original side. If
+both disappeared, pre-snapshot survivors remain before the held messages and
+post-snapshot arrivals remain after them. An inexact but safe restoration shows
+a **stale placement** notice. An unsafe commit shows a **conflict** notice and
+preserves the complete text and ordered images for retry or recovery. Operation
+replays and transient owner reconnects reuse stable session identities so they
+do not reserve, update, delete, lose, or duplicate a message twice; expiry or
+explicit release restores the immutable originals once.
+
+The queued-message editor is intentionally keyboard-only. It does not add an
+FZF picker or slash-command picker.
 
 ### Go SDK
 

@@ -500,7 +500,7 @@ phases:
             - "If no checkout is available, record a justified blocked or not-applicable evidence entry rather than silently skipping."
         - id: "T038"
           title: "Document queued-message editor behavior in README"
-          status: "Pending"
+          status: "Completed"
           type: "documentation"
           parallel: true
           story_id: "US-006"
@@ -512,7 +512,7 @@ phases:
             - "State that FZF and slash pickers are not part of the workflow."
         - id: "T039"
           title: "Add complete in-product queued-message editor help"
-          status: "Pending"
+          status: "Completed"
           type: "documentation"
           parallel: true
           story_id: "US-006"
@@ -524,7 +524,8 @@ phases:
             - "Displayed keys and semantics agree exactly with README and implemented Crossterm handling."
         - id: "T040"
           title: "Complete SDK, documentation, and requirement-traceability review"
-          status: "Pending"
+          status: "Blocked"
+          blocked_reason: 'Blocked by required dependency T037: the explicit jcode-go dev checkout does not yet expose queued_message_editor requests or queued_message_editor_result events. README and in-product help are complete, but the cross-surface SDK/documentation traceability review cannot pass until the owning Go SDK repository is updated and revalidated.'
           type: "test"
           parallel: false
           story_id: "US-006"
