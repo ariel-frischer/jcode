@@ -265,7 +265,7 @@ phases:
       tasks:
         - id: "T020"
           title: "Add failing local older/newer, image, and boundary tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"
@@ -277,7 +277,7 @@ phases:
             - "Oldest and newest boundary actions keep selection, draft, images, and queue unchanged while showing boundary feedback."
         - id: "T021"
           title: "Implement the transient ordered local queued-message editor"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -289,7 +289,7 @@ phases:
             - "New local messages queued after editor start remain outside the active snapshot and retain arrival order."
         - id: "T022"
           title: "Route local Alt+Q and Alt+Shift+Q without changing other shortcuts"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -301,7 +301,7 @@ phases:
             - "Unsupported remote peers and non-editor states retain the established one-shot path."
         - id: "T023"
           title: "Pass independent local traversal and image-preservation tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"

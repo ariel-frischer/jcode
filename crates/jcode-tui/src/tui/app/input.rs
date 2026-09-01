@@ -1,9 +1,9 @@
 #![cfg_attr(test, allow(clippy::items_after_test_module))]
 
 use super::{
-    App, ContentBlock, DisplayMessage, Message, ProcessingStatus, Role, SendAction, commands,
-    ctrl_bracket_fallback_to_esc, is_context_limit_error, is_request_payload_too_large_error,
-    remote,
+    App, ContentBlock, DisplayMessage, LocalQueuedMessageDraft, LocalQueuedMessageEditor, Message,
+    ProcessingStatus, Role, SendAction, commands, ctrl_bracket_fallback_to_esc,
+    is_context_limit_error, is_request_payload_too_large_error, remote,
 };
 use crate::bus::{
     Bus, BusEvent, ClipboardPasteCompleted, ClipboardPasteContent, ClipboardPasteKind,
@@ -1476,46 +1476,79 @@ pub(super) fn expand_paste_placeholders(app: &mut App, input: &str) -> String {
 
 pub(super) fn queue_message(app: &mut App) {
     let prepared = take_prepared_input(app);
-    if let Some(index) = app.queued_message_edit_index.take() {
-        app.queued_messages
-            .insert(index.min(app.queued_messages.len()), prepared.expanded);
-        app.set_status_notice("Updated queued message");
-    } else {
-        app.queued_messages.push(prepared.expanded);
-    }
+    normalize_queued_message_images(app);
+    app.queued_messages.push(prepared.expanded);
+    app.queued_message_images.push(prepared.images);
+}
+
+pub(in crate::tui::app) fn normalize_queued_message_images(app: &mut App) {
+    app.queued_message_images
+        .resize_with(app.queued_messages.len(), Vec::new);
+}
+
+fn save_local_queued_draft(app: &mut App) {
+    let Some(editor) = app.local_queued_message_editor.as_mut() else {
+        return;
+    };
+    editor.held[editor.selected_index] = LocalQueuedMessageDraft {
+        content: std::mem::take(&mut app.input),
+        images: std::mem::take(&mut app.pending_images),
+    };
+}
+
+fn apply_local_queued_selection(app: &mut App) {
+    let editor = app
+        .local_queued_message_editor
+        .as_ref()
+        .expect("local queued editor must be active");
+    let selected = &editor.held[editor.selected_index];
+    app.input = selected.content.clone();
+    app.pending_images = selected.images.clone();
+    app.cursor_pos = app.input.len();
+    app.clear_input_undo_history();
 }
 
 pub(super) fn retrieve_queued_message_for_edit(app: &mut App) -> bool {
-    let (message, edit_index) = if let Some(current_index) = app.queued_message_edit_index {
-        if current_index == 0 {
+    if let Some(selected_index) = app
+        .local_queued_message_editor
+        .as_ref()
+        .map(|editor| editor.selected_index)
+    {
+        if selected_index == 0 {
             app.set_status_notice("Already editing the oldest queued message");
             return true;
         }
+        save_local_queued_draft(app);
+        app.local_queued_message_editor
+            .as_mut()
+            .expect("local queued editor must be active")
+            .selected_index -= 1;
+        apply_local_queued_selection(app);
+        app.set_status_notice("Moved to older queued message");
+        return true;
+    }
 
-        if !app.input.is_empty() {
-            let current = std::mem::take(&mut app.input);
-            app.queued_messages
-                .insert(current_index.min(app.queued_messages.len()), current);
-        }
-        let next_index = current_index - 1;
-        (app.queued_messages.remove(next_index), next_index)
-    } else {
-        if !app.input.is_empty() {
-            return false;
-        }
-        let Some(message) = app.queued_messages.pop() else {
-            return false;
-        };
-        (message, app.queued_messages.len())
-    };
-
-    app.input = message;
-    app.cursor_pos = app.input.len();
-    app.queued_message_edit_index = Some(edit_index);
+    if !app.input.is_empty() || !app.pending_images.is_empty() || app.queued_messages.is_empty() {
+        return false;
+    }
+    normalize_queued_message_images(app);
+    let messages = std::mem::take(&mut app.queued_messages);
+    let images = std::mem::take(&mut app.queued_message_images);
+    let held: Vec<_> = messages
+        .into_iter()
+        .zip(images)
+        .map(|(content, images)| LocalQueuedMessageDraft { content, images })
+        .collect();
+    let selected_index = held.len() - 1;
+    app.local_queued_message_editor = Some(LocalQueuedMessageEditor {
+        held,
+        selected_index,
+    });
+    apply_local_queued_selection(app);
     if !app.has_queued_followups() {
         app.pending_queued_dispatch = false;
     }
-    let remaining = app.queued_messages.len();
+    let remaining = selected_index;
     app.set_status_notice(if remaining == 0 {
         "Took back queued message for editing".to_string()
     } else {
@@ -1524,21 +1557,64 @@ pub(super) fn retrieve_queued_message_for_edit(app: &mut App) -> bool {
     true
 }
 
-pub(super) fn finish_queued_message_edit(app: &mut App) -> bool {
-    let Some(index) = app.queued_message_edit_index.take() else {
+pub(super) fn retrieve_newer_queued_message_for_edit(app: &mut App) -> bool {
+    let Some((selected_index, held_len)) = app
+        .local_queued_message_editor
+        .as_ref()
+        .map(|editor| (editor.selected_index, editor.held.len()))
+    else {
         return false;
     };
-
-    if app.input.is_empty() {
-        app.cursor_pos = 0;
-        app.clear_input_undo_history();
-        app.set_status_notice("Deleted queued message");
-    } else {
-        let prepared = take_prepared_input(app);
-        app.queued_messages
-            .insert(index.min(app.queued_messages.len()), prepared.expanded);
-        app.set_status_notice("Updated queued message");
+    if selected_index + 1 >= held_len {
+        app.set_status_notice("Already editing the newest queued message");
+        return true;
     }
+    save_local_queued_draft(app);
+    app.local_queued_message_editor
+        .as_mut()
+        .expect("local queued editor must be active")
+        .selected_index += 1;
+    apply_local_queued_selection(app);
+    app.set_status_notice("Moved to newer queued message");
+    true
+}
+
+pub(super) fn finish_queued_message_edit(app: &mut App) -> bool {
+    let Some(mut editor) = app.local_queued_message_editor.take() else {
+        return false;
+    };
+    editor.held[editor.selected_index] = LocalQueuedMessageDraft {
+        content: std::mem::take(&mut app.input),
+        images: std::mem::take(&mut app.pending_images),
+    };
+    app.cursor_pos = 0;
+    app.clear_input_undo_history();
+
+    let selected_is_empty = editor.held[editor.selected_index].content.is_empty()
+        && editor.held[editor.selected_index].images.is_empty();
+    if !selected_is_empty {
+        let selected = &mut editor.held[editor.selected_index];
+        app.record_prompt_history(&selected.content);
+        selected.content = expand_paste_placeholders(app, &selected.content);
+        app.pasted_contents.clear();
+    }
+
+    normalize_queued_message_images(app);
+    let arrivals = std::mem::take(&mut app.queued_messages);
+    let arrival_images = std::mem::take(&mut app.queued_message_images);
+    for (index, draft) in editor.held.into_iter().enumerate() {
+        if index != editor.selected_index || !selected_is_empty {
+            app.queued_messages.push(draft.content);
+            app.queued_message_images.push(draft.images);
+        }
+    }
+    app.queued_messages.extend(arrivals);
+    app.queued_message_images.extend(arrival_images);
+    app.set_status_notice(if selected_is_empty {
+        "Deleted queued message"
+    } else {
+        "Updated queued message"
+    });
     true
 }
 
@@ -2196,8 +2272,11 @@ pub(super) fn delete_input_word_back(app: &mut App) {
     app.sync_model_picker_preview_from_input();
 }
 
-pub(super) fn handle_alt_key(app: &mut App, code: KeyCode) -> bool {
+pub(super) fn handle_alt_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) -> bool {
     match code {
+        KeyCode::Char('Q') | KeyCode::Char('q') if modifiers.contains(KeyModifiers::SHIFT) => {
+            retrieve_newer_queued_message_for_edit(app)
+        }
         KeyCode::Char('q') => {
             retrieve_queued_message_for_edit(app);
             true
@@ -2517,11 +2596,11 @@ pub(super) fn handle_pre_control_shortcuts(
     if app.handle_diff_pane_focus_key(code, modifiers) {
         return true;
     }
-    if modifiers.contains(KeyModifiers::ALT) && handle_alt_key(app, code) {
+    if modifiers.contains(KeyModifiers::ALT) && handle_alt_key(app, code, modifiers) {
         return true;
     }
     if let Some(shortcut) = macos_option_shortcut
-        && handle_alt_key(app, KeyCode::Char(shortcut))
+        && handle_alt_key(app, KeyCode::Char(shortcut), KeyModifiers::ALT)
     {
         return true;
     }
@@ -2802,7 +2881,7 @@ pub(super) fn handle_enter(app: &mut App) -> bool {
     if finish_queued_message_edit(app) {
         return true;
     }
-    if !app.input.is_empty() {
+    if !app.input.is_empty() || !app.pending_images.is_empty() {
         if route_prompt_to_new_session_local(app) {
             return true;
         }
@@ -4065,7 +4144,18 @@ impl App {
             self.commit_pending_profile_transition();
             // Combine all currently queued messages into one, treating [SYSTEM: ...]
             // startup continuations as system reminders rather than user turns.
+            normalize_queued_message_images(self);
             let queued_messages = std::mem::take(&mut self.queued_messages);
+            let queued_message_images = std::mem::take(&mut self.queued_message_images);
+            let user_image_groups: Vec<_> = queued_messages
+                .iter()
+                .zip(queued_message_images)
+                .filter_map(|(message, images)| {
+                    super::helpers::extract_bracketed_system_message(message)
+                        .is_none()
+                        .then_some(images)
+                })
+                .collect();
             let hidden_reminders = std::mem::take(&mut self.hidden_queued_system_messages);
             let (messages, reminder, display_system_messages) =
                 super::helpers::partition_queued_messages(queued_messages, hidden_reminders);
@@ -4080,11 +4170,16 @@ impl App {
                     Ok(expanded) => expanded,
                     Err(notice) => {
                         file_mentions::restore_queued_file_mention_failure(
-                            self, messages, reminder, notice,
+                            self,
+                            messages,
+                            user_image_groups,
+                            reminder,
+                            notice,
                         );
                         break;
                     }
                 };
+            let images: Vec<_> = user_image_groups.into_iter().flatten().collect();
 
             for msg in display_system_messages {
                 self.push_display_message(DisplayMessage::system(msg));
@@ -4100,14 +4195,27 @@ impl App {
                 merge_turn_reminders(reminder.clone(), mission_turn_reminder(&self.session.id));
 
             if has_combined {
-                self.add_provider_message(Message::user(&expanded));
-                self.session.add_message(
-                    Role::User,
-                    vec![ContentBlock::Text {
+                if images.is_empty() {
+                    self.add_provider_message(Message::user(&expanded));
+                    self.session.add_message(
+                        Role::User,
+                        vec![ContentBlock::Text {
+                            text: combined.clone(),
+                            cache_control: None,
+                        }],
+                    );
+                } else {
+                    self.add_provider_message(Message::user_with_images(&expanded, images.clone()));
+                    let mut blocks: Vec<_> = images
+                        .into_iter()
+                        .map(|(media_type, data)| ContentBlock::Image { media_type, data })
+                        .collect();
+                    blocks.push(ContentBlock::Text {
                         text: combined.clone(),
                         cache_control: None,
-                    }],
-                );
+                    });
+                    self.session.add_message(Role::User, blocks);
+                }
             }
             self.session_save_pending = true;
             self.clear_streaming_render_state();

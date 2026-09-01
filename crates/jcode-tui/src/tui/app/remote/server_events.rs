@@ -1675,6 +1675,7 @@ pub(in crate::tui::app) fn handle_server_event(
                     // queues belonging to the session being left.
                     if app.pending_handoff_resume_notice.is_none() {
                         app.queued_messages.clear();
+                        app.queued_message_images.clear();
                     }
                     app.interleave_message = None;
                     app.interleave_images.clear();
@@ -2918,6 +2919,7 @@ pub(in crate::tui::app) fn handle_server_event(
                     let handoff_prompt = std::mem::take(&mut app.input);
                     if !handoff_prompt.trim().is_empty() {
                         app.queued_messages.insert(0, handoff_prompt);
+                        app.queued_message_images.insert(0, Vec::new());
                     }
                     app.input = existing_input;
                     app.cursor_pos = existing_cursor.min(app.input.len());

@@ -154,6 +154,7 @@ pub(super) fn recover_undelivered_queued_continuation(app: &mut App, reason: &st
     }
     if !pending.content.trim().is_empty() {
         app.queued_messages.insert(0, pending.content);
+        app.queued_message_images.insert(0, pending.images);
     }
     true
 }
@@ -170,7 +171,9 @@ pub(super) fn recover_local_interleave_to_queue(app: &mut App, reason: &str) -> 
         "Recovering unsent interleave into queued follow-ups after {}",
         reason
     ));
+    let images = std::mem::take(&mut app.interleave_images);
     app.queued_messages.insert(0, interleave);
+    app.queued_message_images.insert(0, images);
     true
 }
 

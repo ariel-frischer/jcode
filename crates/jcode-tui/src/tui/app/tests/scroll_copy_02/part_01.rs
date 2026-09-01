@@ -1432,7 +1432,11 @@ fn test_alt_a_copies_chat_viewport_with_context_when_input_empty() {
     let mut terminal = ratatui::Terminal::new(backend).expect("failed to create test terminal");
     render_and_snap(&app, &mut terminal);
 
-    let handled = super::input::handle_alt_key(&mut app, KeyCode::Char('a'));
+    let handled = super::input::handle_alt_key(
+        &mut app,
+        KeyCode::Char('a'),
+        KeyModifiers::ALT,
+    );
     assert!(handled);
     assert!(matches!(
         app.status_notice().as_deref(),
