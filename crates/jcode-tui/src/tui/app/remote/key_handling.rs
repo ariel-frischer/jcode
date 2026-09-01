@@ -669,7 +669,7 @@ async fn handle_remote_key_internal(
                 return Ok(());
             }
             KeyCode::Char('q') => {
-                app.retrieve_queued_message_for_edit();
+                super::soft_interrupt_recall::handle_alt_q(app, remote).await?;
                 return Ok(());
             }
             _ => {}

@@ -1569,6 +1569,8 @@ pub struct App {
     pending_soft_interrupts: Vec<String>,
     // Soft interrupts written to the socket but not yet acknowledged by the server.
     pending_soft_interrupt_requests: Vec<(u64, String)>,
+    // One authoritative server-queue recall operation, retained across reconnect.
+    remote_soft_interrupt_recall: remote::SoftInterruptRecallState,
     // Whether the current remote turn should trigger autoreview after completion.
     autoreview_after_current_turn: bool,
     // Whether the current remote turn should trigger autojudge after completion.

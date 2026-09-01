@@ -1,12 +1,12 @@
 use crate::bus::FileOp;
 use crate::plan::VersionedPlan;
-use crate::protocol::ServerEvent;
+use crate::protocol::{RecallableSoftInterrupt, ServerEvent};
 use jcode_agent_runtime::{
     InterruptSignal, SoftInterruptMessage, SoftInterruptQueue, SoftInterruptSource,
 };
 use jcode_swarm_core::{SwarmLifecycleStatus, SwarmMemberRecord, SwarmRole};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex as StdMutex};
 use std::time::Instant;
@@ -29,6 +29,97 @@ use tokio::sync::{RwLock, mpsc};
 /// the existing shutdown-signal lifecycle.
 static BACKGROUND_TOOL_SIGNALS: LazyLock<StdMutex<HashMap<String, InterruptSignal>>> =
     LazyLock::new(|| StdMutex::new(HashMap::new()));
+
+const SOFT_INTERRUPT_REPLAY_CAPACITY: usize = 64;
+const SOFT_INTERRUPT_REPLAY_SESSION_CAPACITY: usize = 256;
+type SoftInterruptReplayKey = (String, String);
+type SoftInterruptReplayEntry = (SoftInterruptReplayKey, Option<RecallableSoftInterrupt>);
+
+#[derive(Default)]
+struct SoftInterruptReplay {
+    completed: VecDeque<SoftInterruptReplayEntry>,
+}
+
+impl SoftInterruptReplay {
+    fn get(
+        &self,
+        client_instance_id: &str,
+        operation_id: &str,
+    ) -> Option<Option<RecallableSoftInterrupt>> {
+        self.completed
+            .iter()
+            .find(|((client, operation), _)| {
+                client == client_instance_id && operation == operation_id
+            })
+            .map(|(_, result)| result.clone())
+    }
+
+    fn insert(
+        &mut self,
+        client_instance_id: &str,
+        operation_id: &str,
+        result: Option<RecallableSoftInterrupt>,
+    ) {
+        if self.completed.len() == SOFT_INTERRUPT_REPLAY_CAPACITY {
+            self.completed.pop_front();
+        }
+        self.completed.push_back((
+            (client_instance_id.to_string(), operation_id.to_string()),
+            result,
+        ));
+    }
+}
+
+type SharedSoftInterruptReplay = Arc<StdMutex<SoftInterruptReplay>>;
+
+#[derive(Default)]
+struct SoftInterruptReplayRegistry {
+    replays: HashMap<String, SharedSoftInterruptReplay>,
+    session_order: VecDeque<String>,
+}
+
+impl SoftInterruptReplayRegistry {
+    fn get_or_insert(&mut self, session_id: &str) -> SharedSoftInterruptReplay {
+        if let Some(replay) = self.replays.get(session_id).cloned() {
+            self.session_order.retain(|id| id != session_id);
+            self.session_order.push_back(session_id.to_string());
+            return replay;
+        }
+
+        if self.replays.len() == SOFT_INTERRUPT_REPLAY_SESSION_CAPACITY
+            && let Some(oldest_session_id) = self.session_order.pop_front()
+        {
+            self.replays.remove(&oldest_session_id);
+        }
+
+        let replay = Arc::new(StdMutex::new(SoftInterruptReplay::default()));
+        self.replays.insert(session_id.to_string(), replay.clone());
+        self.session_order.push_back(session_id.to_string());
+        replay
+    }
+
+    fn rename(&mut self, old_session_id: &str, new_session_id: &str) {
+        if old_session_id == new_session_id {
+            return;
+        }
+        if let Some(replay) = self.replays.remove(old_session_id) {
+            self.replays.insert(new_session_id.to_string(), replay);
+            self.session_order.retain(|id| id != old_session_id);
+            self.session_order.retain(|id| id != new_session_id);
+            self.session_order.push_back(new_session_id.to_string());
+        }
+    }
+}
+
+static SOFT_INTERRUPT_REPLAYS: LazyLock<StdMutex<SoftInterruptReplayRegistry>> =
+    LazyLock::new(|| StdMutex::new(SoftInterruptReplayRegistry::default()));
+
+fn soft_interrupt_replay_for_session(session_id: &str) -> SharedSoftInterruptReplay {
+    SOFT_INTERRUPT_REPLAYS
+        .lock()
+        .map(|mut replays| replays.get_or_insert(session_id))
+        .unwrap_or_else(|_| Arc::new(StdMutex::new(SoftInterruptReplay::default())))
+}
 
 /// Register (or replace) the background-tool signal for a session.
 pub(super) fn register_background_tool_signal(session_id: &str, signal: InterruptSignal) {
@@ -485,6 +576,17 @@ pub(super) fn enqueue_soft_interrupt(
     urgent: bool,
     source: SoftInterruptSource,
 ) -> bool {
+    enqueue_soft_interrupt_owned(queue, content, images, urgent, source, None)
+}
+
+pub(super) fn enqueue_soft_interrupt_owned(
+    queue: &SoftInterruptQueue,
+    content: String,
+    images: Vec<(String, String)>,
+    urgent: bool,
+    source: SoftInterruptSource,
+    owner_client_instance_id: Option<&str>,
+) -> bool {
     let content_bytes = content.len();
     let content_chars = content.chars().count();
     if let Ok(mut pending) = queue.lock() {
@@ -494,6 +596,8 @@ pub(super) fn enqueue_soft_interrupt(
             images,
             urgent,
             source,
+            message_id: Some(crate::id::new_id("soft_interrupt")),
+            owner_client_instance_id: owner_client_instance_id.map(str::to_string),
         });
         crate::logging::info(&format!(
             "SOFT_INTERRUPT_QUEUE_PUSH source={:?} urgent={} content_bytes={} content_chars={} pending_before={} pending_after={}",
@@ -524,6 +628,7 @@ pub(super) fn enqueue_soft_interrupt(
 pub struct SessionControlHandle {
     pub session_id: String,
     soft_interrupt_queue: SoftInterruptQueue,
+    soft_interrupt_replay: SharedSoftInterruptReplay,
     background_tool_signal: Option<InterruptSignal>,
     stop_current_turn_signal: InterruptSignal,
 }
@@ -541,9 +646,11 @@ impl SessionControlHandle {
         // `await_members`) can still fire it. Without this, Alt+B/Ctrl+B silently
         // no-ops for busy turns.
         register_background_tool_signal(&session_id, background_tool_signal.clone());
+        let soft_interrupt_replay = soft_interrupt_replay_for_session(&session_id);
         Self {
             session_id,
             soft_interrupt_queue,
+            soft_interrupt_replay,
             background_tool_signal: Some(background_tool_signal),
             stop_current_turn_signal,
         }
@@ -554,9 +661,12 @@ impl SessionControlHandle {
         soft_interrupt_queue: SoftInterruptQueue,
         stop_current_turn_signal: InterruptSignal,
     ) -> Self {
+        let session_id = session_id.into();
+        let soft_interrupt_replay = soft_interrupt_replay_for_session(&session_id);
         Self {
-            session_id: session_id.into(),
+            session_id,
             soft_interrupt_queue,
+            soft_interrupt_replay,
             background_tool_signal: None,
             stop_current_turn_signal,
         }
@@ -570,6 +680,24 @@ impl SessionControlHandle {
         source: SoftInterruptSource,
     ) -> bool {
         enqueue_soft_interrupt(&self.soft_interrupt_queue, content, images, urgent, source)
+    }
+
+    pub fn queue_owned_soft_interrupt(
+        &self,
+        content: String,
+        images: Vec<(String, String)>,
+        urgent: bool,
+        source: SoftInterruptSource,
+        owner_client_instance_id: Option<&str>,
+    ) -> bool {
+        enqueue_soft_interrupt_owned(
+            &self.soft_interrupt_queue,
+            content,
+            images,
+            urgent,
+            source,
+            owner_client_instance_id,
+        )
     }
 
     pub fn clear_soft_interrupts(&self) {
@@ -586,6 +714,37 @@ impl SessionControlHandle {
                 self.session_id
             ));
         }
+    }
+
+    pub fn recall_soft_interrupt(
+        &self,
+        client_instance_id: &str,
+        operation_id: &str,
+    ) -> Option<RecallableSoftInterrupt> {
+        // Keep the replay lock through selection and recording so concurrent
+        // retries of one operation cannot both remove a queue entry.
+        let mut replay = self.soft_interrupt_replay.lock().ok()?;
+        if let Some(result) = replay.get(client_instance_id, operation_id) {
+            return result;
+        }
+
+        let result = {
+            let mut queue = self.soft_interrupt_queue.lock().ok()?;
+            let index = queue.iter().rposition(|message| {
+                message.source == SoftInterruptSource::User
+                    && message.owner_client_instance_id.as_deref() == Some(client_instance_id)
+            });
+            index.map(|index| {
+                let message = queue.remove(index);
+                RecallableSoftInterrupt {
+                    content: message.content,
+                    images: message.images,
+                }
+            })
+        };
+
+        replay.insert(client_instance_id, operation_id, result.clone());
+        result
     }
 
     /// Fire the stop-current-turn signal. Returns the signal's fire epoch so
@@ -696,6 +855,9 @@ pub(super) async fn rename_session_interrupt_queue(
     if let Some(queue) = guard.remove(old_session_id) {
         guard.insert(new_session_id.to_string(), queue);
     }
+    if let Ok(mut replays) = SOFT_INTERRUPT_REPLAYS.lock() {
+        replays.rename(old_session_id, new_session_id);
+    }
 }
 
 pub(super) async fn remove_session_interrupt_queue(
@@ -748,6 +910,8 @@ pub(super) async fn queue_soft_interrupt_for_session(
                 images: Vec::new(),
                 urgent,
                 source,
+                message_id: None,
+                owner_client_instance_id: None,
             },
         )
         .map(|_| true)
@@ -760,3 +924,7 @@ pub(super) async fn queue_soft_interrupt_for_session(
         })
     }
 }
+
+#[cfg(test)]
+#[path = "state_tests/soft_interrupt_recall.rs"]
+mod soft_interrupt_recall_tests;

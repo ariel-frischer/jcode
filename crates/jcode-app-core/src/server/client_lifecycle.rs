@@ -1399,6 +1399,7 @@ pub(super) async fn handle_client(
                     images,
                     urgent,
                     SoftInterruptSource::User,
+                    current_client_instance_id.as_deref(),
                     &session_control,
                     &client_event_tx,
                 );
@@ -1406,6 +1407,16 @@ pub(super) async fn handle_client(
 
             Request::CancelSoftInterrupts { id } => {
                 clear_soft_interrupts(id, &client_session_id, &session_control, &client_event_tx);
+            }
+
+            Request::RecallSoftInterrupt { id, operation_id } => {
+                recall_soft_interrupt(
+                    id,
+                    operation_id,
+                    current_client_instance_id.as_deref(),
+                    &session_control,
+                    &client_event_tx,
+                );
             }
 
             Request::BackgroundTool { id } => {
@@ -3564,6 +3575,7 @@ fn queue_soft_interrupt(
     images: Vec<(String, String)>,
     urgent: bool,
     source: SoftInterruptSource,
+    owner_client_instance_id: Option<&str>,
     session_control: &SessionControlHandle,
     client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
 ) {
@@ -3573,11 +3585,68 @@ fn queue_soft_interrupt(
         "SERVER_SOFT_INTERRUPT_QUEUE_REQUEST id={} session={} source={:?} urgent={} content_bytes={} content_chars={}",
         id, session_control.session_id, source, urgent, content_bytes, content_chars
     ));
-    let queued = session_control.queue_soft_interrupt(content, images, urgent, source);
+    let queued = session_control.queue_owned_soft_interrupt(
+        content,
+        images,
+        urgent,
+        source,
+        owner_client_instance_id,
+    );
     let ack_queued = client_event_tx.send(ServerEvent::Ack { id }).is_ok();
     crate::logging::info(&format!(
         "SERVER_SOFT_INTERRUPT_QUEUE_RESULT id={} session={} queued={} ack_queued={}",
         id, session_control.session_id, queued, ack_queued
+    ));
+}
+
+fn recall_soft_interrupt(
+    id: u64,
+    operation_id: String,
+    client_instance_id: Option<&str>,
+    session_control: &SessionControlHandle,
+    client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
+) {
+    let Some(client_instance_id) = client_instance_id.filter(|value| !value.trim().is_empty())
+    else {
+        crate::logging::warn(&format!(
+            "SERVER_SOFT_INTERRUPT_RECALL_REJECTED id={} session={} reason=missing_client_instance_id",
+            id, session_control.session_id
+        ));
+        let _ = client_event_tx.send(ServerEvent::Error {
+            id,
+            message: "Soft interrupt recall requires a verified client identity.".to_string(),
+            retry_after_secs: None,
+            provider_code: None,
+        });
+        return;
+    };
+    if operation_id.trim().is_empty() {
+        crate::logging::warn(&format!(
+            "SERVER_SOFT_INTERRUPT_RECALL_REJECTED id={} session={} reason=missing_operation_id",
+            id, session_control.session_id
+        ));
+        let _ = client_event_tx.send(ServerEvent::Error {
+            id,
+            message: "Soft interrupt recall requires an operation identity.".to_string(),
+            retry_after_secs: None,
+            provider_code: None,
+        });
+        return;
+    }
+
+    let message = session_control.recall_soft_interrupt(client_instance_id, &operation_id);
+    let found = message.is_some();
+    let image_count = message.as_ref().map_or(0, |message| message.images.len());
+    let result_queued = client_event_tx
+        .send(ServerEvent::SoftInterruptRecalled {
+            id,
+            operation_id,
+            message,
+        })
+        .is_ok();
+    crate::logging::info(&format!(
+        "SERVER_SOFT_INTERRUPT_RECALL_RESULT id={} session={} found={} image_count={} requester_result_queued={}",
+        id, session_control.session_id, found, image_count, result_queued
     ));
 }
 

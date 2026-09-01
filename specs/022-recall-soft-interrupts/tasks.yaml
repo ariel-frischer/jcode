@@ -1,0 +1,189 @@
+tasks:
+  branch: "agent/jcode-c9u-alt-q-soft-queue"
+  created: "2026-09-01"
+  spec_path: "specs/022-recall-soft-interrupts/spec.yaml"
+  plan_path: "specs/022-recall-soft-interrupts/plan.yaml"
+
+summary:
+  total_tasks: 12
+  total_phases: 4
+  parallel_opportunities: 0
+  estimated_complexity: "medium"
+
+phases:
+  - number: 1
+    title: "Acceptance and red tests"
+    purpose: "Freeze the actual one-message empty-composer contract and observe focused tests fail before production changes."
+    tasks:
+      - id: "T001"
+        title: "Record requirement-to-check acceptance matrix"
+        status: "Completed"
+        type: "setup"
+        parallel: false
+        story_id: null
+        file_path: "specs/022-recall-soft-interrupts/validation.md"
+        dependencies: []
+        acceptance_criteria:
+          - "Map FR-001 through FR-009 and NFR-001 through NFR-003 to direct protocol, persistence, server, TUI, regression, and runtime checks."
+          - "Record the isolated worktree branch, current binary caveat, and known baseline guardrail failures."
+      - id: "T002"
+        title: "Add failing additive contract and persistence tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "new focused tests under crates/jcode-protocol and crates/jcode-base"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "Tests require optional stable message identity and owner fields with legacy defaults."
+          - "Tests require RecallSoftInterrupt with id and operation_id plus SoftInterruptRecalled with the exact optional text/images message."
+          - "Run the focused tests and observe expected missing-contract failures."
+      - id: "T003"
+        title: "Add failing authoritative queue and replay tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "new focused tests under crates/jcode-app-core/src/server"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Newest matching owned User message is selected one at a time."
+          - "Other-client, unowned, System, and BackgroundTask entries remain unchanged and ordered."
+          - "The same operation replay returns the same result without a second removal."
+          - "Run the focused tests and observe expected missing-behavior failures."
+      - id: "T004"
+        title: "Add failing remote Alt+q state-machine tests"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-003"
+        file_path: "new small TUI test file included from crates/jcode-tui/src/tui/app/tests.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "Nonempty text or images block recall."
+          - "An empty composer with server-pending input sends one request and repeated Alt+q while pending sends none."
+          - "Only the matching result applies exact text/images once; failure, stale result, and disconnect preserve state."
+          - "Existing local queue recall remains immediate and unchanged."
+          - "Run the focused tests and observe expected missing-behavior failures."
+
+  - number: 2
+    title: "Minimal authoritative implementation"
+    purpose: "Implement ownership, one-message server recall, and additive contracts until the red tests pass."
+    tasks:
+      - id: "T005"
+        title: "Implement queued-message identity, ownership, and additive wire types"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-agent-runtime/src/lib.rs, crates/jcode-protocol/src/wire.rs, crates/jcode-protocol/src/lib.rs, crates/jcode-base/src/soft_interrupt_store.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "Fields are additive and legacy persistence loads unowned."
+          - "Existing CancelSoftInterrupts and Ack shapes are unchanged."
+          - "Focused contract and persistence tests pass."
+      - id: "T006"
+        title: "Implement newest-owned atomic recall and bounded replay"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/state.rs and a focused helper module if needed"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "One queue lock selects and removes only the last matching owned User message."
+          - "All other entries retain relative order."
+          - "A small bounded session-scoped replay record returns the same result for the same client and operation."
+          - "Focused queue and replay tests pass."
+      - id: "T007"
+        title: "Bind ownership and handle requester-only recall"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/client_lifecycle.rs and logging helper"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "User SoftInterrupt enqueue records verified current_client_instance_id."
+          - "Missing identity fails closed."
+          - "Recall result is sent only to the requesting client and preserves exact images."
+          - "CancelSoftInterrupts remains unchanged."
+
+  - number: 3
+    title: "TUI integration"
+    purpose: "Connect lowercase Alt+q to the authoritative one-message recall path without changing established local behavior."
+    tasks:
+      - id: "T008"
+        title: "Implement backend request and small TUI recall state module"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-tui/src/tui/backend.rs and crates/jcode-tui/src/tui/app/remote/soft_interrupt_recall.rs"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "One stable operation is retained while a request is pending and across reconnect retry."
+          - "Only a matching unapplied result puts exact text/images into an empty composer."
+          - "Unavailable, failure, disconnect, stale, and duplicate outcomes do not mutate the composer or local queue."
+      - id: "T009"
+        title: "Delegate remote Alt+q and server result handling"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/app/remote/key_handling.rs, crates/jcode-tui/src/tui/app/remote/server_events.rs, crates/jcode-tui/src/tui/app.rs"
+        dependencies: ["T008"]
+        acceptance_criteria:
+          - "Existing local queued message is recalled first by the unchanged helper."
+          - "If the composer remains empty and server-pending input exists, exactly one server recall request is sent."
+          - "Nonempty text or images block the action."
+          - "Focused TUI tests pass without substantial growth of oversized files."
+
+  - number: 4
+    title: "Validation, review, and landing"
+    purpose: "Prove the safe behavior in tests and a running binary, then integrate and install it."
+    tasks:
+      - id: "T010"
+        title: "Run focused and regression validation"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-004"
+        file_path: "affected crates and existing Alt+q/CancelSoftInterrupts tests"
+        dependencies: ["T009"]
+        acceptance_criteria:
+          - "Protocol, persistence, server, and TUI focused tests pass."
+          - "Existing local Alt+q cycling, original-slot restoration, image handling, and CancelSoftInterrupts tests pass."
+          - "Formatting and relevant Cargo checks pass or verified unrelated baseline failures are recorded once."
+      - id: "T011"
+        title: "Build and validate an isolated running workflow"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-001"
+        file_path: "newly built jcode binary and private socket"
+        dependencies: ["T010"]
+        acceptance_criteria:
+          - "The resolved newly built executable is confirmed."
+          - "A private-socket scenario proves lowercase Alt+q recalls newest server-pending input one at a time and preserves unrelated messages."
+          - "Composer blocking, images, repeated key, unavailable result, and local fallback are exercised where the debug/runtime harness supports them."
+      - id: "T012"
+        title: "Polish, independently review, integrate, install, and verify live"
+        status: "InProgress"
+        type: "documentation"
+        parallel: false
+        story_id: "US-004"
+        file_path: "worktree commit, review report, dev integration, installed binary"
+        dependencies: ["T011"]
+        acceptance_criteria:
+          - "Polish and independent safety review find no cross-client, system-message, duplication, or silent-loss blocker."
+          - "Explicit files are committed and integrated through merge-wt with root remaining on dev."
+          - "scripts/install_release.sh --fast and graceful reload activate the intended revision."
+          - "Live Alt+q behavior is verified, Bead jcode-c9u is closed with evidence, and task worktree cleanup completes."
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-01T09:05:00Z"
+  artifact_type: "tasks"

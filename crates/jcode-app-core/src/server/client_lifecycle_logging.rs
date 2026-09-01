@@ -30,6 +30,11 @@ pub(super) fn interrupt_request_log_fields(
             content.chars().count()
         )),
         Request::CancelSoftInterrupts { id } => Some(base("cancel_soft_interrupts", *id)),
+        Request::RecallSoftInterrupt { id, operation_id } => Some(format!(
+            "{} operation_id_bytes={}",
+            base("recall_soft_interrupt", *id),
+            operation_id.len()
+        )),
         Request::BackgroundTool { id } => Some(base("background_tool", *id)),
         _ => None,
     }

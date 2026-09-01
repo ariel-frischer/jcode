@@ -25,6 +25,7 @@ mod reconnect;
 mod server_event_handlers;
 mod server_events;
 mod session_persistence;
+mod soft_interrupt_recall;
 mod swarm_plan_core;
 mod swarm_status_core;
 mod workspace;
@@ -48,6 +49,9 @@ use session_persistence::{
     persist_remote_session_metadata, persist_replay_display_message, persist_swarm_plan_snapshot,
     persist_swarm_status_snapshot,
 };
+pub(super) use soft_interrupt_recall::SoftInterruptRecallState;
+#[cfg(test)]
+pub(super) use soft_interrupt_recall::retry_pending_after_reconnect;
 use workspace::{handle_workspace_command, handle_workspace_navigation_key};
 
 // Re-export the remote input dispatch helpers for sibling modules/tests that go

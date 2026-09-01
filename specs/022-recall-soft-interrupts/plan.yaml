@@ -1,0 +1,175 @@
+plan:
+  branch: "agent/jcode-c9u-alt-q-soft-queue"
+  created: "2026-09-01"
+  spec_path: "specs/022-recall-soft-interrupts/spec.yaml"
+
+summary: |
+  Add a small ownership-aware recall operation for exactly one newest server-queued user soft interrupt. A queued user message carries a stable identity and the verified subscribing client_instance_id. Lowercase Alt+q with an empty composer and no recall already pending sends an additive request with a stable operation ID. The server atomically selects only the newest eligible message for that owner, preserves every unrelated queue entry and its order, and returns the exact text and images only to the requester. The TUI applies only the matching authoritative result. A bounded per-session replay record lets the same operation reconcile response loss without removing or applying the message twice. Existing local Alt+q cycling and CancelSoftInterrupts remain separate and unchanged.
+
+technical_context:
+  language: "Rust 2024 edition"
+  framework: "Tokio server and Ratatui/Crossterm TUI"
+  primary_dependencies:
+    - name: "serde"
+      version: "1"
+      purpose: "Add backward-compatible wire and persistence fields."
+    - name: "tokio"
+      version: "1"
+      purpose: "Use existing server and transport synchronization."
+  storage: "Existing soft-interrupt persistence gains defaulted optional identity and owner metadata; legacy entries remain unowned. Completed replay results use a small bounded session-scoped cache."
+  testing:
+    framework: "Rust unit and async tests plus isolated-socket runtime validation"
+    approach: "TDD with new small focused test files for protocol, queue selection, ownership, ordering, images, one-in-flight behavior, failure immutability, replay, local fallback, and cancellation compatibility."
+  target_platform: "Supported Jcode TUI platforms"
+  project_type: "cli"
+  performance_goals: "One mutex scan over the usually small pending queue and immediate status feedback."
+  constraints:
+    - "Alt+q is active only when composer text and images are empty."
+    - "Recall at most one newest owned User message per operation."
+    - "Never call CancelSoftInterrupts from recall."
+    - "Never mutate composer state before a matching authoritative result."
+    - "Preserve all unrelated entries and relative order."
+    - "Keep protocol and persistence changes additive."
+    - "Avoid growing already oversized TUI source and test files where a small module can own the behavior."
+    - "Serialize Rust validation commands."
+  scale_scope: "One ordered queue per session, one in-flight recall per TUI, and a small bounded replay cache."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "PRIN-001 Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "Only message ownership, additive recall protocol/server handling, TUI integration, and focused tests change."
+    - name: "PRIN-002 Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "New variants and fields are additive; legacy entries fail closed."
+    - name: "PRIN-004 Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Runtime owns queued-message metadata, protocol owns wire types, server owns authority, and TUI owns composer state."
+    - name: "PRIN-005 Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Every requirement maps to direct protocol, server, TUI, or runtime evidence."
+    - name: "PRIN-006 Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Missing ownership and unconfirmed results fail closed without composer mutation."
+    - name: "PRIN-007 Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "Focused checks, build, guardrails, and runtime proof are delivery gates."
+    - name: "PRIN-008 Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The design extends the canonical queue and existing Alt+q behavior without a parallel system."
+    - name: "PRIN-009 Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The outcome is direct recovery of the user's newest still-queued message without collateral loss."
+    - name: "PRIN-010 Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Validation uses bounded tests and a newly built binary on an isolated socket."
+
+research_findings:
+  decisions:
+    - topic: "Ownership"
+      decision: "Bind user soft interrupts to the stable current_client_instance_id at enqueue."
+      rationale: "The server already verifies and tracks this identity across reconnect."
+      alternatives_considered: ["connection ID", "content matching", "session-wide ownership"]
+    - topic: "Selection"
+      decision: "Under the existing queue mutex, remove only the last entry whose source is User and owner matches the requester."
+      rationale: "This implements newest-first one-message recall and naturally preserves every other entry's order."
+      alternatives_considered: ["clear-all", "recall all owned messages", "client queue indexes"]
+    - topic: "Authoritative response and replay"
+      decision: "Use a stable client operation ID and a bounded session-scoped completed-result cache."
+      rationale: "A retry after response loss can return the same result without a second queue mutation."
+      alternatives_considered: ["optimistic composer mutation", "fire-and-forget removal", "unbounded cache"]
+    - topic: "Composer rule"
+      decision: "Do nothing unless both composer text and images are empty; on success replace the empty composer with exactly one returned message."
+      rationale: "This matches established Alt+q behavior and avoids draft merging."
+      alternatives_considered: ["append to draft", "prepend to draft", "recall while images are attached"]
+    - topic: "Fallback"
+      decision: "Preserve the existing local queued-message recall path; server recall is attempted only when no local editable queued message was taken and local tracking indicates server-pending input."
+      rationale: "Existing local cycling stays immediate and unchanged."
+      alternatives_considered: ["server-first for every press", "disable local recall while connected"]
+
+api_contracts:
+  endpoints:
+    - method: "WIRE"
+      path: "recall_soft_interrupt"
+      description: "Request one newest still-queued User message owned by the invoking client."
+      request:
+        content_type: "application/json"
+        body_schema: "{ type: recall_soft_interrupt, id: u64, operation_id: string }"
+      response:
+        success_code: 200
+        body_schema: "{ type: soft_interrupt_recalled, id: u64, operation_id: string, message: RecallableSoftInterrupt|null }"
+      errors:
+        - code: 400
+          description: "Missing or invalid stable client identity or operation identity."
+        - code: 409
+          description: "Conflicting reuse of an operation identity."
+
+project_structure:
+  documentation:
+    - path: "specs/022-recall-soft-interrupts/"
+      description: "Corrected specification, plan, tasks, and validation evidence."
+  source_code:
+    - path: "crates/jcode-agent-runtime/src/lib.rs"
+      description: "Optional stable message ID and owner metadata."
+    - path: "crates/jcode-protocol/src/wire.rs"
+      description: "Additive one-message recall request and authoritative result."
+    - path: "crates/jcode-base/src/soft_interrupt_store.rs"
+      description: "Defaulted persistence metadata."
+    - path: "crates/jcode-app-core/src/server/state.rs"
+      description: "Atomic newest-owned selection and bounded replay state."
+    - path: "crates/jcode-app-core/src/server/client_lifecycle.rs"
+      description: "Bind ownership and handle requester-only recall."
+    - path: "crates/jcode-tui/src/tui/backend.rs"
+      description: "Send recall request."
+    - path: "crates/jcode-tui/src/tui/app/remote/soft_interrupt_recall.rs"
+      description: "Small TUI recall state machine and authoritative result application."
+    - path: "crates/jcode-tui/src/tui/app/remote/key_handling.rs"
+      description: "Delegate Alt+q to the recall state machine."
+    - path: "crates/jcode-tui/src/tui/app/remote/server_events.rs"
+      description: "Delegate recall result handling."
+  tests:
+    - path: "new focused protocol, server, persistence, and TUI test modules"
+      description: "Avoid adding substantial coverage to existing oversized files."
+
+implementation_phases:
+  - phase: 1
+    name: "Red tests and contracts"
+    goal: "Prove the missing behavior and define minimal additive types."
+    deliverables:
+      - "Failing protocol and persistence tests for identity, owner, one-message request/result, and images."
+      - "Failing queue tests for newest-owned selection and unrelated ordering."
+      - "Failing TUI tests for empty composer, one in-flight request, authoritative application, and local fallback."
+  - phase: 2
+    name: "Ownership and authoritative server recall"
+    goal: "Implement the smallest safe server behavior."
+    dependencies: ["Phase 1"]
+    deliverables:
+      - "Bind User requests to verified stable client identity."
+      - "Atomically remove one newest eligible message and preserve all others."
+      - "Return exact text/images only to requester and retain bounded replay result."
+  - phase: 3
+    name: "TUI integration"
+    goal: "Make lowercase Alt+q recall server-pending input into an empty composer."
+    dependencies: ["Phase 2"]
+    deliverables:
+      - "Keep local recall immediate and unchanged."
+      - "Send at most one server request while pending."
+      - "Apply one matching result once; failures and nonempty composers do not mutate state."
+  - phase: 4
+    name: "Validation and landing"
+    goal: "Prove behavior in tests and the running built binary."
+    dependencies: ["Phase 3"]
+    deliverables:
+      - "Focused affected tests and regression tests."
+      - "Format, checks, guardrails, and isolated-socket runtime workflow."
+      - "Independent safety review, integration, install, reload, and live verification."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-01T08:55:35Z"
+  artifact_type: "plan"

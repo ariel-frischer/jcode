@@ -576,13 +576,14 @@ pub(in crate::tui::app) async fn handle_post_connect<B: ratatui::backend::Backen
     state: &mut RemoteRunState,
     session_to_resume: Option<&str>,
 ) -> Result<PostConnectOutcome> {
+    let reconnected_after_disconnect = state.reconnect_attempts > 0;
     crate::logging::info(&format!(
         "Reload check: session_to_resume={:?}, remote_session_id={:?}, reconnect_attempts={}",
         session_to_resume, app.remote_session_id, state.reconnect_attempts
     ));
     let hints = load_reload_reconnect_hints(app, session_to_resume);
     let has_reload_ctx_for_session = hints.reload_ctx_for_session.is_some();
-    if state.reconnect_attempts > 0 {
+    if reconnected_after_disconnect {
         if let Some(disconnect_start) = state.disconnect_start {
             crate::logging::info(&format!(
                 "Reload reconnect succeeded after {}ms (attempts={})",
@@ -711,6 +712,10 @@ pub(in crate::tui::app) async fn handle_post_connect<B: ratatui::backend::Backen
     } else {
         app.clear_remote_startup_phase();
         app.clear_remote_history_wait();
+    }
+
+    if reconnected_after_disconnect {
+        super::soft_interrupt_recall::retry_pending_after_reconnect(app, remote).await?;
     }
 
     // Hydrate route metadata as part of connection bootstrap, not when the

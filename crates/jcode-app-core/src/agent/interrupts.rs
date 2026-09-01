@@ -136,6 +136,8 @@ impl Agent {
                 images,
                 urgent,
                 source,
+                message_id: None,
+                owner_client_instance_id: None,
             });
             logging::info(&format!(
                 "AGENT_SOFT_INTERRUPT_QUEUE_PUSH session={} source={:?} urgent={} content_bytes={} content_chars={} image_count={} pending_before={} pending_after={}",

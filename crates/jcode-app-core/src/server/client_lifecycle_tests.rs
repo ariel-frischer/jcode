@@ -278,6 +278,121 @@ async fn session_control_handle_does_not_wait_for_busy_agent_lock() {
     assert!(queue.lock().expect("queue lock").is_empty());
 }
 
+#[test]
+fn user_soft_interrupt_enqueue_records_verified_owner_and_exact_images() {
+    let queue = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let control = SessionControlHandle::new(
+        "owned_soft_interrupt_test",
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+    let images = vec![("image/png".to_string(), "exact-image-data".to_string())];
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+
+    queue_soft_interrupt(
+        41,
+        "owned message".to_string(),
+        images.clone(),
+        false,
+        SoftInterruptSource::User,
+        Some("verified-client"),
+        &control,
+        &event_tx,
+    );
+
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(ServerEvent::Ack { id: 41 })
+    ));
+    let pending = queue.lock().expect("queue lock");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(
+        pending[0].owner_client_instance_id.as_deref(),
+        Some("verified-client")
+    );
+    assert!(pending[0].message_id.is_some());
+    assert_eq!(pending[0].images, images);
+}
+
+#[test]
+fn recall_without_verified_identity_fails_closed() {
+    let queue = Arc::new(std::sync::Mutex::new(vec![
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "keep me queued".to_string(),
+            images: Vec::new(),
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("message-1".to_string()),
+            owner_client_instance_id: Some("verified-client".to_string()),
+        },
+    ]));
+    let control = SessionControlHandle::new(
+        "missing_identity_recall_test",
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+
+    recall_soft_interrupt(42, "operation-1".to_string(), None, &control, &event_tx);
+
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(ServerEvent::Error { id: 42, .. })
+    ));
+    assert_eq!(queue.lock().expect("queue lock").len(), 1);
+}
+
+#[test]
+fn recall_returns_exact_payload_only_to_requesting_client() {
+    let images = vec![
+        ("image/png".to_string(), "first-image".to_string()),
+        ("image/jpeg".to_string(), "second-image".to_string()),
+    ];
+    let queue = Arc::new(std::sync::Mutex::new(vec![
+        jcode_agent_runtime::SoftInterruptMessage {
+            content: "recall me".to_string(),
+            images: images.clone(),
+            urgent: false,
+            source: SoftInterruptSource::User,
+            message_id: Some("message-2".to_string()),
+            owner_client_instance_id: Some("requesting-client".to_string()),
+        },
+    ]));
+    let control = SessionControlHandle::new(
+        "requester_only_recall_test",
+        Arc::clone(&queue),
+        InterruptSignal::new(),
+        InterruptSignal::new(),
+    );
+    let (requester_tx, mut requester_rx) = mpsc::unbounded_channel();
+    let (_other_tx, mut other_rx) = mpsc::unbounded_channel::<ServerEvent>();
+
+    recall_soft_interrupt(
+        43,
+        "operation-2".to_string(),
+        Some("requesting-client"),
+        &control,
+        &requester_tx,
+    );
+
+    let ServerEvent::SoftInterruptRecalled {
+        id,
+        operation_id,
+        message: Some(message),
+    } = requester_rx.try_recv().expect("requester result")
+    else {
+        panic!("expected authoritative recall result");
+    };
+    assert_eq!(id, 43);
+    assert_eq!(operation_id, "operation-2");
+    assert_eq!(message.content, "recall me");
+    assert_eq!(message.images, images);
+    assert!(other_rx.try_recv().is_err());
+    assert!(queue.lock().expect("queue lock").is_empty());
+}
+
 #[tokio::test]
 async fn refreshed_session_control_handle_does_not_wait_for_busy_agent_lock() {
     let provider: Arc<dyn Provider> = Arc::new(PanicOnForkProvider {

@@ -172,7 +172,7 @@ impl AuthChanged {
 pub type ReloadRecoverySnapshot = jcode_selfdev_types::ReloadRecoveryDirective;
 
 mod wire;
-pub use wire::TaskGraphNodeSpec;
+pub use wire::{RecallableSoftInterrupt, TaskGraphNodeSpec};
 pub use wire::{Request, ServerEvent, SessionProfileStartup};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -566,6 +566,7 @@ impl Request {
             Request::BackgroundTool { id } => *id,
             Request::SoftInterrupt { id, .. } => *id,
             Request::CancelSoftInterrupts { id } => *id,
+            Request::RecallSoftInterrupt { id, .. } => *id,
             Request::Clear { id } => *id,
             Request::Rewind { id, .. } => *id,
             Request::RewindUndo { id } => *id,
