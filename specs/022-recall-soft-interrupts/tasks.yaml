@@ -72,7 +72,7 @@ phases:
     tasks:
       - id: "T005"
         title: "Implement queued-message identity, ownership, and additive wire types"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

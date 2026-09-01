@@ -26,6 +26,7 @@ fn typed_profile_startup_roundtrips_without_changing_legacy_shape() {
         client_instance_id: None,
         client_has_local_history: false,
         allow_session_takeover: false,
+        crash_on_disconnect: false,
         terminal_env: Vec::new(),
         profile: Some(SessionProfileStartup {
             profile_name: Some("review".to_owned()),

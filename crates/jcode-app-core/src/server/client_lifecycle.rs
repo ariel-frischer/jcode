@@ -1408,6 +1408,15 @@ pub(super) async fn handle_client(
                 clear_soft_interrupts(id, &client_session_id, &session_control, &client_event_tx);
             }
 
+            Request::RecallSoftInterrupt { id, .. } => {
+                let _ = client_event_tx.send(ServerEvent::Error {
+                    id,
+                    message: "Soft interrupt recall is not available yet.".to_string(),
+                    retry_after_secs: None,
+                    provider_code: None,
+                });
+            }
+
             Request::BackgroundTool { id } => {
                 move_tool_to_background(id, &session_control, &client_event_tx);
             }

@@ -494,6 +494,8 @@ pub(super) fn enqueue_soft_interrupt(
             images,
             urgent,
             source,
+            message_id: None,
+            owner_client_instance_id: None,
         });
         crate::logging::info(&format!(
             "SOFT_INTERRUPT_QUEUE_PUSH source={:?} urgent={} content_bytes={} content_chars={} pending_before={} pending_after={}",
@@ -748,6 +750,8 @@ pub(super) async fn queue_soft_interrupt_for_session(
                 images: Vec::new(),
                 urgent,
                 source,
+                message_id: None,
+                owner_client_instance_id: None,
             },
         )
         .map(|_| true)

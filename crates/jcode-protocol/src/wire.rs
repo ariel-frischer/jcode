@@ -43,6 +43,14 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 
+/// Exact user-authored payload returned by an authoritative soft-interrupt recall.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecallableSoftInterrupt {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<(String, String)>,
+}
+
 /// Optional, credential-free startup overlay for one interactive session.
 ///
 /// The CLI resolves the named profile before provider/session work and sends
@@ -126,6 +134,10 @@ pub enum Request {
     /// Cancel all pending soft interrupts (remove from server queue before injection)
     #[serde(rename = "cancel_soft_interrupts")]
     CancelSoftInterrupts { id: u64 },
+
+    /// Recall one newest eligible soft interrupt owned by this client.
+    #[serde(rename = "recall_soft_interrupt")]
+    RecallSoftInterrupt { id: u64, operation_id: String },
 
     /// Clear conversation history
     #[serde(rename = "clear")]
@@ -811,6 +823,14 @@ pub enum ServerEvent {
     /// Acknowledgment of request
     #[serde(rename = "ack")]
     Ack { id: u64 },
+
+    /// Authoritative result for recalling one queued soft interrupt.
+    #[serde(rename = "soft_interrupt_recalled")]
+    SoftInterruptRecalled {
+        id: u64,
+        operation_id: String,
+        message: Option<RecallableSoftInterrupt>,
+    },
 
     /// Streaming text delta
     #[serde(rename = "text_delta")]

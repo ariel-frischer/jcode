@@ -15,6 +15,8 @@ fn append_take_and_clear_round_trip() {
             images: Vec::new(),
             urgent: true,
             source: SoftInterruptSource::System,
+            message_id: None,
+            owner_client_instance_id: None,
         },
     )
     .expect("append first interrupt");
@@ -25,6 +27,8 @@ fn append_take_and_clear_round_trip() {
             images: Vec::new(),
             urgent: false,
             source: SoftInterruptSource::BackgroundTask,
+            message_id: None,
+            owner_client_instance_id: None,
         },
     )
     .expect("append second interrupt");
@@ -46,6 +50,8 @@ fn append_take_and_clear_round_trip() {
             images: Vec::new(),
             urgent: false,
             source: SoftInterruptSource::User,
+            message_id: None,
+            owner_client_instance_id: None,
         },
     )
     .expect("append later interrupt");

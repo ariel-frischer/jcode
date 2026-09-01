@@ -8,6 +8,11 @@ pub struct SoftInterruptMessage {
     /// If true, can skip remaining tools when injected at point C.
     pub urgent: bool,
     pub source: SoftInterruptSource,
+    /// Stable identity for queue operations. Legacy messages have no identity.
+    pub message_id: Option<String>,
+    /// Verified client instance that enqueued this message. Legacy and
+    /// non-client messages remain unowned.
+    pub owner_client_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
