@@ -1,4 +1,6 @@
+use super::super::App;
 use crate::protocol::RecallableSoftInterrupt;
+use crate::tui::backend::RemoteConnection;
 
 #[derive(Debug)]
 enum RecallStatus {
@@ -124,6 +126,71 @@ impl SoftInterruptRecallState {
     fn complete(&mut self, operation_id: &str) {
         self.completed_operation_id = Some(operation_id.to_string());
         self.status = RecallStatus::Idle;
+    }
+}
+
+fn composer_is_empty(app: &App) -> bool {
+    app.input.is_empty() && app.pending_images.is_empty()
+}
+
+fn apply_recalled_message(app: &mut App, message: RecallableSoftInterrupt) {
+    if let Some(pending_content) = app.pending_soft_interrupts.pop()
+        && let Some(index) = app
+            .pending_soft_interrupt_requests
+            .iter()
+            .rposition(|(_, pending)| pending == &pending_content)
+    {
+        app.pending_soft_interrupt_requests.remove(index);
+    }
+
+    app.input = message.content;
+    app.cursor_pos = app.input.len();
+    app.pending_images = message.images;
+    app.set_status_notice("Recalled queued message for editing");
+}
+
+/// Delegate lowercase Alt+q while preserving the established local queue path.
+pub(super) async fn handle_alt_q(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+) -> anyhow::Result<()> {
+    if !composer_is_empty(app) {
+        return Ok(());
+    }
+    if app.retrieve_queued_message_for_edit() {
+        return Ok(());
+    }
+    if let Some(message) = app.remote_soft_interrupt_recall.take_ready(true) {
+        apply_recalled_message(app, message);
+        return Ok(());
+    }
+    if app.pending_soft_interrupts.is_empty() {
+        return Ok(());
+    }
+
+    let Some(operation_id) = app.remote_soft_interrupt_recall.begin().map(str::to_owned) else {
+        return Ok(());
+    };
+    remote.recall_soft_interrupt(&operation_id).await?;
+    app.set_status_notice("Recalling queued message...");
+    Ok(())
+}
+
+/// Apply only the matching authoritative result, at most once.
+pub(super) fn handle_server_result(
+    app: &mut App,
+    operation_id: &str,
+    message: Option<RecallableSoftInterrupt>,
+) -> bool {
+    let composer_is_empty = composer_is_empty(app);
+    let recalled =
+        app.remote_soft_interrupt_recall
+            .handle_result(operation_id, message, composer_is_empty);
+    if let Some(message) = recalled {
+        apply_recalled_message(app, message);
+        true
+    } else {
+        false
     }
 }
 

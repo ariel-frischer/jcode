@@ -2510,6 +2510,11 @@ pub(in crate::tui::app) fn handle_server_event(
             }
             false
         }
+        ServerEvent::SoftInterruptRecalled {
+            operation_id,
+            message,
+            ..
+        } => super::soft_interrupt_recall::handle_server_result(app, &operation_id, message),
         ServerEvent::MemoryInjected {
             count,
             prompt,

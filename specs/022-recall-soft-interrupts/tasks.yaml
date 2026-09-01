@@ -127,7 +127,7 @@ phases:
           - "Unavailable, failure, disconnect, stale, and duplicate outcomes do not mutate the composer or local queue."
       - id: "T009"
         title: "Delegate remote Alt+q and server result handling"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"

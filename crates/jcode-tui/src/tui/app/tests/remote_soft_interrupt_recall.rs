@@ -102,12 +102,17 @@ fn remote_soft_interrupt_recall_matching_result_applies_exact_payload_once() {
         operation_id,
         message: Some(message.clone()),
     };
-    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let mut remote = {
+        let _guard = rt.enter();
+        crate::tui::backend::RemoteConnection::dummy()
+    };
 
     super::remote::handle_server_event(&mut app, event.clone(), &mut remote);
     assert_eq!(app.input, message.content);
     assert_eq!(app.cursor_pos, app.input.len());
     assert_eq!(app.pending_images, message.images);
+    assert!(app.pending_soft_interrupts.is_empty());
 
     app.input.clear();
     app.cursor_pos = 0;
@@ -123,7 +128,11 @@ fn remote_soft_interrupt_recall_failed_stale_and_disconnect_preserve_state() {
     failed_app.pending_soft_interrupts = vec!["server pending".to_string()];
     let operation_id = recall_operation_id(remote_alt_q_request(&mut failed_app));
     let original_pending = failed_app.pending_soft_interrupts.clone();
-    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    let rt = tokio::runtime::Runtime::new().expect("runtime");
+    let mut remote = {
+        let _guard = rt.enter();
+        crate::tui::backend::RemoteConnection::dummy()
+    };
 
     super::remote::handle_server_event(
         &mut failed_app,
