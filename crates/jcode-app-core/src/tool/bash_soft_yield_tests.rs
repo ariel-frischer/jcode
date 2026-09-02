@@ -428,7 +428,7 @@ async fn test_foreground_soft_yield_promotes_and_command_keeps_running() {
 }
 
 #[tokio::test]
-async fn soft_yielded_command_inherits_delivery_stall_and_management_options() {
+async fn soft_yielded_command_defaults_to_terminal_wake_and_inherits_management_options() {
     let tool = BashTool::new();
     let result = tool
         .execute(
@@ -436,7 +436,6 @@ async fn soft_yielded_command_inherits_delivery_stall_and_management_options() {
                 "command": "echo 'progress 10% done'; sleep 0.4; echo lifecycle_done",
                 "soft_yield_ms": 100,
                 "notify": false,
-                "wake": true,
                 "stall_wake_seconds": 1,
             }),
             make_ctx(None),
@@ -450,8 +449,8 @@ async fn soft_yielded_command_inherits_delivery_stall_and_management_options() {
         .status(&task_id)
         .await
         .expect("adopted task status");
-    assert!(status.notify, "wake must imply completion notification");
-    assert!(status.wake, "completion wake must survive adoption");
+    assert!(status.notify, "default completion wake must imply notification");
+    assert!(status.wake, "automatic soft yield must default to one terminal wake");
     assert_eq!(
         status.stall_wake_seconds,
         Some(crate::background::BackgroundTaskManager::MIN_STALL_WAKE_SECONDS),
@@ -469,6 +468,37 @@ async fn soft_yielded_command_inherits_delivery_stall_and_management_options() {
             .is_some_and(|output| output.contains("lifecycle_done")),
         "completed adopted task output must remain addressable"
     );
+}
+
+#[tokio::test]
+async fn explicit_background_keeps_caller_selected_wake_default() {
+    let result = BashTool::new()
+        .execute(
+            json!({
+                "command": "sleep 0.2; echo explicit_background_done",
+                "run_in_background": true,
+            }),
+            make_ctx(None),
+        )
+        .await
+        .expect("explicit background command should start");
+    let metadata = result.metadata.expect("expected background metadata");
+    let task_id = metadata["task_id"].as_str().expect("task id");
+
+    let status = crate::background::global()
+        .status(task_id)
+        .await
+        .expect("explicit background task status");
+    assert!(status.notify, "completion notification remains enabled");
+    assert!(
+        !status.wake,
+        "explicit background execution must preserve its false wake default"
+    );
+
+    crate::background::global()
+        .wait(task_id, Duration::from_secs(3), false)
+        .await
+        .expect("explicit background task should finish");
 }
 
 #[tokio::test]

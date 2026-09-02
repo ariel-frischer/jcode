@@ -249,7 +249,7 @@ impl BashTool {
                         Some(display_name.clone()),
                         &ctx.session_id,
                         params.notify,
-                        params.wake,
+                        params.soft_yield_wake(),
                         work_handle,
                         managed_process,
                     )

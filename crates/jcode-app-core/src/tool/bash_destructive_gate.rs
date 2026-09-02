@@ -77,7 +77,7 @@ pub(super) fn bash_parameters_schema() -> serde_json::Value {
             },
             "wake": {
                 "type": "boolean",
-                "description": "Wake when managed background work completes; wake implies notification."
+                "description": "Wake when managed background work completes; wake implies notification. Defaults to true after automatic soft yield and false for explicit run_in_background. Set explicitly to override either default."
             },
             "stall_wake_seconds": {
                 "type": "integer",

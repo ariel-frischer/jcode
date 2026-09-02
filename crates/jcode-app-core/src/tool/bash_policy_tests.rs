@@ -22,17 +22,20 @@ fn bash_input_accepts_optional_policy_fields_and_rejects_invalid_types() {
     let omitted: BashInput = serde_json::from_value(json!({"command": "true"})).unwrap();
     assert_eq!(omitted.soft_yield_ms, None);
     assert_eq!(omitted.timeout, None);
+    assert_eq!(omitted.wake, None);
 
     let configured: BashInput = serde_json::from_value(json!({
         "command": "true",
         "soft_yield_ms": 0,
         "timeout": 1_800_000,
-        "run_in_background": true
+        "run_in_background": true,
+        "wake": false
     }))
     .unwrap();
     assert_eq!(configured.soft_yield_ms, Some(0));
     assert_eq!(configured.timeout, Some(1_800_000));
     assert_eq!(configured.run_in_background, Some(true));
+    assert_eq!(configured.wake, Some(false));
 
     assert!(
         serde_json::from_value::<BashInput>(json!({

@@ -832,7 +832,7 @@ struct BashInput {
     #[serde(default = "default_true")]
     notify: bool,
     #[serde(default)]
-    wake: bool,
+    wake: Option<bool>,
     /// For background runs: wake the agent after this many seconds with no
     /// new output and no progress events. Resets on activity.
     #[serde(default)]
@@ -840,6 +840,16 @@ struct BashInput {
     /// Set only when re-issuing a call the gate refused (#604).
     #[serde(default)]
     justification: Option<String>,
+}
+
+impl BashInput {
+    fn requested_wake(&self) -> bool {
+        self.wake.unwrap_or(false)
+    }
+
+    fn soft_yield_wake(&self) -> bool {
+        self.wake.unwrap_or(true)
+    }
 }
 
 fn default_true() -> bool {
@@ -1021,7 +1031,7 @@ impl BashTool {
                         pid,
                         &started_at,
                         params.notify,
-                        params.wake,
+                        params.soft_yield_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
@@ -1109,7 +1119,7 @@ impl BashTool {
                         pid,
                         &started_at,
                         params.notify,
-                        params.wake,
+                        params.requested_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
@@ -1175,7 +1185,7 @@ impl BashTool {
         let timeout_ms = params.timeout.map(|timeout| timeout.min(MAX_TIMEOUT_MS));
         let timeout_duration = timeout_ms.map(Duration::from_millis);
 
-        let wake = params.wake;
+        let wake = params.requested_wake();
         let notify = params.notify || wake;
         let info = crate::background::global()
             .spawn_with_notify(
