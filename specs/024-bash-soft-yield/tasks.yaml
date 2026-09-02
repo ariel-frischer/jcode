@@ -258,7 +258,7 @@ phases:
       tasks:
         - id: "T018"
           title: "Build and validate soft yield and hard timeout on an isolated Jcode socket"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null
@@ -271,7 +271,7 @@ phases:
             - "The validation does not reload, stop, or otherwise disturb the shared daemon or caller session."
         - id: "T019"
           title: "Run focused tests, repository guardrails, artifact validation, and final scope review"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: null

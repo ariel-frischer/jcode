@@ -5,8 +5,8 @@ use tokio::time::{Duration, sleep};
 #[path = "hard_deadline_tests.rs"]
 mod hard_deadline_tests;
 use {anyhow::anyhow, tempfile::tempdir};
-#[path = "soft_yield_test_fixtures.rs"]
-mod soft_yield_test_fixtures;
+#[path = "soft_yield_tests.rs"]
+mod soft_yield_tests;
 #[tokio::test]
 async fn spawn_with_notify_emits_started_ui_activity() -> Result<()> {
     let tmp = tempdir()?;

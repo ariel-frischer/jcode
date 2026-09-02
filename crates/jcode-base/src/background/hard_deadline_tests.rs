@@ -94,10 +94,17 @@ async fn detached_hard_deadline_terminates_group_and_records_exit_124_once() -> 
     let mut child = command.spawn()?;
     let pid = child.id();
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
-    while !descendant_file.exists() && std::time::Instant::now() < deadline {
+    let descendant_pid = loop {
+        if let Ok(contents) = std::fs::read_to_string(&descendant_file)
+            && let Ok(pid) = contents.parse::<u32>()
+        {
+            break pid;
+        }
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!("descendant PID was not published before the test deadline");
+        }
         sleep(Duration::from_millis(10)).await;
-    }
-    let descendant_pid = std::fs::read_to_string(&descendant_file)?.parse::<u32>()?;
+    };
     let info = manager.reserve_task_info();
     manager
         .register_detached_task_with_identity_and_deadline(
