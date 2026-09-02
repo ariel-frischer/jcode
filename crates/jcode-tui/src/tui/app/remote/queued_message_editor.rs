@@ -4,16 +4,25 @@ use crate::protocol::{
     QueuedMessageEditorPlacement, QueuedMessageEditorSelection, RecallableSoftInterrupt,
 };
 use crate::tui::backend::RemoteConnection;
+use std::collections::HashMap;
 
 /// Owner-scoped client state for one authoritative queued-message editor session.
 ///
 /// The active navigation and pending operation identities deliberately survive
 /// transport loss. A reconnect can therefore retry the same operation without
 /// accepting a stale or foreign result into the composer.
+#[derive(Debug, Clone)]
+struct VisibleQueueEntry {
+    index: usize,
+    original_content: String,
+    original_images: Vec<(String, String)>,
+}
+
 #[derive(Debug, Default)]
 pub(in crate::tui::app) struct QueuedMessageEditorClientState {
     navigation_session_id: Option<String>,
     selected_message_id: Option<String>,
+    visible_queue_entries: HashMap<String, VisibleQueueEntry>,
     pending_operation_id: Option<String>,
     pending_operation: Option<QueuedMessageEditorOperation>,
 }
@@ -114,6 +123,32 @@ impl QueuedMessageEditorClientState {
         self.selected_message_id = Some(message_id);
     }
 
+    fn visible_queue_index(&self, message_id: &str) -> Option<usize> {
+        self.visible_queue_entries
+            .get(message_id)
+            .map(|entry| entry.index)
+    }
+
+    fn selected_visible_queue_entry(&self) -> Option<VisibleQueueEntry> {
+        self.selected_message_id
+            .as_deref()
+            .and_then(|message_id| self.visible_queue_entries.get(message_id))
+            .cloned()
+    }
+
+    fn remember_visible_queue_entry(&mut self, message_id: &str, entry: VisibleQueueEntry) {
+        self.visible_queue_entries
+            .entry(message_id.to_string())
+            .or_insert(entry);
+    }
+
+    fn pending_move_direction(&self) -> Option<QueuedMessageEditorDirection> {
+        match self.pending_operation.as_ref()? {
+            QueuedMessageEditorOperation::Move { direction, .. } => Some(*direction),
+            _ => None,
+        }
+    }
+
     fn accepts(&self, navigation_session_id: &str, operation_id: &str) -> bool {
         self.navigation_session_id.as_deref() == Some(navigation_session_id)
             && self.pending_operation_id.as_deref() == Some(operation_id)
@@ -125,6 +160,7 @@ impl QueuedMessageEditorClientState {
         if !keep_session {
             self.navigation_session_id = None;
             self.selected_message_id = None;
+            self.visible_queue_entries.clear();
         }
     }
 
@@ -214,7 +250,70 @@ pub(super) async fn move_newer(
     move_selection(app, remote, QueuedMessageEditorDirection::Newer).await
 }
 
+fn queued_selection_matches(
+    app: &App,
+    index: usize,
+    selection: &QueuedMessageEditorSelection,
+) -> bool {
+    app.queued_messages.get(index) == Some(&selection.content)
+        && app
+            .queued_message_images
+            .get(index)
+            .map_or(selection.images.is_empty(), |images| {
+                images == &selection.images
+            })
+}
+
+fn locate_visible_queue_selection(
+    app: &App,
+    selection: &QueuedMessageEditorSelection,
+) -> Option<usize> {
+    if let Some(index) = app
+        .remote_queued_message_editor
+        .visible_queue_index(&selection.message_id)
+    {
+        return Some(index);
+    }
+
+    let current = app
+        .remote_queued_message_editor
+        .selected_visible_queue_entry()
+        .map(|entry| entry.index);
+    match app.remote_queued_message_editor.pending_move_direction() {
+        Some(QueuedMessageEditorDirection::Older) => {
+            let end = current.unwrap_or(app.queued_messages.len());
+            (0..end)
+                .rev()
+                .find(|&index| queued_selection_matches(app, index, selection))
+        }
+        Some(QueuedMessageEditorDirection::Newer) => {
+            let start = current.map_or(0, |index| index.saturating_add(1));
+            (start..app.queued_messages.len())
+                .find(|&index| queued_selection_matches(app, index, selection))
+        }
+        None => (0..app.queued_messages.len())
+            .rev()
+            .find(|&index| queued_selection_matches(app, index, selection)),
+    }
+}
+
 fn apply_selection(app: &mut App, selection: QueuedMessageEditorSelection) {
+    let visible_queue_index = locate_visible_queue_selection(app, &selection);
+    if let Some(index) = visible_queue_index {
+        app.remote_queued_message_editor
+            .remember_visible_queue_entry(
+                &selection.message_id,
+                VisibleQueueEntry {
+                    index,
+                    original_content: app.queued_messages[index].clone(),
+                    original_images: app
+                        .queued_message_images
+                        .get(index)
+                        .cloned()
+                        .unwrap_or_default(),
+                },
+            );
+    }
     app.remote_queued_message_editor
         .set_selection(selection.message_id.clone());
     app.input = selection.content;
@@ -287,6 +386,23 @@ pub(super) fn handle_server_result(
             );
         }
         QueuedMessageEditorOutcome::Committed => {
+            if let Some(entry) = app
+                .remote_queued_message_editor
+                .selected_visible_queue_entry()
+                .filter(|entry| {
+                    app.queued_messages.get(entry.index) == Some(&entry.original_content)
+                        && app
+                            .queued_message_images
+                            .get(entry.index)
+                            .map_or(entry.original_images.is_empty(), |images| {
+                                images == &entry.original_images
+                            })
+                })
+            {
+                app.queued_messages[entry.index] = app.input.clone();
+                crate::tui::app::input::normalize_queued_message_images(app);
+                app.queued_message_images[entry.index] = app.pending_images.clone();
+            }
             app.remote_queued_message_editor.complete_operation(false);
             app.input.clear();
             app.cursor_pos = 0;
