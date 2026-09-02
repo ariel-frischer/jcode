@@ -573,7 +573,7 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
 #[test]
 fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() {
     let mut app = create_test_app();
-    app.pending_soft_interrupts = vec![
+    app.queued_messages = vec![
         "remote old".to_string(),
         "remote middle".to_string(),
         "remote new".to_string(),
@@ -615,6 +615,10 @@ fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() 
         };
         assert!(app.remote_queued_message_editor.is_active());
         assert!(app.remote_queued_message_editor.has_pending_operation());
+        assert_eq!(
+            app.queued_messages,
+            ["remote old", "remote middle", "remote new"]
+        );
 
         super::remote::handle_server_event(
             &mut app,

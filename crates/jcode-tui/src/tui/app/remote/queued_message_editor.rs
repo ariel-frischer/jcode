@@ -153,7 +153,7 @@ impl QueuedMessageEditorClientState {
 pub(super) async fn start(app: &mut App, remote: &mut RemoteConnection) -> anyhow::Result<bool> {
     if app.remote_queued_message_editor.is_active()
         || !remote.supports_queued_message_navigation()
-        || app.pending_soft_interrupts.is_empty()
+        || (app.queued_messages.is_empty() && app.pending_soft_interrupts.is_empty())
         || !app.input.is_empty()
         || !app.pending_images.is_empty()
     {
