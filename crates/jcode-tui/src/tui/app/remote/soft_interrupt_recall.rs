@@ -185,6 +185,12 @@ pub(super) async fn handle_alt_q(
     if app.retrieve_queued_message_for_edit() {
         return Ok(());
     }
+    if super::queued_message_editor::move_older(app, remote).await? {
+        return Ok(());
+    }
+    if super::queued_message_editor::start(app, remote).await? {
+        return Ok(());
+    }
     if !composer_is_empty(app) {
         return Ok(());
     }

@@ -571,6 +571,144 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
 }
 
 #[test]
+fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() {
+    let mut app = create_test_app();
+    app.pending_soft_interrupts = vec![
+        "remote old".to_string(),
+        "remote middle".to_string(),
+        "remote new".to_string(),
+    ];
+
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    runtime.block_on(async {
+        use tokio::io::AsyncBufReadExt;
+
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        remote.apply_server_capabilities(&[
+            crate::tui::backend::QUEUED_MESSAGE_NAVIGATION_CAPABILITY.to_string(),
+        ]);
+        let peer = remote.take_dummy_peer().expect("dummy peer");
+        let (reader, _writer) = peer.into_split();
+        let mut reader = tokio::io::BufReader::new(reader);
+
+        super::remote::handle_remote_key(
+            &mut app,
+            KeyCode::Char('q'),
+            KeyModifiers::ALT,
+            &mut remote,
+        )
+        .await
+        .expect("start remote editor");
+
+        let mut line = String::new();
+        reader.read_line(&mut line).await.expect("read start");
+        let start: crate::protocol::Request =
+            serde_json::from_str(&line).expect("decode start request");
+        let (navigation_session_id, start_operation_id) = match start {
+            crate::protocol::Request::QueuedMessageEditor {
+                navigation_session_id,
+                operation_id,
+                operation: crate::protocol::QueuedMessageEditorOperation::Start,
+                ..
+            } => (navigation_session_id, operation_id),
+            other => panic!("expected queued editor start, got {other:?}"),
+        };
+        assert!(app.remote_queued_message_editor.is_active());
+        assert!(app.remote_queued_message_editor.has_pending_operation());
+
+        super::remote::handle_server_event(
+            &mut app,
+            queued_editor_event(
+                &navigation_session_id,
+                &start_operation_id,
+                crate::protocol::QueuedMessageEditorOutcome::Started,
+                Some(queued_editor_selection("new-id", "remote new")),
+                crate::protocol::QueuedMessageEditorPlacement::Exact,
+            ),
+            &mut remote,
+        );
+        assert_eq!(app.input, "remote new");
+
+        app.input.push_str(" edited");
+        app.cursor_pos = app.input.len();
+        app.pending_images = vec![("image/png".to_string(), "new-image".to_string())];
+        super::remote::handle_remote_key(
+            &mut app,
+            KeyCode::Char('q'),
+            KeyModifiers::ALT,
+            &mut remote,
+        )
+        .await
+        .expect("move older");
+
+        line.clear();
+        reader.read_line(&mut line).await.expect("read older move");
+        let older: crate::protocol::Request =
+            serde_json::from_str(&line).expect("decode older request");
+        let older_operation_id = match older {
+            crate::protocol::Request::QueuedMessageEditor {
+                navigation_session_id: request_navigation_id,
+                operation_id,
+                operation:
+                    crate::protocol::QueuedMessageEditorOperation::Move {
+                        direction: crate::protocol::QueuedMessageEditorDirection::Older,
+                        selected_message_id,
+                        draft,
+                    },
+                ..
+            } => {
+                assert_eq!(request_navigation_id, navigation_session_id);
+                assert_eq!(selected_message_id, "new-id");
+                assert_eq!(draft.content, "remote new edited");
+                assert_eq!(draft.images, app.pending_images);
+                operation_id
+            }
+            other => panic!("expected older move, got {other:?}"),
+        };
+
+        super::remote::handle_server_event(
+            &mut app,
+            queued_editor_event(
+                &navigation_session_id,
+                &older_operation_id,
+                crate::protocol::QueuedMessageEditorOutcome::Moved,
+                Some(queued_editor_selection("middle-id", "remote middle")),
+                crate::protocol::QueuedMessageEditorPlacement::Exact,
+            ),
+            &mut remote,
+        );
+        assert_eq!(app.input, "remote middle");
+
+        super::remote::handle_remote_key(
+            &mut app,
+            KeyCode::Char('q'),
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+            &mut remote,
+        )
+        .await
+        .expect("move newer");
+        line.clear();
+        reader.read_line(&mut line).await.expect("read newer move");
+        let newer: crate::protocol::Request =
+            serde_json::from_str(&line).expect("decode newer request");
+        assert!(matches!(
+            newer,
+            crate::protocol::Request::QueuedMessageEditor {
+                navigation_session_id: request_navigation_id,
+                operation: crate::protocol::QueuedMessageEditorOperation::Move {
+                    direction: crate::protocol::QueuedMessageEditorDirection::Newer,
+                    selected_message_id,
+                    draft,
+                },
+                ..
+            } if request_navigation_id == navigation_session_id
+                && selected_message_id == "middle-id"
+                && draft.content == "remote middle"
+        ));
+    });
+}
+
+#[test]
 fn unsupported_remote_editor_never_sends_and_preserves_the_recoverable_draft() {
     let mut app = create_test_app();
     app.input = "recoverable unsupported draft".to_string();

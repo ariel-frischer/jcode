@@ -669,7 +669,9 @@ async fn handle_remote_key_internal(
                 return Ok(());
             }
             KeyCode::Char('Q') | KeyCode::Char('q') if modifiers.contains(KeyModifiers::SHIFT) => {
-                input::retrieve_newer_queued_message_for_edit(app);
+                if !input::retrieve_newer_queued_message_for_edit(app) {
+                    super::queued_message_editor::move_newer(app, remote).await?;
+                }
                 return Ok(());
             }
             KeyCode::Char('q') => {

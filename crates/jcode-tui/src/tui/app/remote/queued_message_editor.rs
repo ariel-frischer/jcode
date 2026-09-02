@@ -1,7 +1,7 @@
 use super::super::App;
 use crate::protocol::{
-    QueuedMessageEditorOperation, QueuedMessageEditorOutcome, QueuedMessageEditorPlacement,
-    QueuedMessageEditorSelection, RecallableSoftInterrupt,
+    QueuedMessageEditorDirection, QueuedMessageEditorOperation, QueuedMessageEditorOutcome,
+    QueuedMessageEditorPlacement, QueuedMessageEditorSelection, RecallableSoftInterrupt,
 };
 use crate::tui::backend::RemoteConnection;
 
@@ -19,6 +19,43 @@ pub(in crate::tui::app) struct QueuedMessageEditorClientState {
 }
 
 impl QueuedMessageEditorClientState {
+    fn begin_start(&mut self) -> Option<(String, String, QueuedMessageEditorOperation)> {
+        if self.navigation_session_id.is_some() || self.pending_operation_id.is_some() {
+            return None;
+        }
+        let navigation_session_id = format!(
+            "tui-queued-message-navigation-{:032x}",
+            rand::random::<u128>()
+        );
+        let operation_id = format!("tui-queued-message-start-{:032x}", rand::random::<u128>());
+        let operation = QueuedMessageEditorOperation::Start;
+        self.navigation_session_id = Some(navigation_session_id.clone());
+        self.pending_operation_id = Some(operation_id.clone());
+        self.pending_operation = Some(operation.clone());
+        Some((navigation_session_id, operation_id, operation))
+    }
+
+    fn begin_move(
+        &mut self,
+        direction: QueuedMessageEditorDirection,
+        draft: RecallableSoftInterrupt,
+    ) -> Option<(String, String, QueuedMessageEditorOperation)> {
+        if self.pending_operation_id.is_some() {
+            return None;
+        }
+        let navigation_session_id = self.navigation_session_id.clone()?;
+        let selected_message_id = self.selected_message_id.clone()?;
+        let operation_id = format!("tui-queued-message-move-{:032x}", rand::random::<u128>());
+        let operation = QueuedMessageEditorOperation::Move {
+            direction,
+            selected_message_id,
+            draft,
+        };
+        self.pending_operation_id = Some(operation_id.clone());
+        self.pending_operation = Some(operation.clone());
+        Some((navigation_session_id, operation_id, operation))
+    }
+
     /// Record the stable identities for an operation before it is sent.
     // The phase-4 result path lands before the follow-up request-routing tasks.
     #[allow(dead_code)]
@@ -111,6 +148,70 @@ impl QueuedMessageEditorClientState {
         self.pending_operation_id = None;
         self.pending_operation = None;
     }
+}
+
+pub(super) async fn start(app: &mut App, remote: &mut RemoteConnection) -> anyhow::Result<bool> {
+    if app.remote_queued_message_editor.is_active()
+        || !remote.supports_queued_message_navigation()
+        || app.pending_soft_interrupts.is_empty()
+        || !app.input.is_empty()
+        || !app.pending_images.is_empty()
+    {
+        return Ok(false);
+    }
+    let Some((navigation_session_id, operation_id, operation)) =
+        app.remote_queued_message_editor.begin_start()
+    else {
+        return Ok(true);
+    };
+    remote
+        .queued_message_editor(&navigation_session_id, &operation_id, operation)
+        .await?;
+    app.set_status_notice("Opening queued message editor...");
+    Ok(true)
+}
+
+async fn move_selection(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+    direction: QueuedMessageEditorDirection,
+) -> anyhow::Result<bool> {
+    if !app.remote_queued_message_editor.is_active() {
+        return Ok(false);
+    }
+    let draft = RecallableSoftInterrupt {
+        content: app.input.clone(),
+        images: app.pending_images.clone(),
+    };
+    let Some((navigation_session_id, operation_id, operation)) = app
+        .remote_queued_message_editor
+        .begin_move(direction, draft)
+    else {
+        app.set_status_notice("Queued message navigation already pending...");
+        return Ok(true);
+    };
+    remote
+        .queued_message_editor(&navigation_session_id, &operation_id, operation)
+        .await?;
+    app.set_status_notice(match direction {
+        QueuedMessageEditorDirection::Older => "Moving to older queued message...",
+        QueuedMessageEditorDirection::Newer => "Moving to newer queued message...",
+    });
+    Ok(true)
+}
+
+pub(super) async fn move_older(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+) -> anyhow::Result<bool> {
+    move_selection(app, remote, QueuedMessageEditorDirection::Older).await
+}
+
+pub(super) async fn move_newer(
+    app: &mut App,
+    remote: &mut RemoteConnection,
+) -> anyhow::Result<bool> {
+    move_selection(app, remote, QueuedMessageEditorDirection::Newer).await
 }
 
 fn apply_selection(app: &mut App, selection: QueuedMessageEditorSelection) {
