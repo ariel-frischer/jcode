@@ -58,6 +58,10 @@ fn server_supports_queued_message_navigation(server_version: Option<&str>) -> bo
         .is_some_and(|version| version >= (0, 81, 784))
 }
 
+fn queued_message_navigation_support_update(server_version: Option<&str>) -> Option<bool> {
+    server_version.map(|version| server_supports_queued_message_navigation(Some(version)))
+}
+
 /// True when the connected server reports a clean release version strictly older
 /// than this client's own clean release version.
 ///
@@ -152,8 +156,8 @@ fn should_defer_history_for_runtime_identity(
 #[cfg(test)]
 mod runtime_identity_tests {
     use super::{
-        parse_release_semver, server_release_is_older_than_client,
-        server_supports_queued_message_navigation,
+        parse_release_semver, queued_message_navigation_support_update,
+        server_release_is_older_than_client, server_supports_queued_message_navigation,
         should_defer_history_for_runtime_identity_with_allow,
     };
 
@@ -235,6 +239,11 @@ mod runtime_identity_tests {
         )));
         assert!(!server_supports_queued_message_navigation(None));
         assert!(!server_supports_queued_message_navigation(Some("unknown")));
+        assert_eq!(queued_message_navigation_support_update(None), None);
+        assert_eq!(
+            queued_message_navigation_support_update(Some("v0.81.786-dev (691fc4474)")),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1653,9 +1662,11 @@ pub(in crate::tui::app) fn handle_server_event(
                 return false;
             }
 
-            remote.set_queued_message_navigation_supported(
-                server_supports_queued_message_navigation(server_version.as_deref()),
-            );
+            if let Some(supported) =
+                queued_message_navigation_support_update(server_version.as_deref())
+            {
+                remote.set_queued_message_navigation_supported(supported);
+            }
             remote.set_session_id(session_id.clone());
             app.remote_session_id = Some(session_id.clone());
             crate::set_current_session(&session_id);
