@@ -176,6 +176,23 @@ fn every_api_event_has_one_explicit_publication_contract() {
             "attached",
         ),
         (
+            ApiEvent::SessionForked {
+                session: SessionInfo {
+                    session_id: "fork".into(),
+                    working_dir: None,
+                    title: None,
+                    status: "idle".into(),
+                    transcript_bytes: None,
+                    saved: false,
+                    updated_at_ms: None,
+                    last_active_at_ms: None,
+                    archived: false,
+                    archived_at_ms: None,
+                },
+            },
+            "session_forked",
+        ),
+        (
             ApiEvent::History {
                 session_id: "s".into(),
                 messages: vec![],
@@ -260,6 +277,14 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 session_id: "s".into(),
             },
             "turn_done",
+        ),
+        (
+            ApiEvent::WakeRequested {
+                session_id: "s".into(),
+                reason: "scheduled".into(),
+                notification: "ready".into(),
+            },
+            "wake_requested",
         ),
         (
             ApiEvent::BackgroundProgress {
@@ -384,6 +409,18 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 display_title: "x".into(),
             },
             "session_renamed",
+        ),
+        (
+            ApiEvent::QueuedMessageEditorResult {
+                session_id: "s".into(),
+                navigation_session_id: "navigation".into(),
+                operation_id: "operation".into(),
+                outcome: QueuedMessageEditorOutcome::Boundary,
+                selection: None,
+                placement: QueuedMessageEditorPlacement::Exact,
+                message: Some("oldest boundary".into()),
+            },
+            "queued_message_editor_result",
         ),
         (ApiEvent::Unknown, "unknown"),
     ];
@@ -628,6 +665,12 @@ fn request_roundtrip() {
         ApiRequest::FileStatus {
             session_id: "s1".into(),
             path: "src/lib.rs".into(),
+        },
+        ApiRequest::QueuedMessageEditor {
+            session_id: "s1".into(),
+            navigation_session_id: "navigation-1".into(),
+            operation_id: "operation-1".into(),
+            operation: QueuedMessageEditorOperation::Start,
         },
         ApiRequest::Ping,
     ];

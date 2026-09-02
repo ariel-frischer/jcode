@@ -264,6 +264,11 @@ fn remote_soft_interrupt_recall_preserves_immediate_local_queue_recall() {
     });
 
     assert_eq!(app.input, "second");
-    assert_eq!(app.queued_messages, ["first"]);
+    assert!(app.queued_messages.is_empty());
+    assert_eq!(app.pending_soft_interrupts, ["server pending"]);
+
+    app.handle_key(KeyCode::Enter, KeyModifiers::empty())
+        .expect("commit local selection");
+    assert_eq!(app.queued_messages, ["first", "second"]);
     assert_eq!(app.pending_soft_interrupts, ["server pending"]);
 }

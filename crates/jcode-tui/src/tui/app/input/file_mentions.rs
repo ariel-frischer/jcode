@@ -129,14 +129,16 @@ pub(in crate::tui::app) fn expand_queued_file_mentions_for_submit(
 pub(in crate::tui::app) fn restore_queued_file_mention_failure(
     app: &mut App,
     messages: Vec<String>,
+    image_groups: Vec<Vec<(String, String)>>,
     reminder: Option<String>,
     notice: String,
 ) {
     if let Some(reminder) = reminder {
         app.hidden_queued_system_messages.insert(0, reminder);
     }
-    for message in messages.into_iter().rev() {
+    for (message, images) in messages.into_iter().zip(image_groups).rev() {
         app.queued_messages.insert(0, message);
+        app.queued_message_images.insert(0, images);
     }
     app.clear_visible_turn_started();
     app.set_status_notice(notice.clone());

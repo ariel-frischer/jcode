@@ -668,6 +668,10 @@ async fn handle_remote_key_internal(
                 app.paste_from_clipboard();
                 return Ok(());
             }
+            KeyCode::Char('Q') | KeyCode::Char('q') if modifiers.contains(KeyModifiers::SHIFT) => {
+                input::retrieve_newer_queued_message_for_edit(app);
+                return Ok(());
+            }
             KeyCode::Char('q') => {
                 super::soft_interrupt_recall::handle_alt_q(app, remote).await?;
                 return Ok(());
@@ -1019,6 +1023,9 @@ async fn handle_remote_key_internal(
         }
         KeyCode::Enter => {
             if app.activate_picker_from_preview() {
+                return Ok(());
+            }
+            if super::queued_message_editor::finish(app, remote).await? {
                 return Ok(());
             }
             if input::finish_queued_message_edit(app) {
@@ -1789,6 +1796,7 @@ async fn handle_remote_key_internal(
                     app.clear_provider_messages();
                     app.clear_display_messages();
                     app.queued_messages.clear();
+                    app.queued_message_images.clear();
                     app.pasted_contents.clear();
                     app.pending_images.clear();
                     app.clear_streaming_render_state();

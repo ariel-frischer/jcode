@@ -401,7 +401,15 @@ pub(super) fn build_registry(inputs: &RegistryInputs<'_>) -> Vec<KnownHotkey> {
     out.push(KnownHotkey::new(
         alt('q'),
         "queued_message_edit",
-        "take back the newest queued message for editing",
+        "save the draft and move older through local or owned server user messages; Enter updates it or deletes only when text and images are empty",
+    ));
+    out.push(KnownHotkey::new(
+        key(
+            KeyCode::Char('q'),
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ),
+        "queued_message_newer",
+        "save text and ordered images and move newer; boundaries keep the draft, while stale or conflict notices keep recovery visible",
     ));
     out.push(KnownHotkey::new(
         key(KeyCode::Up, KeyModifiers::CONTROL),
@@ -953,6 +961,31 @@ mod tests {
         let with_draft = lookup(&registry, false, KeyCode::Char('a'), KeyModifiers::CONTROL)
             .expect("ctrl+a known");
         assert_eq!(with_draft.action, "input_home");
+    }
+
+    #[test]
+    fn queued_message_hotkey_help_covers_both_directions_and_finish_semantics() {
+        let registry = test_inputs_registry(false);
+        let older =
+            lookup(&registry, true, KeyCode::Char('q'), KeyModifiers::ALT).expect("alt+q known");
+        assert_eq!(older.action, "queued_message_edit");
+        assert!(older.description.contains("move older"));
+        assert!(older.description.contains("owned server user messages"));
+        assert!(older.description.contains("Enter updates"));
+        assert!(older.description.contains("text and images are empty"));
+
+        let newer = lookup(
+            &registry,
+            false,
+            KeyCode::Char('q'),
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        )
+        .expect("alt+shift+q known");
+        assert_eq!(newer.action, "queued_message_newer");
+        assert!(newer.description.contains("ordered images"));
+        assert!(newer.description.contains("move newer"));
+        assert!(newer.description.contains("boundaries keep the draft"));
+        assert!(newer.description.contains("stale or conflict"));
     }
 
     #[test]

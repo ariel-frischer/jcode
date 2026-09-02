@@ -197,6 +197,68 @@ fn send_message_forwards_run_safety_and_omission_stays_legacy() {
 }
 
 #[test]
+fn queued_message_editor_result_requires_matching_navigation_and_operation_ids() {
+    fn request(state: &mut BridgeState, api_id: u64) -> u64 {
+        let outbound = state.api_request_to_legacy(&json!({
+            "id": api_id,
+            "req": "queued_message_editor",
+            "session_id": "s1",
+            "navigation_session_id": "navigation-1",
+            "operation_id": "operation-1",
+            "operation": {"kind": "start"},
+        }));
+        match &outbound[0] {
+            Outbound::Legacy(value) => value["id"].as_u64().expect("legacy id"),
+            other => panic!("expected legacy request, got {other:?}"),
+        }
+    }
+
+    for event in [
+        json!({
+            "type": "queued_message_editor_result",
+            "id": 0,
+            "navigation_session_id": "wrong-navigation",
+            "operation_id": "operation-1",
+            "outcome": "boundary",
+            "placement": "exact",
+        }),
+        json!({
+            "type": "queued_message_editor_result",
+            "id": 0,
+            "navigation_session_id": "navigation-1",
+            "outcome": "boundary",
+            "placement": "exact",
+        }),
+    ] {
+        let mut state = state_with_session();
+        let legacy_id = request(&mut state, 81);
+        let mut event = event;
+        event["id"] = json!(legacy_id);
+        let frames = state.legacy_event_to_api(&event);
+        assert_eq!(frames.len(), 1);
+        assert!(matches!(frames[0].event, ApiEvent::Error { .. }));
+    }
+
+    let mut state = state_with_session();
+    let legacy_id = request(&mut state, 82);
+    let frames = state.legacy_event_to_api(&json!({
+        "type": "queued_message_editor_result",
+        "id": legacy_id,
+        "navigation_session_id": "navigation-1",
+        "operation_id": "operation-1",
+        "outcome": "boundary",
+        "placement": "exact",
+    }));
+    assert!(matches!(
+        frames.as_slice(),
+        [ServerFrame {
+            event: ApiEvent::QueuedMessageEditorResult { .. },
+            ..
+        }]
+    ));
+}
+
+#[test]
 fn connection_phase_is_forwarded_to_api_clients() {
     let mut state = state_with_session();
     let frames = state.legacy_event_to_api(&json!({

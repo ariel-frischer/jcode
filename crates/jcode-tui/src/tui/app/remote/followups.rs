@@ -349,7 +349,18 @@ pub(in crate::tui::app) async fn process_remote_followups(
             }
         }
     } else if !app.queued_messages.is_empty() {
+        super::super::input::normalize_queued_message_images(app);
         let queued_messages = std::mem::take(&mut app.queued_messages);
+        let queued_message_images = std::mem::take(&mut app.queued_message_images);
+        let user_image_groups: Vec<_> = queued_messages
+            .iter()
+            .zip(queued_message_images)
+            .filter_map(|(message, images)| {
+                super::super::helpers::extract_bracketed_system_message(message)
+                    .is_none()
+                    .then_some(images)
+            })
+            .collect();
         let hidden_reminders = std::mem::take(&mut app.hidden_queued_system_messages);
         let (messages, reminder, display_system_messages) =
             super::super::helpers::partition_queued_messages(queued_messages, hidden_reminders);
@@ -364,16 +375,21 @@ pub(in crate::tui::app) async fn process_remote_followups(
                 Ok(expanded) => expanded,
                 Err(notice) => {
                     super::super::input::file_mentions::restore_queued_file_mention_failure(
-                        app, messages, reminder, notice,
+                        app,
+                        messages,
+                        user_image_groups,
+                        reminder,
+                        notice,
                     );
                     return;
                 }
             };
+        let images = user_image_groups.iter().flatten().cloned().collect();
         if let Err(error) = begin_remote_send(
             app,
             remote,
             expanded,
-            vec![],
+            images,
             true,
             reminder.clone(),
             auto_retry,
@@ -389,6 +405,7 @@ pub(in crate::tui::app) async fn process_remote_followups(
             super::super::input::file_mentions::restore_queued_file_mention_failure(
                 app,
                 messages,
+                user_image_groups,
                 reminder,
                 "Queued message send failed; restored for retry".to_string(),
             );

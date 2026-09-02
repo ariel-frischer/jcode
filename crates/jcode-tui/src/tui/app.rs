@@ -914,8 +914,11 @@ pub struct App {
     should_quit: bool,
     // Message queueing
     queued_messages: Vec<String>,
-    /// Original queue slot of the message currently recalled into the composer.
-    queued_message_edit_index: Option<usize>,
+    /// Ordered image payloads aligned with `queued_messages`. Older queue producers
+    /// that append text directly are normalized to empty image lists on demand.
+    queued_message_images: Vec<Vec<(String, String)>>,
+    /// Stable oldest-to-newest snapshot held out of local dispatch while editing.
+    local_queued_message_editor: Option<LocalQueuedMessageEditor>,
     hidden_queued_system_messages: Vec<String>,
     current_turn_system_reminder: Option<String>,
     // Upstream provider (e.g., which provider OpenRouter routed to)
@@ -1571,6 +1574,8 @@ pub struct App {
     pending_soft_interrupt_requests: Vec<(u64, String)>,
     // One authoritative server-queue recall operation, retained across reconnect.
     remote_soft_interrupt_recall: remote::SoftInterruptRecallState,
+    // One owner-scoped queued-message editor session and its stable pending operation.
+    remote_queued_message_editor: remote::QueuedMessageEditorClientState,
     // Whether the current remote turn should trigger autoreview after completion.
     autoreview_after_current_turn: bool,
     // Whether the current remote turn should trigger autojudge after completion.
@@ -1715,6 +1720,18 @@ pub struct App {
     /// Lazily-loaded persisted cross-session prompt history (oldest first,
     /// deduped). None until first use; see `prompt_history.rs`.
     persisted_prompt_history: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct LocalQueuedMessageDraft {
+    content: String,
+    images: Vec<(String, String)>,
+}
+
+#[derive(Debug)]
+struct LocalQueuedMessageEditor {
+    held: Vec<LocalQueuedMessageDraft>,
+    selected_index: usize,
 }
 
 /// Inert provider used by runtime modes whose output is supplied by another source.

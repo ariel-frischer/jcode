@@ -14,8 +14,8 @@ use crate::errors::{Error, ErrorKind, Result};
 use crate::launch::{LaunchOptions, LaunchedInstance, ensure_runtime, launch_instance};
 use jcode_harness_api::{
     API_VERSION_MAJOR, ApiEvent, ApiRequest, ClientFrame, HistoryMessage, ModelRouteInfo,
-    PermissionDecision, ServerFrame, SessionInfo, TextMatch, api_socket_path, read_frame,
-    write_frame,
+    PermissionDecision, QUEUED_MESSAGE_NAVIGATION_CAPABILITY, QueuedMessageEditorOperation,
+    ServerFrame, SessionInfo, TextMatch, api_socket_path, read_frame, write_frame,
 };
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -1064,6 +1064,37 @@ impl JcodeClient {
             session_id: session_id.to_string(),
         })
         .map(drop)
+    }
+
+    /// Start, navigate, finish, or release an authoritative queued-message editor session.
+    ///
+    /// The capability check happens before the request is written so a newer SDK
+    /// preserves legacy one-shot behavior against peers that do not implement the contract.
+    pub fn queued_message_editor(
+        &self,
+        session_id: &str,
+        navigation_session_id: &str,
+        operation_id: &str,
+        operation: QueuedMessageEditorOperation,
+    ) -> Result<ApiEvent> {
+        if !self.supports(QUEUED_MESSAGE_NAVIGATION_CAPABILITY) {
+            return Err(Error::new(
+                ErrorKind::Harness(jcode_harness_api::ErrorCode::UnknownRequest),
+                format!(
+                    "server does not advertise {QUEUED_MESSAGE_NAVIGATION_CAPABILITY}; preserve legacy queued-message behavior"
+                ),
+            ));
+        }
+        let frame = self.request_ok(ApiRequest::QueuedMessageEditor {
+            session_id: session_id.to_string(),
+            navigation_session_id: navigation_session_id.to_string(),
+            operation_id: operation_id.to_string(),
+            operation,
+        })?;
+        match frame.event {
+            event @ ApiEvent::QueuedMessageEditorResult { .. } => Ok(event),
+            other => Err(unexpected("queued_message_editor_result", &other)),
+        }
     }
 
     pub fn ping(&self) -> Result<()> {

@@ -1419,6 +1419,23 @@ pub(super) async fn handle_client(
                 );
             }
 
+            Request::QueuedMessageEditor {
+                id,
+                navigation_session_id,
+                operation_id,
+                operation,
+            } => {
+                queued_message_editor(
+                    id,
+                    navigation_session_id,
+                    operation_id,
+                    operation,
+                    current_client_instance_id.as_deref(),
+                    &session_control,
+                    &client_event_tx,
+                );
+            }
+
             Request::BackgroundTool { id } => {
                 move_tool_to_background(id, &session_control, &client_event_tx);
             }
@@ -1654,6 +1671,9 @@ pub(super) async fn handle_client(
                 // rather than retaining a prior pane's values.
                 active_terminal_env = terminal_env;
                 current_client_instance_id = client_instance_id.clone();
+                if let Some(client_instance_id) = current_client_instance_id.as_deref() {
+                    session_control.resume_queued_message_editor_owner(client_instance_id);
+                }
                 {
                     let mut connections = client_connections.write().await;
                     if let Some(info) = connections.get_mut(&client_connection_id) {
@@ -1933,6 +1953,9 @@ pub(super) async fn handle_client(
                     agent_guard.working_dir().map(str::to_string)
                 };
                 current_client_instance_id = client_instance_id.clone();
+                if let Some(client_instance_id) = current_client_instance_id.as_deref() {
+                    session_control.resume_queued_message_editor_owner(client_instance_id);
+                }
                 {
                     let mut connections = client_connections.write().await;
                     if let Some(info) = connections.get_mut(&client_connection_id) {
@@ -3064,6 +3087,12 @@ pub(super) async fn handle_client(
         }
     }
 
+    if let Some(client_instance_id) = current_client_instance_id.clone() {
+        session_control.begin_queued_message_editor_disconnect_grace(
+            client_instance_id,
+            Duration::from_secs(30),
+        );
+    }
     crate::hooks::with_client_terminal_env(
         active_terminal_env,
         cleanup_client_connection(
@@ -3650,6 +3679,53 @@ fn recall_soft_interrupt(
     ));
 }
 
+fn queued_message_editor(
+    id: u64,
+    navigation_session_id: String,
+    operation_id: String,
+    operation: crate::protocol::QueuedMessageEditorOperation,
+    client_instance_id: Option<&str>,
+    session_control: &SessionControlHandle,
+    client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
+) {
+    let Some(client_instance_id) = client_instance_id.filter(|value| !value.trim().is_empty())
+    else {
+        let _ = client_event_tx.send(ServerEvent::Error {
+            id,
+            message: "Queued message navigation requires a verified client identity.".to_string(),
+            retry_after_secs: None,
+            provider_code: None,
+        });
+        return;
+    };
+    match session_control.queued_message_editor(
+        client_instance_id,
+        &navigation_session_id,
+        &operation_id,
+        operation,
+    ) {
+        Ok(result) => {
+            let _ = client_event_tx.send(ServerEvent::QueuedMessageEditorResult {
+                id,
+                navigation_session_id,
+                operation_id,
+                outcome: result.outcome,
+                selection: result.selection,
+                placement: result.placement,
+                message: result.message,
+            });
+        }
+        Err(message) => {
+            let _ = client_event_tx.send(ServerEvent::Error {
+                id,
+                message,
+                retry_after_secs: None,
+                provider_code: None,
+            });
+        }
+    }
+}
+
 fn clear_soft_interrupts(
     id: u64,
     session_id: &str,
@@ -3660,17 +3736,7 @@ fn clear_soft_interrupts(
         "SERVER_SOFT_INTERRUPT_CLEAR_REQUEST id={} session={} control_session={}",
         id, session_id, session_control.session_id
     ));
-    session_control.clear_soft_interrupts();
-    let persisted_clear = match crate::soft_interrupt_store::clear(session_id) {
-        Ok(()) => true,
-        Err(err) => {
-            crate::logging::warn(&format!(
-                "SERVER_SOFT_INTERRUPT_CLEAR_PERSISTED_FAILED id={} session={} error={}",
-                id, session_id, err
-            ));
-            false
-        }
-    };
+    let persisted_clear = session_control.clear_soft_interrupts();
     let ack_queued = client_event_tx.send(ServerEvent::Ack { id }).is_ok();
     crate::logging::info(&format!(
         "SERVER_SOFT_INTERRUPT_CLEAR_RESULT id={} session={} persisted_clear={} ack_queued={}",

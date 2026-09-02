@@ -1,6 +1,10 @@
 use crate::bus::FileOp;
 use crate::plan::VersionedPlan;
-use crate::protocol::{RecallableSoftInterrupt, ServerEvent};
+use crate::protocol::{
+    QueuedMessageEditorDirection, QueuedMessageEditorOperation, QueuedMessageEditorOutcome,
+    QueuedMessageEditorPlacement, QueuedMessageEditorSelection, RecallableSoftInterrupt,
+    ServerEvent,
+};
 use jcode_agent_runtime::{
     InterruptSignal, SoftInterruptMessage, SoftInterruptQueue, SoftInterruptSource,
 };
@@ -32,6 +36,7 @@ static BACKGROUND_TOOL_SIGNALS: LazyLock<StdMutex<HashMap<String, InterruptSigna
 
 const SOFT_INTERRUPT_REPLAY_CAPACITY: usize = 64;
 const SOFT_INTERRUPT_REPLAY_SESSION_CAPACITY: usize = 256;
+const QUEUED_MESSAGE_EDITOR_REPLAY_CAPACITY: usize = 128;
 type SoftInterruptReplayKey = (String, String);
 type SoftInterruptReplayEntry = (SoftInterruptReplayKey, Option<RecallableSoftInterrupt>);
 
@@ -113,6 +118,268 @@ impl SoftInterruptReplayRegistry {
 
 static SOFT_INTERRUPT_REPLAYS: LazyLock<StdMutex<SoftInterruptReplayRegistry>> =
     LazyLock::new(|| StdMutex::new(SoftInterruptReplayRegistry::default()));
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct QueuedMessageEditorResult {
+    pub outcome: QueuedMessageEditorOutcome,
+    pub selection: Option<QueuedMessageEditorSelection>,
+    pub placement: QueuedMessageEditorPlacement,
+    pub message: Option<String>,
+}
+
+#[derive(Clone)]
+struct HeldQueuedMessage {
+    original: SoftInterruptMessage,
+    draft: RecallableSoftInterrupt,
+}
+
+#[derive(Clone)]
+struct QueuedMessageReservation {
+    owner_client_instance_id: String,
+    snapshot_queue_sequence: u64,
+    selected_index: usize,
+    predecessor_message_id: Option<String>,
+    successor_message_id: Option<String>,
+    held: Vec<HeldQueuedMessage>,
+}
+
+#[derive(Clone)]
+struct CompletedQueuedMessageEditorOperation {
+    owner_client_instance_id: String,
+    navigation_session_id: String,
+    operation_id: String,
+    request_fingerprint: String,
+    result: QueuedMessageEditorResult,
+}
+
+#[derive(Clone, Default)]
+struct QueuedMessageEditorCoordinator {
+    reservations: HashMap<String, QueuedMessageReservation>,
+    completed: VecDeque<CompletedQueuedMessageEditorOperation>,
+    grace_tokens: HashMap<String, u64>,
+    next_grace_token: u64,
+    next_enqueue_sequence: u64,
+}
+
+type SharedQueuedMessageEditorCoordinator = Arc<StdMutex<QueuedMessageEditorCoordinator>>;
+
+#[derive(Default)]
+struct QueuedMessageEditorRegistry {
+    coordinators: HashMap<String, SharedQueuedMessageEditorCoordinator>,
+    session_order: VecDeque<String>,
+}
+
+impl QueuedMessageEditorRegistry {
+    fn get_or_insert(&mut self, session_id: &str) -> SharedQueuedMessageEditorCoordinator {
+        if let Some(coordinator) = self.coordinators.get(session_id).cloned() {
+            self.session_order.retain(|id| id != session_id);
+            self.session_order.push_back(session_id.to_string());
+            return coordinator;
+        }
+        if self.coordinators.len() == SOFT_INTERRUPT_REPLAY_SESSION_CAPACITY
+            && let Some(oldest) = self.session_order.pop_front()
+        {
+            self.coordinators.remove(&oldest);
+        }
+        let coordinator = Arc::new(StdMutex::new(QueuedMessageEditorCoordinator::default()));
+        self.coordinators
+            .insert(session_id.to_string(), coordinator.clone());
+        self.session_order.push_back(session_id.to_string());
+        coordinator
+    }
+
+    fn rename(&mut self, old_session_id: &str, new_session_id: &str) {
+        if old_session_id == new_session_id {
+            return;
+        }
+        if let Some(coordinator) = self.coordinators.remove(old_session_id) {
+            self.coordinators
+                .insert(new_session_id.to_string(), coordinator);
+            self.session_order.retain(|id| id != old_session_id);
+            self.session_order.retain(|id| id != new_session_id);
+            self.session_order.push_back(new_session_id.to_string());
+        }
+    }
+}
+
+static QUEUED_MESSAGE_EDITORS: LazyLock<StdMutex<QueuedMessageEditorRegistry>> =
+    LazyLock::new(|| StdMutex::new(QueuedMessageEditorRegistry::default()));
+
+fn queued_message_editor_for_session(session_id: &str) -> SharedQueuedMessageEditorCoordinator {
+    QUEUED_MESSAGE_EDITORS
+        .lock()
+        .map(|mut editors| editors.get_or_insert(session_id))
+        .unwrap_or_else(|_| Arc::new(StdMutex::new(QueuedMessageEditorCoordinator::default())))
+}
+
+fn editor_selection(reservation: &QueuedMessageReservation) -> QueuedMessageEditorSelection {
+    let selected = &reservation.held[reservation.selected_index];
+    QueuedMessageEditorSelection {
+        message_id: selected
+            .original
+            .message_id
+            .clone()
+            .expect("authoritative held messages always have stable identity"),
+        content: selected.draft.content.clone(),
+        images: selected.draft.images.clone(),
+        older_available: reservation.selected_index > 0,
+        newer_available: reservation.selected_index + 1 < reservation.held.len(),
+    }
+}
+
+fn editor_fingerprint(operation: &QueuedMessageEditorOperation) -> Result<String, String> {
+    serde_json::to_string(operation)
+        .map_err(|error| format!("invalid queued message editor operation: {error}"))
+}
+
+fn restoration_position(
+    queue: &[SoftInterruptMessage],
+    reservation: &QueuedMessageReservation,
+) -> (usize, bool) {
+    let predecessor = reservation
+        .predecessor_message_id
+        .as_deref()
+        .and_then(|id| {
+            queue
+                .iter()
+                .position(|message| message.message_id.as_deref() == Some(id))
+        });
+    let successor = reservation.successor_message_id.as_deref().and_then(|id| {
+        queue
+            .iter()
+            .position(|message| message.message_id.as_deref() == Some(id))
+    });
+    let predecessor_survived =
+        reservation.predecessor_message_id.is_none() || predecessor.is_some();
+    let successor_survived = reservation.successor_message_id.is_none() || successor.is_some();
+    let exact = predecessor_survived
+        && successor_survived
+        && !matches!((predecessor, successor), (Some(before), Some(after)) if before >= after);
+    let position = match (predecessor, successor) {
+        (Some(before), Some(after)) if before < after => before + 1,
+        (Some(before), _) => before + 1,
+        (_, Some(after)) => after,
+        (None, None) => queue
+            .iter()
+            .position(|message| {
+                message
+                    .enqueue_sequence
+                    .is_some_and(|sequence| sequence > reservation.snapshot_queue_sequence)
+            })
+            .unwrap_or(queue.len()),
+    };
+    (position, exact)
+}
+
+fn restore_reservation(
+    queue: &mut Vec<SoftInterruptMessage>,
+    mut reservation: QueuedMessageReservation,
+    selected_draft: Option<RecallableSoftInterrupt>,
+) -> bool {
+    let (position, exact) = restoration_position(queue, &reservation);
+    if let Some(draft) = selected_draft {
+        let selected = &mut reservation.held[reservation.selected_index];
+        selected.original.content = draft.content;
+        selected.original.images = draft.images;
+    }
+    queue.splice(
+        position..position,
+        reservation.held.into_iter().map(|held| held.original),
+    );
+    exact
+}
+
+#[cfg(not(test))]
+fn persist_queued_message_editor_state(
+    session_id: &str,
+    queue: &[SoftInterruptMessage],
+    coordinator: &QueuedMessageEditorCoordinator,
+) -> Result<(), String> {
+    use crate::soft_interrupt_store::{
+        PersistedCompletedEditorOperation, PersistedHeldSoftInterrupt, PersistedReservationState,
+        PersistedSoftInterruptDraft, PersistedSoftInterruptReservation, SoftInterruptStoreEnvelope,
+    };
+    let reservations = coordinator
+        .reservations
+        .iter()
+        .map(
+            |(navigation_session_id, reservation)| PersistedSoftInterruptReservation {
+                navigation_session_id: navigation_session_id.clone(),
+                owner_client_instance_id: reservation.owner_client_instance_id.clone(),
+                snapshot_queue_sequence: reservation.snapshot_queue_sequence,
+                state: PersistedReservationState::Active,
+                selected_index: reservation.selected_index,
+                predecessor_message_id: reservation.predecessor_message_id.clone(),
+                successor_message_id: reservation.successor_message_id.clone(),
+                held: reservation
+                    .held
+                    .iter()
+                    .enumerate()
+                    .map(|(index, held)| PersistedHeldSoftInterrupt {
+                        message_id: held
+                            .original
+                            .message_id
+                            .clone()
+                            .expect("held message identity"),
+                        original: held.original.clone().into(),
+                        draft: PersistedSoftInterruptDraft {
+                            content: held.draft.content.clone(),
+                            images: held.draft.images.clone(),
+                        },
+                        original_relative_index: index,
+                    })
+                    .collect(),
+                completed_operations: coordinator
+                    .completed
+                    .iter()
+                    .filter(|completed| {
+                        completed.navigation_session_id == *navigation_session_id
+                            && completed.owner_client_instance_id
+                                == reservation.owner_client_instance_id
+                    })
+                    .map(|completed| PersistedCompletedEditorOperation {
+                        operation_id: completed.operation_id.clone(),
+                        request_fingerprint: completed.request_fingerprint.clone(),
+                        outcome: serde_json::to_value(&completed.result.outcome)
+                            .unwrap_or(serde_json::Value::Null),
+                    })
+                    .collect(),
+            },
+        )
+        .collect();
+    crate::soft_interrupt_store::overwrite_envelope(
+        session_id,
+        &SoftInterruptStoreEnvelope {
+            version: 1,
+            dispatchable: queue.iter().cloned().map(Into::into).collect(),
+            reservations,
+        },
+    )
+    .map_err(|error| format!("failed to persist queued message editor state: {error}"))
+}
+
+pub(crate) fn persist_session_soft_interrupt_state(
+    session_id: &str,
+    queue: &SoftInterruptQueue,
+) -> Result<(), String> {
+    let coordinator = queued_message_editor_for_session(session_id);
+    let coordinator = coordinator
+        .lock()
+        .map_err(|_| "queued message editor authority is unavailable".to_string())?;
+    let queue = queue
+        .lock()
+        .map_err(|_| "soft interrupt queue is unavailable".to_string())?;
+    persist_queued_message_editor_state(session_id, &queue, &coordinator)
+}
+
+#[cfg(test)]
+fn persist_queued_message_editor_state(
+    _session_id: &str,
+    _queue: &[SoftInterruptMessage],
+    _coordinator: &QueuedMessageEditorCoordinator,
+) -> Result<(), String> {
+    Ok(())
+}
 
 fn soft_interrupt_replay_for_session(session_id: &str) -> SharedSoftInterruptReplay {
     SOFT_INTERRUPT_REPLAYS
@@ -569,18 +836,20 @@ pub(super) fn session_event_fanout_sender_with_fallback(
     tx
 }
 
-pub(super) fn enqueue_soft_interrupt(
+fn enqueue_soft_interrupt(
     queue: &SoftInterruptQueue,
+    coordinator: &SharedQueuedMessageEditorCoordinator,
     content: String,
     images: Vec<(String, String)>,
     urgent: bool,
     source: SoftInterruptSource,
 ) -> bool {
-    enqueue_soft_interrupt_owned(queue, content, images, urgent, source, None)
+    enqueue_soft_interrupt_owned(queue, coordinator, content, images, urgent, source, None)
 }
 
-pub(super) fn enqueue_soft_interrupt_owned(
+fn enqueue_soft_interrupt_owned(
     queue: &SoftInterruptQueue,
+    coordinator: &SharedQueuedMessageEditorCoordinator,
     content: String,
     images: Vec<(String, String)>,
     urgent: bool,
@@ -589,8 +858,23 @@ pub(super) fn enqueue_soft_interrupt_owned(
 ) -> bool {
     let content_bytes = content.len();
     let content_chars = content.chars().count();
+    let Ok(mut coordinator) = coordinator.lock() else {
+        crate::logging::warn(&format!(
+            "SOFT_INTERRUPT_QUEUE_PUSH_FAILED source={:?} urgent={} content_bytes={} content_chars={} reason=editor_lock_poisoned",
+            source, urgent, content_bytes, content_chars
+        ));
+        return false;
+    };
     if let Ok(mut pending) = queue.lock() {
         let pending_before = pending.len();
+        let queued_max = pending
+            .iter()
+            .filter_map(|message| message.enqueue_sequence)
+            .max()
+            .unwrap_or(0);
+        coordinator.next_enqueue_sequence = coordinator.next_enqueue_sequence.max(queued_max);
+        coordinator.next_enqueue_sequence = coordinator.next_enqueue_sequence.saturating_add(1);
+        let enqueue_sequence = coordinator.next_enqueue_sequence;
         pending.push(SoftInterruptMessage {
             content,
             images,
@@ -598,6 +882,7 @@ pub(super) fn enqueue_soft_interrupt_owned(
             source,
             message_id: Some(crate::id::new_id("soft_interrupt")),
             owner_client_instance_id: owner_client_instance_id.map(str::to_string),
+            enqueue_sequence: Some(enqueue_sequence),
         });
         crate::logging::info(&format!(
             "SOFT_INTERRUPT_QUEUE_PUSH source={:?} urgent={} content_bytes={} content_chars={} pending_before={} pending_after={}",
@@ -629,6 +914,7 @@ pub struct SessionControlHandle {
     pub session_id: String,
     soft_interrupt_queue: SoftInterruptQueue,
     soft_interrupt_replay: SharedSoftInterruptReplay,
+    queued_message_editor: SharedQueuedMessageEditorCoordinator,
     background_tool_signal: Option<InterruptSignal>,
     stop_current_turn_signal: InterruptSignal,
 }
@@ -647,10 +933,12 @@ impl SessionControlHandle {
         // no-ops for busy turns.
         register_background_tool_signal(&session_id, background_tool_signal.clone());
         let soft_interrupt_replay = soft_interrupt_replay_for_session(&session_id);
+        let queued_message_editor = queued_message_editor_for_session(&session_id);
         Self {
             session_id,
             soft_interrupt_queue,
             soft_interrupt_replay,
+            queued_message_editor,
             background_tool_signal: Some(background_tool_signal),
             stop_current_turn_signal,
         }
@@ -663,10 +951,12 @@ impl SessionControlHandle {
     ) -> Self {
         let session_id = session_id.into();
         let soft_interrupt_replay = soft_interrupt_replay_for_session(&session_id);
+        let queued_message_editor = queued_message_editor_for_session(&session_id);
         Self {
             session_id,
             soft_interrupt_queue,
             soft_interrupt_replay,
+            queued_message_editor,
             background_tool_signal: None,
             stop_current_turn_signal,
         }
@@ -679,7 +969,14 @@ impl SessionControlHandle {
         urgent: bool,
         source: SoftInterruptSource,
     ) -> bool {
-        enqueue_soft_interrupt(&self.soft_interrupt_queue, content, images, urgent, source)
+        enqueue_soft_interrupt(
+            &self.soft_interrupt_queue,
+            &self.queued_message_editor,
+            content,
+            images,
+            urgent,
+            source,
+        )
     }
 
     pub fn queue_owned_soft_interrupt(
@@ -690,17 +987,28 @@ impl SessionControlHandle {
         source: SoftInterruptSource,
         owner_client_instance_id: Option<&str>,
     ) -> bool {
-        enqueue_soft_interrupt_owned(
+        let queued = enqueue_soft_interrupt_owned(
             &self.soft_interrupt_queue,
+            &self.queued_message_editor,
             content,
             images,
             urgent,
             source,
             owner_client_instance_id,
-        )
+        );
+        if queued
+            && let Err(error) =
+                persist_session_soft_interrupt_state(&self.session_id, &self.soft_interrupt_queue)
+        {
+            crate::logging::warn(&format!(
+                "Failed to persist queued soft interrupt with editor state for {}: {}",
+                self.session_id, error
+            ));
+        }
+        queued
     }
 
-    pub fn clear_soft_interrupts(&self) {
+    pub fn clear_soft_interrupts(&self) -> bool {
         if let Ok(mut queue) = self.soft_interrupt_queue.lock() {
             let cleared = queue.len();
             queue.clear();
@@ -713,6 +1021,16 @@ impl SessionControlHandle {
                 "SOFT_INTERRUPT_QUEUE_CLEAR_FAILED session={} reason=queue_lock_poisoned",
                 self.session_id
             ));
+        }
+        match persist_session_soft_interrupt_state(&self.session_id, &self.soft_interrupt_queue) {
+            Ok(()) => true,
+            Err(error) => {
+                crate::logging::warn(&format!(
+                    "Failed to persist cleared soft interrupts with editor state for {}: {}",
+                    self.session_id, error
+                ));
+                false
+            }
         }
     }
 
@@ -745,6 +1063,399 @@ impl SessionControlHandle {
 
         replay.insert(client_instance_id, operation_id, result.clone());
         result
+    }
+
+    pub(crate) fn queued_message_editor(
+        &self,
+        client_instance_id: &str,
+        navigation_session_id: &str,
+        operation_id: &str,
+        operation: QueuedMessageEditorOperation,
+    ) -> Result<QueuedMessageEditorResult, String> {
+        if client_instance_id.trim().is_empty()
+            || navigation_session_id.trim().is_empty()
+            || operation_id.trim().is_empty()
+        {
+            return Err("queued message editor identities must not be empty".to_string());
+        }
+        let fingerprint = editor_fingerprint(&operation)?;
+        let mut coordinator = self
+            .queued_message_editor
+            .lock()
+            .map_err(|_| "queued message editor authority is unavailable".to_string())?;
+
+        if let Some(completed) = coordinator.completed.iter().find(|completed| {
+            completed.navigation_session_id == navigation_session_id
+                && completed.operation_id == operation_id
+        }) {
+            if completed.owner_client_instance_id != client_instance_id {
+                return Err("queued message editor session is not owned by this client".to_string());
+            }
+            if completed.request_fingerprint != fingerprint {
+                return Err(
+                    "queued message editor operation identity was reused with different input"
+                        .to_string(),
+                );
+            }
+            let mut replay = completed.result.clone();
+            replay.outcome = QueuedMessageEditorOutcome::Replay;
+            replay.message = Some("replayed completed queued message editor operation".to_string());
+            return Ok(replay);
+        }
+
+        let mut queue = self
+            .soft_interrupt_queue
+            .lock()
+            .map_err(|_| "soft interrupt queue is unavailable".to_string())?;
+        let coordinator_before = coordinator.clone();
+        let queue_before = queue.clone();
+
+        let result = match operation {
+            QueuedMessageEditorOperation::Start => {
+                if let Some(existing) = coordinator.reservations.get(navigation_session_id) {
+                    if existing.owner_client_instance_id != client_instance_id {
+                        return Err(
+                            "queued message editor session is not owned by this client".to_string()
+                        );
+                    }
+                    return Err("queued message editor session already exists".to_string());
+                }
+                if coordinator
+                    .reservations
+                    .values()
+                    .any(|reservation| reservation.owner_client_instance_id == client_instance_id)
+                {
+                    return Err(
+                        "client already owns an active queued message editor session".to_string(),
+                    );
+                }
+
+                let eligible_indices: Vec<usize> = queue
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, message)| {
+                        (message.source == SoftInterruptSource::User
+                            && message.owner_client_instance_id.as_deref()
+                                == Some(client_instance_id)
+                            && message.message_id.is_some()
+                            && message.enqueue_sequence.is_some())
+                        .then_some(index)
+                    })
+                    .collect();
+                if eligible_indices.is_empty() {
+                    QueuedMessageEditorResult {
+                        outcome: QueuedMessageEditorOutcome::Boundary,
+                        selection: None,
+                        placement: QueuedMessageEditorPlacement::Exact,
+                        message: Some("no eligible queued user messages".to_string()),
+                    }
+                } else {
+                    let first = eligible_indices[0];
+                    let last = *eligible_indices
+                        .last()
+                        .expect("non-empty eligible snapshot");
+                    let predecessor_message_id = first
+                        .checked_sub(1)
+                        .and_then(|index| queue.get(index))
+                        .and_then(|message| message.message_id.clone());
+                    let successor_message_id = queue
+                        .get(last + 1)
+                        .and_then(|message| message.message_id.clone());
+                    let snapshot_queue_sequence = queue
+                        .iter()
+                        .filter_map(|message| message.enqueue_sequence)
+                        .max()
+                        .unwrap_or(0);
+                    coordinator.next_enqueue_sequence = coordinator
+                        .next_enqueue_sequence
+                        .max(snapshot_queue_sequence);
+                    let eligible: HashSet<usize> = eligible_indices.into_iter().collect();
+                    let mut held = Vec::new();
+                    let mut remaining = Vec::with_capacity(queue.len() - eligible.len());
+                    for (index, message) in std::mem::take(&mut *queue).into_iter().enumerate() {
+                        if eligible.contains(&index) {
+                            held.push(HeldQueuedMessage {
+                                draft: RecallableSoftInterrupt {
+                                    content: message.content.clone(),
+                                    images: message.images.clone(),
+                                },
+                                original: message,
+                            });
+                        } else {
+                            remaining.push(message);
+                        }
+                    }
+                    *queue = remaining;
+                    let reservation = QueuedMessageReservation {
+                        owner_client_instance_id: client_instance_id.to_string(),
+                        snapshot_queue_sequence,
+                        selected_index: held.len() - 1,
+                        predecessor_message_id,
+                        successor_message_id,
+                        held,
+                    };
+                    let selection = editor_selection(&reservation);
+                    coordinator
+                        .reservations
+                        .insert(navigation_session_id.to_string(), reservation);
+                    QueuedMessageEditorResult {
+                        outcome: QueuedMessageEditorOutcome::Started,
+                        selection: Some(selection),
+                        placement: QueuedMessageEditorPlacement::Exact,
+                        message: None,
+                    }
+                }
+            }
+            QueuedMessageEditorOperation::Move {
+                direction,
+                selected_message_id,
+                draft,
+            } => {
+                let reservation = coordinator
+                    .reservations
+                    .get_mut(navigation_session_id)
+                    .ok_or_else(|| "queued message editor session does not exist".to_string())?;
+                if reservation.owner_client_instance_id != client_instance_id {
+                    return Err(
+                        "queued message editor session is not owned by this client".to_string()
+                    );
+                }
+                let current_id = reservation.held[reservation.selected_index]
+                    .original
+                    .message_id
+                    .as_deref();
+                if current_id != Some(selected_message_id.as_str()) {
+                    QueuedMessageEditorResult {
+                        outcome: QueuedMessageEditorOutcome::Conflict,
+                        selection: Some(editor_selection(reservation)),
+                        placement: QueuedMessageEditorPlacement::NotApplied,
+                        message: Some(
+                            "queued message editor selection changed; draft was not applied"
+                                .to_string(),
+                        ),
+                    }
+                } else {
+                    reservation.held[reservation.selected_index].draft = draft;
+                    let next_index = match direction {
+                        QueuedMessageEditorDirection::Older => {
+                            reservation.selected_index.checked_sub(1)
+                        }
+                        QueuedMessageEditorDirection::Newer => (reservation.selected_index + 1
+                            < reservation.held.len())
+                        .then_some(reservation.selected_index + 1),
+                    };
+                    let outcome = if let Some(next_index) = next_index {
+                        reservation.selected_index = next_index;
+                        QueuedMessageEditorOutcome::Moved
+                    } else {
+                        QueuedMessageEditorOutcome::Boundary
+                    };
+                    QueuedMessageEditorResult {
+                        outcome,
+                        selection: Some(editor_selection(reservation)),
+                        placement: QueuedMessageEditorPlacement::Exact,
+                        message: (outcome == QueuedMessageEditorOutcome::Boundary)
+                            .then(|| "queued message editor boundary reached".to_string()),
+                    }
+                }
+            }
+            QueuedMessageEditorOperation::Finish {
+                selected_message_id,
+                draft,
+            } => {
+                let mut reservation = coordinator
+                    .reservations
+                    .remove(navigation_session_id)
+                    .ok_or_else(|| "queued message editor session does not exist".to_string())?;
+                if reservation.owner_client_instance_id != client_instance_id {
+                    coordinator
+                        .reservations
+                        .insert(navigation_session_id.to_string(), reservation);
+                    return Err(
+                        "queued message editor session is not owned by this client".to_string()
+                    );
+                }
+                let current_id = reservation.held[reservation.selected_index]
+                    .original
+                    .message_id
+                    .as_deref();
+                if current_id != Some(selected_message_id.as_str()) {
+                    let selection = editor_selection(&reservation);
+                    coordinator
+                        .reservations
+                        .insert(navigation_session_id.to_string(), reservation);
+                    QueuedMessageEditorResult {
+                        outcome: QueuedMessageEditorOutcome::Conflict,
+                        selection: Some(selection),
+                        placement: QueuedMessageEditorPlacement::NotApplied,
+                        message: Some(
+                            "queued message editor selection changed; finish was not applied"
+                                .to_string(),
+                        ),
+                    }
+                } else if draft.content.is_empty() && draft.images.is_empty() {
+                    reservation.held.remove(reservation.selected_index);
+                    let exact = if reservation.held.is_empty() {
+                        let (_, exact) = restoration_position(&queue, &reservation);
+                        exact
+                    } else {
+                        if reservation.selected_index >= reservation.held.len() {
+                            reservation.selected_index = reservation.held.len() - 1;
+                        }
+                        restore_reservation(&mut queue, reservation, None)
+                    };
+                    QueuedMessageEditorResult {
+                        outcome: if exact {
+                            QueuedMessageEditorOutcome::Deleted
+                        } else {
+                            QueuedMessageEditorOutcome::StalePlacement
+                        },
+                        selection: None,
+                        placement: if exact {
+                            QueuedMessageEditorPlacement::Exact
+                        } else {
+                            QueuedMessageEditorPlacement::StaleBestEffort
+                        },
+                        message: (!exact).then(|| {
+                            "selected queued message deleted with stale best-effort placement"
+                                .to_string()
+                        }),
+                    }
+                } else {
+                    let exact = restore_reservation(&mut queue, reservation, Some(draft));
+                    QueuedMessageEditorResult {
+                        outcome: if exact {
+                            QueuedMessageEditorOutcome::Committed
+                        } else {
+                            QueuedMessageEditorOutcome::StalePlacement
+                        },
+                        selection: None,
+                        placement: if exact {
+                            QueuedMessageEditorPlacement::Exact
+                        } else {
+                            QueuedMessageEditorPlacement::StaleBestEffort
+                        },
+                        message: (!exact).then(|| {
+                            "queued message committed with stale best-effort placement".to_string()
+                        }),
+                    }
+                }
+            }
+            QueuedMessageEditorOperation::Release => {
+                let reservation = coordinator
+                    .reservations
+                    .remove(navigation_session_id)
+                    .ok_or_else(|| "queued message editor session does not exist".to_string())?;
+                if reservation.owner_client_instance_id != client_instance_id {
+                    coordinator
+                        .reservations
+                        .insert(navigation_session_id.to_string(), reservation);
+                    return Err(
+                        "queued message editor session is not owned by this client".to_string()
+                    );
+                }
+                let exact = restore_reservation(&mut queue, reservation, None);
+                QueuedMessageEditorResult {
+                    outcome: QueuedMessageEditorOutcome::Released,
+                    selection: None,
+                    placement: if exact {
+                        QueuedMessageEditorPlacement::Exact
+                    } else {
+                        QueuedMessageEditorPlacement::StaleBestEffort
+                    },
+                    message: (!exact).then(|| {
+                        "queued messages released with stale best-effort placement".to_string()
+                    }),
+                }
+            }
+        };
+
+        if coordinator.completed.len() == QUEUED_MESSAGE_EDITOR_REPLAY_CAPACITY {
+            coordinator.completed.pop_front();
+        }
+        coordinator
+            .completed
+            .push_back(CompletedQueuedMessageEditorOperation {
+                owner_client_instance_id: client_instance_id.to_string(),
+                navigation_session_id: navigation_session_id.to_string(),
+                operation_id: operation_id.to_string(),
+                request_fingerprint: fingerprint,
+                result: result.clone(),
+            });
+        if let Err(error) =
+            persist_queued_message_editor_state(&self.session_id, &queue, &coordinator)
+        {
+            *coordinator = coordinator_before;
+            *queue = queue_before;
+            return Err(error);
+        }
+        Ok(result)
+    }
+
+    pub(crate) fn resume_queued_message_editor_owner(&self, client_instance_id: &str) {
+        if let Ok(mut coordinator) = self.queued_message_editor.lock() {
+            coordinator.grace_tokens.remove(client_instance_id);
+        }
+    }
+
+    pub(crate) fn begin_queued_message_editor_disconnect_grace(
+        &self,
+        client_instance_id: String,
+        grace: std::time::Duration,
+    ) {
+        let token = {
+            let Ok(mut coordinator) = self.queued_message_editor.lock() else {
+                return;
+            };
+            if !coordinator
+                .reservations
+                .values()
+                .any(|reservation| reservation.owner_client_instance_id == client_instance_id)
+            {
+                return;
+            }
+            coordinator.next_grace_token = coordinator.next_grace_token.wrapping_add(1);
+            let token = coordinator.next_grace_token;
+            coordinator
+                .grace_tokens
+                .insert(client_instance_id.clone(), token);
+            token
+        };
+        let control = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(grace).await;
+            let Ok(mut coordinator) = control.queued_message_editor.lock() else {
+                return;
+            };
+            if coordinator.grace_tokens.get(&client_instance_id) != Some(&token) {
+                return;
+            }
+            coordinator.grace_tokens.remove(&client_instance_id);
+            let navigation_ids: Vec<String> = coordinator
+                .reservations
+                .iter()
+                .filter_map(|(navigation_id, reservation)| {
+                    (reservation.owner_client_instance_id == client_instance_id)
+                        .then_some(navigation_id.clone())
+                })
+                .collect();
+            let Ok(mut queue) = control.soft_interrupt_queue.lock() else {
+                return;
+            };
+            for navigation_id in navigation_ids {
+                if let Some(reservation) = coordinator.reservations.remove(&navigation_id) {
+                    restore_reservation(&mut queue, reservation, None);
+                }
+            }
+            if let Err(error) =
+                persist_queued_message_editor_state(&control.session_id, &queue, &coordinator)
+            {
+                crate::logging::warn(&format!(
+                    "Failed to persist queued editor disconnect release for {}: {}",
+                    control.session_id, error
+                ));
+            }
+        });
     }
 
     /// Fire the stop-current-turn signal. Returns the signal's fire epoch so
@@ -858,6 +1569,9 @@ pub(super) async fn rename_session_interrupt_queue(
     if let Ok(mut replays) = SOFT_INTERRUPT_REPLAYS.lock() {
         replays.rename(old_session_id, new_session_id);
     }
+    if let Ok(mut editors) = QUEUED_MESSAGE_EDITORS.lock() {
+        editors.rename(old_session_id, new_session_id);
+    }
 }
 
 pub(super) async fn remove_session_interrupt_queue(
@@ -876,8 +1590,9 @@ pub(super) async fn queue_soft_interrupt_for_session(
     queues: &SessionInterruptQueues,
     sessions: &super::SessionAgents,
 ) -> bool {
+    let coordinator = queued_message_editor_for_session(session_id);
     if let Some(queue) = queues.read().await.get(session_id).cloned() {
-        return enqueue_soft_interrupt(&queue, content, Vec::new(), urgent, source);
+        return enqueue_soft_interrupt(&queue, &coordinator, content, Vec::new(), urgent, source);
     }
 
     let queue = {
@@ -892,7 +1607,7 @@ pub(super) async fn queue_soft_interrupt_for_session(
 
     if let Some(queue) = queue {
         register_session_interrupt_queue(queues, session_id, queue.clone()).await;
-        enqueue_soft_interrupt(&queue, content, Vec::new(), urgent, source)
+        enqueue_soft_interrupt(&queue, &coordinator, content, Vec::new(), urgent, source)
     } else {
         let session_exists = {
             let guard = sessions.read().await;
@@ -903,19 +1618,41 @@ pub(super) async fn queue_soft_interrupt_for_session(
             return false;
         }
 
-        crate::soft_interrupt_store::append(
-            session_id,
-            SoftInterruptMessage {
-                content,
-                images: Vec::new(),
-                urgent,
-                source,
-                message_id: None,
-                owner_client_instance_id: None,
-            },
-        )
-        .map(|_| true)
-        .unwrap_or_else(|err| {
+        let persist = || -> anyhow::Result<()> {
+            let mut coordinator = coordinator
+                .lock()
+                .map_err(|_| anyhow::anyhow!("queued message editor authority is unavailable"))?;
+            let mut envelope = crate::soft_interrupt_store::load_envelope(session_id)?;
+            let persisted_max = envelope
+                .dispatchable
+                .iter()
+                .filter_map(|message| message.enqueue_sequence)
+                .chain(
+                    envelope
+                        .reservations
+                        .iter()
+                        .map(|reservation| reservation.snapshot_queue_sequence),
+                )
+                .max()
+                .unwrap_or(0);
+            coordinator.next_enqueue_sequence =
+                coordinator.next_enqueue_sequence.max(persisted_max);
+            coordinator.next_enqueue_sequence = coordinator.next_enqueue_sequence.saturating_add(1);
+            envelope.dispatchable.push(
+                SoftInterruptMessage {
+                    content,
+                    images: Vec::new(),
+                    urgent,
+                    source,
+                    message_id: Some(crate::id::new_id("soft_interrupt")),
+                    owner_client_instance_id: None,
+                    enqueue_sequence: Some(coordinator.next_enqueue_sequence),
+                }
+                .into(),
+            );
+            crate::soft_interrupt_store::overwrite_envelope(session_id, &envelope)
+        };
+        persist().map(|_| true).unwrap_or_else(|err| {
             crate::logging::warn(&format!(
                 "Failed to persist deferred soft interrupt for session {}: {}",
                 session_id, err
@@ -928,3 +1665,7 @@ pub(super) async fn queue_soft_interrupt_for_session(
 #[cfg(test)]
 #[path = "state_tests/soft_interrupt_recall.rs"]
 mod soft_interrupt_recall_tests;
+
+#[cfg(test)]
+#[path = "state_tests/queued_message_editor.rs"]
+mod queued_message_editor_fixtures;

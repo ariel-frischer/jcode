@@ -583,6 +583,7 @@ async fn capture_runtime_memory_attribution_sample(
 mod state;
 
 use self::state::latest_peer_touches;
+pub(crate) use self::state::persist_session_soft_interrupt_state;
 pub use self::state::{
     FileAccess, SessionControlHandle, SharedContext, SwarmEvent, SwarmEventType, SwarmMember,
     SwarmState,

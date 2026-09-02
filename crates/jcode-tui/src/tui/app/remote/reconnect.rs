@@ -716,6 +716,7 @@ pub(in crate::tui::app) async fn handle_post_connect<B: ratatui::backend::Backen
 
     if reconnected_after_disconnect {
         super::soft_interrupt_recall::retry_pending_after_reconnect(app, remote).await?;
+        super::queued_message_editor::retry_pending_after_reconnect(app, remote).await?;
     }
 
     // Hydrate route metadata as part of connection bootstrap, not when the

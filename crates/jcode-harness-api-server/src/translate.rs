@@ -3,7 +3,8 @@
 
 use crate::background_progress::parse_background_notification;
 use jcode_harness_api::{
-    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, ServerFrame, SessionInfo,
+    ApiEvent, ErrorCode, HistoryMessage, ModelRouteInfo, ProviderCode, QueuedMessageEditorOutcome,
+    QueuedMessageEditorPlacement, QueuedMessageEditorSelection, ServerFrame, SessionInfo,
     TextMatch,
 };
 use jcode_protocol::SessionProfileStartup;
@@ -31,6 +32,7 @@ const REQUIRES_ATTACH: &[&str] = &[
     "cancel",
     "soft_interrupt",
     "cancel_soft_interrupts",
+    "queued_message_editor",
     "clear",
     "rewind",
     "rewind_undo",
@@ -117,6 +119,8 @@ pub struct BridgeState {
     pending_model_probe: Option<u64>,
     /// Legacy id -> API id for simple acked requests (ping, clear, ...).
     pending_simple: Vec<(u64, u64, SimpleKind)>,
+    /// Legacy id -> authoritative queued-editor identities expected in the result.
+    pending_queued_message_editors: BTreeMap<u64, (String, String)>,
     /// Every session the daemon has told us about, newest snapshot wins.
     ///
     /// The legacy protocol has no session-list request, but it volunteers the
@@ -235,6 +239,7 @@ enum SimpleKind {
     Compact,
     /// Awaiting the catalog reply that answers `list_models`.
     Models,
+    QueuedMessageEditor,
     Credential {
         provider: String,
         configured: bool,
@@ -1002,6 +1007,43 @@ impl BridgeState {
                     json!({"type": "cancel_soft_interrupts", "id": id}),
                 )]
             }
+            "queued_message_editor" => {
+                let Some(navigation_session_id) = request["navigation_session_id"].as_str() else {
+                    return vec![Outbound::Reply(ServerFrame::reply(
+                        api_id,
+                        ApiEvent::Error {
+                            code: ErrorCode::InvalidRequest,
+                            message: "queued message editor navigation_session_id must be a string"
+                                .into(),
+                            provider_code: None,
+                        },
+                    ))];
+                };
+                let Some(operation_id) = request["operation_id"].as_str() else {
+                    return vec![Outbound::Reply(ServerFrame::reply(
+                        api_id,
+                        ApiEvent::Error {
+                            code: ErrorCode::InvalidRequest,
+                            message: "queued message editor operation_id must be a string".into(),
+                            provider_code: None,
+                        },
+                    ))];
+                };
+                let id = self.legacy_id();
+                self.pending_simple
+                    .push((id, api_id, SimpleKind::QueuedMessageEditor));
+                self.pending_queued_message_editors.insert(
+                    id,
+                    (navigation_session_id.to_string(), operation_id.to_string()),
+                );
+                vec![Outbound::Legacy(json!({
+                    "type": "queued_message_editor",
+                    "id": id,
+                    "navigation_session_id": request["navigation_session_id"],
+                    "operation_id": request["operation_id"],
+                    "operation": request["operation"],
+                }))]
+            }
             "detach_session" => {
                 let id = self.legacy_id();
                 vec![
@@ -1417,6 +1459,78 @@ impl BridgeState {
                     display_title: event["display_title"].as_str().unwrap_or("").to_string(),
                 })]
             }
+            "queued_message_editor_result" => {
+                let id = event["id"].as_u64().unwrap_or(0);
+                let Some(api_id) = self.take_simple(id, SimpleKind::QueuedMessageEditor) else {
+                    return vec![];
+                };
+                let expected_ids = self.pending_queued_message_editors.remove(&id);
+                let returned_ids = event["navigation_session_id"]
+                    .as_str()
+                    .zip(event["operation_id"].as_str());
+                let Some((
+                    (expected_navigation_id, expected_operation_id),
+                    (navigation_id, operation_id),
+                )) = expected_ids.zip(returned_ids)
+                else {
+                    return vec![ServerFrame::reply(
+                        api_id,
+                        ApiEvent::Error {
+                            code: ErrorCode::Internal,
+                            message: "daemon returned a queued-message editor result without matching identities"
+                                .into(),
+                            provider_code: None,
+                        },
+                    )];
+                };
+                if navigation_id != expected_navigation_id || operation_id != expected_operation_id
+                {
+                    return vec![ServerFrame::reply(
+                        api_id,
+                        ApiEvent::Error {
+                            code: ErrorCode::Internal,
+                            message: "daemon returned a queued-message editor result with mismatched identities"
+                                .into(),
+                            provider_code: None,
+                        },
+                    )];
+                }
+                let parsed = (
+                    serde_json::from_value::<QueuedMessageEditorOutcome>(event["outcome"].clone()),
+                    serde_json::from_value::<QueuedMessageEditorPlacement>(
+                        event["placement"].clone(),
+                    ),
+                    serde_json::from_value::<Option<QueuedMessageEditorSelection>>(
+                        event.get("selection").cloned().unwrap_or(Value::Null),
+                    ),
+                );
+                let (outcome, placement, selection) = match parsed {
+                    (Ok(outcome), Ok(placement), Ok(selection)) => (outcome, placement, selection),
+                    _ => {
+                        return vec![ServerFrame::reply(
+                            api_id,
+                            ApiEvent::Error {
+                                code: ErrorCode::Internal,
+                                message: "daemon returned an invalid queued-message editor result"
+                                    .into(),
+                                provider_code: None,
+                            },
+                        )];
+                    }
+                };
+                vec![ServerFrame::reply(
+                    api_id,
+                    ApiEvent::QueuedMessageEditorResult {
+                        session_id: session(self),
+                        navigation_session_id: navigation_id.to_string(),
+                        operation_id: operation_id.to_string(),
+                        outcome,
+                        selection,
+                        placement,
+                        message: event["message"].as_str().map(str::to_string),
+                    },
+                )]
+            }
             "available_models_updated" => {
                 self.note_models(event);
                 vec![ServerFrame::event(self.model_info(session(self), event))]
@@ -1477,6 +1591,7 @@ impl BridgeState {
             }
             "error" => {
                 let id = event["id"].as_u64().unwrap_or(0);
+                self.pending_queued_message_editors.remove(&id);
                 let message = event["message"].as_str().unwrap_or("").to_string();
                 // A turn that fails ends with `error` *instead of* `done`, so
                 // the turn is over: forget the pending message, or a later

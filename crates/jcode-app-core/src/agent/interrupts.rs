@@ -97,7 +97,10 @@ impl Agent {
             }
         };
 
-        if let Err(err) = crate::soft_interrupt_store::overwrite(self.session_id(), &pending) {
+        if let Err(err) = crate::server::persist_session_soft_interrupt_state(
+            self.session_id(),
+            &self.soft_interrupt_queue,
+        ) {
             logging::warn(&format!(
                 "Failed to persist {} soft interrupt(s) for {}: {}",
                 pending.len(),
@@ -138,6 +141,7 @@ impl Agent {
                 source,
                 message_id: None,
                 owner_client_instance_id: None,
+                enqueue_sequence: None,
             });
             logging::info(&format!(
                 "AGENT_SOFT_INTERRUPT_QUEUE_PUSH session={} source={:?} urgent={} content_bytes={} content_chars={} image_count={} pending_before={} pending_after={}",

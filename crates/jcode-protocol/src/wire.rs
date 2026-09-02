@@ -51,6 +51,74 @@ pub struct RecallableSoftInterrupt {
     pub images: Vec<(String, String)>,
 }
 
+fn deserialize_non_empty_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value.trim().is_empty() {
+        return Err(serde::de::Error::custom("identity must not be empty"));
+    }
+    Ok(value)
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QueuedMessageEditorDirection {
+    Older,
+    Newer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum QueuedMessageEditorOperation {
+    Start,
+    Move {
+        direction: QueuedMessageEditorDirection,
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        selected_message_id: String,
+        draft: RecallableSoftInterrupt,
+    },
+    Finish {
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        selected_message_id: String,
+        draft: RecallableSoftInterrupt,
+    },
+    Release,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QueuedMessageEditorOutcome {
+    Started,
+    Moved,
+    Boundary,
+    Committed,
+    Deleted,
+    Released,
+    StalePlacement,
+    Conflict,
+    Replay,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QueuedMessageEditorPlacement {
+    Exact,
+    StaleBestEffort,
+    NotApplied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct QueuedMessageEditorSelection {
+    pub message_id: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<(String, String)>,
+    pub older_available: bool,
+    pub newer_available: bool,
+}
+
 /// Optional, credential-free startup overlay for one interactive session.
 ///
 /// The CLI resolves the named profile before provider/session work and sends
@@ -138,6 +206,17 @@ pub enum Request {
     /// Recall one newest eligible soft interrupt owned by this client.
     #[serde(rename = "recall_soft_interrupt")]
     RecallSoftInterrupt { id: u64, operation_id: String },
+
+    /// Operate on one owner-scoped authoritative queued-message editor session.
+    #[serde(rename = "queued_message_editor")]
+    QueuedMessageEditor {
+        id: u64,
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        navigation_session_id: String,
+        #[serde(deserialize_with = "deserialize_non_empty_string")]
+        operation_id: String,
+        operation: QueuedMessageEditorOperation,
+    },
 
     /// Clear conversation history
     #[serde(rename = "clear")]
@@ -830,6 +909,18 @@ pub enum ServerEvent {
         id: u64,
         operation_id: String,
         message: Option<RecallableSoftInterrupt>,
+    },
+
+    /// Authoritative result for one queued-message editor operation.
+    #[serde(rename = "queued_message_editor_result")]
+    QueuedMessageEditorResult {
+        id: u64,
+        navigation_session_id: String,
+        operation_id: String,
+        outcome: QueuedMessageEditorOutcome,
+        selection: Option<QueuedMessageEditorSelection>,
+        placement: QueuedMessageEditorPlacement,
+        message: Option<String>,
     },
 
     /// Streaming text delta

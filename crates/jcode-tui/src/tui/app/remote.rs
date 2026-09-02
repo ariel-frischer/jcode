@@ -21,6 +21,7 @@ mod input_dispatch;
 pub(super) use followups::process_remote_followups;
 mod key_handling;
 mod queue_recovery;
+mod queued_message_editor;
 mod reconnect;
 mod server_event_handlers;
 mod server_events;
@@ -36,8 +37,15 @@ use queue_recovery::{
     recover_local_interleave_to_queue, recover_stranded_soft_interrupts,
     recover_undelivered_queued_continuation,
 };
+#[cfg(test)]
+pub(super) fn recover_local_interleave_to_queue_for_test(app: &mut App, reason: &str) -> bool {
+    recover_local_interleave_to_queue(app, reason)
+}
 // Re-export for sibling modules and tests that access reconnect state and helpers
 // through `super::remote::*` without reaching into private submodules directly.
+pub(super) use queued_message_editor::QueuedMessageEditorClientState;
+#[cfg(test)]
+pub(super) use queued_message_editor::retry_pending_after_reconnect as retry_queued_message_editor_after_reconnect;
 #[allow(unused_imports)]
 pub(super) use reconnect::{
     ConnectOutcome, PostConnectOutcome, ReloadReconnectHints, RemoteRunState, connect_with_retry,
@@ -268,7 +276,17 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
     // handoff briefing remains the first visible destination message instead of
     // flashing briefly and disappearing before the assistant response.
     if remote.has_loaded_history() && !app.is_processing && !app.queued_messages.is_empty() {
+        input::normalize_queued_message_images(app);
         let queued_messages = std::mem::take(&mut app.queued_messages);
+        let queued_message_images = std::mem::take(&mut app.queued_message_images);
+        let images: Vec<_> = queued_messages
+            .iter()
+            .zip(queued_message_images)
+            .filter(|(message, _)| {
+                super::helpers::extract_bracketed_system_message(message).is_none()
+            })
+            .flat_map(|(_, images)| images)
+            .collect();
         let hidden_reminders = std::mem::take(&mut app.hidden_queued_system_messages);
         let (messages, reminder, display_system_messages) =
             super::helpers::partition_queued_messages(queued_messages, hidden_reminders);
@@ -289,7 +307,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
             app,
             remote,
             combined.clone(),
-            vec![],
+            images.clone(),
             true,
             reminder.clone(),
             auto_retry,
@@ -310,6 +328,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
             }
             if !combined.is_empty() {
                 app.queued_messages.insert(0, combined);
+                app.queued_message_images.insert(0, images);
             }
         }
         needs_redraw = true;
@@ -1659,11 +1678,11 @@ fn handle_disconnected_key_internal(
 
     let macos_option_shortcut =
         crate::tui::keybind::shortcut_char_for_macos_option_key(code, modifiers);
-    if modifiers.contains(KeyModifiers::ALT) && input::handle_alt_key(app, code) {
+    if modifiers.contains(KeyModifiers::ALT) && input::handle_alt_key(app, code, modifiers) {
         return Ok(());
     }
     if let Some(shortcut) = macos_option_shortcut
-        && input::handle_alt_key(app, KeyCode::Char(shortcut))
+        && input::handle_alt_key(app, KeyCode::Char(shortcut), KeyModifiers::ALT)
     {
         return Ok(());
     }

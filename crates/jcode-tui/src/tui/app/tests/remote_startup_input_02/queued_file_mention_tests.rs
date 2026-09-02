@@ -111,6 +111,7 @@ fn queued_expansion_failure_restores_queue_reminder_and_visible_turn_without_tou
     super::input::file_mentions::restore_queued_file_mention_failure(
         &mut app,
         vec!["first".to_string(), "second".to_string()],
+        vec![Vec::new(), Vec::new()],
         Some("system reminder".to_string()),
         "too large".to_string(),
     );

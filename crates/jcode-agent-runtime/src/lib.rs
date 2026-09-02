@@ -13,6 +13,10 @@ pub struct SoftInterruptMessage {
     /// Verified client instance that enqueued this message. Legacy and
     /// non-client messages remain unowned.
     pub owner_client_instance_id: Option<String>,
+    /// Monotonic queue generation used to distinguish records that survived a
+    /// navigation snapshot from records enqueued afterward. Legacy records do
+    /// not have a sequence and remain ineligible for authoritative editing.
+    pub enqueue_sequence: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

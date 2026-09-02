@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 mod client;
 mod events;
+mod queued_message_editor;
 mod requests;
 mod sockets;
 
@@ -25,6 +26,7 @@ pub use client::{
     UNSUPPORTED_TYPED_EVENT_CODE, read_frame, unsupported_event_diagnostic, write_frame,
 };
 pub use events::*;
+pub use queued_message_editor::*;
 pub use requests::*;
 pub use sockets::{api_socket_path, legacy_socket_path, runtime_dir};
 
@@ -36,10 +38,14 @@ mod schema_snapshot_tests;
 #[path = "harness_api_tests/capability_coverage.rs"]
 mod capability_coverage_tests;
 
+#[cfg(test)]
+#[path = "harness_api_tests/queued_message_editor.rs"]
+mod queued_message_editor_tests;
+
 /// Protocol major version. Breaking changes only.
 pub const API_VERSION_MAJOR: u32 = 1;
 /// Protocol minor version. Additive changes.
-pub const API_VERSION_MINOR: u32 = 0;
+pub const API_VERSION_MINOR: u32 = 1;
 
 /// Envelope wrapping every client-to-server frame.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
