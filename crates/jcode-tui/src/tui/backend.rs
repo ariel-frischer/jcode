@@ -1377,6 +1377,10 @@ impl RemoteConnection {
             .any(|capability| capability == QUEUED_MESSAGE_NAVIGATION_CAPABILITY);
     }
 
+    pub fn supports_queued_message_navigation(&self) -> bool {
+        self.queued_message_navigation_supported
+    }
+
     /// Set session ID
     pub fn set_session_id(&mut self, id: String) {
         self.session_id = Some(id);
