@@ -26,6 +26,35 @@ fn parses_bing_html_results() {
 }
 
 #[test]
+fn parses_current_bing_redirect_result_urls() {
+    let html = r#"
+        <li class="b_algo">
+          <h2><a href="https://www.bing.com/ck/a?!&amp;&amp;p=tracking&amp;u=a1aHR0cHM6Ly9haS5nb29nbGUuZGV2L2dlbWluaS1hcGkvZG9jcy90ZXh0LWdlbmVyYXRpb24&amp;ntb=1">Text generation | Gemini API</a></h2>
+          <div class="b_caption"><p>Generate text with Gemini models.</p></div>
+        </li>
+    "#;
+
+    let results = parse_bing_html_results(html, 10);
+    assert_eq!(results.len(), 1);
+    assert_eq!(
+        results[0].url,
+        "https://ai.google.dev/gemini-api/docs/text-generation"
+    );
+}
+
+#[test]
+fn does_not_decode_bing_shaped_redirects_from_untrusted_hosts() {
+    let redirect = "https://notbing.com/ck/a?u=a1aHR0cHM6Ly9leGFtcGxlLmNvbS8";
+    assert_eq!(decode_bing_url(redirect), redirect);
+}
+
+#[test]
+fn does_not_accept_decoded_urls_without_a_host() {
+    let redirect = "https://www.bing.com/ck/a?u=a1aHR0cHM6Ly8";
+    assert_eq!(decode_bing_url(redirect), redirect);
+}
+
+#[test]
 fn parses_bing_api_results() {
     let response: BingApiResponse = serde_json::from_value(json!({
         "webPages": {
