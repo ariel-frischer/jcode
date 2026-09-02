@@ -573,15 +573,11 @@ fn remote_queued_editor_enter_sends_exact_finish_payload_and_keeps_draft_until_t
 #[test]
 fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() {
     let mut app = create_test_app();
-    app.queued_messages = vec![
+    app.pending_soft_interrupts = vec![
         "remote old".to_string(),
         "remote middle".to_string(),
         "remote new".to_string(),
     ];
-    app.queued_message_images = ["old-id", "middle-id", "new-id"]
-        .into_iter()
-        .map(|message_id| queued_editor_selection(message_id, "").images)
-        .collect();
 
     let runtime = tokio::runtime::Runtime::new().expect("runtime");
     runtime.block_on(async {
@@ -620,7 +616,7 @@ fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() 
         assert!(app.remote_queued_message_editor.is_active());
         assert!(app.remote_queued_message_editor.has_pending_operation());
         assert_eq!(
-            app.queued_messages,
+            app.pending_soft_interrupts,
             ["remote old", "remote middle", "remote new"]
         );
 
@@ -731,8 +727,6 @@ fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() 
             &mut remote,
         );
         assert_eq!(app.input, "remote new edited");
-        let edited_images = app.pending_images.clone();
-
         super::remote::handle_remote_key(
             &mut app,
             KeyCode::Enter,
@@ -761,10 +755,9 @@ fn remote_alt_q_starts_editor_then_moves_older_and_newer_with_the_saved_draft() 
             &mut remote,
         );
         assert_eq!(
-            app.queued_messages,
+            app.pending_soft_interrupts,
             ["remote old", "remote middle", "remote new edited"]
         );
-        assert_eq!(app.queued_message_images[2], edited_images);
     });
 }
 

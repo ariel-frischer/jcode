@@ -15,7 +15,6 @@ use std::collections::HashMap;
 struct VisibleQueueEntry {
     index: usize,
     original_content: String,
-    original_images: Vec<(String, String)>,
 }
 
 #[derive(Debug, Default)]
@@ -255,13 +254,7 @@ fn queued_selection_matches(
     index: usize,
     selection: &QueuedMessageEditorSelection,
 ) -> bool {
-    app.queued_messages.get(index) == Some(&selection.content)
-        && app
-            .queued_message_images
-            .get(index)
-            .map_or(selection.images.is_empty(), |images| {
-                images == &selection.images
-            })
+    app.pending_soft_interrupts.get(index) == Some(&selection.content)
 }
 
 fn locate_visible_queue_selection(
@@ -281,17 +274,17 @@ fn locate_visible_queue_selection(
         .map(|entry| entry.index);
     match app.remote_queued_message_editor.pending_move_direction() {
         Some(QueuedMessageEditorDirection::Older) => {
-            let end = current.unwrap_or(app.queued_messages.len());
+            let end = current.unwrap_or(app.pending_soft_interrupts.len());
             (0..end)
                 .rev()
                 .find(|&index| queued_selection_matches(app, index, selection))
         }
         Some(QueuedMessageEditorDirection::Newer) => {
             let start = current.map_or(0, |index| index.saturating_add(1));
-            (start..app.queued_messages.len())
+            (start..app.pending_soft_interrupts.len())
                 .find(|&index| queued_selection_matches(app, index, selection))
         }
-        None => (0..app.queued_messages.len())
+        None => (0..app.pending_soft_interrupts.len())
             .rev()
             .find(|&index| queued_selection_matches(app, index, selection)),
     }
@@ -305,12 +298,7 @@ fn apply_selection(app: &mut App, selection: QueuedMessageEditorSelection) {
                 &selection.message_id,
                 VisibleQueueEntry {
                     index,
-                    original_content: app.queued_messages[index].clone(),
-                    original_images: app
-                        .queued_message_images
-                        .get(index)
-                        .cloned()
-                        .unwrap_or_default(),
+                    original_content: app.pending_soft_interrupts[index].clone(),
                 },
             );
     }
@@ -390,18 +378,10 @@ pub(super) fn handle_server_result(
                 .remote_queued_message_editor
                 .selected_visible_queue_entry()
                 .filter(|entry| {
-                    app.queued_messages.get(entry.index) == Some(&entry.original_content)
-                        && app
-                            .queued_message_images
-                            .get(entry.index)
-                            .map_or(entry.original_images.is_empty(), |images| {
-                                images == &entry.original_images
-                            })
+                    app.pending_soft_interrupts.get(entry.index) == Some(&entry.original_content)
                 })
             {
-                app.queued_messages[entry.index] = app.input.clone();
-                crate::tui::app::input::normalize_queued_message_images(app);
-                app.queued_message_images[entry.index] = app.pending_images.clone();
+                app.pending_soft_interrupts[entry.index] = app.input.clone();
             }
             app.remote_queued_message_editor.complete_operation(false);
             app.input.clear();
