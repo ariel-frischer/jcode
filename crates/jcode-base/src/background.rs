@@ -853,30 +853,37 @@ impl BackgroundTaskManager {
 
             let (status, exit_code, error, output_text) = match tool_result {
                 Ok(Ok(output)) => {
-                    let exit_code = output
+                    let reported_exit_code = output
                         .metadata
                         .as_ref()
-                        .and_then(|metadata| metadata.get("exit_code"))
+                        .and_then(|metadata| metadata.get("exit_code"));
+                    let exit_code = reported_exit_code
                         .and_then(serde_json::Value::as_i64)
                         .and_then(|code| {
                             let in_range =
                                 (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&code);
                             in_range.then_some(code as i32)
-                        })
-                        .or(Some(0));
+                        });
+                    let unusable_exit_code =
+                        reported_exit_code.is_some() && exit_code.is_none();
                     let timed_out = output
                         .metadata
                         .as_ref()
                         .and_then(|metadata| metadata.get("timed_out"))
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false);
-                    let status = if exit_code == Some(0) {
-                        BackgroundTaskStatus::Completed
-                    } else {
+                    let status = if timed_out
+                        || unusable_exit_code
+                        || exit_code.is_some_and(|code| code != 0)
+                    {
                         BackgroundTaskStatus::Failed
+                    } else {
+                        BackgroundTaskStatus::Completed
                     };
                     let error = if timed_out {
                         Some("Command timed out".to_string())
+                    } else if unusable_exit_code {
+                        Some("Adopted tool reported an unusable exit code".to_string())
                     } else {
                         exit_code
                             .filter(|code| *code != 0)

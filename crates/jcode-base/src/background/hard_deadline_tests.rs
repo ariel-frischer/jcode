@@ -150,8 +150,8 @@ async fn detached_hard_deadline_terminates_group_and_records_exit_124_once() -> 
             .count(),
         1
     );
+    let _ = child.wait();
     assert!(!crate::platform::is_process_group_live(pid));
     assert!(!crate::platform::is_process_running(descendant_pid));
-    let _ = child.wait();
     Ok(())
 }

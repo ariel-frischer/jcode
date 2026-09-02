@@ -17,6 +17,7 @@ mod soft_yield_tests;
 #[cfg(target_os = "linux")]
 use soft_yield_tests::*;
 
+#[cfg(target_os = "linux")]
 #[path = "bash_policy_tests.rs"]
 mod policy_tests;
 

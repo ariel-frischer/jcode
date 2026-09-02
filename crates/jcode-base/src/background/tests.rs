@@ -99,6 +99,51 @@ async fn update_delivery_applies_to_running_task_completion() -> Result<()> {
 }
 
 #[tokio::test]
+async fn adopted_timeout_without_exit_code_is_failed() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let handle = tokio::spawn(async {
+        Ok(jcode_tool_types::ToolOutput::new("timed out")
+            .with_metadata(serde_json::json!({"timed_out": true})))
+    });
+    let info = manager.adopt("bash", "session-timeout", handle).await;
+
+    let status = manager
+        .wait(&info.task_id, Duration::from_secs(2), false)
+        .await
+        .ok_or_else(|| anyhow!("task should exist"))?
+        .task;
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert_eq!(status.exit_code, None);
+    assert_eq!(status.error.as_deref(), Some("Command timed out"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn adopted_unusable_exit_code_is_failed() -> Result<()> {
+    let tmp = tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let handle = tokio::spawn(async {
+        Ok(jcode_tool_types::ToolOutput::new("invalid exit")
+            .with_metadata(serde_json::json!({"exit_code": "zero"})))
+    });
+    let info = manager.adopt("bash", "session-invalid-exit", handle).await;
+
+    let status = manager
+        .wait(&info.task_id, Duration::from_secs(2), false)
+        .await
+        .ok_or_else(|| anyhow!("task should exist"))?
+        .task;
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert_eq!(status.exit_code, None);
+    assert_eq!(
+        status.error.as_deref(),
+        Some("Adopted tool reported an unusable exit code")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn update_progress_persists_status_and_emits_bus_event() -> Result<()> {
     let tmp = tempdir()?;
     let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
