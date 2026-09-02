@@ -73,15 +73,15 @@ pub(super) fn bash_parameters_schema() -> serde_json::Value {
             },
             "notify": {
                 "type": "boolean",
-                "description": "Notify on completion."
+                "description": "Notify when managed background work completes, whether backgrounded immediately or after soft yield."
             },
             "wake": {
                 "type": "boolean",
-                "description": "Wake on completion."
+                "description": "Wake when managed background work completes; wake implies notification."
             },
             "stall_wake_seconds": {
                 "type": "integer",
-                "description": "With run_in_background: wake the agent after this many seconds of no output/progress (min 30, resets on activity). Use for long jobs that may hang silently."
+                "description": "Once work is managed in the background, immediately or after soft yield: wake the agent after this many seconds of no output/progress (min 30, resets on activity). Use for long jobs that may hang silently."
             },
             "justification": {
                 "type": "string",

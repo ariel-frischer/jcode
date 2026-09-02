@@ -229,7 +229,7 @@ phases:
       tasks:
         - id: "T016"
           title: "Add configuration matrix and fast-command performance acceptance tests"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: true
           story_id: "US-004"
@@ -242,7 +242,7 @@ phases:
             - "A controlled repeated comparison records no more than 20 ms median added overhead for fast foreground commands."
         - id: "T017"
           title: "Document the four Bash execution modes and configuration examples"
-          status: "Pending"
+          status: "Completed"
           type: "documentation"
           parallel: true
           story_id: "US-004"

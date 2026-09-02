@@ -113,6 +113,116 @@ async fn test_basic_command_with_unused_stdin_channel() {
 }
 
 #[tokio::test]
+async fn soft_yield_configuration_matrix_preserves_fast_and_direct_completion() {
+    let fast_cases = [
+        (json!({"command": "printf omitted_fast"}), "omitted_fast"),
+        (
+            json!({"command": "printf shorter_fast", "soft_yield_ms": 500}),
+            "shorter_fast",
+        ),
+        (
+            json!({"command": "printf longer_fast", "soft_yield_ms": 5_000}),
+            "longer_fast",
+        ),
+        (
+            json!({"command": "printf disabled_fast", "soft_yield_ms": 0}),
+            "disabled_fast",
+        ),
+    ];
+
+    for (input, marker) in fast_cases {
+        let result = BashTool::new()
+            .execute(input, make_ctx(None))
+            .await
+            .expect("fast command should complete directly");
+        assert!(result.metadata.is_none(), "{marker} unexpectedly yielded");
+        assert!(
+            result.output.contains(marker),
+            "output was: {}",
+            result.output
+        );
+    }
+
+    let yielded = BashTool::new()
+        .execute(
+            json!({
+                "command": "sleep 0.15; printf shorter_window_completed",
+                "soft_yield_ms": 20,
+            }),
+            make_ctx(None),
+        )
+        .await
+        .expect("short soft-yield window should return managed work");
+    let yielded_metadata = yielded.metadata.expect("short window should soft yield");
+    assert_eq!(yielded_metadata["background"], true);
+    assert_eq!(yielded_metadata["soft_yielded"], true);
+    assert_eq!(yielded_metadata["soft_yield_ms"], 20);
+    let yielded_task_id = yielded_metadata["task_id"].as_str().expect("task id");
+    let completed = crate::background::global()
+        .wait(yielded_task_id, Duration::from_secs(3), false)
+        .await
+        .expect("yielded task should remain manageable");
+    assert_eq!(completed.task.status, BackgroundTaskStatus::Completed);
+
+    for (soft_yield_ms, marker) in [(500, "longer_window_direct"), (0, "disabled_direct")] {
+        let result = BashTool::new()
+            .execute(
+                json!({
+                    "command": format!("sleep 0.05; printf {marker}"),
+                    "soft_yield_ms": soft_yield_ms,
+                }),
+                make_ctx(None),
+            )
+            .await
+            .expect("longer or disabled window should await natural completion");
+        assert!(result.metadata.is_none(), "{marker} unexpectedly yielded");
+        assert!(
+            result.output.contains(marker),
+            "output was: {}",
+            result.output
+        );
+    }
+}
+
+#[tokio::test]
+async fn default_soft_yield_adds_at_most_twenty_ms_median_fast_command_overhead() {
+    const SAMPLE_COUNT: usize = 21;
+    let mut added_overhead = Vec::with_capacity(SAMPLE_COUNT);
+
+    for sample in 0..SAMPLE_COUNT {
+        let run = |soft_yield_ms: Option<u64>| async move {
+            let input = match soft_yield_ms {
+                Some(value) => json!({"command": "true", "soft_yield_ms": value}),
+                None => json!({"command": "true"}),
+            };
+            let started = std::time::Instant::now();
+            let result = BashTool::new()
+                .execute(input, make_ctx(None))
+                .await
+                .expect("fast timing command should complete directly");
+            assert!(result.metadata.is_none());
+            started.elapsed()
+        };
+
+        let (baseline, with_default) = if sample % 2 == 0 {
+            (run(Some(0)).await, run(None).await)
+        } else {
+            let with_default = run(None).await;
+            let baseline = run(Some(0)).await;
+            (baseline, with_default)
+        };
+        added_overhead.push(with_default.saturating_sub(baseline));
+    }
+
+    added_overhead.sort_unstable();
+    let median = added_overhead[SAMPLE_COUNT / 2];
+    assert!(
+        median <= Duration::from_millis(20),
+        "default soft yield added {median:?} median overhead; samples: {added_overhead:?}"
+    );
+}
+
+#[tokio::test]
 async fn test_stdin_forwarding_single_line() {
     let (tx, mut rx) = mpsc::unbounded_channel::<StdinInputRequest>();
     let tool = BashTool::new();
