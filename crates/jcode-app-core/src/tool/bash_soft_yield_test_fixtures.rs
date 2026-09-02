@@ -29,33 +29,37 @@ pub(super) struct BashCommandFixture {
     _temp: tempfile::TempDir,
     command: String,
     pid_file: std::path::PathBuf,
+    release_file: std::path::PathBuf,
     terminal_file: std::path::PathBuf,
 }
 
 #[cfg(target_os = "linux")]
 impl BashCommandFixture {
-    fn new(command: impl FnOnce(&str, &str) -> String) -> Self {
+    fn new(command: impl FnOnce(&str, &str, &str) -> String) -> Self {
         let temp = tempfile::tempdir().expect("bash fixture temp dir");
         let pid_file = temp.path().join("pids");
+        let release_file = temp.path().join("release");
         let terminal_file = temp.path().join("terminal-outcomes");
         let pid_path = shell_single_quote(&pid_file.to_string_lossy());
+        let release_path = shell_single_quote(&release_file.to_string_lossy());
         let terminal_path = shell_single_quote(&terminal_file.to_string_lossy());
         Self {
-            command: command(&pid_path, &terminal_path),
+            command: command(&pid_path, &release_path, &terminal_path),
             _temp: temp,
             pid_file,
+            release_file,
             terminal_file,
         }
     }
 
     fn fast_success() -> Self {
-        Self::new(|_, terminal| {
+        Self::new(|_, _, terminal| {
             format!("printf 'fixture-fast-success\\n'; printf 'terminal\\n' >> {terminal}")
         })
     }
 
     fn fast_failure(exit_code: u8) -> Self {
-        Self::new(|_, terminal| {
+        Self::new(|_, _, terminal| {
             format!(
                 "printf 'fixture-fast-failure\\n' >&2; printf 'terminal\\n' >> {terminal}; exit {exit_code}"
             )
@@ -64,12 +68,14 @@ impl BashCommandFixture {
 
     fn silent(run_for: Duration) -> Self {
         let seconds = run_for.as_secs_f64();
-        Self::new(|_, terminal| format!("sleep {seconds:.3}; printf 'terminal\\n' >> {terminal}"))
+        Self::new(|_, _, terminal| {
+            format!("sleep {seconds:.3}; printf 'terminal\\n' >> {terminal}")
+        })
     }
 
     fn output_heavy(lines: usize, run_for: Duration) -> Self {
         let seconds = run_for.as_secs_f64();
-        Self::new(|_, terminal| {
+        Self::new(|_, _, terminal| {
             format!(
                 "i=0; while [ \"$i\" -lt {lines} ]; do printf 'fixture-output-%06d-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\n' \"$i\"; i=$((i + 1)); done; sleep {seconds:.3}; printf 'terminal\\n' >> {terminal}"
             )
@@ -78,11 +84,24 @@ impl BashCommandFixture {
 
     pub(super) fn parent_child(run_for: Duration) -> Self {
         let seconds = run_for.as_secs_f64();
-        Self::new(|pids, terminal| {
+        Self::new(|pids, _, terminal| {
             format!(
                 "sleep {seconds:.3} & descendant=$!; printf '%s\\n%s\\n' \"$$\" \"$descendant\" > {pids}; wait \"$descendant\"; printf 'terminal\\n' >> {terminal}"
             )
         })
+    }
+
+    pub(super) fn boundary_parent_child() -> Self {
+        Self::new(|pids, release, terminal| {
+            format!(
+                "(while [ ! -s {release} ]; do sleep 0.001; done; delay=$(cat {release}); sleep \"$delay\") & descendant=$!; printf '%s\\n%s\\n' \"$$\" \"$descendant\" > {pids}; wait \"$descendant\"; printf 'terminal\\n' >> {terminal}"
+            )
+        })
+    }
+
+    pub(super) fn release_after(&self, delay: Duration) {
+        std::fs::write(&self.release_file, format!("{:.6}\n", delay.as_secs_f64()))
+            .expect("release boundary fixture");
     }
 
     pub(super) fn command(&self) -> &str {
@@ -121,7 +140,7 @@ impl BashCommandFixture {
         }
     }
 
-    fn terminal_outcome_count(&self) -> usize {
+    pub(super) fn terminal_outcome_count(&self) -> usize {
         std::fs::read_to_string(&self.terminal_file)
             .map(|contents| contents.lines().count())
             .unwrap_or(0)
@@ -155,6 +174,10 @@ async fn deterministic_bash_fixtures_cover_required_workloads() {
         .await
         .expect("fast success fixture");
     assert!(result.output.contains("fixture-fast-success"));
+    assert!(
+        result.metadata.is_none(),
+        "fast success must remain a direct foreground result"
+    );
     assert_eq!(success.terminal_outcome_count(), 1);
 
     let failure = BashCommandFixture::fast_failure(17);
@@ -167,6 +190,10 @@ async fn deterministic_bash_fixtures_cover_required_workloads() {
         .expect("fast failure fixture");
     assert!(result.output.contains("fixture-fast-failure"));
     assert!(result.output.contains("17"));
+    let failure_metadata = result.metadata.expect("direct failure exit metadata");
+    assert_eq!(failure_metadata["exit_code"], 17);
+    assert_ne!(failure_metadata["background"], true);
+    assert!(failure_metadata.get("task_id").is_none());
     assert_eq!(failure.terminal_outcome_count(), 1);
 
     let silent = BashCommandFixture::silent(Duration::from_millis(40));

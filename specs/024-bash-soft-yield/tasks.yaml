@@ -86,7 +86,7 @@ phases:
       tasks:
         - id: "T006"
           title: "Add foreground completion, silent soft-yield, and one-lineage regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"
@@ -99,7 +99,7 @@ phases:
             - "A completion-versus-yield boundary loop permits either direct completion or one managed task, never both."
         - id: "T007"
           title: "Implement one-process foreground work and atomic soft-yield adoption"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-001"
@@ -112,7 +112,7 @@ phases:
             - "Promotion never respawns the command, loses pre-yield output, or creates more than one task identity."
         - id: "T008"
           title: "Harden soft-yield versus completion registration races"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-001"

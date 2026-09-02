@@ -957,7 +957,7 @@ impl BashTool {
         let stdout_handle = child.stdout.take();
         let stderr_handle = child.stderr.take();
 
-        // Owned copies let timeout promotion move the work to the background.
+        // Owned copies let soft yield move the work to the background.
         let title = params
             .intent
             .clone()
@@ -965,7 +965,7 @@ impl BashTool {
         let stdin_tx = ctx.stdin_request_tx.clone();
         let tool_call_id = ctx.tool_call_id.clone();
         let title_for_work = title.clone();
-        // Track progress parsed from output so a timeout promotion starts the
+        // Track progress parsed from output so a soft-yield adoption starts the
         // background task at the real percentage instead of 0%.
         let promoted_progress = std::sync::Arc::new(PromotedCommandProgress::default());
         let stdout_progress = std::sync::Arc::clone(&promoted_progress);
