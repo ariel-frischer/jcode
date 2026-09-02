@@ -130,7 +130,7 @@ phases:
       tasks:
         - id: "T009"
           title: "Add foreground, yielded, and immediate-background hard-timeout regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"
@@ -143,7 +143,7 @@ phases:
             - "A no-timeout policy fixture remains healthy beyond the former implicit deadline using controlled time or policy-level verification rather than a 120-second wall-clock sleep."
         - id: "T010"
           title: "Implement identity-safe hard timeout inside owned command work"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: false
           story_id: "US-002"
@@ -156,7 +156,7 @@ phases:
             - "Immediate backgrounding and automatic yielding share the same original deadline and process identity."
         - id: "T011"
           title: "Harden timeout, completion, yield, and cancellation boundary races"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-002"

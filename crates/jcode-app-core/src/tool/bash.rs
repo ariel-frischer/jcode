@@ -951,6 +951,9 @@ impl BashTool {
         }
         let mut child = command.spawn()?;
         let child_pid = child.id().unwrap_or(0);
+        let hard_timeout_deadline = policy
+            .hard_timeout
+            .map(|duration| tokio::time::Instant::now() + duration);
         #[cfg(unix)]
         let mut foreground_guard = ForegroundProcessGuard::new(child.id());
         let stdin_handle = child.stdin.take();
@@ -1050,7 +1053,7 @@ impl BashTool {
                     None
                 };
 
-                let timeout_sleep = hard_timeout.map(tokio::time::sleep);
+                let timeout_sleep = hard_timeout_deadline.map(tokio::time::sleep_until);
                 tokio::pin!(timeout_sleep);
                 let mut timed_out = false;
                 let status = tokio::select! {
@@ -1064,12 +1067,8 @@ impl BashTool {
                         timed_out = true;
                         #[cfg(unix)]
                         {
-                            let token = crate::platform::process_start_token(child_pid);
-                            if crate::platform::signal_verified_process_group(
-                                child_pid,
-                                token.as_deref(),
-                                libc::SIGKILL,
-                            ) != crate::platform::ProcessIdentityCheck::Matching
+                            if process_group_guard.terminate_verified()
+                                != crate::platform::ProcessIdentityCheck::Matching
                             {
                                 crate::logging::info(&format!(
                                     "failed to terminate timed-out bash process group {child_pid}"
@@ -1490,6 +1489,8 @@ impl BashTool {
                         .map_err(|e| anyhow::anyhow!("Failed to spawn command: {}", e))?;
                     #[cfg(unix)]
                     let mut process_group_guard = ProcessGroupKillGuard::new(child.id());
+                    let hard_timeout_deadline = timeout_duration
+                        .map(|duration| tokio::time::Instant::now() + duration);
 
                     // Stream output to file
                     let mut file = tokio::fs::File::create(&output_path)
@@ -1505,7 +1506,7 @@ impl BashTool {
                     let mut stderr_lines = stderr.map(|s| BufReader::new(s).lines());
                     let mut stdout_done = stdout_lines.is_none();
                     let mut stderr_done = stderr_lines.is_none();
-                    let timeout_sleep = timeout_duration.map(tokio::time::sleep);
+                    let timeout_sleep = hard_timeout_deadline.map(tokio::time::sleep_until);
                     tokio::pin!(timeout_sleep);
                     let mut timed_out = false;
 
@@ -1518,18 +1519,9 @@ impl BashTool {
 	                                }
 	                            }, if timeout_duration.is_some() => {
 	                                timed_out = true;
-                                #[cfg(unix)]
-                                {
-                                    if let Some(pid) = child.id() {
-                                        let token = crate::platform::process_start_token(pid);
-                                        let _ = crate::platform::signal_verified_process_group(
-                                            pid,
-                                            token.as_deref(),
-                                            libc::SIGKILL,
-                                        );
-                                    } else {
-	                                        let _ = child.start_kill();
-	                                    }
+	                                #[cfg(unix)]
+	                                {
+	                                    let _ = process_group_guard.terminate_verified();
 	                                }
 	                                #[cfg(not(unix))]
 	                                {
