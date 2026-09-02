@@ -305,6 +305,87 @@ async fn test_foreground_soft_yield_promotes_and_command_keeps_running() {
 }
 
 #[tokio::test]
+async fn soft_yielded_command_inherits_delivery_stall_and_management_options() {
+    let tool = BashTool::new();
+    let result = tool
+        .execute(
+            json!({
+                "command": "echo 'progress 10% done'; sleep 0.4; echo lifecycle_done",
+                "soft_yield_ms": 100,
+                "notify": false,
+                "wake": true,
+                "stall_wake_seconds": 1,
+            }),
+            make_ctx(None),
+        )
+        .await
+        .expect("soft yield should adopt the running command");
+    let metadata = result.metadata.expect("expected background metadata");
+    let task_id = metadata["task_id"].as_str().expect("task id").to_string();
+
+    let status = crate::background::global()
+        .status(&task_id)
+        .await
+        .expect("adopted task status");
+    assert!(status.notify, "wake must imply completion notification");
+    assert!(status.wake, "completion wake must survive adoption");
+    assert_eq!(
+        status.stall_wake_seconds,
+        Some(crate::background::BackgroundTaskManager::MIN_STALL_WAKE_SECONDS),
+        "automatic adoption must arm the existing clamped stall watchdog"
+    );
+    let wait = crate::background::global()
+        .wait(&task_id, Duration::from_secs(5), false)
+        .await
+        .expect("adopted task should be waitable");
+    assert_eq!(wait.task.task_id, task_id);
+    assert!(
+        crate::background::global()
+            .output(&task_id)
+            .await
+            .is_some_and(|output| output.contains("lifecycle_done")),
+        "completed adopted task output must remain addressable"
+    );
+}
+
+#[tokio::test]
+async fn output_heavy_soft_yield_remains_bounded_and_retrievable() {
+    let tool = BashTool::new();
+    let result = tool
+        .execute(
+            json!({
+                "command": "head -c 50000 /dev/zero | tr '\\0' x; sleep 0.3; echo output_heavy_done",
+                "soft_yield_ms": 100,
+            }),
+            make_ctx(None),
+        )
+        .await
+        .expect("output-heavy command should soft yield");
+    assert!(
+        result.output.len() < 5_000,
+        "yield response must not embed accumulated command output"
+    );
+    let metadata = result.metadata.expect("expected background metadata");
+    let task_id = metadata["task_id"].as_str().expect("task id").to_string();
+
+    let finished = crate::background::global()
+        .wait(&task_id, Duration::from_secs(5), false)
+        .await
+        .expect("output-heavy task should remain waitable");
+    assert_ne!(finished.task.status, BackgroundTaskStatus::Running);
+    let output = crate::background::global()
+        .output(&task_id)
+        .await
+        .expect("bounded terminal output should remain retrievable");
+    assert!(
+        output.len() <= MAX_OUTPUT_LEN + 64,
+        "output was {} bytes",
+        output.len()
+    );
+    assert!(output.contains("... (output truncated)"));
+}
+
+#[tokio::test]
 async fn test_reload_persistable_bash_continues_in_background() {
     let tool = BashTool::new();
     let signal = jcode_agent_runtime::InterruptSignal::new();
@@ -519,6 +600,38 @@ async fn test_reload_persistable_bash_soft_yields_to_background() {
 
     let _ = tokio::fs::remove_file(output_file).await;
     let _ = tokio::fs::remove_file(status_file).await;
+}
+
+#[tokio::test]
+async fn reload_persistable_soft_yield_records_future_hard_deadline() {
+    let tool = BashTool::new();
+    let signal = jcode_agent_runtime::InterruptSignal::new();
+    let result = tool
+        .execute(
+            json!({
+                "command": "sleep 60",
+                "soft_yield_ms": 100,
+                "timeout": 5_000,
+            }),
+            make_agent_ctx(signal),
+        )
+        .await
+        .expect("reload-persistable command should soft yield");
+    let metadata = result.metadata.expect("expected background metadata");
+    let task_id = metadata["task_id"].as_str().expect("task id");
+    let status = crate::background::global()
+        .status(task_id)
+        .await
+        .expect("persisted task status");
+    assert!(status.detached);
+    assert!(
+        status
+            .hard_deadline_at
+            .is_some_and(|deadline| deadline > chrono::Utc::now()),
+        "explicit hard timeout must survive automatic detached promotion"
+    );
+
+    let _ = crate::background::global().cancel(task_id).await;
 }
 
 #[tokio::test]

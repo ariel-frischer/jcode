@@ -634,6 +634,7 @@ async fn stale_identity_mismatch_does_not_signal() -> Result<()> {
     });
     status.pid = Some(std::process::id());
     status.detached = true;
+    status.hard_deadline_at = Some(Utc::now() - chrono::Duration::seconds(1));
     write_status_fixture(&manager, &status).await;
 
     let decision = manager

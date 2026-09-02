@@ -1175,6 +1175,11 @@ impl BashTool {
                         managed_process,
                     )
                     .await;
+                if let Some(stall_wake_seconds) = params.stall_wake_seconds {
+                    let _ = crate::background::global()
+                        .arm_stall_watchdog(&info.task_id, stall_wake_seconds)
+                        .await;
+                }
                 #[cfg(unix)]
                 // Keep the task-local kill guard armed for explicit cancellation,
                 // but remove transferred work from foreground runtime cleanup.
@@ -1238,6 +1243,10 @@ impl BashTool {
     ) -> Result<ToolOutput> {
         let started_at = Utc::now().to_rfc3339();
         let started = Instant::now();
+        let hard_deadline_at = policy
+            .hard_timeout
+            .and_then(|duration| chrono::Duration::from_std(duration).ok())
+            .map(|duration| Utc::now() + duration);
         let manager = crate::background::global();
         let info = manager.reserve_task_info();
         let display_name = summarize_background_command(params.intent.as_deref(), &params.command);
@@ -1309,7 +1318,7 @@ impl BashTool {
             {
                 let elapsed = started.elapsed();
                 manager
-                    .register_detached_task_with_identity(
+                    .register_detached_task_with_identity_and_deadline(
                         &info,
                         "bash",
                         Some(display_name.clone()),
@@ -1336,8 +1345,14 @@ impl BashTool {
                             transfer_policy:
                                 crate::background::ManagedProcessTransferPolicy::Transferred,
                         }),
+                        hard_deadline_at,
                     )
                     .await;
+                if let Some(stall_wake_seconds) = params.stall_wake_seconds {
+                    let _ = manager
+                        .arm_stall_watchdog(&info.task_id, stall_wake_seconds)
+                        .await;
+                }
                 child_guard.disarm();
                 // Detached commands write straight to the output file, so no
                 // in-process reader sees their output. Follow the file to keep
@@ -1391,7 +1406,7 @@ impl BashTool {
                 .unwrap_or(false)
             {
                 manager
-                    .register_detached_task_with_identity(
+                    .register_detached_task_with_identity_and_deadline(
                         &info,
                         "bash",
                         Some(display_name.clone()),
@@ -1418,8 +1433,14 @@ impl BashTool {
                             transfer_policy:
                                 crate::background::ManagedProcessTransferPolicy::Transferred,
                         }),
+                        hard_deadline_at,
                     )
                     .await;
+                if let Some(stall_wake_seconds) = params.stall_wake_seconds {
+                    let _ = manager
+                        .arm_stall_watchdog(&info.task_id, stall_wake_seconds)
+                        .await;
+                }
                 child_guard.disarm();
                 spawn_detached_progress_follower(info.task_id.clone(), info.output_file.clone());
                 let output = format!(

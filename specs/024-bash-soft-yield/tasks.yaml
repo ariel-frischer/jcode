@@ -174,7 +174,7 @@ phases:
       tasks:
         - id: "T012"
           title: "Add yielded lifecycle, bounded-output, cancellation, and reload regressions"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-003"
@@ -186,7 +186,7 @@ phases:
             - "A reload-persistable yielded task remains discoverable after reload and reaches exactly one completion, timeout, or cancellation outcome."
         - id: "T013"
           title: "Wire automatic adoption to the complete existing background lifecycle"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-003"
@@ -198,7 +198,7 @@ phases:
             - "run_in_background still registers immediately and automatic yield introduces no parallel management API."
         - id: "T014"
           title: "Enforce persisted hard deadlines through background monitoring and reload reconciliation"
-          status: "Pending"
+          status: "Completed"
           type: "implementation"
           parallel: true
           story_id: "US-003"
@@ -211,7 +211,7 @@ phases:
             - "Completion, deadline, cancellation, and reconciliation races use existing single-terminal-state and single-delivery guards."
         - id: "T015"
           title: "Verify lifecycle parity after adoption and reload"
-          status: "Pending"
+          status: "Completed"
           type: "test"
           parallel: false
           story_id: "US-003"

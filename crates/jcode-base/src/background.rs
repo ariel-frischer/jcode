@@ -95,11 +95,15 @@ impl<T> Drop for AbortOnDrop<T> {
 }
 
 /// Manages background task execution
+#[derive(Clone)]
 pub struct BackgroundTaskManager {
     tasks: Arc<RwLock<HashMap<String, RunningTask>>>,
     /// Serializes progress status read-modify-write cycles so concurrent output
     /// readers cannot overwrite a newer high-water mark with a stale update.
     progress_updates: Arc<Mutex<()>>,
+    /// Serializes detached hard-deadline reconciliation so timeout, completion,
+    /// cancellation, and reload checks publish at most one terminal outcome.
+    deadline_reconciliation: Arc<Mutex<()>>,
     /// Live stall watchdogs by task id. Each entry is a spawned monitor that
     /// fires a [`BusEvent::BackgroundTaskStalled`] after its task produces no
     /// output bytes and no progress events for the configured window.
@@ -116,6 +120,7 @@ impl BackgroundTaskManager {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
             progress_updates: Arc::new(Mutex::new(())),
+            deadline_reconciliation: Arc::new(Mutex::new(())),
             stall_watchdogs: Arc::new(RwLock::new(HashMap::new())),
             output_dir,
         }
@@ -212,6 +217,11 @@ impl BackgroundTaskManager {
         mut status: TaskStatusFile,
         status_path: &std::path::Path,
     ) -> TaskStatusFile {
+        let _deadline_guard = self.deadline_reconciliation.lock().await;
+        let Some(current_status) = self.read_status_file(status_path).await else {
+            return status;
+        };
+        status = current_status;
         if status.status != BackgroundTaskStatus::Running || !status.detached {
             return status;
         }
@@ -240,11 +250,12 @@ impl BackgroundTaskManager {
             .process_group_member
             .as_ref()
             .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
-        match crate::platform::verify_process_group_identity(
+        let identity_check = crate::platform::verify_process_group_identity(
             identity.pid,
             identity.process_instance.as_deref(),
             member,
-        ) {
+        );
+        match identity_check {
             crate::platform::ProcessIdentityCheck::Matching => {}
             crate::platform::ProcessIdentityCheck::Stopped
                 if crate::platform::is_process_group_live(identity.pid) =>
@@ -259,6 +270,66 @@ impl BackgroundTaskManager {
                 self.write_status_file(status_path, &status).await;
                 return status;
             }
+        }
+
+        if identity_check == crate::platform::ProcessIdentityCheck::Matching
+            && status
+                .hard_deadline_at
+                .is_some_and(|deadline| deadline <= Utc::now())
+        {
+            if let Err(error) = self
+                .terminate_managed_process_group(identity, Duration::from_millis(400))
+                .await
+            {
+                status.error = Some(format!(
+                    "Hard deadline expired but managed process teardown was not completed: {error:?}"
+                ));
+                self.write_status_file(status_path, &status).await;
+                return status;
+            }
+
+            let _ = crate::platform::try_reap_child_process(pid);
+            let output_path = self.output_path_for(&status.task_id);
+            let timeout_message = "Command timed out after its hard deadline";
+            if let Ok(mut output) = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&output_path)
+                .await
+            {
+                let _ = output
+                    .write_all(format!("\n--- {timeout_message} ---\n").as_bytes())
+                    .await;
+            }
+            let completed_at = Utc::now();
+            status.status = BackgroundTaskStatus::Failed;
+            status.exit_code = Some(124);
+            status.error = Some(timeout_message.to_string());
+            status.completed_at = Some(completed_at.to_rfc3339());
+            status.duration_secs = Self::status_duration_secs(&status.started_at, completed_at);
+            push_task_event(
+                &mut status,
+                terminal_event_record(
+                    BackgroundTaskStatus::Failed,
+                    Some(124),
+                    Some(timeout_message),
+                ),
+            );
+            self.write_status_file(status_path, &status).await;
+            Bus::global().publish(BusEvent::BackgroundTaskCompleted(BackgroundTaskCompleted {
+                task_id: status.task_id.clone(),
+                tool_name: status.tool_name.clone(),
+                display_name: status.display_name.clone(),
+                session_id: status.session_id.clone(),
+                status: BackgroundTaskStatus::Failed,
+                exit_code: Some(124),
+                output_preview: timeout_message.to_string(),
+                output_file: output_path,
+                duration_secs: status.duration_secs.unwrap_or_default(),
+                notify: status.notify,
+                wake: status.wake,
+            }));
+            return status;
         }
 
         let reaped_exit = crate::platform::try_reap_child_process(pid).ok().flatten();
@@ -459,6 +530,16 @@ impl BackgroundTaskManager {
             let Some(status) = self.read_status_file(&path).await else {
                 continue;
             };
+            if status.status == BackgroundTaskStatus::Running && status.detached {
+                let prior_status = status.status.clone();
+                let finalized = self.finalize_detached_status_if_needed(status, &path).await;
+                if finalized.status != prior_status {
+                    reconciled += 1;
+                } else if let Some(deadline) = finalized.hard_deadline_at {
+                    self.arm_hard_deadline_monitor(finalized.task_id.clone(), deadline);
+                }
+                continue;
+            }
             if !Self::status_is_reconcilable_orphan(&status) {
                 continue;
             }
@@ -480,6 +561,15 @@ impl BackgroundTaskManager {
             output_file,
             status_file,
         }
+    }
+
+    fn arm_hard_deadline_monitor(&self, task_id: String, deadline: DateTime<Utc>) {
+        let manager = self.clone();
+        tokio::spawn(async move {
+            let remaining = (deadline - Utc::now()).to_std().unwrap_or_default();
+            tokio::time::sleep(remaining).await;
+            let _ = manager.status(&task_id).await;
+        });
     }
 
     #[expect(
@@ -533,6 +623,38 @@ impl BackgroundTaskManager {
         wake: bool,
         managed_process: Option<ManagedProcessIdentity>,
     ) {
+        self.register_detached_task_with_identity_and_deadline(
+            info,
+            tool_name,
+            display_name,
+            session_id,
+            pid,
+            started_at,
+            notify,
+            wake,
+            managed_process,
+            None,
+        )
+        .await;
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Detached task registration mirrors persisted status fields and deadline policy"
+    )]
+    pub async fn register_detached_task_with_identity_and_deadline(
+        &self,
+        info: &BackgroundTaskInfo,
+        tool_name: &str,
+        display_name: Option<String>,
+        session_id: &str,
+        pid: u32,
+        started_at: &str,
+        notify: bool,
+        wake: bool,
+        managed_process: Option<ManagedProcessIdentity>,
+        hard_deadline_at: Option<DateTime<Utc>>,
+    ) {
         let (notify, wake) = normalize_delivery(notify, wake);
         let status = TaskStatusFile {
             task_id: info.task_id.clone(),
@@ -559,7 +681,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process,
-            hard_deadline_at: None,
+            hard_deadline_at,
         };
         self.write_status_file(&info.status_file, &status).await;
         Self::publish_task_started_activity(
@@ -569,6 +691,9 @@ impl BackgroundTaskManager {
             session_id,
             notify,
         );
+        if let Some(deadline) = hard_deadline_at {
+            self.arm_hard_deadline_monitor(info.task_id.clone(), deadline);
+        }
     }
 
     /// Spawn a background task
@@ -1677,12 +1802,17 @@ impl BackgroundTaskManager {
             Ok(cancellation_outcome(wrapper_completed, teardown_error))
         } else {
             let status_path = self.status_path_for(task_id);
-            let Some(mut status) = self.read_status_file(&status_path).await else {
+            let Some(status) = self.read_status_file(&status_path).await else {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
             };
-            status = self
+            let _ = self
                 .finalize_detached_status_if_needed(status, &status_path)
                 .await;
+            let _deadline_guard = self.deadline_reconciliation.lock().await;
+            let Some(current_status) = self.read_status_file(&status_path).await else {
+                return Ok(BackgroundTaskCancellation::AlreadyTerminal);
+            };
+            let mut status = current_status;
             if status.status != BackgroundTaskStatus::Running {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
             }

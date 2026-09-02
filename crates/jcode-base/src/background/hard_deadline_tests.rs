@@ -63,3 +63,88 @@ fn managed_task_hard_deadline_round_trips_and_distinguishes_deadline_states() ->
     }
     Ok(())
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn detached_hard_deadline_terminates_group_and_records_exit_124_once() -> Result<()> {
+    use std::os::unix::process::CommandExt;
+
+    let tmp = tempfile::tempdir()?;
+    let manager = BackgroundTaskManager::with_output_dir(tmp.path().to_path_buf());
+    let descendant_file = tmp.path().join("descendant.pid");
+    let mut command = std::process::Command::new("sh");
+    command
+        .args([
+            "-c",
+            &format!(
+                "sleep 60 & descendant=$!; printf '%s' \"$descendant\" > {}; wait",
+                descendant_file.display()
+            ),
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    unsafe {
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn()?;
+    let pid = child.id();
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while !descendant_file.exists() && std::time::Instant::now() < deadline {
+        sleep(Duration::from_millis(10)).await;
+    }
+    let descendant_pid = std::fs::read_to_string(&descendant_file)?.parse::<u32>()?;
+    let info = manager.reserve_task_info();
+    manager
+        .register_detached_task_with_identity_and_deadline(
+            &info,
+            "bash",
+            Some("deadline test".to_string()),
+            "deadline-session",
+            pid,
+            &Utc::now().to_rfc3339(),
+            true,
+            true,
+            Some(ManagedProcessIdentity {
+                pid,
+                process_instance: crate::platform::process_start_token(pid),
+                process_group_member: Some(ManagedProcessMemberIdentity {
+                    pid: descendant_pid,
+                    process_instance: crate::platform::process_start_token(descendant_pid),
+                }),
+                owner_instance: Some(process_instance_token().to_string()),
+                transfer_policy: ManagedProcessTransferPolicy::Transferred,
+            }),
+            Some(Utc::now() + chrono::Duration::milliseconds(150)),
+        )
+        .await;
+
+    let final_status = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let status = manager.status(&info.task_id).await.expect("status");
+            if status.status != BackgroundTaskStatus::Running {
+                break status;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await?;
+    assert_eq!(final_status.status, BackgroundTaskStatus::Failed);
+    assert_eq!(final_status.exit_code, Some(124));
+    assert_eq!(
+        final_status
+            .event_history
+            .iter()
+            .filter(|event| event.exit_code == Some(124))
+            .count(),
+        1
+    );
+    assert!(!crate::platform::is_process_group_live(pid));
+    assert!(!crate::platform::is_process_running(descendant_pid));
+    let _ = child.wait();
+    Ok(())
+}
