@@ -2,6 +2,7 @@ use super::{Tool, ToolContext, ToolOutput};
 use crate::config::WebSearchEngine;
 use anyhow::Result;
 use async_trait::async_trait;
+use base64::Engine;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -812,7 +813,7 @@ fn parse_bing_html_results(html: &str, max_results: usize) -> Vec<SearchResult> 
         let Some(link) = link_re.captures(&block[1]) else {
             continue;
         };
-        let url = html_decode(&link[1]);
+        let url = decode_bing_url(&html_decode(&link[1]));
         if !url.starts_with("http") || url.contains("bing.com") {
             continue;
         }
@@ -829,6 +830,38 @@ fn parse_bing_html_results(html: &str, max_results: usize) -> Vec<SearchResult> 
     }
 
     results
+}
+
+fn decode_bing_url(url: &str) -> String {
+    let parsed = match url::Url::parse(url) {
+        Ok(parsed) => parsed,
+        Err(_) => return url.to_string(),
+    };
+    if parsed.scheme() != "https"
+        || !parsed
+            .host_str()
+            .is_some_and(|host| host == "bing.com" || host.ends_with(".bing.com"))
+        || parsed.path() != "/ck/a"
+    {
+        return url.to_string();
+    }
+    let Some(encoded) = parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "u").then(|| value.into_owned()))
+    else {
+        return url.to_string();
+    };
+    let Some(payload) = encoded.strip_prefix("a1") else {
+        return url.to_string();
+    };
+    let decoded = match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload) {
+        Ok(decoded) => decoded,
+        Err(_) => return url.to_string(),
+    };
+    match String::from_utf8(decoded) {
+        Ok(decoded) if decoded.starts_with("http://") || decoded.starts_with("https://") => decoded,
+        Ok(_) | Err(_) => url.to_string(),
+    }
 }
 
 fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
