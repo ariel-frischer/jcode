@@ -2122,7 +2122,7 @@ fn current_release_server_history_is_not_deferred_by_client_check() {
     // guards against the client-side check over-firing and looping reloads.
     let _env_guard = crate::storage::lock_test_env();
     crate::env::remove_var("JCODE_ALLOW_SERVER_VERSION_MISMATCH");
-    crate::env::set_var("JCODE_TEST_CLIENT_VERSION_OVERRIDE", "v0.17.0 (d741696f)");
+    crate::env::set_var("JCODE_TEST_CLIENT_VERSION_OVERRIDE", "v0.81.784 (d741696f)");
 
     let mut app = create_test_app();
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -2153,7 +2153,7 @@ fn current_release_server_history_is_not_deferred_by_client_check() {
             client_count: Some(1),
             is_canary: Some(false),
             reload_recovery: None,
-            server_version: Some("v0.17.0 (d741696f)".to_string()),
+            server_version: Some("v0.81.784 (d741696f)".to_string()),
             server_name: Some("current-server".to_string()),
             server_icon: Some("🟢".to_string()),
             server_has_update: None,
@@ -2179,6 +2179,7 @@ fn current_release_server_history_is_not_deferred_by_client_check() {
     let _ = redraw;
     assert!(!app.pending_server_reload);
     assert_eq!(app.remote_session_id.as_deref(), Some("session_current"));
+    assert!(remote.supports_queued_message_navigation());
 }
 
 #[test]
