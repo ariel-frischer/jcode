@@ -49,6 +49,12 @@ fn does_not_decode_bing_shaped_redirects_from_untrusted_hosts() {
 }
 
 #[test]
+fn does_not_accept_decoded_urls_without_a_host() {
+    let redirect = "https://www.bing.com/ck/a?u=a1aHR0cHM6Ly8";
+    assert_eq!(decode_bing_url(redirect), redirect);
+}
+
+#[test]
 fn parses_bing_api_results() {
     let response: BingApiResponse = serde_json::from_value(json!({
         "webPages": {

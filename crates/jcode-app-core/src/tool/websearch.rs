@@ -858,8 +858,16 @@ fn decode_bing_url(url: &str) -> String {
         Ok(decoded) => decoded,
         Err(_) => return url.to_string(),
     };
-    match String::from_utf8(decoded) {
-        Ok(decoded) if decoded.starts_with("http://") || decoded.starts_with("https://") => decoded,
+    let decoded = match String::from_utf8(decoded) {
+        Ok(decoded) => decoded,
+        Err(_) => return url.to_string(),
+    };
+    match url::Url::parse(&decoded) {
+        Ok(parsed)
+            if matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some() =>
+        {
+            decoded
+        }
         Ok(_) | Err(_) => url.to_string(),
     }
 }
