@@ -829,8 +829,8 @@ struct BashInput {
     soft_yield_ms: Option<u64>,
     #[serde(default)]
     run_in_background: Option<bool>,
-    #[serde(default = "default_true")]
-    notify: bool,
+    #[serde(default)]
+    notify: Option<bool>,
     #[serde(default)]
     wake: Option<bool>,
     /// For background runs: wake the agent after this many seconds with no
@@ -843,6 +843,10 @@ struct BashInput {
 }
 
 impl BashInput {
+    fn requested_notify(&self) -> bool {
+        self.notify.unwrap_or(true)
+    }
+
     fn requested_wake(&self) -> bool {
         self.wake.unwrap_or(false)
     }
@@ -850,10 +854,6 @@ impl BashInput {
     fn soft_yield_wake(&self) -> bool {
         self.wake.unwrap_or(true)
     }
-}
-
-fn default_true() -> bool {
-    true
 }
 
 #[path = "bash_destructive_gate.rs"]
@@ -1030,7 +1030,7 @@ impl BashTool {
                         &ctx.session_id,
                         pid,
                         &started_at,
-                        params.notify,
+                        params.requested_notify(),
                         params.soft_yield_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
@@ -1118,7 +1118,7 @@ impl BashTool {
                         &ctx.session_id,
                         pid,
                         &started_at,
-                        params.notify,
+                        params.requested_notify(),
                         params.requested_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
@@ -1186,7 +1186,7 @@ impl BashTool {
         let timeout_duration = timeout_ms.map(Duration::from_millis);
 
         let wake = params.requested_wake();
-        let notify = params.notify || wake;
+        let notify = params.requested_notify() || wake;
         let info = crate::background::global()
             .spawn_with_notify(
                 "bash",

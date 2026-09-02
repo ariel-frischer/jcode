@@ -37,6 +37,19 @@ fn bash_input_accepts_optional_policy_fields_and_rejects_invalid_types() {
     assert_eq!(configured.run_in_background, Some(true));
     assert_eq!(configured.wake, Some(false));
 
+    let provider_nulls: BashInput = serde_json::from_value(json!({
+        "command": "true",
+        "notify": null,
+        "wake": null,
+        "timeout": null,
+        "soft_yield_ms": null,
+        "run_in_background": null,
+        "stall_wake_seconds": null
+    }))
+    .expect("provider-emitted null optionals must behave like omission");
+    assert_eq!(provider_nulls.notify, None);
+    assert_eq!(provider_nulls.wake, None);
+
     assert!(
         serde_json::from_value::<BashInput>(json!({
             "command": "true",

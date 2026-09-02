@@ -248,7 +248,7 @@ impl BashTool {
                         "bash",
                         Some(display_name.clone()),
                         &ctx.session_id,
-                        params.notify,
+                        params.requested_notify(),
                         params.soft_yield_wake(),
                         work_handle,
                         managed_process,
