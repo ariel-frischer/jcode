@@ -1,368 +1,356 @@
 tasks:
-  branch: "024-bash-soft-yield"
-  created: "2026-09-02"
-  spec_path: "specs/024-bash-soft-yield/spec.yaml"
-  plan_path: "specs/024-bash-soft-yield/plan.yaml"
-
+    branch: "024-bash-soft-yield"
+    created: "2026-09-02"
+    spec_path: "specs/024-bash-soft-yield/spec.yaml"
+    plan_path: "specs/024-bash-soft-yield/plan.yaml"
 summary:
-  total_tasks: 19
-  total_phases: 7
-  parallel_opportunities: 8
-  estimated_complexity: "high"
-
+    total_tasks: 19
+    total_phases: 7
+    parallel_opportunities: 8
+    estimated_complexity: "high"
 phases:
-  - number: 1
-    title: "Setup"
-    purpose: "Establish deterministic command, process-tree, output, timing, and isolated-runtime fixtures without changing production behavior."
-    tasks:
-      - id: "T001"
-        title: "Prepare deterministic Bash soft-yield and hard-timeout fixtures"
-        status: "Completed"
-        type: "setup"
-        parallel: false
-        story_id: null
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background/tests.rs"
-        dependencies: []
-        acceptance_criteria:
-          - "Fixtures can start fast success, fast failure, silent long-running, output-heavy, and parent-child process-group commands with sub-second configurable deadlines."
-          - "PID and process-start evidence can prove one process lineage, descendant cleanup, and absence of duplicate terminal outcomes."
-          - "All fixtures use temporary files and bounded waits and clean up their own processes after assertion failures."
-
-  - number: 2
-    title: "Foundational"
-    purpose: "Lock shared policy, schema, persistence, and compatibility contracts required by every user story."
-    tasks:
-      - id: "T002"
-        title: "Add Bash execution policy and public schema contract regressions"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs"
-        dependencies: ["T001"]
-        acceptance_criteria:
-          - "Schema assertions require additive soft_yield_ms units, a 10000 ms default, zero-disable behavior, optional hard timeout semantics, the retained 1800000 ms timeout maximum, and immediate run_in_background behavior."
-          - "Deserialization tests reject invalid types while preserving compatibility for calls that omit soft_yield_ms and timeout."
-          - "No schema text claims that timeout promotes work or that omission imposes an implicit 120-second deadline."
-      - id: "T003"
-        title: "Add persisted managed-task hard-deadline compatibility regressions"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-base/src/background/tests.rs"
-        dependencies: ["T001"]
-        acceptance_criteria:
-          - "Legacy status records without a hard deadline deserialize unchanged."
-          - "Records with an absolute hard deadline round-trip without altering existing managed process identity, output, progress, or delivery fields."
-          - "Expired, future, and absent deadline fixtures are distinguishable during manager reconciliation."
-      - id: "T004"
-        title: "Implement canonical Bash execution policy resolution and schema"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_destructive_gate.rs"
-        dependencies: ["T002"]
-        acceptance_criteria:
-          - "Bash input accepts soft_yield_ms as Option<u64>; omission resolves to 10000 ms and zero disables automatic yielding."
-          - "Timeout resolves to Option<Duration>; omission supplies no hard deadline and explicit values retain the existing 1800000 ms effective maximum."
-          - "run_in_background bypasses soft-yield waiting but does not disable an explicit hard timeout."
-          - "Public descriptions clearly separate synchronous completion, non-terminating soft yield, immediate backgrounding, and hard exit-124 timeout."
-      - id: "T005"
-        title: "Add backward-compatible persisted hard deadline to managed task state"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: null
-        file_path: "crates/jcode-base/src/background/model.rs"
-        dependencies: ["T003"]
-        acceptance_criteria:
-          - "The persisted managed-task model includes an optional absolute hard_deadline_at field with backward-compatible serde defaults."
-          - "Existing status files and callers remain valid when the field is absent."
-          - "The lower-level model adds no dependency on jcode-app-core and does not create a second task type or supervisor."
-
-  - number: 3
-    title: "User Story 1 - Regain control from long-running foreground commands"
-    purpose: "Return control after a bounded soft-yield window while preserving exactly one original command process and unchanged fast-command completion."
-    story_reference: "US-001"
-    independent_test: "Run a silent command beyond a short soft-yield override, verify one managed task reference is returned while the same PID lineage continues, then observe one eventual completion; also verify fast success and failure remain direct results."
-    tasks:
-      - id: "T006"
-        title: "Add foreground completion, silent soft-yield, and one-lineage regressions"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
-        dependencies: ["T004", "T005"]
-        acceptance_criteria:
-          - "Fast successful and failing commands return direct completed results and create no managed background task."
-          - "A silent healthy command exceeding a short soft-yield window returns one reusable existing-manager task ID without being killed, restarted, or duplicated."
-          - "PID evidence proves the process before and after promotion belongs to one lineage and produces one terminal result."
-          - "A completion-versus-yield boundary loop permits either direct completion or one managed task, never both."
-      - id: "T007"
-        title: "Implement one-process foreground work and atomic soft-yield adoption"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs"
-        dependencies: ["T006"]
-        acceptance_criteria:
-          - "One owned command work future retains the child, stdin, concurrent output readers, process-group guard, completion, and optional hard-timeout responsibility."
-          - "The caller races only the owned work handle against the enabled soft-yield timer and atomically adopts the same handle and process identity when yield wins."
-          - "Natural completion wins synchronously with existing exit and bounded-output formatting."
-          - "Promotion never respawns the command, loses pre-yield output, or creates more than one task identity."
-      - id: "T008"
-        title: "Harden soft-yield versus completion registration races"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-001"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
-        dependencies: ["T007"]
-        acceptance_criteria:
-          - "At least 100 deterministic boundary executions each retain one process lineage and at most one task and terminal outcome."
-          - "A command exiting during adoption remains retrievable either directly or through the returned task ID without lost completion."
-          - "No run leaves a live or zombie descendant after its expected terminal state."
-
-  - number: 4
-    title: "User Story 2 - Apply timeout only as a hard deadline"
-    purpose: "Enforce explicit timeout as an independent process-group kill deadline with exit status 124 and impose no hard timeout when omitted."
-    story_reference: "US-002"
-    independent_test: "Run foreground, yielded, and immediately backgrounded parent-child commands with explicit short timeouts and verify exit 124 plus zero descendants; separately prove an omitted timeout does not trigger the former implicit limit."
-    tasks:
-      - id: "T009"
-        title: "Add foreground, yielded, and immediate-background hard-timeout regressions"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
-        dependencies: ["T008"]
-        acceptance_criteria:
-          - "An explicit timeout shorter than soft yield terminates and reaps the full process group and returns exit status 124 without creating a yielded task."
-          - "An explicit timeout longer than soft yield remains active after adoption and later records one exit-124 outcome on the same task."
-          - "run_in_background returns promptly while preserving and enforcing the explicit hard deadline."
-          - "A no-timeout policy fixture remains healthy beyond the former implicit deadline using controlled time or policy-level verification rather than a 120-second wall-clock sleep."
-      - id: "T010"
-        title: "Implement identity-safe hard timeout inside owned command work"
-        status: "Pending"
-        type: "implementation"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs"
-        dependencies: ["T009"]
-        acceptance_criteria:
-          - "The optional hard deadline is measured from the original command start and continues to run after foreground adoption."
-          - "On expiry, verified process-group termination and bounded reaping complete before direct or managed status reports exit code 124."
-          - "Natural completion before the deadline is authoritative and does not receive a later timeout signal."
-          - "Immediate backgrounding and automatic yielding share the same original deadline and process identity."
-      - id: "T011"
-        title: "Harden timeout, completion, yield, and cancellation boundary races"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-base/src/background/tests.rs"
-        dependencies: ["T010"]
-        acceptance_criteria:
-          - "Repeated timeout-versus-completion and timeout-versus-yield runs record one authoritative outcome, with 124 only when the hard deadline wins."
-          - "Cancellation during promotion or timeout registration reaches the original verified process group and records at most one cancelled or timed-out terminal state."
-          - "All parent-child fixtures leave zero live or zombie descendants after the bounded cleanup period."
-
-  - number: 5
-    title: "User Story 3 - Manage yielded work consistently"
-    purpose: "Give automatically yielded work full existing background lifecycle, bounded-output, cancellation, notification, stall-wake, progress, and reload parity."
-    story_reference: "US-003"
-    independent_test: "Soft-yield silent and output-producing commands, inspect status and bounded output, observe progress/stall/completion delivery, reload one task, and cancel another through the existing background controls."
-    tasks:
-      - id: "T012"
-        title: "Add yielded lifecycle, bounded-output, cancellation, and reload regressions"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs"
-        dependencies: ["T011"]
-        acceptance_criteria:
-          - "Automatically yielded silent and progress-producing jobs support existing status, output, wait, cancel, cleanup, notify, wake, and stall-wake behavior."
-          - "An output-heavy job drains concurrently, returns bounded yield and bg responses, communicates truncation consistently, and retains bounded terminal output."
-          - "A reload-persistable yielded task remains discoverable after reload and reaches exactly one completion, timeout, or cancellation outcome."
-      - id: "T013"
-        title: "Wire automatic adoption to the complete existing background lifecycle"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-003"
-        file_path: "crates/jcode-app-core/src/tool/bash.rs"
-        dependencies: ["T012"]
-        acceptance_criteria:
-          - "Automatic adoption applies the same task metadata, notify, completion wake, stall watchdog, progress attachment or follower, cancellation hook, and cleanup behavior as immediate backgrounding."
-          - "Yield-time and later output formatting reuse existing MAX_OUTPUT_LEN and background response limits."
-          - "run_in_background still registers immediately and automatic yield introduces no parallel management API."
-      - id: "T014"
-        title: "Enforce persisted hard deadlines through background monitoring and reload reconciliation"
-        status: "Pending"
-        type: "implementation"
-        parallel: true
-        story_id: "US-003"
-        file_path: "crates/jcode-base/src/background.rs, crates/jcode-base/src/background/model.rs"
-        dependencies: ["T012", "T005"]
-        acceptance_criteria:
-          - "Detached or reload-persistable yielded work records the optional absolute hard deadline with its verified managed process identity."
-          - "Existing monitor and reconciliation paths enforce an expired deadline after reload by terminating and reaping the verified group and recording exit 124 once."
-          - "Absent deadlines preserve legacy unlimited behavior, and identity mismatch or missing identity fails closed without signaling an unrelated process."
-          - "Completion, deadline, cancellation, and reconciliation races use existing single-terminal-state and single-delivery guards."
-      - id: "T015"
-        title: "Verify lifecycle parity after adoption and reload"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: "US-003"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background/tests.rs"
-        dependencies: ["T013", "T014"]
-        acceptance_criteria:
-          - "Focused tests prove status, output, wait, progress, stall wake, completion wake, cancellation, cleanup, and reload behavior for automatically yielded tasks."
-          - "Reload before a future deadline preserves the task; reload after deadline converges to one exit-124 terminal result with no descendants."
-          - "Silent and output-heavy tasks remain manageable without unbounded responses or duplicate completion delivery."
-
-  - number: 6
-    title: "User Story 4 - Configure automatic yielding without regressions"
-    purpose: "Prove default, shorter, longer, and disabled soft-yield choices are predictable, independent from timeout, and inexpensive for fast commands."
-    story_reference: "US-004"
-    independent_test: "Exercise omitted, zero, shorter, and longer soft_yield_ms values against fast and slow commands, combine each relevant mode with timeout, and measure fast-command overhead."
-    tasks:
-      - id: "T016"
-        title: "Add configuration matrix and fast-command performance acceptance tests"
-        status: "Pending"
-        type: "test"
-        parallel: true
-        story_id: "US-004"
-        file_path: "crates/jcode-app-core/src/tool/bash_tests.rs"
-        dependencies: ["T015"]
-        acceptance_criteria:
-          - "Omission uses the documented 10000 ms production default while deterministic test overrides avoid unnecessary 10-second sleeps."
-          - "Shorter and longer values alter only automatic yield timing; zero disables yielding; none changes natural completion or explicit hard timeout."
-          - "Commands completing within 100 ms remain synchronous across the configuration matrix."
-          - "A controlled repeated comparison records no more than 20 ms median added overhead for fast foreground commands."
-      - id: "T017"
-        title: "Document the four Bash execution modes and configuration examples"
-        status: "Pending"
-        type: "documentation"
-        parallel: true
-        story_id: "US-004"
-        file_path: "docs/BASH_EXECUTION.md, crates/jcode-app-core/src/tool/bash_destructive_gate.rs"
-        dependencies: ["T015"]
-        acceptance_criteria:
-          - "Documentation explains direct completion, automatic non-terminating soft yield, immediate run_in_background, and optional hard timeout with exit 124."
-          - "Examples cover the 10000 ms default, explicit shorter and longer windows, zero disable behavior, omitted timeout meaning no hard deadline, and the retained 1800000 ms effective timeout maximum."
-          - "Schema and documentation use consistent units and contain no implicit 120-second timeout or timeout-as-promotion statement."
-
-  - number: 7
-    title: "Polish & Cross-Cutting Concerns"
-    purpose: "Run serialized quality gates, validate the newly built executable in isolation, and confirm surgical compatibility."
-    tasks:
-      - id: "T018"
-        title: "Build and validate soft yield and hard timeout on an isolated Jcode socket"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: null
-        file_path: "target/selfdev/jcode and isolated runtime artifacts under $JCODE_SCRATCH_DIR"
-        dependencies: ["T016", "T017"]
-        acceptance_criteria:
-          - "A serialized self-dev build produces the current worktree executable and validation records its resolved binary path."
-          - "Using a unique socket and the newly built executable, a silent command soft-yields, remains the same process, and later completes through the returned task."
-          - "A separate explicit-timeout parent-child command reports exit 124 and leaves zero descendants."
-          - "The validation does not reload, stop, or otherwise disturb the shared daemon or caller session."
-      - id: "T019"
-        title: "Run focused tests, repository guardrails, artifact validation, and final scope review"
-        status: "Pending"
-        type: "test"
-        parallel: false
-        story_id: null
-        file_path: "specs/024-bash-soft-yield, docs/BASH_EXECUTION.md, crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_destructive_gate.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs, crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background.rs, crates/jcode-base/src/background/model.rs, crates/jcode-base/src/background/tests.rs"
-        dependencies: ["T018"]
-        acceptance_criteria:
-          - "Focused jcode-app-core and jcode-base tests pass, rustfmt is clean, the relevant serialized build passes, and repository guardrails complete or proven unrelated baseline failures are recorded."
-          - "autospec artifact validates spec.yaml, plan.yaml, and tasks.yaml after task status updates."
-          - "The final diff changes no unrelated tool timeout semantics, adds no dependency edge or second supervisor, and preserves existing background task consumers."
-          - "All functional requirements FR-001 through FR-015 and nonfunctional targets NFR-001 through NFR-004 map to passing test, runtime, documentation, or review evidence."
-          - "The branch remains 024-bash-soft-yield and only owned feature files are committed."
-
+    - number: 1
+      title: "Setup"
+      purpose: "Establish deterministic command, process-tree, output, timing, and isolated-runtime fixtures without changing production behavior."
+      tasks:
+        - id: "T001"
+          title: "Prepare deterministic Bash soft-yield and hard-timeout fixtures"
+          status: "Completed"
+          type: "setup"
+          parallel: false
+          story_id: null
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: []
+          acceptance_criteria:
+            - "Fixtures can start fast success, fast failure, silent long-running, output-heavy, and parent-child process-group commands with sub-second configurable deadlines."
+            - "PID and process-start evidence can prove one process lineage, descendant cleanup, and absence of duplicate terminal outcomes."
+            - "All fixtures use temporary files and bounded waits and clean up their own processes after assertion failures."
+    - number: 2
+      title: "Foundational"
+      purpose: "Lock shared policy, schema, persistence, and compatibility contracts required by every user story."
+      tasks:
+        - id: "T002"
+          title: "Add Bash execution policy and public schema contract regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Schema assertions require additive soft_yield_ms units, a 10000 ms default, zero-disable behavior, optional hard timeout semantics, the retained 1800000 ms timeout maximum, and immediate run_in_background behavior."
+            - "Deserialization tests reject invalid types while preserving compatibility for calls that omit soft_yield_ms and timeout."
+            - "No schema text claims that timeout promotes work or that omission imposes an implicit 120-second deadline."
+        - id: "T003"
+          title: "Add persisted managed-task hard-deadline compatibility regressions"
+          status: "Completed"
+          type: "test"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T001"]
+          acceptance_criteria:
+            - "Legacy status records without a hard deadline deserialize unchanged."
+            - "Records with an absolute hard deadline round-trip without altering existing managed process identity, output, progress, or delivery fields."
+            - "Expired, future, and absent deadline fixtures are distinguishable during manager reconciliation."
+        - id: "T004"
+          title: "Implement canonical Bash execution policy resolution and schema"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_destructive_gate.rs"
+          dependencies: ["T002"]
+          acceptance_criteria:
+            - "Bash input accepts soft_yield_ms as Option<u64>; omission resolves to 10000 ms and zero disables automatic yielding."
+            - "Timeout resolves to Option<Duration>; omission supplies no hard deadline and explicit values retain the existing 1800000 ms effective maximum."
+            - "run_in_background bypasses soft-yield waiting but does not disable an explicit hard timeout."
+            - "Public descriptions clearly separate synchronous completion, non-terminating soft yield, immediate backgrounding, and hard exit-124 timeout."
+        - id: "T005"
+          title: "Add backward-compatible persisted hard deadline to managed task state"
+          status: "Completed"
+          type: "implementation"
+          parallel: true
+          story_id: null
+          file_path: "crates/jcode-base/src/background/model.rs"
+          dependencies: ["T003"]
+          acceptance_criteria:
+            - "The persisted managed-task model includes an optional absolute hard_deadline_at field with backward-compatible serde defaults."
+            - "Existing status files and callers remain valid when the field is absent."
+            - "The lower-level model adds no dependency on jcode-app-core and does not create a second task type or supervisor."
+    - number: 3
+      title: "User Story 1 - Regain control from long-running foreground commands"
+      purpose: "Return control after a bounded soft-yield window while preserving exactly one original command process and unchanged fast-command completion."
+      story_reference: "US-001"
+      independent_test: "Run a silent command beyond a short soft-yield override, verify one managed task reference is returned while the same PID lineage continues, then observe one eventual completion; also verify fast success and failure remain direct results."
+      tasks:
+        - id: "T006"
+          title: "Add foreground completion, silent soft-yield, and one-lineage regressions"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
+          dependencies: ["T004", "T005"]
+          acceptance_criteria:
+            - "Fast successful and failing commands return direct completed results and create no managed background task."
+            - "A silent healthy command exceeding a short soft-yield window returns one reusable existing-manager task ID without being killed, restarted, or duplicated."
+            - "PID evidence proves the process before and after promotion belongs to one lineage and produces one terminal result."
+            - "A completion-versus-yield boundary loop permits either direct completion or one managed task, never both."
+        - id: "T007"
+          title: "Implement one-process foreground work and atomic soft-yield adoption"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs"
+          dependencies: ["T006"]
+          acceptance_criteria:
+            - "One owned command work future retains the child, stdin, concurrent output readers, process-group guard, completion, and optional hard-timeout responsibility."
+            - "The caller races only the owned work handle against the enabled soft-yield timer and atomically adopts the same handle and process identity when yield wins."
+            - "Natural completion wins synchronously with existing exit and bounded-output formatting."
+            - "Promotion never respawns the command, loses pre-yield output, or creates more than one task identity."
+        - id: "T008"
+          title: "Harden soft-yield versus completion registration races"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-001"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
+          dependencies: ["T007"]
+          acceptance_criteria:
+            - "At least 100 deterministic boundary executions each retain one process lineage and at most one task and terminal outcome."
+            - "A command exiting during adoption remains retrievable either directly or through the returned task ID without lost completion."
+            - "No run leaves a live or zombie descendant after its expected terminal state."
+    - number: 4
+      title: "User Story 2 - Apply timeout only as a hard deadline"
+      purpose: "Enforce explicit timeout as an independent process-group kill deadline with exit status 124 and impose no hard timeout when omitted."
+      story_reference: "US-002"
+      independent_test: "Run foreground, yielded, and immediately backgrounded parent-child commands with explicit short timeouts and verify exit 124 plus zero descendants; separately prove an omitted timeout does not trigger the former implicit limit."
+      tasks:
+        - id: "T009"
+          title: "Add foreground, yielded, and immediate-background hard-timeout regressions"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
+          dependencies: ["T008"]
+          acceptance_criteria:
+            - "An explicit timeout shorter than soft yield terminates and reaps the full process group and returns exit status 124 without creating a yielded task."
+            - "An explicit timeout longer than soft yield remains active after adoption and later records one exit-124 outcome on the same task."
+            - "run_in_background returns promptly while preserving and enforcing the explicit hard deadline."
+            - "A no-timeout policy fixture remains healthy beyond the former implicit deadline using controlled time or policy-level verification rather than a 120-second wall-clock sleep."
+        - id: "T010"
+          title: "Implement identity-safe hard timeout inside owned command work"
+          status: "Pending"
+          type: "implementation"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs"
+          dependencies: ["T009"]
+          acceptance_criteria:
+            - "The optional hard deadline is measured from the original command start and continues to run after foreground adoption."
+            - "On expiry, verified process-group termination and bounded reaping complete before direct or managed status reports exit code 124."
+            - "Natural completion before the deadline is authoritative and does not receive a later timeout signal."
+            - "Immediate backgrounding and automatic yielding share the same original deadline and process identity."
+        - id: "T011"
+          title: "Harden timeout, completion, yield, and cancellation boundary races"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-002"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T010"]
+          acceptance_criteria:
+            - "Repeated timeout-versus-completion and timeout-versus-yield runs record one authoritative outcome, with 124 only when the hard deadline wins."
+            - "Cancellation during promotion or timeout registration reaches the original verified process group and records at most one cancelled or timed-out terminal state."
+            - "All parent-child fixtures leave zero live or zombie descendants after the bounded cleanup period."
+    - number: 5
+      title: "User Story 3 - Manage yielded work consistently"
+      purpose: "Give automatically yielded work full existing background lifecycle, bounded-output, cancellation, notification, stall-wake, progress, and reload parity."
+      story_reference: "US-003"
+      independent_test: "Soft-yield silent and output-producing commands, inspect status and bounded output, observe progress/stall/completion delivery, reload one task, and cancel another through the existing background controls."
+      tasks:
+        - id: "T012"
+          title: "Add yielded lifecycle, bounded-output, cancellation, and reload regressions"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs"
+          dependencies: ["T011"]
+          acceptance_criteria:
+            - "Automatically yielded silent and progress-producing jobs support existing status, output, wait, cancel, cleanup, notify, wake, and stall-wake behavior."
+            - "An output-heavy job drains concurrently, returns bounded yield and bg responses, communicates truncation consistently, and retains bounded terminal output."
+            - "A reload-persistable yielded task remains discoverable after reload and reaches exactly one completion, timeout, or cancellation outcome."
+        - id: "T013"
+          title: "Wire automatic adoption to the complete existing background lifecycle"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/bash.rs"
+          dependencies: ["T012"]
+          acceptance_criteria:
+            - "Automatic adoption applies the same task metadata, notify, completion wake, stall watchdog, progress attachment or follower, cancellation hook, and cleanup behavior as immediate backgrounding."
+            - "Yield-time and later output formatting reuse existing MAX_OUTPUT_LEN and background response limits."
+            - "run_in_background still registers immediately and automatic yield introduces no parallel management API."
+        - id: "T014"
+          title: "Enforce persisted hard deadlines through background monitoring and reload reconciliation"
+          status: "Pending"
+          type: "implementation"
+          parallel: true
+          story_id: "US-003"
+          file_path: "crates/jcode-base/src/background.rs, crates/jcode-base/src/background/model.rs"
+          dependencies: ["T012", "T005"]
+          acceptance_criteria:
+            - "Detached or reload-persistable yielded work records the optional absolute hard deadline with its verified managed process identity."
+            - "Existing monitor and reconciliation paths enforce an expired deadline after reload by terminating and reaping the verified group and recording exit 124 once."
+            - "Absent deadlines preserve legacy unlimited behavior, and identity mismatch or missing identity fails closed without signaling an unrelated process."
+            - "Completion, deadline, cancellation, and reconciliation races use existing single-terminal-state and single-delivery guards."
+        - id: "T015"
+          title: "Verify lifecycle parity after adoption and reload"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: "US-003"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T013", "T014"]
+          acceptance_criteria:
+            - "Focused tests prove status, output, wait, progress, stall wake, completion wake, cancellation, cleanup, and reload behavior for automatically yielded tasks."
+            - "Reload before a future deadline preserves the task; reload after deadline converges to one exit-124 terminal result with no descendants."
+            - "Silent and output-heavy tasks remain manageable without unbounded responses or duplicate completion delivery."
+    - number: 6
+      title: "User Story 4 - Configure automatic yielding without regressions"
+      purpose: "Prove default, shorter, longer, and disabled soft-yield choices are predictable, independent from timeout, and inexpensive for fast commands."
+      story_reference: "US-004"
+      independent_test: "Exercise omitted, zero, shorter, and longer soft_yield_ms values against fast and slow commands, combine each relevant mode with timeout, and measure fast-command overhead."
+      tasks:
+        - id: "T016"
+          title: "Add configuration matrix and fast-command performance acceptance tests"
+          status: "Pending"
+          type: "test"
+          parallel: true
+          story_id: "US-004"
+          file_path: "crates/jcode-app-core/src/tool/bash_tests.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Omission uses the documented 10000 ms production default while deterministic test overrides avoid unnecessary 10-second sleeps."
+            - "Shorter and longer values alter only automatic yield timing; zero disables yielding; none changes natural completion or explicit hard timeout."
+            - "Commands completing within 100 ms remain synchronous across the configuration matrix."
+            - "A controlled repeated comparison records no more than 20 ms median added overhead for fast foreground commands."
+        - id: "T017"
+          title: "Document the four Bash execution modes and configuration examples"
+          status: "Pending"
+          type: "documentation"
+          parallel: true
+          story_id: "US-004"
+          file_path: "docs/BASH_EXECUTION.md, crates/jcode-app-core/src/tool/bash_destructive_gate.rs"
+          dependencies: ["T015"]
+          acceptance_criteria:
+            - "Documentation explains direct completion, automatic non-terminating soft yield, immediate run_in_background, and optional hard timeout with exit 124."
+            - "Examples cover the 10000 ms default, explicit shorter and longer windows, zero disable behavior, omitted timeout meaning no hard deadline, and the retained 1800000 ms effective timeout maximum."
+            - "Schema and documentation use consistent units and contain no implicit 120-second timeout or timeout-as-promotion statement."
+    - number: 7
+      title: "Polish & Cross-Cutting Concerns"
+      purpose: "Run serialized quality gates, validate the newly built executable in isolation, and confirm surgical compatibility."
+      tasks:
+        - id: "T018"
+          title: "Build and validate soft yield and hard timeout on an isolated Jcode socket"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "target/selfdev/jcode and isolated runtime artifacts under $JCODE_SCRATCH_DIR"
+          dependencies: ["T016", "T017"]
+          acceptance_criteria:
+            - "A serialized self-dev build produces the current worktree executable and validation records its resolved binary path."
+            - "Using a unique socket and the newly built executable, a silent command soft-yields, remains the same process, and later completes through the returned task."
+            - "A separate explicit-timeout parent-child command reports exit 124 and leaves zero descendants."
+            - "The validation does not reload, stop, or otherwise disturb the shared daemon or caller session."
+        - id: "T019"
+          title: "Run focused tests, repository guardrails, artifact validation, and final scope review"
+          status: "Pending"
+          type: "test"
+          parallel: false
+          story_id: null
+          file_path: "specs/024-bash-soft-yield, docs/BASH_EXECUTION.md, crates/jcode-app-core/src/tool/bash.rs, crates/jcode-app-core/src/tool/bash_destructive_gate.rs, crates/jcode-app-core/src/tool/bash_process_guard.rs, crates/jcode-app-core/src/tool/bash_tests.rs, crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs, crates/jcode-app-core/src/tool/bash_shutdown_tests.rs, crates/jcode-base/src/background.rs, crates/jcode-base/src/background/model.rs, crates/jcode-base/src/background/tests.rs"
+          dependencies: ["T018"]
+          acceptance_criteria:
+            - "Focused jcode-app-core and jcode-base tests pass, rustfmt is clean, the relevant serialized build passes, and repository guardrails complete or proven unrelated baseline failures are recorded."
+            - "autospec artifact validates spec.yaml, plan.yaml, and tasks.yaml after task status updates."
+            - "The final diff changes no unrelated tool timeout semantics, adds no dependency edge or second supervisor, and preserves existing background task consumers."
+            - "All functional requirements FR-001 through FR-015 and nonfunctional targets NFR-001 through NFR-004 map to passing test, runtime, documentation, or review evidence."
+            - "The branch remains 024-bash-soft-yield and only owned feature files are committed."
 dependencies:
-  user_story_order:
-    - story_id: "US-001"
-      depends_on: []
-      blocks: ["US-002"]
-    - story_id: "US-002"
-      depends_on: ["US-001"]
-      blocks: ["US-003"]
-    - story_id: "US-003"
-      depends_on: ["US-002"]
-      blocks: ["US-004"]
-    - story_id: "US-004"
-      depends_on: ["US-003"]
-      blocks: []
-  phase_order:
-    - phase: 1
-      blocks: [2]
-    - phase: 2
-      blocks: [3]
-    - phase: 3
-      blocks: [4]
-    - phase: 4
-      blocks: [5]
-    - phase: 5
-      blocks: [6]
-    - phase: 6
-      blocks: [7]
-    - phase: 7
-      blocks: []
-
+    user_story_order:
+        - story_id: "US-001"
+          depends_on: []
+          blocks: ["US-002"]
+        - story_id: "US-002"
+          depends_on: ["US-001"]
+          blocks: ["US-003"]
+        - story_id: "US-003"
+          depends_on: ["US-002"]
+          blocks: ["US-004"]
+        - story_id: "US-004"
+          depends_on: ["US-003"]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: [7]
+        - phase: 7
+          blocks: []
 parallel_execution:
-  - phase: 2
-    parallel_groups:
-      - tasks: ["T002", "T003"]
-        rationale: "Public Bash policy/schema regressions and lower-level persisted status compatibility regressions touch separate crate seams after shared fixtures exist."
-      - tasks: ["T004", "T005"]
-        rationale: "Bash policy/schema implementation and the jcode-base additive persisted model field modify separate crates and depend on separate regression tasks."
-  - phase: 5
-    parallel_groups:
-      - tasks: ["T013", "T014"]
-        rationale: "App-core lifecycle option wiring and base-layer persisted deadline monitoring have separate ownership boundaries after shared regressions are written."
-  - phase: 6
-    parallel_groups:
-      - tasks: ["T016", "T017"]
-        rationale: "The configuration/performance test matrix and user-facing documentation can proceed independently after lifecycle behavior is stable."
-
+    - phase: 2
+      parallel_groups:
+        - tasks: ["T002", "T003"]
+          rationale: "Public Bash policy/schema regressions and lower-level persisted status compatibility regressions touch separate crate seams after shared fixtures exist."
+        - tasks: ["T004", "T005"]
+          rationale: "Bash policy/schema implementation and the jcode-base additive persisted model field modify separate crates and depend on separate regression tasks."
+    - phase: 5
+      parallel_groups:
+        - tasks: ["T013", "T014"]
+          rationale: "App-core lifecycle option wiring and base-layer persisted deadline monitoring have separate ownership boundaries after shared regressions are written."
+    - phase: 6
+      parallel_groups:
+        - tasks: ["T016", "T017"]
+          rationale: "The configuration/performance test matrix and user-facing documentation can proceed independently after lifecycle behavior is stable."
 implementation_strategy:
-  mvp_scope:
-    phases: [1, 2, 3, 4]
-    description: "Setup, shared policy contracts, one-process automatic soft yield, and explicit hard-timeout enforcement form the minimum usable behavior correction. Lifecycle parity, configuration acceptance, documentation, and built-binary validation remain required delivery gates."
-    validation: "Run focused Bash and process-group tests proving fast direct completion, silent one-process yield, explicit exit-124 timeout, no implicit timeout, and zero surviving descendants."
-  incremental_delivery:
-    - milestone: "Contracts Locked"
-      phases: [1, 2]
-      deliverable: "Deterministic fixtures and additive policy, schema, and persisted deadline contracts are ready."
-    - milestone: "MVP Semantics Complete"
-      phases: [1, 2, 3, 4]
-      deliverable: "Foreground commands soft-yield without duplication and explicit timeout independently terminates full process groups with status 124."
-    - milestone: "Managed Lifecycle Complete"
-      phases: [1, 2, 3, 4, 5]
-      deliverable: "Automatically yielded work has existing progress, wake, output, cancellation, cleanup, and reload behavior."
-    - milestone: "Configuration and Guidance Complete"
-      phases: [1, 2, 3, 4, 5, 6]
-      deliverable: "Default, custom, disabled, and fast-command behavior is tested and documented consistently."
-    - milestone: "Runtime Outcome Validated"
-      phases: [1, 2, 3, 4, 5, 6, 7]
-      deliverable: "The actual new executable passes isolated soft-yield and hard-timeout acceptance plus project guardrails and scope review."
-
+    mvp_scope:
+        phases: [1, 2, 3, 4]
+        description: "Setup, shared policy contracts, one-process automatic soft yield, and explicit hard-timeout enforcement form the minimum usable behavior correction. Lifecycle parity, configuration acceptance, documentation, and built-binary validation remain required delivery gates."
+        validation: "Run focused Bash and process-group tests proving fast direct completion, silent one-process yield, explicit exit-124 timeout, no implicit timeout, and zero surviving descendants."
+    incremental_delivery:
+        - milestone: "Contracts Locked"
+          phases: [1, 2]
+          deliverable: "Deterministic fixtures and additive policy, schema, and persisted deadline contracts are ready."
+        - milestone: "MVP Semantics Complete"
+          phases: [1, 2, 3, 4]
+          deliverable: "Foreground commands soft-yield without duplication and explicit timeout independently terminates full process groups with status 124."
+        - milestone: "Managed Lifecycle Complete"
+          phases: [1, 2, 3, 4, 5]
+          deliverable: "Automatically yielded work has existing progress, wake, output, cancellation, cleanup, and reload behavior."
+        - milestone: "Configuration and Guidance Complete"
+          phases: [1, 2, 3, 4, 5, 6]
+          deliverable: "Default, custom, disabled, and fast-command behavior is tested and documented consistently."
+        - milestone: "Runtime Outcome Validated"
+          phases: [1, 2, 3, 4, 5, 6, 7]
+          deliverable: "The actual new executable passes isolated soft-yield and hard-timeout acceptance plus project guardrails and scope review."
 _meta:
-  version: "1.0.0"
-  generator: "autospec"
-  generator_version: "autospec dev"
-  created: "2026-09-02T20:02:03Z"
-  artifact_type: "tasks"
+    version: "1.0.0"
+    generator: "autospec"
+    generator_version: "autospec dev"
+    created: "2026-09-02T20:02:03Z"
+    artifact_type: "tasks"

@@ -31,7 +31,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command as TokioCommand;
 
 const MAX_OUTPUT_LEN: usize = 30000;
-const DEFAULT_TIMEOUT_MS: u64 = 120000;
+const DEFAULT_SOFT_YIELD_MS: u64 = 10_000;
 const MAX_TIMEOUT_MS: u64 = 1_800_000;
 const STDIN_POLL_INTERVAL_MS: u64 = 500;
 const STDIN_INITIAL_DELAY_MS: u64 = 300;
@@ -47,8 +47,24 @@ pub(crate) fn terminate_owned_foreground_process_groups() {
     process_guard::terminate_owned_foreground_process_groups();
 }
 
-fn bounded_timeout_ms(timeout: Option<u64>) -> u64 {
-    timeout.unwrap_or(DEFAULT_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BashExecutionPolicy {
+    soft_yield: Option<Duration>,
+    hard_timeout: Option<Duration>,
+    run_in_background: bool,
+}
+
+impl BashExecutionPolicy {
+    fn resolve(soft_yield_ms: Option<u64>, timeout: Option<u64>, run_in_background: bool) -> Self {
+        let soft_yield_ms = soft_yield_ms.unwrap_or(DEFAULT_SOFT_YIELD_MS);
+        Self {
+            soft_yield: (!run_in_background && soft_yield_ms > 0)
+                .then(|| Duration::from_millis(soft_yield_ms)),
+            hard_timeout: timeout
+                .map(|timeout_ms| Duration::from_millis(timeout_ms.min(MAX_TIMEOUT_MS))),
+            run_in_background,
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -98,6 +114,13 @@ fn timeout_message(timeout_ms: u64) -> String {
         );
     }
     msg
+}
+
+fn duration_millis_u64(duration: Duration) -> u64 {
+    match u64::try_from(duration.as_millis()) {
+        Ok(milliseconds) => milliseconds,
+        Err(_) => u64::MAX,
+    }
 }
 
 fn progress_ratio_regex() -> Result<&'static regex::Regex> {
@@ -806,6 +829,8 @@ struct BashInput {
     #[serde(default)]
     timeout: Option<u64>,
     #[serde(default)]
+    soft_yield_ms: Option<u64>,
+    #[serde(default)]
     run_in_background: Option<bool>,
     #[serde(default = "default_true")]
     notify: bool,
@@ -847,7 +872,11 @@ impl Tool for BashTool {
 
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
         let mut params: BashInput = serde_json::from_value(input)?;
-        let run_in_background = params.run_in_background.unwrap_or(false);
+        let policy = BashExecutionPolicy::resolve(
+            params.soft_yield_ms,
+            params.timeout,
+            params.run_in_background.unwrap_or(false),
+        );
 
         // Destructive-command gate (#604), before background dispatch.
         if let Some(refusal) = destructive_command_refusal(
@@ -864,7 +893,7 @@ impl Tool for BashTool {
             params.command = wrapped;
         }
 
-        if run_in_background {
+        if policy.run_in_background {
             return self.execute_background(params, ctx).await;
         }
 
@@ -887,7 +916,7 @@ impl Tool for BashTool {
         }
 
         // Foreground execution with stdin detection
-        self.execute_foreground(&params, &ctx).await
+        self.execute_foreground(&params, &ctx, policy).await
     }
 }
 
@@ -896,16 +925,16 @@ impl BashTool {
         &self,
         params: &BashInput,
         ctx: &ToolContext,
+        policy: BashExecutionPolicy,
     ) -> Result<ToolOutput> {
         #[cfg(unix)]
         if self.supports_reload_persistence(ctx) {
             return self
-                .execute_reload_persistable_foreground(params, ctx)
+                .execute_reload_persistable_foreground(params, ctx, policy)
                 .await;
         }
 
-        let timeout_ms = bounded_timeout_ms(params.timeout);
-        let timeout_duration = Duration::from_millis(timeout_ms);
+        let hard_timeout = policy.hard_timeout;
         let has_stdin_channel = ctx.stdin_request_tx.is_some();
         let mut command = build_shell_command(&params.command);
         #[cfg(unix)]
@@ -1021,7 +1050,43 @@ impl BashTool {
                     None
                 };
 
-                let status = child.wait().await?;
+                let timeout_sleep = hard_timeout.map(tokio::time::sleep);
+                tokio::pin!(timeout_sleep);
+                let mut timed_out = false;
+                let status = tokio::select! {
+                    status = child.wait() => status?,
+                    _ = async {
+                        match timeout_sleep.as_mut().as_pin_mut() {
+                            Some(sleep) => sleep.await,
+                            None => std::future::pending().await,
+                        }
+                    }, if hard_timeout.is_some() => {
+                        timed_out = true;
+                        #[cfg(unix)]
+                        {
+                            let token = crate::platform::process_start_token(child_pid);
+                            if crate::platform::signal_verified_process_group(
+                                child_pid,
+                                token.as_deref(),
+                                libc::SIGKILL,
+                            ) != crate::platform::ProcessIdentityCheck::Matching
+                            {
+                                crate::logging::info(&format!(
+                                    "failed to terminate timed-out bash process group {child_pid}"
+                                ));
+                            }
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            if let Err(err) = child.start_kill() {
+                                crate::logging::info(&format!(
+                                    "failed to terminate timed-out bash process: {err}"
+                                ));
+                            }
+                        }
+                        child.wait().await?
+                    }
+                };
                 #[cfg(unix)]
                 process_group_guard.disarm();
 
@@ -1042,14 +1107,38 @@ impl BashTool {
                     }
                     output.push_str(&stderr);
                 }
-                let output = format_command_output(output, status.code());
-                Ok(ToolOutput::new(output).with_title(title_for_work))
+                let exit_code = if timed_out { Some(124) } else { status.code() };
+                if timed_out {
+                    let timeout_ms = hard_timeout.map(duration_millis_u64).unwrap_or(0);
+                    if !output.is_empty() {
+                        output.push('\n');
+                    }
+                    output.push_str(&timeout_message(timeout_ms));
+                }
+                let output = format_command_output(output, exit_code);
+                let mut tool_output = ToolOutput::new(output).with_title(title_for_work);
+                if exit_code.is_some_and(|code| code != 0) {
+                    tool_output = tool_output.with_metadata(json!({
+                        "exit_code": exit_code,
+                        "timed_out": timed_out,
+                    }));
+                }
+                Ok(tool_output)
             });
         #[cfg(unix)]
         foreground_guard.attach_task(work_handle.abort_handle());
 
-        match tokio::time::timeout(timeout_duration, &mut work_handle).await {
-            Ok(join_result) => {
+        let join_result = if let Some(soft_yield) = policy.soft_yield {
+            match tokio::time::timeout(soft_yield, &mut work_handle).await {
+                Ok(result) => Some(result),
+                Err(_) => None,
+            }
+        } else {
+            Some((&mut work_handle).await)
+        };
+
+        match join_result {
+            Some(join_result) => {
                 #[cfg(unix)]
                 foreground_guard.disarm();
                 match join_result {
@@ -1058,10 +1147,9 @@ impl BashTool {
                     Err(join_err) => Err(anyhow::anyhow!("Command task panicked: {}", join_err)),
                 }
             }
-            Err(_) => {
-                // Timed out, but the command is still running. Instead of killing
-                // it, promote it to a background task so it keeps running, renders
-                // as a background-task card, and the agent is told where to find it.
+            None => {
+                // The soft-yield window elapsed while the original command stayed
+                // healthy. Adopt that exact work future without killing or respawning it.
                 let display_name =
                     summarize_background_command(params.intent.as_deref(), &params.command);
                 let managed_process = Some(crate::background::ManagedProcessIdentity {
@@ -1098,7 +1186,7 @@ impl BashTool {
                 promoted_progress.attach_task(&info.task_id).await;
 
                 let output = format!(
-                    "Command exceeded the foreground timeout after {:.1}s and is continuing in background (not killed).\n\n\
+                    "Command soft-yielded after {:.1}s and is continuing in background (not killed).\n\n\
                      Task ID: {}\n\
                      Name: {}\n\
                      Output file: {}\n\
@@ -1106,8 +1194,10 @@ impl BashTool {
                      The command is still running; do not rerun it unless you intentionally want a second copy.\n\
                      Use `bg` with action=\"wait\" and task_id=\"{}\" to wait for completion or the next progress checkpoint.\n\
                      Use `bg` with action=\"output\" and task_id=\"{}\" to inspect output.\n\
-                     If you expected it to finish quickly and it did not, the `timeout` parameter is in MILLISECONDS; pass a larger value or omit it.",
-                    timeout_ms as f64 / 1000.0,
+                     Soft yield only returns control; an explicit `timeout` remains a hard deadline with exit status 124.",
+                    policy
+                        .soft_yield
+                        .map_or(0.0, |duration| duration.as_secs_f64()),
                     info.task_id,
                     display_name,
                     info.output_file.display(),
@@ -1124,8 +1214,8 @@ impl BashTool {
                         "display_name": display_name,
                         "output_file": info.output_file.to_string_lossy(),
                         "status_file": info.status_file.to_string_lossy(),
-                        "timeout_promoted": true,
-                        "foreground_timeout_ms": timeout_ms,
+                        "soft_yielded": true,
+                        "soft_yield_ms": policy.soft_yield.map(|duration| duration.as_millis()),
                     })))
             }
         }
@@ -1145,9 +1235,8 @@ impl BashTool {
         &self,
         params: &BashInput,
         ctx: &ToolContext,
+        policy: BashExecutionPolicy,
     ) -> Result<ToolOutput> {
-        let timeout_ms = bounded_timeout_ms(params.timeout);
-        let timeout_duration = Duration::from_millis(timeout_ms);
         let started_at = Utc::now().to_rfc3339();
         let started = Instant::now();
         let manager = crate::background::global();
@@ -1188,7 +1277,37 @@ impl BashTool {
                 );
             }
 
-            if started.elapsed() >= timeout_duration {
+            if policy
+                .hard_timeout
+                .map(|deadline| started.elapsed() >= deadline)
+                .unwrap_or(false)
+            {
+                let timeout_ms = policy.hard_timeout.map(duration_millis_u64).unwrap_or(0);
+                drop(child_guard);
+                let output = tokio::fs::read_to_string(&info.output_file)
+                    .await
+                    .unwrap_or_else(|err| format!("Failed to read command output: {err}"));
+                let output_remove_result = tokio::fs::remove_file(&info.output_file).await;
+                drop(output_remove_result);
+                let status_remove_result = tokio::fs::remove_file(&info.status_file).await;
+                drop(status_remove_result);
+                return Ok(ToolOutput::new(format_command_output(
+                    format!("{}\n{}", output, timeout_message(timeout_ms)),
+                    Some(124),
+                ))
+                .with_title(
+                    params
+                        .intent
+                        .clone()
+                        .unwrap_or_else(|| params.command.clone()),
+                ));
+            }
+
+            if policy
+                .soft_yield
+                .map(|deadline| started.elapsed() >= deadline)
+                .unwrap_or(false)
+            {
                 let elapsed = started.elapsed();
                 manager
                     .register_detached_task_with_identity(
@@ -1228,7 +1347,7 @@ impl BashTool {
 
                 let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
                 let output = format!(
-                    "Command exceeded the foreground timeout after {:.1}s and is continuing in background.\n\n\
+                    "Command soft-yielded after {:.1}s and is continuing in background.\n\n\
                      Task ID: {}\n\
                      Name: {}\n\
                      Foreground time used: {:.1}s\n\
@@ -1237,7 +1356,9 @@ impl BashTool {
                      The command is still running; do not rerun it unless you intentionally want a second copy.\n\
                      Use `bg` with action=\"wait\" and task_id=\"{}\" to wait for completion or the next progress checkpoint.\n\
                      Use `bg` with action=\"output\" and task_id=\"{}\" to inspect output.",
-                    timeout_ms as f64 / 1000.0,
+                    policy
+                        .soft_yield
+                        .map_or(0.0, |duration| duration.as_secs_f64()),
                     info.task_id,
                     display_name,
                     elapsed.as_secs_f64(),
@@ -1258,8 +1379,8 @@ impl BashTool {
                         "task_id": info.task_id,
                         "output_file": info.output_file.to_string_lossy(),
                         "status_file": info.status_file.to_string_lossy(),
-                        "timeout_promoted": true,
-                        "foreground_timeout_ms": timeout_ms,
+                        "soft_yielded": true,
+                        "soft_yield_ms": policy.soft_yield.map(|duration| duration.as_millis()),
                         "foreground_elapsed_ms": elapsed_ms,
                         "pid": pid,
                     })));

@@ -53,7 +53,7 @@ async fn ordinary_foreground_drop_kills_isolated_shell_and_descendant() {
 }
 
 #[tokio::test]
-async fn timeout_promoted_ordinary_command_keeps_isolated_group() {
+async fn soft_yielded_ordinary_command_keeps_isolated_group() {
     let temp = tempfile::tempdir().expect("temp dir");
     let pid_file = temp.path().join("pids");
     let command = format!(
@@ -62,11 +62,14 @@ async fn timeout_promoted_ordinary_command_keeps_isolated_group() {
     );
 
     let result = BashTool::new()
-        .execute(json!({"command": command, "timeout": 100}), make_ctx(None))
+        .execute(
+            json!({"command": command, "soft_yield_ms": 100}),
+            make_ctx(None),
+        )
         .await
-        .expect("ordinary command should promote on timeout");
+        .expect("ordinary command should be adopted on soft yield");
     let metadata = result.metadata.expect("background metadata");
-    assert_eq!(metadata["timeout_promoted"], true);
+    assert_eq!(metadata["soft_yielded"], true);
     let task_id = metadata["task_id"].as_str().expect("task id").to_string();
     let pids = std::fs::read_to_string(&pid_file)
         .expect("promoted command pid file")

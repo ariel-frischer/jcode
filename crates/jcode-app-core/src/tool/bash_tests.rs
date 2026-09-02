@@ -17,6 +17,9 @@ mod soft_yield_test_fixtures;
 #[cfg(target_os = "linux")]
 use soft_yield_test_fixtures::*;
 
+#[path = "bash_policy_tests.rs"]
+mod policy_tests;
+
 #[test]
 fn repository_commands_export_a_logged_cargo_function() {
     let repo =
@@ -88,13 +91,6 @@ fn make_agent_ctx(signal: jcode_agent_runtime::InterruptSignal) -> ToolContext {
         graceful_shutdown_signal: Some(signal),
         execution_mode: crate::tool::ToolExecutionMode::AgentTurn,
     }
-}
-
-#[test]
-fn managed_timeout_allows_thirty_minutes() {
-    assert_eq!(bounded_timeout_ms(None), DEFAULT_TIMEOUT_MS);
-    assert_eq!(bounded_timeout_ms(Some(1_800_000)), 1_800_000);
-    assert_eq!(bounded_timeout_ms(Some(3_600_000)), 1_800_000);
 }
 
 #[tokio::test]
@@ -227,20 +223,20 @@ async fn test_stdin_not_triggered_for_non_blocking_command() {
 }
 
 #[tokio::test]
-async fn test_command_timeout_with_stdin_channel() {
+async fn test_command_soft_yield_with_stdin_channel() {
     let (tx, _rx) = mpsc::unbounded_channel::<StdinInputRequest>();
     let tool = BashTool::new();
 
-    // `cat` blocks forever on stdin. With a short timeout and no stdin response,
-    // the command should be promoted to the background (kept running), not killed
-    // with an error.
-    let input = json!({"command": "cat", "timeout": 1000});
+    // `cat` blocks forever on stdin. With a short soft-yield window and no stdin
+    // response, the command should be adopted by the background manager without
+    // being killed.
+    let input = json!({"command": "cat", "soft_yield_ms": 100});
     let ctx = make_ctx(Some(tx));
 
     let result = tool
         .execute(input, ctx)
         .await
-        .expect("timeout should promote to background, not error");
+        .expect("soft yield should adopt the command, not error");
     assert!(
         result.output.contains("continuing in background"),
         "output should explain background promotion: {}",
@@ -248,8 +244,8 @@ async fn test_command_timeout_with_stdin_channel() {
     );
     let metadata = result.metadata.expect("expected background metadata");
     assert_eq!(metadata["background"], true);
-    assert_eq!(metadata["timeout_promoted"], true);
-    assert_eq!(metadata["foreground_timeout_ms"], 1000);
+    assert_eq!(metadata["soft_yielded"], true);
+    assert_eq!(metadata["soft_yield_ms"], 100);
 
     // Clean up the still-running background task so it does not linger.
     let task_id = metadata["task_id"]
@@ -259,12 +255,12 @@ async fn test_command_timeout_with_stdin_channel() {
 }
 
 #[tokio::test]
-async fn test_foreground_timeout_promotes_and_command_keeps_running() {
+async fn test_foreground_soft_yield_promotes_and_command_keeps_running() {
     let tool = BashTool::new();
     // No stdin channel and Direct mode -> plain foreground path. The command runs
-    // longer than the timeout, so it should be promoted to background and keep
-    // running to completion rather than being killed at the timeout.
-    let input = json!({"command": "sleep 0.5; echo fg_promote_ok", "timeout": 100});
+    // longer than the soft-yield window, so the same process should be adopted by
+    // the background manager and continue to completion.
+    let input = json!({"command": "sleep 0.5; echo fg_promote_ok", "soft_yield_ms": 100});
     let ctx = make_ctx(None);
 
     let result = tool
@@ -278,7 +274,7 @@ async fn test_foreground_timeout_promotes_and_command_keeps_running() {
     );
     let metadata = result.metadata.expect("expected background metadata");
     assert_eq!(metadata["background"], true);
-    assert_eq!(metadata["timeout_promoted"], true);
+    assert_eq!(metadata["soft_yielded"], true);
     let task_id = metadata["task_id"]
         .as_str()
         .expect("task_id should be present")
@@ -304,7 +300,7 @@ async fn test_foreground_timeout_promotes_and_command_keeps_running() {
         .expect("output should exist");
     assert!(
         output.contains("fg_promote_ok"),
-        "command should have continued after foreground timeout: {output}"
+        "command should have continued after soft yield: {output}"
     );
 }
 
@@ -446,14 +442,14 @@ async fn cancelling_reload_persistable_bash_kills_parent_and_descendants() {
 mod shutdown_tests;
 
 #[tokio::test]
-async fn test_reload_persistable_bash_timeout_promotes_to_background() {
+async fn test_reload_persistable_bash_soft_yields_to_background() {
     let tool = BashTool::new();
     let signal = jcode_agent_runtime::InterruptSignal::new();
     let ctx = make_agent_ctx(signal);
 
     let result = tool
         .execute(
-            json!({"command": "sleep 0.4; echo timeout_promote_ok", "timeout": 100}),
+            json!({"command": "sleep 0.4; echo timeout_promote_ok", "soft_yield_ms": 100}),
             ctx,
         )
         .await
@@ -472,8 +468,8 @@ async fn test_reload_persistable_bash_timeout_promotes_to_background() {
 
     let metadata = result.metadata.expect("expected background metadata");
     assert_eq!(metadata["background"], true);
-    assert_eq!(metadata["timeout_promoted"], true);
-    assert_eq!(metadata["foreground_timeout_ms"], 100);
+    assert_eq!(metadata["soft_yielded"], true);
+    assert_eq!(metadata["soft_yield_ms"], 100);
     let task_id = metadata["task_id"]
         .as_str()
         .expect("task_id should be present")
@@ -518,7 +514,7 @@ async fn test_reload_persistable_bash_timeout_promotes_to_background() {
         .expect("output should exist");
     assert!(
         output.contains("timeout_promote_ok"),
-        "command should have continued after foreground timeout: {output}"
+        "command should have continued after soft yield: {output}"
     );
 
     let _ = tokio::fs::remove_file(output_file).await;
@@ -1185,26 +1181,26 @@ fn parse_progress_line_classifies_markers_checkpoints_and_heuristics() {
     );
 }
 
-/// The bug this guards against: a foreground command promoted to background at
-/// the timeout showed 0% until it completed, because nothing parsed its output
-/// for progress. Both the update emitted *before* promotion and updates
-/// emitted *after* promotion must reach the background task's status.
+/// The bug this guards against: a foreground command adopted by the background
+/// manager at soft yield showed 0% until it completed, because nothing parsed its
+/// output for progress. Both the update emitted *before* adoption and updates
+/// emitted *after* adoption must reach the background task's status.
 #[tokio::test]
-async fn test_timeout_promoted_command_reports_intermediate_progress() {
+async fn test_soft_yielded_command_reports_intermediate_progress() {
     let tool = BashTool::new();
-    // Emits 10% before the 300ms foreground timeout, then 80% about 2s in.
+    // Emits 10% before the 300ms soft-yield window, then 80% about 2s in.
     let input = json!({
         "command": "echo 'progress 10% done'; sleep 2; echo 'progress 80% done'; sleep 1",
-        "timeout": 300,
+        "soft_yield_ms": 300,
     });
     let ctx = make_ctx(None);
 
     let result = tool
         .execute(input, ctx)
         .await
-        .expect("timeout should promote to background");
+        .expect("soft yield should adopt the command");
     let metadata = result.metadata.expect("expected background metadata");
-    assert_eq!(metadata["timeout_promoted"], true);
+    assert_eq!(metadata["soft_yielded"], true);
     let task_id = metadata["task_id"]
         .as_str()
         .expect("task_id should be present")
@@ -1258,14 +1254,14 @@ async fn test_detached_promoted_command_reports_intermediate_progress() {
         .execute(
             json!({
                 "command": "sleep 0.5; echo 'done 3/10 steps'; sleep 2; echo 'done 8/10 steps'; sleep 1",
-                "timeout": 200,
+                "soft_yield_ms": 200,
             }),
             ctx,
         )
         .await
-        .expect("timeout should promote the detached command to background");
+        .expect("soft yield should adopt the detached command");
     let metadata = result.metadata.expect("expected background metadata");
-    assert_eq!(metadata["timeout_promoted"], true);
+    assert_eq!(metadata["soft_yielded"], true);
     let task_id = metadata["task_id"]
         .as_str()
         .expect("task_id should be present")

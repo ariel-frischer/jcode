@@ -559,6 +559,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process,
+            hard_deadline_at: None,
         };
         self.write_status_file(&info.status_file, &status).await;
         Self::publish_task_started_activity(
@@ -630,6 +631,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: None,
+            hard_deadline_at: None,
         };
         if let Ok(json) = serde_json::to_string_pretty(&initial_status) {
             let _ = std::fs::write(&status_path, json);
@@ -711,6 +713,9 @@ impl BackgroundTaskManager {
                 event_history: prior_event_history,
                 stall_wake_seconds: None,
                 managed_process,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
             };
             push_task_event(
                 &mut final_status,
@@ -869,6 +874,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: managed_process.clone(),
+            hard_deadline_at: None,
         };
         if let Ok(json) = serde_json::to_string_pretty(&initial_status) {
             let _ = std::fs::write(&status_path, json);
@@ -903,12 +909,38 @@ impl BackgroundTaskManager {
             let duration_secs = started_at.elapsed().as_secs_f64();
 
             let (status, exit_code, error, output_text) = match tool_result {
-                Ok(Ok(output)) => (
-                    BackgroundTaskStatus::Completed,
-                    Some(0),
-                    None,
-                    output.output,
-                ),
+                Ok(Ok(output)) => {
+                    let exit_code = output
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("exit_code"))
+                        .and_then(serde_json::Value::as_i64)
+                        .and_then(|code| {
+                            let in_range =
+                                (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&code);
+                            in_range.then_some(code as i32)
+                        })
+                        .or(Some(0));
+                    let timed_out = output
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("timed_out"))
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    let status = if exit_code == Some(0) {
+                        BackgroundTaskStatus::Completed
+                    } else {
+                        BackgroundTaskStatus::Failed
+                    };
+                    let error = if timed_out {
+                        Some("Command timed out".to_string())
+                    } else {
+                        exit_code
+                            .filter(|code| *code != 0)
+                            .map(|code| format!("Command exited with code {code}"))
+                    };
+                    (status, exit_code, error, output.output)
+                }
                 Ok(Err(e)) => (
                     BackgroundTaskStatus::Failed,
                     None,
@@ -961,6 +993,9 @@ impl BackgroundTaskManager {
                 event_history: prior_event_history,
                 stall_wake_seconds: None,
                 managed_process: None,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
             };
             push_task_event(
                 &mut final_status,
@@ -1626,6 +1661,7 @@ impl BackgroundTaskManager {
                 event_history: Vec::new(),
                 stall_wake_seconds: None,
                 managed_process: task.managed_process,
+                hard_deadline_at: None,
             };
             let event_status = final_status.status.clone();
             let event_exit_code = final_status.exit_code;
@@ -2146,6 +2182,9 @@ impl BackgroundTaskManager {
                     .map(|status| status.event_history.clone())
                     .unwrap_or_default(),
                 stall_wake_seconds: None,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
                 managed_process: prior_status.and_then(|status| status.managed_process),
             };
             push_task_event(

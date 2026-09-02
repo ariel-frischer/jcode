@@ -1941,10 +1941,10 @@ async fn build_ignores_stale_pending_requests_when_computing_queue_position() {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: None,
+            hard_deadline_at: None,
         },
     )
     .expect("write stale status file");
-
     let source = test_source_state(repo.path());
     let stale_request = BuildRequest {
         request_id: "stale-queued-request".to_string(),
@@ -2043,10 +2043,10 @@ fn reconcile_pending_state_maps_superseded_background_status() {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: None,
+            hard_deadline_at: None,
         },
     )
     .expect("write superseded status file");
-
     let source = test_source_state(std::path::Path::new("/tmp/jcode"));
     let request = BuildRequest {
         request_id: "superseded-request".to_string(),
@@ -2134,10 +2134,10 @@ fn reconcile_keeps_running_request_not_yet_registered_in_live_task_map() {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: None,
+            hard_deadline_at: None,
         },
     )
     .expect("write running status file");
-
     let source = test_source_state(std::path::Path::new("/tmp/jcode"));
     let request = BuildRequest {
         request_id: "racing-request".to_string(),

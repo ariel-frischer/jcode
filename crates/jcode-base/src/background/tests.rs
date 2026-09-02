@@ -1,6 +1,9 @@
 use super::*;
 use crate::bus::{BackgroundTaskProgressKind, BackgroundTaskProgressSource, BusEvent};
 use tokio::time::{Duration, sleep};
+
+#[path = "hard_deadline_tests.rs"]
+mod hard_deadline_tests;
 use {anyhow::anyhow, tempfile::tempdir};
 #[path = "soft_yield_test_fixtures.rs"]
 mod soft_yield_test_fixtures;
@@ -426,6 +429,7 @@ fn running_status_fixture(task_id: &str, session_id: &str) -> TaskStatusFile {
         event_history: Vec::new(),
         stall_wake_seconds: None,
         managed_process: None,
+        hard_deadline_at: None,
     }
 }
 
@@ -608,34 +612,6 @@ async fn stale_inspection_does_not_reconcile_or_change_status() -> Result<()> {
     );
     let raw_status: TaskStatusFile = serde_json::from_slice(&after)?;
     assert_eq!(raw_status.status, BackgroundTaskStatus::Running);
-    Ok(())
-}
-
-#[test]
-fn legacy_status_round_trips_without_managed_identity() -> Result<()> {
-    let legacy = serde_json::json!({
-        "task_id": "legacy-round-trip",
-        "tool_name": "bash",
-        "session_id": "session",
-        "status": "running",
-        "exit_code": null,
-        "error": null,
-        "started_at": Utc::now().to_rfc3339(),
-        "completed_at": null,
-        "duration_secs": null,
-        "pid": null,
-        "detached": false,
-        "notify": false,
-        "wake": false,
-        "progress": null,
-        "event_history": []
-    });
-    let status: TaskStatusFile = serde_json::from_value(legacy.clone())?;
-    assert_eq!(status.managed_process, None);
-    assert_eq!(
-        serde_json::from_str::<TaskStatusFile>(&serde_json::to_string(&status)?)?.task_id,
-        "legacy-round-trip"
-    );
     Ok(())
 }
 
