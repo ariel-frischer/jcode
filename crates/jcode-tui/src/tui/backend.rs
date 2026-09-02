@@ -296,6 +296,7 @@ pub(crate) trait RemoteEventState {
     fn has_loaded_history(&self) -> bool;
     fn arm_resume_in_flight(&mut self);
     fn mark_history_loaded(&mut self);
+    fn set_queued_message_navigation_supported(&mut self, _supported: bool) {}
 }
 
 #[derive(Default)]
@@ -1377,6 +1378,10 @@ impl RemoteConnection {
             .any(|capability| capability == QUEUED_MESSAGE_NAVIGATION_CAPABILITY);
     }
 
+    pub fn set_queued_message_navigation_supported(&mut self, supported: bool) {
+        self.queued_message_navigation_supported = supported;
+    }
+
     pub fn supports_queued_message_navigation(&self) -> bool {
         self.queued_message_navigation_supported
     }
@@ -1508,6 +1513,10 @@ impl RemoteEventState for RemoteConnection {
 
     fn mark_history_loaded(&mut self) {
         Self::mark_history_loaded(self);
+    }
+
+    fn set_queued_message_navigation_supported(&mut self, supported: bool) {
+        Self::set_queued_message_navigation_supported(self, supported);
     }
 }
 

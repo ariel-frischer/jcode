@@ -19,11 +19,8 @@ fn allow_runtime_identity_mismatch() -> bool {
 /// classify anything carrying a `-dev` or `dirty` marker as an orderable version
 /// and return `None`, leaving such daemons to the existing `server_has_update`
 /// (mtime-directional) path.
-fn parse_release_semver(version: &str) -> Option<(u32, u32, u32)> {
+fn parse_semver_prefix(version: &str) -> Option<(u32, u32, u32)> {
     let lower = version.trim().to_ascii_lowercase();
-    if lower.contains("-dev") || lower.contains("dirty") {
-        return None;
-    }
     // Take the leading token, e.g. "v0.17.0 (d741696f)" -> "0.17.0".
     let token = lower
         .split([' ', '(', ')', ','])
@@ -34,8 +31,31 @@ fn parse_release_semver(version: &str) -> Option<(u32, u32, u32)> {
     let mut parts = token.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next()?.parse().ok()?;
-    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    let patch_token = parts.next().unwrap_or("0");
+    let patch_digits: String = patch_token
+        .chars()
+        .take_while(|character| character.is_ascii_digit())
+        .collect();
+    let patch = patch_digits.parse().ok()?;
     Some((major, minor, patch))
+}
+
+fn parse_release_semver(version: &str) -> Option<(u32, u32, u32)> {
+    let lower = version.trim().to_ascii_lowercase();
+    if lower.contains("-dev") || lower.contains("dirty") {
+        return None;
+    }
+    parse_semver_prefix(version)
+}
+
+fn server_supports_queued_message_navigation(server_version: Option<&str>) -> bool {
+    // The production remote protocol gained queued-message editor requests and
+    // results in v0.81.784. History already carries the server version, so this
+    // preserves fail-closed behavior for older and unknown peers without adding
+    // a new bootstrap event that older TUI clients could not deserialize.
+    server_version
+        .and_then(parse_semver_prefix)
+        .is_some_and(|version| version >= (0, 81, 784))
 }
 
 /// True when the connected server reports a clean release version strictly older
@@ -133,6 +153,7 @@ fn should_defer_history_for_runtime_identity(
 mod runtime_identity_tests {
     use super::{
         parse_release_semver, server_release_is_older_than_client,
+        server_supports_queued_message_navigation,
         should_defer_history_for_runtime_identity_with_allow,
     };
 
@@ -201,6 +222,19 @@ mod runtime_identity_tests {
         assert_eq!(parse_release_semver("v0.18.4-dev (102e9750, dirty)"), None);
         assert_eq!(parse_release_semver("v0.14.2-dev (38452185, dirty)"), None);
         assert_eq!(parse_release_semver("unknown"), None);
+    }
+
+    #[test]
+    fn queued_message_navigation_supports_feature_release_and_dev_builds() {
+        assert!(!server_supports_queued_message_navigation(Some(
+            "v0.81.783"
+        )));
+        assert!(server_supports_queued_message_navigation(Some("v0.81.784")));
+        assert!(server_supports_queued_message_navigation(Some(
+            "v0.81.786-dev (691fc4474)"
+        )));
+        assert!(!server_supports_queued_message_navigation(None));
+        assert!(!server_supports_queued_message_navigation(Some("unknown")));
     }
 
     #[test]
@@ -1619,6 +1653,9 @@ pub(in crate::tui::app) fn handle_server_event(
                 return false;
             }
 
+            remote.set_queued_message_navigation_supported(
+                server_supports_queued_message_navigation(server_version.as_deref()),
+            );
             remote.set_session_id(session_id.clone());
             app.remote_session_id = Some(session_id.clone());
             crate::set_current_session(&session_id);
