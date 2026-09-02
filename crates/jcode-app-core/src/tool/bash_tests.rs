@@ -12,14 +12,10 @@ use tokio::sync::mpsc;
 mod ordinary_foreground_tests;
 
 #[cfg(target_os = "linux")]
-fn linux_process_is_live(pid: u32) -> bool {
-    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
-        return false;
-    };
-    stat.rsplit_once(") ")
-        .and_then(|(_, fields)| fields.chars().next())
-        .is_some_and(|state| state != 'Z')
-}
+#[path = "bash_soft_yield_test_fixtures.rs"]
+mod soft_yield_test_fixtures;
+#[cfg(target_os = "linux")]
+use soft_yield_test_fixtures::*;
 
 #[test]
 fn repository_commands_export_a_logged_cargo_function() {

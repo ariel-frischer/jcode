@@ -24,12 +24,8 @@ async fn wait_for_process_exit(pid: u32) {
 
 #[tokio::test]
 async fn ordinary_foreground_drop_kills_isolated_shell_and_descendant() {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let pid_file = temp.path().join("pids");
-    let command = format!(
-        "sleep 60 & descendant=$!; printf '%s\\n%s\\n' \"$$\" \"$descendant\" > {}; wait \"$descendant\"",
-        shell_single_quote(&pid_file.to_string_lossy())
-    );
+    let fixture = BashCommandFixture::parent_child(Duration::from_secs(60));
+    let command = fixture.command().to_string();
     let tool = BashTool::new();
     let execution = tokio::spawn(async move {
         tool.execute(
@@ -39,27 +35,9 @@ async fn ordinary_foreground_drop_kills_isolated_shell_and_descendant() {
         .await
     });
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
-    let pids = loop {
-        if let Ok(contents) = std::fs::read_to_string(&pid_file) {
-            let parsed = contents
-                .lines()
-                .map(str::parse::<u32>)
-                .collect::<Result<Vec<_>, _>>();
-            if let Ok(pids) = parsed
-                && pids.len() == 2
-            {
-                break pids;
-            }
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "ordinary foreground command did not publish its pids"
-        );
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    };
-    let shell_pid = pids[0];
-    let descendant_pid = pids[1];
+    let evidence = fixture.wait_for_process_evidence(2).await;
+    let shell_pid = evidence[0].pid;
+    let descendant_pid = evidence[1].pid;
     let shell_group = process_group_and_session(shell_pid).expect("shell process stat");
     let descendant_group =
         process_group_and_session(descendant_pid).expect("descendant process stat");

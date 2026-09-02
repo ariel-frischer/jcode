@@ -1,9 +1,9 @@
 use super::*;
 use crate::bus::{BackgroundTaskProgressKind, BackgroundTaskProgressSource, BusEvent};
-use anyhow::anyhow;
-use tempfile::tempdir;
 use tokio::time::{Duration, sleep};
-
+use {anyhow::anyhow, tempfile::tempdir};
+#[path = "soft_yield_test_fixtures.rs"]
+mod soft_yield_test_fixtures;
 #[tokio::test]
 async fn spawn_with_notify_emits_started_ui_activity() -> Result<()> {
     let tmp = tempdir()?;
