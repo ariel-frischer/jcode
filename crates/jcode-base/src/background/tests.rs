@@ -1201,6 +1201,11 @@ async fn stall_watchdog_does_not_fire_for_task_that_finishes() -> Result<()> {
         .await
         .ok_or_else(|| anyhow!("task should exist"))?;
     assert_eq!(wait_result.reason, BackgroundTaskWaitReason::Finished);
+    assert_eq!(
+        wait_result.task.stall_wake_seconds,
+        Some(30),
+        "terminal task status should retain the configured stall watchdog window"
+    );
 
     // Give the watchdog time to notice the terminal status and exit.
     sleep(Duration::from_secs(30)).await;
