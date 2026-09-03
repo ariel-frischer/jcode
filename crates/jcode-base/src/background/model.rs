@@ -1,6 +1,6 @@
 use crate::bus::{BackgroundTaskProgress, BackgroundTaskProgressEvent, BackgroundTaskStatus};
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -90,6 +90,10 @@ pub struct TaskStatusFile {
     /// destructive reconciliation fails closed when it is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub managed_process: Option<ManagedProcessIdentity>,
+    /// Optional absolute wall-clock deadline for a managed Bash process. The
+    /// field is additive so status files written by older builds remain valid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hard_deadline_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

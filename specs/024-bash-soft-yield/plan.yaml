@@ -1,0 +1,337 @@
+plan:
+  branch: "024-bash-soft-yield"
+  created: "2026-09-02"
+  spec_path: "specs/024-bash-soft-yield/spec.yaml"
+
+summary: |
+  Separate Bash responsiveness from process termination by adding an additive
+  per-invocation `soft_yield_ms` input with a documented 10,000 ms default and
+  `0` as the explicit disabled value. Foreground execution will await the same
+  original process until natural completion, the soft-yield deadline, or an
+  optional hard timeout. Natural completion remains synchronous, soft yield
+  adopts or registers the already-running process exactly once with the existing
+  background manager, and hard timeout identity-safely terminates the complete
+  process group and reports exit status 124 whether work is still foreground or
+  has already yielded.
+
+  Keep the change inside the existing Bash and background lifecycle seams. The
+  ordinary Tokio path will move hard-timeout enforcement into the owned command
+  work so it continues after adoption. The reload-persistable detached path will
+  carry an optional persisted hard deadline through the existing managed-process
+  record so reload reconciliation can enforce the same deadline without a second
+  supervisor. Both promotion paths will reuse task IDs, bounded output, progress,
+  completion and stall wakes, cancellation, and reload persistence. Focused race,
+  process-tree, schema, output-bound, and performance tests plus an isolated
+  newly built binary check will establish runtime behavior.
+
+technical_context:
+  language: "Rust 2024"
+  framework: "Tokio async runtime with Serde JSON tool schemas and persisted background task state"
+  primary_dependencies:
+    - name: "tokio"
+      version: "1"
+      purpose: "Race natural completion, soft-yield timers, hard deadlines, cancellation, process waiting, and deterministic asynchronous tests."
+    - name: "serde and serde_json"
+      version: "1"
+      purpose: "Deserialize the additive Bash input and preserve backward-compatible optional background status fields and tool metadata."
+    - name: "chrono"
+      version: "0.4"
+      purpose: "Represent the existing detached-task start time and an optional absolute hard deadline across reloads."
+    - name: "libc"
+      version: "0.2"
+      purpose: "Reuse existing Unix process-group isolation and verified termination for timeout and cancellation cleanup."
+    - name: "tempfile"
+      version: "3"
+      purpose: "Create deterministic output, PID, status, and isolated lifecycle fixtures in focused tests."
+  storage: "Existing background task output and status files; add only an optional hard-deadline field where detached yielded work requires reload-safe enforcement."
+  testing:
+    framework: "Cargo unit and integration tests with Tokio time control, Linux process-tree fixtures, schema assertions, and isolated built-binary smoke validation"
+    approach: "Add focused failing tests first for direct completion, default/configured/disabled soft yield, hard timeout, promotion races, process-group cleanup, lifecycle delivery, reload persistence, bounded output, and fast-command overhead; then run affected crate tests, a serialized self-dev build, repository guardrails, and private-socket runtime checks against the resolved new executable."
+  target_platform: "All existing Jcode CLI/TUI platforms for tool-contract behavior, with Unix/Linux-specific process-group, descendant cleanup, reload, and isolated socket validation."
+  project_type: "cli"
+  performance_goals: "Commands completing within 100 ms remain synchronous and add no more than 20 ms median overhead; default soft yield occurs near 10 seconds; all deterministic timeout and cancellation cleanup leaves zero descendants; 100 yield-boundary runs produce one process lineage and one terminal outcome."
+  constraints:
+    - "Preserve `run_in_background: true` as immediate managed background execution."
+    - "Treat omitted timeout as no hard deadline and an explicit timeout as the existing bounded hard deadline with exit status 124."
+    - "Retain the existing 1,800,000 ms maximum timeout compatibility behavior and document the effective bound rather than silently changing it."
+    - "Use one original process and one existing background task identity; never respawn during promotion."
+    - "Reuse existing adoption, detached registration, managed process identity, cancellation, progress, stall wake, completion wake, reload reconciliation, and bounded-output paths."
+    - "Keep stable background contracts in jcode-base and Bash orchestration in jcode-app-core without adding dependency edges or a parallel supervisor."
+    - "Keep stdout, stderr, promotion responses, retained files, and later bg output bounded by existing policies."
+    - "Serialize Cargo-heavy validation on the resource-constrained development host."
+    - "Do not disturb the shared daemon during acceptance checks; use the newly built executable with a unique socket."
+  scale_scope: "One local Bash process group per invocation and the existing one-to-tens of concurrent managed background tasks within a single shared Jcode server."
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan is limited to Bash execution timing, the minimum reload-safe background deadline contract, focused lifecycle tests, schema, and one user-facing behavior document."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "The new input and persisted deadline are additive and optional; fast foreground commands and immediate backgrounding remain unchanged. The only intentional behavior correction is timeout matching its already documented hard-deadline contract and omission meaning no timeout."
+    - name: "Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "Soft yield has one resolver: explicit `soft_yield_ms`, then the 10,000 ms built-in default. Zero explicitly disables it; invalid JSON types fail deserialization, and no environment or persisted configuration path is introduced."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "jcode-app-core owns Bash spawning and foreground races, while jcode-base owns optional persisted managed-task deadline enforcement and reload reconciliation. No lower crate depends upward."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Each functional and nonfunctional acceptance area maps to exact Bash or background tests, including boundary races, silent and heavy output, descendants, schema, reload, and measured fast-command overhead."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "The public schema states units, default, disable behavior, hard-timeout maximum, and non-overlapping semantics; timeout and cleanup failures remain explicit terminal outcomes rather than silent promotion or swallowed errors."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "The implementation workflow runs focused tests first, then the relevant serialized build, dependency and quality guardrails, artifact checks, and isolated runtime validation."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "The design corrects the intentional local timeout-promotion path by reusing its existing background manager and process guards rather than importing another supervisor or copying an upstream architecture."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "Healthy work is preserved exactly once, while explicit timeout and cancellation retain bounded identity-verified teardown controlled by the caller."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "The plan includes repeated timing checks and acceptance against the resolved newly built binary on an isolated socket, not merely compilation or the existing shared daemon."
+
+research_findings:
+  decisions:
+    - topic: "Public soft-yield control"
+      decision: "Add `soft_yield_ms: Option<u64>` to Bash input and schema, resolve omission to 10,000 ms, and define zero as disabled."
+      rationale: "A dedicated millisecond input is additive, matches the existing timeout unit convention, supports default/shorter/longer/disabled acceptance cases, and avoids introducing a repository-wide configuration path for an invocation-specific tool behavior."
+      alternatives_considered:
+        - "Continue overloading `timeout` as a foreground wait budget"
+        - "Use an environment or persisted config setting without a per-call override"
+        - "Use a boolean-only automatic yield switch with no configurable duration"
+    - topic: "Foreground race ownership"
+      decision: "Create one command work future that owns the child, output readers, stdin handling, process-group guard, and optional hard-timeout enforcement; race only that future against the soft-yield timer in the caller."
+      rationale: "When the yield timer wins, the exact same JoinHandle and process identity can be adopted without cancellation or respawn, while a hard deadline inside the work continues to apply after adoption. Tokio selection produces one authoritative winner and avoids duplicate terminal delivery."
+      alternatives_considered:
+        - "Kill and restart the command as an explicit background task"
+        - "Use nested `tokio::time::timeout` calls that cancel the hard-timeout future on promotion"
+        - "Create a second watcher task without transferring ownership"
+    - topic: "Hard timeout semantics"
+      decision: "Resolve timeout to `Option<Duration>` rather than a defaulted duration, preserve the existing 1,800,000 ms cap, and on expiry terminate and reap the verified process group before returning or recording exit status 124."
+      rationale: "This makes omission genuinely unbounded, aligns foreground and background behavior with the public contract, retains the existing maximum-duration compatibility limit, and prevents descendants from escaping."
+      alternatives_considered:
+        - "Keep the implicit 120,000 ms timeout"
+        - "Promote at the timeout deadline"
+        - "Kill only the immediate shell process"
+    - topic: "Reload-persistable yielded timeout"
+      decision: "Extend the existing detached managed-task status with an optional absolute hard deadline and let the existing manager monitor/reconciliation path enforce it using persisted process identity."
+      rationale: "An in-memory timer cannot survive supported reloads, and platform-specific shell `timeout` wrappers are not portable or sufficiently identity-safe. An optional field preserves old status files and keeps the background manager authoritative."
+      alternatives_considered:
+        - "Use GNU `timeout` inside the detached shell wrapper"
+        - "Drop hard-timeout enforcement after reload"
+        - "Add a new standalone process supervisor"
+    - topic: "Lifecycle option parity after automatic yield"
+      decision: "After adoption or detached registration, apply the same notify, wake, stall watchdog, progress attachment/follower, cancellation identity, and task metadata used by immediate background execution."
+      rationale: "Current foreground promotion already adopts/registers into the manager but does not wire every immediate-background lifecycle option. Completing that wiring satisfies the spec without a second interface."
+      alternatives_considered:
+        - "Return an unmanaged process identifier"
+        - "Create a separate yielded-command task type"
+        - "Support only completion polling for yielded work"
+    - topic: "Output handling"
+      decision: "Continue concurrent stdout/stderr draining and existing `MAX_OUTPUT_LEN` formatting for adopted work; detached work continues writing to the established task output file and using existing bounded bg response/tail behavior."
+      rationale: "Reusing the current collectors prevents pipe deadlock, retains progress parsing, and keeps high-volume work observable without embedding unbounded output in the yield response."
+      alternatives_considered:
+        - "Buffer all output until completion"
+        - "Return accumulated output in the soft-yield response"
+        - "Discard output emitted before promotion"
+    - topic: "Validation strategy"
+      decision: "Use deterministic sub-second test overrides for soft yield and timeout, repeated race loops, PID files for lineage and cleanup, output-volume fixtures, targeted Cargo tests, and two private-socket built-binary scenarios."
+      rationale: "Production defaults should not make tests slow, race correctness needs repetition and process evidence, and repository rules require runtime truth from the actual new binary."
+      alternatives_considered:
+        - "Sleep for the 10-second default in every unit test"
+        - "Rely only on mocked timers without real child processes"
+        - "Validate through the currently running shared daemon"
+
+data_model:
+  entities:
+    - name: "BashExecutionPolicy"
+      description: "Resolved per-invocation timing and lifecycle policy for one Bash command."
+      fields:
+        - name: "soft_yield_ms"
+          type: "Option<u64>"
+          description: "Foreground wait window before adopting the still-running command."
+          constraints: "Omission resolves to 10,000 ms; zero resolves to disabled; it never terminates work."
+        - name: "hard_timeout_ms"
+          type: "Option<u64>"
+          description: "Optional wall-clock process lifetime limit."
+          constraints: "Omission means no hard deadline; explicit values retain the existing 1,800,000 ms effective maximum and expire with status 124."
+        - name: "run_in_background"
+          type: "bool"
+          description: "Whether to register managed work immediately."
+          constraints: "When true, bypass the soft-yield wait but retain the hard deadline."
+        - name: "notify"
+          type: "bool"
+          description: "Whether completion notification is requested."
+          constraints: "Uses existing default and manager behavior."
+        - name: "wake"
+          type: "bool"
+          description: "Whether completion wakes the agent."
+          constraints: "Wake implies notification under existing behavior."
+        - name: "stall_wake_seconds"
+          type: "Option<u64>"
+          description: "Optional inactivity interval for a managed task wake."
+          constraints: "Uses the existing manager minimum and activity-reset behavior after immediate or automatic backgrounding."
+      relationships:
+        - target: "ForegroundCommandExecution"
+          type: "one-to-one"
+          description: "Each invocation resolves exactly one execution policy before spawning."
+    - name: "ForegroundCommandExecution"
+      description: "The single original process lineage initially awaited by the Bash caller."
+      fields:
+        - name: "process_identity"
+          type: "ManagedProcessIdentity"
+          description: "PID, process start token, process-group member identity, owner, and transfer policy."
+          constraints: "Captured once and verified before destructive signaling."
+        - name: "started_at"
+          type: "Instant and RFC3339 timestamp"
+          description: "Monotonic race origin and persisted wall-clock origin."
+          constraints: "All deadlines derive from this one command start."
+        - name: "soft_yield_deadline"
+          type: "Option<Instant>"
+          description: "When foreground waiting may return control without terminating work."
+          constraints: "Absent when disabled or immediate backgrounding is selected."
+        - name: "hard_timeout_deadline"
+          type: "Option<Instant>"
+          description: "When the process group must be terminated and reaped."
+          constraints: "Independent of soft yield and authoritative whenever present."
+        - name: "state"
+          type: "enum"
+          description: "Foreground, yielded, completed, timed out, or cancelled."
+          constraints: "Transitions once from foreground and records at most one terminal outcome."
+      relationships:
+        - target: "ManagedBackgroundTask"
+          type: "zero-or-one-to-one"
+          description: "A still-running foreground command gains one existing task identity when soft yield wins."
+    - name: "ManagedBackgroundTask"
+      description: "The existing reusable task record for immediately backgrounded or automatically yielded Bash work."
+      fields:
+        - name: "task_id"
+          type: "String"
+          description: "Stable identifier used by bg status, output, wait, cancel, and cleanup."
+          constraints: "Exactly one identifier per promoted command."
+        - name: "managed_process"
+          type: "Option<ManagedProcessIdentity>"
+          description: "Identity-safe cancellation and timeout target."
+          constraints: "Present for yielded Bash process groups on supported platforms."
+        - name: "hard_deadline_at"
+          type: "Option<DateTime<Utc>>"
+          description: "Reload-safe absolute timeout for detached yielded work."
+          constraints: "Optional and defaulted for backward-compatible status deserialization."
+        - name: "output_file"
+          type: "PathBuf"
+          description: "Existing retained task output path."
+          constraints: "Read and returned through existing bounded output operations."
+        - name: "progress_and_delivery"
+          type: "Existing background progress, notification, wake, and stall state"
+          description: "Lifecycle signals shared with immediate background execution."
+          constraints: "No parallel event or delivery contract."
+        - name: "terminal_outcome"
+          type: "BackgroundTaskStatus and optional exit code"
+          description: "Completed, failed, timed out with 124, or cancelled result."
+          constraints: "At most one terminal state and one completion delivery."
+      relationships:
+        - target: "ForegroundCommandExecution"
+          type: "one-to-one"
+          description: "An automatically yielded task continues the same process execution rather than a replacement."
+
+api_contracts:
+  endpoints: []
+
+project_structure:
+  documentation:
+    - path: "specs/024-bash-soft-yield/spec.yaml"
+      description: "Approved behavior, acceptance scenarios, constraints, and measurable outcomes."
+    - path: "specs/024-bash-soft-yield/plan.yaml"
+      description: "Technical design, ownership decisions, data model, phases, and validation strategy."
+    - path: "specs/024-bash-soft-yield/tasks.yaml"
+      description: "Dependency-ordered implementation and acceptance work generated by `/autospec.tasks`."
+    - path: "docs/BASH_EXECUTION.md"
+      description: "User-facing distinction among synchronous completion, automatic soft yield, immediate backgrounding, and optional hard timeout, including defaults and examples."
+  source_code:
+    - path: "crates/jcode-app-core/src/tool/bash.rs"
+      description: "Additive input, policy resolution, independent timers, one-process promotion, hard timeout, lifecycle option wiring, bounded output, and task metadata."
+    - path: "crates/jcode-app-core/src/tool/bash_destructive_gate.rs"
+      description: "Public JSON schema descriptions for `soft_yield_ms`, hard timeout, immediate backgrounding, wake, and stall semantics."
+    - path: "crates/jcode-base/src/background/model.rs"
+      description: "Backward-compatible optional persisted hard deadline for reload-persistable managed Bash work."
+    - path: "crates/jcode-base/src/background.rs"
+      description: "Existing task adoption, detached registration, stall watchdog, cancellation, deadline monitoring, reconciliation, and single-terminal-state enforcement."
+    - path: "crates/jcode-app-core/src/tool/bash_process_guard.rs"
+      description: "Reuse verified process-group termination and reaping, with only narrowly required timeout helpers if existing APIs are insufficient."
+  tests:
+    - path: "crates/jcode-app-core/src/tool/bash_tests.rs"
+      description: "Default/configured/disabled soft yield, direct completion, hard timeout, immediate background, lifecycle parity, silent/heavy output, schema, and repeated race tests."
+    - path: "crates/jcode-app-core/src/tool/bash_ordinary_foreground_tests.rs"
+      description: "One process lineage, process-group isolation, hard-timeout descendant cleanup, and cancellation after ordinary foreground adoption."
+    - path: "crates/jcode-app-core/src/tool/bash_shutdown_tests.rs"
+      description: "Reload transfer, discoverability, deadline persistence, and completion/cancellation after reload."
+    - path: "crates/jcode-base/src/background/tests.rs"
+      description: "Optional deadline serde compatibility, monitor/reconciliation enforcement, single terminal delivery, stall wake, and cancellation races."
+    - path: "scripts or exact runtime smoke command documented with the feature"
+      description: "Newly built executable validation on a unique socket for silent soft yield/completion and hard timeout with child cleanup."
+
+implementation_phases:
+  - phase: 1
+    name: "Lock contracts and regression cases"
+    goal: "Replace timeout-promotion expectations with focused failing tests that encode independent soft yield and hard timeout behavior."
+    deliverables:
+      - "Schema tests for `soft_yield_ms`, 10,000 ms default, zero-disable behavior, optional hard timeout, immediate backgrounding, units, and maximum."
+      - "Fast success and failure tests proving direct results and no managed task."
+      - "Silent command tests for default override, shorter, longer, and disabled soft-yield policies."
+      - "Explicit foreground and immediate-background timeout tests requiring exit 124 and zero surviving descendants."
+  - phase: 2
+    name: "Separate foreground yield from hard termination"
+    goal: "Implement one-process foreground execution with independent soft-yield and hard-timeout deadlines."
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Canonical BashExecutionPolicy resolver with no implicit timeout and additive `soft_yield_ms`."
+      - "Ordinary foreground command work that owns output, stdin, process guard, natural completion, and hard timeout after adoption."
+      - "Atomic adoption of the same JoinHandle and identity when soft yield wins, with updated non-timeout metadata and guidance."
+      - "Immediate background dispatch that bypasses soft yield while preserving optional hard timeout."
+  - phase: 3
+    name: "Complete managed lifecycle and reload semantics"
+    goal: "Make automatically yielded work indistinguishable from existing managed background work for management and supported reloads."
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Notify, completion wake, stall wake, progress attachment/follower, bounded output, status, wait, output, cancellation, and cleanup parity on both promotion paths."
+      - "Backward-compatible optional persisted hard deadline for detached yielded work."
+      - "Reload monitor/reconciliation enforcement of hard timeout through verified managed process identity."
+      - "Reload test proving discoverability and one eventual completion or timeout delivery."
+  - phase: 4
+    name: "Harden races, output bounds, and process cleanup"
+    goal: "Prove all boundary outcomes converge without duplicate tasks, duplicate delivery, or orphan processes."
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Repeated soft-yield versus completion, soft-yield versus hard timeout, timeout versus completion, and registration versus cancellation tests."
+      - "One-lineage PID evidence across 100 deterministic yield-boundary runs."
+      - "Silent and output-heavy fixtures proving scheduled yield, concurrent draining, truncation, retrievability, and bounded responses."
+      - "Parent-child process-group assertions for hard timeout and cancellation on foreground, yielded, and immediate-background paths."
+  - phase: 5
+    name: "Document and validate runtime truth"
+    goal: "Deliver consistent public guidance and prove behavior using the actual new executable."
+    dependencies:
+      - "Phase 4"
+    deliverables:
+      - "Bash execution documentation and schema with no remaining implicit 120-second or timeout-as-yield claim."
+      - "Focused jcode-app-core and jcode-base tests, including the controlled fast-command median overhead comparison."
+      - "Serialized self-dev build and relevant repository guardrails with changed-surface failures resolved."
+      - "Resolved newly built binary on a unique socket: one silent command soft-yields then completes, and one explicit-timeout parent/child command exits 124 with no descendants."
+      - "Final scope and compatibility review confirming no unrelated tool timeout changes or parallel background mechanism."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-02T19:56:53Z"
+  artifact_type: "plan"

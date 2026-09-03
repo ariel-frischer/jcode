@@ -101,6 +101,17 @@ impl ProcessGroupKillGuard {
     pub(super) fn disarm(&mut self) {
         self.pid = None;
     }
+
+    pub(super) fn terminate_verified(&self) -> crate::platform::ProcessIdentityCheck {
+        let Some(pid) = self.pid else {
+            return crate::platform::ProcessIdentityCheck::Missing;
+        };
+        crate::platform::signal_verified_process_group(
+            pid,
+            self.process_instance.as_deref(),
+            libc::SIGKILL,
+        )
+    }
 }
 
 impl Drop for ProcessGroupKillGuard {

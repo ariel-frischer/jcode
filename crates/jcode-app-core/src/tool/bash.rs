@@ -31,7 +31,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command as TokioCommand;
 
 const MAX_OUTPUT_LEN: usize = 30000;
-const DEFAULT_TIMEOUT_MS: u64 = 120000;
+const DEFAULT_SOFT_YIELD_MS: u64 = 10_000;
 const MAX_TIMEOUT_MS: u64 = 1_800_000;
 const STDIN_POLL_INTERVAL_MS: u64 = 500;
 const STDIN_INITIAL_DELAY_MS: u64 = 300;
@@ -47,8 +47,24 @@ pub(crate) fn terminate_owned_foreground_process_groups() {
     process_guard::terminate_owned_foreground_process_groups();
 }
 
-fn bounded_timeout_ms(timeout: Option<u64>) -> u64 {
-    timeout.unwrap_or(DEFAULT_TIMEOUT_MS).min(MAX_TIMEOUT_MS)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BashExecutionPolicy {
+    soft_yield: Option<Duration>,
+    hard_timeout: Option<Duration>,
+    run_in_background: bool,
+}
+
+impl BashExecutionPolicy {
+    fn resolve(soft_yield_ms: Option<u64>, timeout: Option<u64>, run_in_background: bool) -> Self {
+        let soft_yield_ms = soft_yield_ms.unwrap_or(DEFAULT_SOFT_YIELD_MS);
+        Self {
+            soft_yield: (!run_in_background && soft_yield_ms > 0)
+                .then(|| Duration::from_millis(soft_yield_ms)),
+            hard_timeout: timeout
+                .map(|timeout_ms| Duration::from_millis(timeout_ms.min(MAX_TIMEOUT_MS))),
+            run_in_background,
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -98,6 +114,10 @@ fn timeout_message(timeout_ms: u64) -> String {
         );
     }
     msg
+}
+
+fn duration_millis_u64(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 fn progress_ratio_regex() -> Result<&'static regex::Regex> {
@@ -806,11 +826,13 @@ struct BashInput {
     #[serde(default)]
     timeout: Option<u64>,
     #[serde(default)]
-    run_in_background: Option<bool>,
-    #[serde(default = "default_true")]
-    notify: bool,
+    soft_yield_ms: Option<u64>,
     #[serde(default)]
-    wake: bool,
+    run_in_background: Option<bool>,
+    #[serde(default)]
+    notify: Option<bool>,
+    #[serde(default)]
+    wake: Option<bool>,
     /// For background runs: wake the agent after this many seconds with no
     /// new output and no progress events. Resets on activity.
     #[serde(default)]
@@ -820,12 +842,24 @@ struct BashInput {
     justification: Option<String>,
 }
 
-fn default_true() -> bool {
-    true
+impl BashInput {
+    fn requested_notify(&self) -> bool {
+        self.notify.unwrap_or(true)
+    }
+
+    fn requested_wake(&self) -> bool {
+        self.wake.unwrap_or(false)
+    }
+
+    fn soft_yield_wake(&self) -> bool {
+        self.wake.unwrap_or(true)
+    }
 }
 
 #[path = "bash_destructive_gate.rs"]
 mod destructive_gate;
+#[path = "bash_foreground.rs"]
+mod foreground;
 use destructive_gate::destructive_command_refusal;
 #[async_trait]
 impl Tool for BashTool {
@@ -847,7 +881,11 @@ impl Tool for BashTool {
 
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
         let mut params: BashInput = serde_json::from_value(input)?;
-        let run_in_background = params.run_in_background.unwrap_or(false);
+        let policy = BashExecutionPolicy::resolve(
+            params.soft_yield_ms,
+            params.timeout,
+            params.run_in_background.unwrap_or(false),
+        );
 
         // Destructive-command gate (#604), before background dispatch.
         if let Some(refusal) = destructive_command_refusal(
@@ -864,7 +902,7 @@ impl Tool for BashTool {
             params.command = wrapped;
         }
 
-        if run_in_background {
+        if policy.run_in_background {
             return self.execute_background(params, ctx).await;
         }
 
@@ -887,250 +925,11 @@ impl Tool for BashTool {
         }
 
         // Foreground execution with stdin detection
-        self.execute_foreground(&params, &ctx).await
+        self.execute_foreground(&params, &ctx, policy).await
     }
 }
 
 impl BashTool {
-    async fn execute_foreground(
-        &self,
-        params: &BashInput,
-        ctx: &ToolContext,
-    ) -> Result<ToolOutput> {
-        #[cfg(unix)]
-        if self.supports_reload_persistence(ctx) {
-            return self
-                .execute_reload_persistable_foreground(params, ctx)
-                .await;
-        }
-
-        let timeout_ms = bounded_timeout_ms(params.timeout);
-        let timeout_duration = Duration::from_millis(timeout_ms);
-        let has_stdin_channel = ctx.stdin_request_tx.is_some();
-        let mut command = build_shell_command(&params.command);
-        #[cfg(unix)]
-        process_guard::isolate_process_group(&mut command);
-        command
-            .kill_on_drop(true)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        if has_stdin_channel {
-            command.stdin(Stdio::piped());
-        }
-        if let Some(ref dir) = ctx.working_dir {
-            command.current_dir(dir);
-        }
-        let mut child = command.spawn()?;
-        let child_pid = child.id().unwrap_or(0);
-        #[cfg(unix)]
-        let mut foreground_guard = ForegroundProcessGuard::new(child.id());
-        let stdin_handle = child.stdin.take();
-        let stdout_handle = child.stdout.take();
-        let stderr_handle = child.stderr.take();
-
-        // Owned copies let timeout promotion move the work to the background.
-        let title = params
-            .intent
-            .clone()
-            .unwrap_or_else(|| params.command.clone());
-        let stdin_tx = ctx.stdin_request_tx.clone();
-        let tool_call_id = ctx.tool_call_id.clone();
-        let title_for_work = title.clone();
-        // Track progress parsed from output so a timeout promotion starts the
-        // background task at the real percentage instead of 0%.
-        let promoted_progress = std::sync::Arc::new(PromotedCommandProgress::default());
-        let stdout_progress = std::sync::Arc::clone(&promoted_progress);
-        let stderr_progress = std::sync::Arc::clone(&promoted_progress);
-
-        // A dedicated task can be handed to the background manager on timeout
-        // instead of killing the still-running command.
-        let mut work_handle: tokio::task::JoinHandle<Result<ToolOutput>> =
-            tokio::spawn(async move {
-                #[cfg(unix)]
-                let mut process_group_guard = ProcessGroupKillGuard::new(child.id());
-                let stdout_task = tokio::spawn(collect_output_reporting_progress(
-                    stdout_handle,
-                    stdout_progress,
-                ));
-
-                let stderr_task = tokio::spawn(collect_output_reporting_progress(
-                    stderr_handle,
-                    stderr_progress,
-                ));
-
-                let stdin_task = if has_stdin_channel {
-                    Some(tokio::spawn(async move {
-                        if let (Some(mut stdin_pipe), Some(stdin_tx)) = (stdin_handle, stdin_tx) {
-                            tokio::time::sleep(Duration::from_millis(STDIN_INITIAL_DELAY_MS)).await;
-
-                            let mut request_counter = 0u32;
-                            loop {
-                                #[cfg(target_os = "linux")]
-                                let state = stdin_detect::linux::check_process_tree(child_pid);
-                                #[cfg(not(target_os = "linux"))]
-                                let state = stdin_detect::is_waiting_for_stdin(child_pid);
-
-                                if state == StdinState::Reading {
-                                    request_counter += 1;
-                                    let request_id =
-                                        format!("stdin-{}-{}", tool_call_id, request_counter);
-                                    let (response_tx, response_rx) =
-                                        tokio::sync::oneshot::channel();
-
-                                    let request = StdinInputRequest {
-                                        request_id,
-                                        prompt: String::new(),
-                                        is_password: false,
-                                        response_tx,
-                                    };
-
-                                    if stdin_tx.send(request).is_err() {
-                                        break;
-                                    }
-
-                                    match response_rx.await {
-                                        Ok(input) => {
-                                            let line = if input.ends_with('\n') {
-                                                input
-                                            } else {
-                                                format!("{}\n", input)
-                                            };
-                                            if stdin_pipe.write_all(line.as_bytes()).await.is_err()
-                                            {
-                                                break;
-                                            }
-                                            if stdin_pipe.flush().await.is_err() {
-                                                break;
-                                            }
-                                        }
-                                        Err(_) => break,
-                                    }
-
-                                    tokio::time::sleep(Duration::from_millis(100)).await;
-                                } else {
-                                    tokio::time::sleep(Duration::from_millis(
-                                        STDIN_POLL_INTERVAL_MS,
-                                    ))
-                                    .await;
-                                }
-                            }
-                        }
-                    }))
-                } else {
-                    drop(stdin_handle);
-                    None
-                };
-
-                let status = child.wait().await?;
-                #[cfg(unix)]
-                process_group_guard.disarm();
-
-                if let Some(task) = stdin_task {
-                    task.abort();
-                }
-
-                let stdout = stdout_task.await.unwrap_or_default();
-                let stderr = stderr_task.await.unwrap_or_default();
-
-                let mut output = String::new();
-                if !stdout.is_empty() {
-                    output.push_str(&stdout);
-                }
-                if !stderr.is_empty() {
-                    if !output.is_empty() {
-                        output.push('\n');
-                    }
-                    output.push_str(&stderr);
-                }
-                let output = format_command_output(output, status.code());
-                Ok(ToolOutput::new(output).with_title(title_for_work))
-            });
-        #[cfg(unix)]
-        foreground_guard.attach_task(work_handle.abort_handle());
-
-        match tokio::time::timeout(timeout_duration, &mut work_handle).await {
-            Ok(join_result) => {
-                #[cfg(unix)]
-                foreground_guard.disarm();
-                match join_result {
-                    Ok(Ok(output)) => Ok(output),
-                    Ok(Err(e)) => Err(anyhow::anyhow!("Command failed: {}", e)),
-                    Err(join_err) => Err(anyhow::anyhow!("Command task panicked: {}", join_err)),
-                }
-            }
-            Err(_) => {
-                // Timed out, but the command is still running. Instead of killing
-                // it, promote it to a background task so it keeps running, renders
-                // as a background-task card, and the agent is told where to find it.
-                let display_name =
-                    summarize_background_command(params.intent.as_deref(), &params.command);
-                let managed_process = Some(crate::background::ManagedProcessIdentity {
-                    pid: child_pid,
-                    process_instance: crate::platform::process_start_token(child_pid),
-                    process_group_member: crate::platform::process_group_member_identity(child_pid)
-                        .map(
-                            |(pid, token)| crate::background::ManagedProcessMemberIdentity {
-                                pid,
-                                process_instance: Some(token),
-                            },
-                        ),
-                    owner_instance: Some(crate::background::process_instance_token().to_string()),
-                    transfer_policy: crate::background::ManagedProcessTransferPolicy::OwnerBound,
-                });
-                let info = crate::background::global()
-                    .adopt_with_options_and_identity(
-                        "bash",
-                        Some(display_name.clone()),
-                        &ctx.session_id,
-                        params.notify,
-                        params.wake,
-                        work_handle,
-                        managed_process,
-                    )
-                    .await;
-                #[cfg(unix)]
-                // Keep the task-local kill guard armed for explicit cancellation,
-                // but remove transferred work from foreground runtime cleanup.
-                foreground_guard.disarm();
-                // Route progress parsed from the still-running command's output
-                // to the new background task, including any update seen before
-                // promotion, so the task row shows real progress from the start.
-                promoted_progress.attach_task(&info.task_id).await;
-
-                let output = format!(
-                    "Command exceeded the foreground timeout after {:.1}s and is continuing in background (not killed).\n\n\
-                     Task ID: {}\n\
-                     Name: {}\n\
-                     Output file: {}\n\
-                     Status file: {}\n\n\
-                     The command is still running; do not rerun it unless you intentionally want a second copy.\n\
-                     Use `bg` with action=\"wait\" and task_id=\"{}\" to wait for completion or the next progress checkpoint.\n\
-                     Use `bg` with action=\"output\" and task_id=\"{}\" to inspect output.\n\
-                     If you expected it to finish quickly and it did not, the `timeout` parameter is in MILLISECONDS; pass a larger value or omit it.",
-                    timeout_ms as f64 / 1000.0,
-                    info.task_id,
-                    display_name,
-                    info.output_file.display(),
-                    info.status_file.display(),
-                    info.task_id,
-                    info.task_id,
-                );
-
-                Ok(ToolOutput::new(output)
-                    .with_title(title)
-                    .with_metadata(json!({
-                        "background": true,
-                        "task_id": info.task_id,
-                        "display_name": display_name,
-                        "output_file": info.output_file.to_string_lossy(),
-                        "status_file": info.status_file.to_string_lossy(),
-                        "timeout_promoted": true,
-                        "foreground_timeout_ms": timeout_ms,
-                    })))
-            }
-        }
-    }
-
     #[cfg(unix)]
     fn supports_reload_persistence(&self, ctx: &ToolContext) -> bool {
         matches!(
@@ -1145,11 +944,14 @@ impl BashTool {
         &self,
         params: &BashInput,
         ctx: &ToolContext,
+        policy: BashExecutionPolicy,
     ) -> Result<ToolOutput> {
-        let timeout_ms = bounded_timeout_ms(params.timeout);
-        let timeout_duration = Duration::from_millis(timeout_ms);
         let started_at = Utc::now().to_rfc3339();
         let started = Instant::now();
+        let hard_deadline_at = policy
+            .hard_timeout
+            .and_then(|duration| chrono::Duration::from_std(duration).ok())
+            .map(|duration| Utc::now() + duration);
         let manager = crate::background::global();
         let info = manager.reserve_task_info();
         let display_name = summarize_background_command(params.intent.as_deref(), &params.command);
@@ -1188,18 +990,48 @@ impl BashTool {
                 );
             }
 
-            if started.elapsed() >= timeout_duration {
+            if policy
+                .hard_timeout
+                .map(|deadline| started.elapsed() >= deadline)
+                .unwrap_or(false)
+            {
+                let timeout_ms = policy.hard_timeout.map(duration_millis_u64).unwrap_or(0);
+                drop(child_guard);
+                let output = tokio::fs::read_to_string(&info.output_file)
+                    .await
+                    .unwrap_or_else(|err| format!("Failed to read command output: {err}"));
+                let output_remove_result = tokio::fs::remove_file(&info.output_file).await;
+                drop(output_remove_result);
+                let status_remove_result = tokio::fs::remove_file(&info.status_file).await;
+                drop(status_remove_result);
+                return Ok(ToolOutput::new(format_command_output(
+                    format!("{}\n{}", output, timeout_message(timeout_ms)),
+                    Some(124),
+                ))
+                .with_title(
+                    params
+                        .intent
+                        .clone()
+                        .unwrap_or_else(|| params.command.clone()),
+                ));
+            }
+
+            if policy
+                .soft_yield
+                .map(|deadline| started.elapsed() >= deadline)
+                .unwrap_or(false)
+            {
                 let elapsed = started.elapsed();
                 manager
-                    .register_detached_task_with_identity(
+                    .register_detached_task_with_identity_and_deadline(
                         &info,
                         "bash",
                         Some(display_name.clone()),
                         &ctx.session_id,
                         pid,
                         &started_at,
-                        params.notify,
-                        params.wake,
+                        params.requested_notify(),
+                        params.soft_yield_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
@@ -1218,8 +1050,14 @@ impl BashTool {
                             transfer_policy:
                                 crate::background::ManagedProcessTransferPolicy::Transferred,
                         }),
+                        hard_deadline_at,
                     )
                     .await;
+                if let Some(stall_wake_seconds) = params.stall_wake_seconds {
+                    let _ = manager
+                        .arm_stall_watchdog(&info.task_id, stall_wake_seconds)
+                        .await;
+                }
                 child_guard.disarm();
                 // Detached commands write straight to the output file, so no
                 // in-process reader sees their output. Follow the file to keep
@@ -1228,7 +1066,7 @@ impl BashTool {
 
                 let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
                 let output = format!(
-                    "Command exceeded the foreground timeout after {:.1}s and is continuing in background.\n\n\
+                    "Command soft-yielded after {:.1}s and is continuing in background.\n\n\
                      Task ID: {}\n\
                      Name: {}\n\
                      Foreground time used: {:.1}s\n\
@@ -1237,7 +1075,9 @@ impl BashTool {
                      The command is still running; do not rerun it unless you intentionally want a second copy.\n\
                      Use `bg` with action=\"wait\" and task_id=\"{}\" to wait for completion or the next progress checkpoint.\n\
                      Use `bg` with action=\"output\" and task_id=\"{}\" to inspect output.",
-                    timeout_ms as f64 / 1000.0,
+                    policy
+                        .soft_yield
+                        .map_or(0.0, |duration| duration.as_secs_f64()),
                     info.task_id,
                     display_name,
                     elapsed.as_secs_f64(),
@@ -1258,8 +1098,8 @@ impl BashTool {
                         "task_id": info.task_id,
                         "output_file": info.output_file.to_string_lossy(),
                         "status_file": info.status_file.to_string_lossy(),
-                        "timeout_promoted": true,
-                        "foreground_timeout_ms": timeout_ms,
+                        "soft_yielded": true,
+                        "soft_yield_ms": policy.soft_yield.map(|duration| duration.as_millis()),
                         "foreground_elapsed_ms": elapsed_ms,
                         "pid": pid,
                     })));
@@ -1271,15 +1111,15 @@ impl BashTool {
                 .unwrap_or(false)
             {
                 manager
-                    .register_detached_task_with_identity(
+                    .register_detached_task_with_identity_and_deadline(
                         &info,
                         "bash",
                         Some(display_name.clone()),
                         &ctx.session_id,
                         pid,
                         &started_at,
-                        params.notify,
-                        params.wake,
+                        params.requested_notify(),
+                        params.requested_wake(),
                         Some(crate::background::ManagedProcessIdentity {
                             pid,
                             process_instance: crate::platform::process_start_token(pid),
@@ -1298,8 +1138,14 @@ impl BashTool {
                             transfer_policy:
                                 crate::background::ManagedProcessTransferPolicy::Transferred,
                         }),
+                        hard_deadline_at,
                     )
                     .await;
+                if let Some(stall_wake_seconds) = params.stall_wake_seconds {
+                    let _ = manager
+                        .arm_stall_watchdog(&info.task_id, stall_wake_seconds)
+                        .await;
+                }
                 child_guard.disarm();
                 spawn_detached_progress_follower(info.task_id.clone(), info.output_file.clone());
                 let output = format!(
@@ -1339,8 +1185,8 @@ impl BashTool {
         let timeout_ms = params.timeout.map(|timeout| timeout.min(MAX_TIMEOUT_MS));
         let timeout_duration = timeout_ms.map(Duration::from_millis);
 
-        let wake = params.wake;
-        let notify = params.notify || wake;
+        let wake = params.requested_wake();
+        let notify = params.requested_notify() || wake;
         let info = crate::background::global()
             .spawn_with_notify(
                 "bash",
@@ -1369,6 +1215,8 @@ impl BashTool {
                         .map_err(|e| anyhow::anyhow!("Failed to spawn command: {}", e))?;
                     #[cfg(unix)]
                     let mut process_group_guard = ProcessGroupKillGuard::new(child.id());
+                    let hard_timeout_deadline = timeout_duration
+                        .map(|duration| tokio::time::Instant::now() + duration);
 
                     // Stream output to file
                     let mut file = tokio::fs::File::create(&output_path)
@@ -1384,7 +1232,7 @@ impl BashTool {
                     let mut stderr_lines = stderr.map(|s| BufReader::new(s).lines());
                     let mut stdout_done = stdout_lines.is_none();
                     let mut stderr_done = stderr_lines.is_none();
-                    let timeout_sleep = timeout_duration.map(tokio::time::sleep);
+                    let timeout_sleep = hard_timeout_deadline.map(tokio::time::sleep_until);
                     tokio::pin!(timeout_sleep);
                     let mut timed_out = false;
 
@@ -1397,18 +1245,9 @@ impl BashTool {
 	                                }
 	                            }, if timeout_duration.is_some() => {
 	                                timed_out = true;
-                                #[cfg(unix)]
-                                {
-                                    if let Some(pid) = child.id() {
-                                        let token = crate::platform::process_start_token(pid);
-                                        let _ = crate::platform::signal_verified_process_group(
-                                            pid,
-                                            token.as_deref(),
-                                            libc::SIGKILL,
-                                        );
-                                    } else {
-	                                        let _ = child.start_kill();
-	                                    }
+	                                #[cfg(unix)]
+	                                {
+	                                    let _ = process_group_guard.terminate_verified();
 	                                }
 	                                #[cfg(not(unix))]
 	                                {

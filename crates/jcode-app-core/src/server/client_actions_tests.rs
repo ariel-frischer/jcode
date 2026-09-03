@@ -431,8 +431,8 @@ fn process_manifest_lifecycle_reference_is_opaque_and_session_bound() {
         event_history: Vec::new(),
         stall_wake_seconds: None,
         managed_process: None,
+        hard_deadline_at: None,
     };
-
     let process_manifest_id = process_manifest_id_for_lifecycle(&status, "session-parent-safe");
     assert_eq!(process_manifest_id.as_deref(), Some("task-manifest-opaque"));
     assert!(process_manifest_id_for_lifecycle(&status, "other-session").is_none());

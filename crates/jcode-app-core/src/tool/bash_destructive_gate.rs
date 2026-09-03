@@ -61,23 +61,27 @@ pub(super) fn bash_parameters_schema() -> serde_json::Value {
             },
             "timeout": {
                 "type": "integer",
-                "description": "Timeout in MILLISECONDS (not seconds), e.g. 1800000 = 30min; kills with exit 124. Omit for no timeout."
+                "description": "Optional hard timeout in MILLISECONDS (not seconds), capped at 1800000 (30min); terminates the command process group with exit 124. Omit for no timeout."
+            },
+            "soft_yield_ms": {
+                "type": "integer",
+                "description": "Foreground wait window in MILLISECONDS before the still-running command is adopted by the background manager. Defaults to 10000; 0 disables automatic soft yield. Soft yield returns control and does not terminate or restart the command."
             },
             "run_in_background": {
                 "type": "boolean",
-                "description": "Run in background. Emit `JCODE_PROGRESS {json}` lines for progress reporting."
+                "description": "Run in managed background execution immediately, without waiting for soft yield. An explicit hard timeout still applies. Emit `JCODE_PROGRESS {json}` lines for progress reporting."
             },
             "notify": {
                 "type": "boolean",
-                "description": "Notify on completion."
+                "description": "Notify when managed background work completes, whether backgrounded immediately or after soft yield."
             },
             "wake": {
                 "type": "boolean",
-                "description": "Wake on completion."
+                "description": "Wake when managed background work completes; wake implies notification. Defaults to true after automatic soft yield and false for explicit run_in_background. Set explicitly to override either default."
             },
             "stall_wake_seconds": {
                 "type": "integer",
-                "description": "With run_in_background: wake the agent after this many seconds of no output/progress (min 30, resets on activity). Use for long jobs that may hang silently."
+                "description": "Once work is managed in the background, immediately or after soft yield: wake the agent after this many seconds of no output/progress (min 30, resets on activity). Use for long jobs that may hang silently."
             },
             "justification": {
                 "type": "string",

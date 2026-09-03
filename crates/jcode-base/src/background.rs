@@ -19,6 +19,7 @@ use tokio::sync::{Mutex, RwLock, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant as TokioInstant, MissedTickBehavior};
 
+mod hard_deadline;
 mod model;
 
 pub use model::{
@@ -95,11 +96,15 @@ impl<T> Drop for AbortOnDrop<T> {
 }
 
 /// Manages background task execution
+#[derive(Clone)]
 pub struct BackgroundTaskManager {
     tasks: Arc<RwLock<HashMap<String, RunningTask>>>,
     /// Serializes progress status read-modify-write cycles so concurrent output
     /// readers cannot overwrite a newer high-water mark with a stale update.
     progress_updates: Arc<Mutex<()>>,
+    /// Serializes detached hard-deadline reconciliation so timeout, completion,
+    /// cancellation, and reload checks publish at most one terminal outcome.
+    deadline_reconciliation: Arc<Mutex<()>>,
     /// Live stall watchdogs by task id. Each entry is a spawned monitor that
     /// fires a [`BusEvent::BackgroundTaskStalled`] after its task produces no
     /// output bytes and no progress events for the configured window.
@@ -116,6 +121,7 @@ impl BackgroundTaskManager {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
             progress_updates: Arc::new(Mutex::new(())),
+            deadline_reconciliation: Arc::new(Mutex::new(())),
             stall_watchdogs: Arc::new(RwLock::new(HashMap::new())),
             output_dir,
         }
@@ -205,123 +211,6 @@ impl BackgroundTaskManager {
         if let Ok(json) = serde_json::to_string_pretty(status) {
             let _ = fs::write(path, json).await;
         }
-    }
-
-    async fn finalize_detached_status_if_needed(
-        &self,
-        mut status: TaskStatusFile,
-        status_path: &std::path::Path,
-    ) -> TaskStatusFile {
-        if status.status != BackgroundTaskStatus::Running || !status.detached {
-            return status;
-        }
-
-        let Some(pid) = status.pid else {
-            return status;
-        };
-
-        let Some(identity) = status.managed_process.as_ref() else {
-            status.error = Some(
-                "Managed process identity is missing; detached reconciliation failed closed"
-                    .to_string(),
-            );
-            self.write_status_file(status_path, &status).await;
-            return status;
-        };
-        if identity.pid != pid {
-            status.error = Some(
-                "Managed process PID does not match detached status; reconciliation failed closed"
-                    .to_string(),
-            );
-            self.write_status_file(status_path, &status).await;
-            return status;
-        }
-        let member = identity
-            .process_group_member
-            .as_ref()
-            .and_then(|member| Some((member.pid, member.process_instance.as_deref()?)));
-        match crate::platform::verify_process_group_identity(
-            identity.pid,
-            identity.process_instance.as_deref(),
-            member,
-        ) {
-            crate::platform::ProcessIdentityCheck::Matching => {}
-            crate::platform::ProcessIdentityCheck::Stopped
-                if crate::platform::is_process_group_live(identity.pid) =>
-            {
-                return status;
-            }
-            crate::platform::ProcessIdentityCheck::Stopped => {}
-            check => {
-                status.error = Some(format!(
-                    "Managed process identity verification failed during reconciliation ({check:?})"
-                ));
-                self.write_status_file(status_path, &status).await;
-                return status;
-            }
-        }
-
-        let reaped_exit = crate::platform::try_reap_child_process(pid).ok().flatten();
-
-        if reaped_exit.is_none()
-            && (crate::platform::is_process_running(pid)
-                || crate::platform::is_process_group_live(identity.pid))
-        {
-            return status;
-        }
-
-        let output_path = self.output_path_for(&status.task_id);
-        let output = fs::read_to_string(&output_path).await.unwrap_or_default();
-        let exit_code = reaped_exit.or_else(|| Self::parse_exit_code_from_output(&output));
-        let completed_at = Utc::now();
-        let duration_secs = Self::status_duration_secs(&status.started_at, completed_at);
-        let final_status = if matches!(exit_code, Some(0)) {
-            BackgroundTaskStatus::Completed
-        } else {
-            BackgroundTaskStatus::Failed
-        };
-        let final_error = if matches!(final_status, BackgroundTaskStatus::Failed) {
-            Some(match exit_code {
-                Some(code) => format!("Command exited with code {}", code),
-                None => "Detached command exited without a readable exit code".to_string(),
-            })
-        } else {
-            None
-        };
-
-        status.status = final_status.clone();
-        status.exit_code = exit_code;
-        status.error = final_error.clone();
-        status.completed_at = Some(completed_at.to_rfc3339());
-        status.duration_secs = duration_secs;
-        status.pid = Some(pid);
-        push_task_event(
-            &mut status,
-            terminal_event_record(final_status.clone(), exit_code, final_error.as_deref()),
-        );
-
-        self.write_status_file(status_path, &status).await;
-
-        let output_preview = if output.len() > 500 {
-            format!("{}...", crate::util::truncate_str(&output, 500))
-        } else {
-            output
-        };
-        Bus::global().publish(BusEvent::BackgroundTaskCompleted(BackgroundTaskCompleted {
-            task_id: status.task_id.clone(),
-            tool_name: status.tool_name.clone(),
-            display_name: status.display_name.clone(),
-            session_id: status.session_id.clone(),
-            status: final_status,
-            exit_code,
-            output_preview,
-            output_file: output_path,
-            duration_secs: duration_secs.unwrap_or_default(),
-            notify: status.notify,
-            wake: status.wake,
-        }));
-
-        status
     }
 
     /// True when a non-detached `Running` status file provably belongs to a
@@ -459,6 +348,16 @@ impl BackgroundTaskManager {
             let Some(status) = self.read_status_file(&path).await else {
                 continue;
             };
+            if status.status == BackgroundTaskStatus::Running && status.detached {
+                let prior_status = status.status.clone();
+                let finalized = self.finalize_detached_status_if_needed(status, &path).await;
+                if finalized.status != prior_status {
+                    reconciled += 1;
+                } else if let Some(deadline) = finalized.hard_deadline_at {
+                    self.arm_hard_deadline_monitor(finalized.task_id.clone(), deadline);
+                }
+                continue;
+            }
             if !Self::status_is_reconcilable_orphan(&status) {
                 continue;
             }
@@ -480,6 +379,15 @@ impl BackgroundTaskManager {
             output_file,
             status_file,
         }
+    }
+
+    fn arm_hard_deadline_monitor(&self, task_id: String, deadline: DateTime<Utc>) {
+        let manager = self.clone();
+        tokio::spawn(async move {
+            let remaining = (deadline - Utc::now()).to_std().unwrap_or(Duration::ZERO);
+            tokio::time::sleep(remaining).await;
+            drop(manager.status(&task_id).await);
+        });
     }
 
     #[expect(
@@ -533,6 +441,38 @@ impl BackgroundTaskManager {
         wake: bool,
         managed_process: Option<ManagedProcessIdentity>,
     ) {
+        self.register_detached_task_with_identity_and_deadline(
+            info,
+            tool_name,
+            display_name,
+            session_id,
+            pid,
+            started_at,
+            notify,
+            wake,
+            managed_process,
+            None,
+        )
+        .await;
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Detached task registration mirrors persisted status fields and deadline policy"
+    )]
+    pub async fn register_detached_task_with_identity_and_deadline(
+        &self,
+        info: &BackgroundTaskInfo,
+        tool_name: &str,
+        display_name: Option<String>,
+        session_id: &str,
+        pid: u32,
+        started_at: &str,
+        notify: bool,
+        wake: bool,
+        managed_process: Option<ManagedProcessIdentity>,
+        hard_deadline_at: Option<DateTime<Utc>>,
+    ) {
         let (notify, wake) = normalize_delivery(notify, wake);
         let status = TaskStatusFile {
             task_id: info.task_id.clone(),
@@ -559,6 +499,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process,
+            hard_deadline_at,
         };
         self.write_status_file(&info.status_file, &status).await;
         Self::publish_task_started_activity(
@@ -568,6 +509,9 @@ impl BackgroundTaskManager {
             session_id,
             notify,
         );
+        if let Some(deadline) = hard_deadline_at {
+            self.arm_hard_deadline_monitor(info.task_id.clone(), deadline);
+        }
     }
 
     /// Spawn a background task
@@ -630,6 +574,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: None,
+            hard_deadline_at: None,
         };
         if let Ok(json) = serde_json::to_string_pretty(&initial_status) {
             let _ = std::fs::write(&status_path, json);
@@ -711,6 +656,9 @@ impl BackgroundTaskManager {
                 event_history: prior_event_history,
                 stall_wake_seconds: None,
                 managed_process,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
             };
             push_task_event(
                 &mut final_status,
@@ -869,6 +817,7 @@ impl BackgroundTaskManager {
             event_history: Vec::new(),
             stall_wake_seconds: None,
             managed_process: managed_process.clone(),
+            hard_deadline_at: None,
         };
         if let Ok(json) = serde_json::to_string_pretty(&initial_status) {
             let _ = std::fs::write(&status_path, json);
@@ -903,12 +852,45 @@ impl BackgroundTaskManager {
             let duration_secs = started_at.elapsed().as_secs_f64();
 
             let (status, exit_code, error, output_text) = match tool_result {
-                Ok(Ok(output)) => (
-                    BackgroundTaskStatus::Completed,
-                    Some(0),
-                    None,
-                    output.output,
-                ),
+                Ok(Ok(output)) => {
+                    let reported_exit_code = output
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("exit_code"));
+                    let exit_code = reported_exit_code
+                        .and_then(serde_json::Value::as_i64)
+                        .and_then(|code| {
+                            let in_range =
+                                (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&code);
+                            in_range.then_some(code as i32)
+                        });
+                    let unusable_exit_code =
+                        reported_exit_code.is_some() && exit_code.is_none();
+                    let timed_out = output
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("timed_out"))
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
+                    let status = if timed_out
+                        || unusable_exit_code
+                        || exit_code.is_some_and(|code| code != 0)
+                    {
+                        BackgroundTaskStatus::Failed
+                    } else {
+                        BackgroundTaskStatus::Completed
+                    };
+                    let error = if timed_out {
+                        Some("Command timed out".to_string())
+                    } else if unusable_exit_code {
+                        Some("Adopted tool reported an unusable exit code".to_string())
+                    } else {
+                        exit_code
+                            .filter(|code| *code != 0)
+                            .map(|code| format!("Command exited with code {code}"))
+                    };
+                    (status, exit_code, error, output.output)
+                }
                 Ok(Err(e)) => (
                     BackgroundTaskStatus::Failed,
                     None,
@@ -961,6 +943,9 @@ impl BackgroundTaskManager {
                 event_history: prior_event_history,
                 stall_wake_seconds: None,
                 managed_process: None,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
             };
             push_task_event(
                 &mut final_status,
@@ -1626,6 +1611,7 @@ impl BackgroundTaskManager {
                 event_history: Vec::new(),
                 stall_wake_seconds: None,
                 managed_process: task.managed_process,
+                hard_deadline_at: None,
             };
             let event_status = final_status.status.clone();
             let event_exit_code = final_status.exit_code;
@@ -1641,12 +1627,18 @@ impl BackgroundTaskManager {
             Ok(cancellation_outcome(wrapper_completed, teardown_error))
         } else {
             let status_path = self.status_path_for(task_id);
-            let Some(mut status) = self.read_status_file(&status_path).await else {
+            let Some(status) = self.read_status_file(&status_path).await else {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
             };
-            status = self
-                .finalize_detached_status_if_needed(status, &status_path)
-                .await;
+            drop(
+                self.finalize_detached_status_if_needed(status, &status_path)
+                    .await,
+            );
+            let _deadline_guard = self.deadline_reconciliation.lock().await;
+            let Some(current_status) = self.read_status_file(&status_path).await else {
+                return Ok(BackgroundTaskCancellation::AlreadyTerminal);
+            };
+            let mut status = current_status;
             if status.status != BackgroundTaskStatus::Running {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
             }
@@ -2146,6 +2138,9 @@ impl BackgroundTaskManager {
                     .map(|status| status.event_history.clone())
                     .unwrap_or_default(),
                 stall_wake_seconds: None,
+                hard_deadline_at: prior_status
+                    .as_ref()
+                    .and_then(|status| status.hard_deadline_at),
                 managed_process: prior_status.and_then(|status| status.managed_process),
             };
             push_task_event(
