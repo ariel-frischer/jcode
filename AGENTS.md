@@ -34,6 +34,53 @@
   and its base (e.g. `main`) otherwise. Never integrate branches owned by non-maintainers
   or other agents yourself; tell the user and let them decide how to proceed.
 
+## Worktree Hygiene
+
+Every worktree carries its own Cargo `target/`. Cargo shares nothing between
+them, and a single built worktree runs 12-33 GB. A fleet of 20+ review worktrees
+silently reached 382 GB and filled the disk, so cleanup is part of finishing a
+task, not a separate chore.
+
+- **Remove your worktree when the work has landed.** Before starting new work in
+  a fresh worktree, remove any of your own worktrees whose branch is already
+  merged. Do not leave merged worktrees parked "just in case" - the branch and
+  its commits survive in the repository after the worktree is gone.
+- **Verify merged status against `github/dev`, not `origin/*`.** This repository
+  has **no `origin` remote**; it uses `github`, `gitlab`, and `upstream`. A base
+  of `origin/main` silently resolves to nothing and makes `git cherry` report
+  every branch as fully merged:
+
+  ```bash
+  git cherry github/dev HEAD | grep -c '^+'   # 0 == fully merged (survives squash merges)
+  ```
+
+- **Remove with `git worktree remove`, never `rm -rf`.** Omit `--force` so git
+  refuses any worktree with uncommitted or untracked changes; that refusal is the
+  safety net, so investigate rather than re-running with `--force`.
+
+  ```bash
+  git worktree remove .worktrees/agent/<name>
+  ```
+
+- **`git worktree list` is the only authority on what is a worktree.** Do not
+  infer from directory layout. `.worktrees/agent/` is a *container* holding many
+  live worktrees, not a worktree itself, and stale directories left under
+  `.worktrees/` are not registered at all - `git -C` inside one silently walks up
+  and reports the *parent* checkout's branch and HEAD.
+- **Reclaim space without deleting a worktree you still need.** Deleting only
+  `target/` keeps the branch and sources intact; `cargo build` regenerates it:
+
+  ```bash
+  scripts/clean_target.sh --sweep 7            # dry-run; add --apply to act
+  ```
+
+  Run it from inside the worktree you want cleaned. It resolves `target/` from
+  its own checkout and has no cross-worktree awareness, so a fleet of worktrees
+  needs one invocation each. It already skips profiles with an active
+  `cargo`/`rustc` process or recent writes, so it is safe alongside other agents.
+- **Prune registry entries** after removing directories by hand:
+  `git worktree prune`.
+
 ## Install Notes
 - After landing a merge into `dev`, automatically install the newer build with
   `scripts/install_release.sh --fast` and gracefully reload the shared server.
