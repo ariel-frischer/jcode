@@ -1539,9 +1539,9 @@ impl BackgroundTaskManager {
             tasks.remove(task_id)
         };
         if let Some(task) = task {
-            if self
-                .read_status_file(&task.status_path)
-                .await
+            let prior_status = self.read_status_file(&task.status_path).await;
+            if prior_status
+                .as_ref()
                 .is_some_and(|status| status.status != BackgroundTaskStatus::Running)
             {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
@@ -1612,7 +1612,9 @@ impl BackgroundTaskManager {
                 wake: wake_flag,
                 progress: None,
                 event_history: Vec::new(),
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 managed_process: task.managed_process,
                 hard_deadline_at: None,
             };
@@ -2140,7 +2142,9 @@ impl BackgroundTaskManager {
                     .as_ref()
                     .map(|status| status.event_history.clone())
                     .unwrap_or_default(),
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 hard_deadline_at: prior_status
                     .as_ref()
                     .and_then(|status| status.hard_deadline_at),

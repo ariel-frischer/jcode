@@ -774,14 +774,17 @@ async fn cancel_reports_fully_stopped_instead_of_boolean_success() -> Result<()>
             },
         )
         .await;
+    manager
+        .arm_stall_watchdog(&info.task_id, 30)
+        .await
+        .ok_or_else(|| anyhow!("watchdog should arm before cancellation"))?;
     assert_eq!(
         manager.cancel(&info.task_id).await?,
         BackgroundTaskCancellation::FullyStopped
     );
-    assert_eq!(
-        manager.status(&info.task_id).await.unwrap().status,
-        BackgroundTaskStatus::Failed
-    );
+    let status = manager.status(&info.task_id).await.unwrap();
+    assert_eq!(status.status, BackgroundTaskStatus::Failed);
+    assert_eq!(status.stall_wake_seconds, Some(30));
     Ok(())
 }
 
@@ -1000,6 +1003,10 @@ async fn abort_live_tasks_for_reload_finalizes_running_tasks() -> Result<()> {
         )
         .await;
     assert!(manager.is_live_task(&info.task_id));
+    manager
+        .arm_stall_watchdog(&info.task_id, 30)
+        .await
+        .ok_or_else(|| anyhow!("watchdog should arm before reload finalization"))?;
 
     let aborted = manager.abort_live_tasks_for_reload().await;
     assert_eq!(aborted, 1);
@@ -1019,6 +1026,7 @@ async fn abort_live_tasks_for_reload_finalizes_running_tasks() -> Result<()> {
         "error should explain the reload interruption, got: {error}"
     );
     assert!(status.completed_at.is_some());
+    assert_eq!(status.stall_wake_seconds, Some(30));
 
     // Idempotent: a second sweep finds nothing.
     assert_eq!(manager.abort_live_tasks_for_reload().await, 0);
