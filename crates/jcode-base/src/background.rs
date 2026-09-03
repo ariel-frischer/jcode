@@ -654,7 +654,9 @@ impl BackgroundTaskManager {
                 wake: wake_flag,
                 progress: prior_progress,
                 event_history: prior_event_history,
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 managed_process,
                 hard_deadline_at: prior_status
                     .as_ref()
@@ -864,8 +866,7 @@ impl BackgroundTaskManager {
                                 (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&code);
                             in_range.then_some(code as i32)
                         });
-                    let unusable_exit_code =
-                        reported_exit_code.is_some() && exit_code.is_none();
+                    let unusable_exit_code = reported_exit_code.is_some() && exit_code.is_none();
                     let timed_out = output
                         .metadata
                         .as_ref()
@@ -941,7 +942,9 @@ impl BackgroundTaskManager {
                 wake: wake_flag,
                 progress: prior_progress,
                 event_history: prior_event_history,
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 managed_process: None,
                 hard_deadline_at: prior_status
                     .as_ref()
@@ -1536,9 +1539,9 @@ impl BackgroundTaskManager {
             tasks.remove(task_id)
         };
         if let Some(task) = task {
-            if self
-                .read_status_file(&task.status_path)
-                .await
+            let prior_status = self.read_status_file(&task.status_path).await;
+            if prior_status
+                .as_ref()
                 .is_some_and(|status| status.status != BackgroundTaskStatus::Running)
             {
                 return Ok(BackgroundTaskCancellation::AlreadyTerminal);
@@ -1609,7 +1612,9 @@ impl BackgroundTaskManager {
                 wake: wake_flag,
                 progress: None,
                 event_history: Vec::new(),
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 managed_process: task.managed_process,
                 hard_deadline_at: None,
             };
@@ -2137,7 +2142,9 @@ impl BackgroundTaskManager {
                     .as_ref()
                     .map(|status| status.event_history.clone())
                     .unwrap_or_default(),
-                stall_wake_seconds: None,
+                stall_wake_seconds: prior_status
+                    .as_ref()
+                    .and_then(|status| status.stall_wake_seconds),
                 hard_deadline_at: prior_status
                     .as_ref()
                     .and_then(|status| status.hard_deadline_at),

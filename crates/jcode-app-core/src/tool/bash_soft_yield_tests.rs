@@ -449,18 +449,24 @@ async fn soft_yielded_command_defaults_to_terminal_wake_and_inherits_management_
         .status(&task_id)
         .await
         .expect("adopted task status");
-    assert!(status.notify, "default completion wake must imply notification");
-    assert!(status.wake, "automatic soft yield must default to one terminal wake");
-    assert_eq!(
-        status.stall_wake_seconds,
-        Some(crate::background::BackgroundTaskManager::MIN_STALL_WAKE_SECONDS),
-        "automatic adoption must arm the existing clamped stall watchdog"
+    assert!(
+        status.notify,
+        "default completion wake must imply notification"
+    );
+    assert!(
+        status.wake,
+        "automatic soft yield must default to one terminal wake"
     );
     let wait = crate::background::global()
         .wait(&task_id, Duration::from_secs(5), false)
         .await
         .expect("adopted task should be waitable");
     assert_eq!(wait.task.task_id, task_id);
+    assert_eq!(
+        wait.task.stall_wake_seconds,
+        Some(crate::background::BackgroundTaskManager::MIN_STALL_WAKE_SECONDS),
+        "automatic adoption must retain the clamped stall watchdog configuration through terminal finalization"
+    );
     assert!(
         crate::background::global()
             .output(&task_id)
