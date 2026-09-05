@@ -145,3 +145,47 @@ integration-line growth in already oversized files. Resolve these without hiding
 unrelated baseline drift or blanket rebaselining. Clippy also reports an existing
 `jcode-tui-mermaid` type-complexity error that needs baseline isolation. Full
 formatting passed, but no full compile/Clippy/routing guardrail pass is claimed.
+
+### T007 repairs and exact-base isolation (2026-09-05 21:32 UTC)
+
+Commit `81adbe1b1` makes first-observation and optional display defaults explicit,
+diagnoses non-Unicode environment overrides without exposing their values, and
+reports an invalid pre-epoch clock instead of silently replacing its error.
+The unsupported-platform artifact branch names its unused argument explicitly.
+A deterministic configuration test verifies invalid Unicode retains the configured
+value and reports only the key. Focused compilation is still pending below.
+
+Static checks ran against an archive of exact base `c2a7d18a3` and the repaired
+candidate. Provenance, panic and swallowed-error failure sets are identical.
+The Mermaid package manifest and offending source file are byte-identical to base.
+No unrelated Rust source or swallowed/panic budget was changed.
+
+Inline review accepted only these necessary composition/compatibility size deltas:
+
+| Existing oversized surface | Owned LOC delta |
+| --- | ---: |
+| app-core server.rs / client_lifecycle.rs | 3 / 24 |
+| protocol wire.rs | 10 |
+| TUI app.rs / remote/server_events.rs | 1 / 14 |
+| TUI tui_lifecycle.rs / tui_state.rs | 2 / 4 |
+| TUI backend.rs / mod.rs / ui.rs | 4 / 15 / 7 |
+| CLI acp.rs | 2 |
+| app-core client_lifecycle_tests.rs / E2E test_support/mod.rs | 1 / 1 |
+
+The two size budgets add exactly these 88 lines, not the current file sizes.
+The existing provenance ledger records causal commits, review disposition and
+bounded source-Bead search. Its ancestry ceiling now includes the accepted source
+candidate, with the previous merged ceiling and not-yet-landed status explicit in
+`scoped_extensions`. Historical reconciliation ownership remains unchanged.
+An automated comparison verifies each file's excess above its allowance is
+identical to the exact base. No new provenance, panic or swallowed-error failure
+remains. This is changed-surface static acceptance, **not a full guardrail pass**.
+
+Receipts, exact-base logs and `scoped-size-deltas.json` are retained at
+`/home/ari/.jcode/scratch/workflow-guardrails/t007-baseline/`.
+The sanitized serialized runner is
+`/home/ari/.jcode/scratch/workflow-guardrails/t007-run.py`. It awaits the existing
+external Cargo lane by process-exit notification before invalidating only owned
+workspace dev-profile artifacts and running focused tests plus full guardrails.
+It preserves dependency caches and the already validated selfdev executable.
+No install, shared-daemon change or installed configuration enablement occurred.

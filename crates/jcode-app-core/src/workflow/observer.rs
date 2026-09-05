@@ -9,8 +9,8 @@ pub(super) fn observe(run: &mut Registration, now: u64, quiet_seconds: u64) -> W
     // A first observation has no previous snapshot. This is not an error fallback.
     let mut snapshot = run
         .last_good
-        .clone()
-        .unwrap_or_else(WorkflowSnapshot::default);
+        .as_ref()
+        .map_or_else(WorkflowSnapshot::default, Clone::clone);
     snapshot.id = run.id.clone();
     snapshot.label = super::display_text(&run.label);
     snapshot.source = "autospec".into();
