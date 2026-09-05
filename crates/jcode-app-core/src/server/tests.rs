@@ -507,6 +507,10 @@ async fn external_background_task_wake_emits_request_without_starting_turn() {
     assert!(soft_interrupt_queues.read().await.is_empty());
 }
 
+include!("tests/idle_live_agent_reservation_blocks_a_second_wake_until_released.rs");
+
+include!("tests/wake_turn_holds_reservation_until_terminal_status_is_published.rs");
+
 #[tokio::test]
 async fn wake_turn_tracks_member_status_and_emits_terminal_done() {
     let provider = Arc::new(StreamingMockProvider::default());

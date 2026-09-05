@@ -389,46 +389,7 @@ impl OpenRouterTransportState {
     }
 }
 
-fn is_kimi_coding_api_base(api_base: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(api_base) else {
-        return false;
-    };
-    matches!(url.host_str(), Some("api.kimi.com"))
-        && url.path().trim_end_matches('/').starts_with("/coding")
-}
-
-fn is_coding_agent_api_base(api_base: &str) -> bool {
-    let Ok(url) = reqwest::Url::parse(api_base) else {
-        return false;
-    };
-    let host = url.host_str().unwrap_or_default();
-    let path = url.path().trim_end_matches('/');
-    is_kimi_coding_api_base(api_base)
-        || host == "coding.dashscope.aliyuncs.com"
-        || host == "coding-intl.dashscope.aliyuncs.com"
-        || (host == "api.z.ai" && path.starts_with("/api/coding/paas"))
-}
-
-fn is_kimi_model_name(model: &str) -> bool {
-    model.to_ascii_lowercase().contains("kimi")
-}
-
-fn should_send_kimi_coding_agent_headers(api_base: &str, model: Option<&str>) -> bool {
-    is_coding_agent_api_base(api_base) || model.map(is_kimi_model_name).unwrap_or(false)
-}
-
-fn apply_kimi_coding_agent_headers(
-    req: reqwest::RequestBuilder,
-    api_base: &str,
-    model: Option<&str>,
-) -> reqwest::RequestBuilder {
-    if should_send_kimi_coding_agent_headers(api_base, model) {
-        req.header("User-Agent", KIMI_CODING_USER_AGENT)
-            .header("x-app", KIMI_CODING_X_APP)
-    } else {
-        req
-    }
-}
+include!("coding_agent_headers.rs");
 
 #[derive(Debug, Clone)]
 enum ProviderAuth {
@@ -895,6 +856,10 @@ pub struct OpenRouterProvider {
     /// Missing entries mean unspecified and preserve the provider-level fallback.
     static_image_input_support: HashMap<String, bool>,
     send_openrouter_headers: bool,
+    /// Stable per-conversation identifier sent as `x-opencode-session` to
+    /// OpenCode (Zen / Go) endpoints, which require it for routing (issue #1167).
+    /// Each provider instance (and each `fork()`) gets a fresh UUID.
+    conversation_id: String,
     models_cache: Arc<RwLock<ModelsCache>>,
     model_catalog_refresh: Arc<Mutex<ModelCatalogRefreshState>>,
     /// Provider routing preferences
@@ -1432,6 +1397,7 @@ impl OpenRouterProvider {
             static_context_limits,
             static_image_input_support,
             send_openrouter_headers: false,
+            conversation_id: new_conversation_id(),
             models_cache: Arc::new(RwLock::new(ModelsCache::default())),
             model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
             provider_routing: Arc::new(RwLock::new(ProviderRouting::default())),
@@ -1637,6 +1603,7 @@ impl OpenRouterProvider {
             static_context_limits,
             static_image_input_support: HashMap::new(),
             send_openrouter_headers,
+            conversation_id: new_conversation_id(),
             models_cache: Arc::new(RwLock::new(ModelsCache::default())),
             model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
             provider_routing: Arc::new(RwLock::new(provider_routing)),
@@ -1680,6 +1647,7 @@ impl OpenRouterProvider {
             static_context_limits: HashMap::new(),
             static_image_input_support: HashMap::new(),
             send_openrouter_headers: true,
+            conversation_id: new_conversation_id(),
             models_cache: Arc::new(RwLock::new(ModelsCache::default())),
             model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
             provider_routing: Arc::new(RwLock::new(Self::parse_provider_routing())),
@@ -1751,6 +1719,7 @@ impl OpenRouterProvider {
             static_context_limits,
             static_image_input_support: HashMap::new(),
             send_openrouter_headers: false,
+            conversation_id: new_conversation_id(),
             models_cache: Arc::new(RwLock::new(ModelsCache::default())),
             model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
             provider_routing: Arc::new(RwLock::new(ProviderRouting::default())),
@@ -1956,6 +1925,7 @@ impl OpenRouterProvider {
                 static_context_limits: HashMap::new(),
                 static_image_input_support: HashMap::new(),
                 send_openrouter_headers: true,
+                conversation_id: new_conversation_id(),
                 models_cache: Arc::new(RwLock::new(ModelsCache::default())),
                 model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
                 provider_routing: Arc::new(RwLock::new(ProviderRouting::default())),

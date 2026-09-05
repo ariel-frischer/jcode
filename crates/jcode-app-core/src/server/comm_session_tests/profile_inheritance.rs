@@ -1,6 +1,6 @@
 use super::super::{
     CoordinatorSpawnIdentity, prepare_visible_spawn_session, resolve_coordinator_spawn_identity,
-    resolve_spawn_profile_snapshot,
+    resolve_spawn_profile_snapshot, resolve_swarm_spawn_effort,
 };
 use crate::agent::Agent;
 use crate::config::{
@@ -108,6 +108,37 @@ fn inherited_profile_snapshot_keeps_policy_and_updates_only_explicit_worker_fiel
         identity.profile_snapshot.as_ref().unwrap().fingerprint,
         parent_fingerprint
     );
+}
+
+#[test]
+fn swarm_effort_resolution_preserves_inherited_profile_policies() {
+    let parent = profiled_snapshot();
+    let identity = CoordinatorSpawnIdentity {
+        model: Some("gpt-review".to_owned()),
+        provider_key: Some("openai".to_owned()),
+        route_api_method: None,
+        is_canary: false,
+        profile_name: parent.profile_name.clone(),
+        profile_snapshot: Some(parent.clone()),
+        profile_restore_status: Some(ProfileRestoreStatus::Matching),
+    };
+    for (requested, configured, expected) in [
+        (Some("low"), Some("medium"), "low"),
+        (None, Some("medium"), "medium"),
+        (None, None, "high"),
+    ] {
+        let effort = resolve_swarm_spawn_effort(requested, configured);
+        let child = resolve_spawn_profile_snapshot(&identity, None, effort.as_deref())
+            .expect("child retains the custom profile snapshot");
+        assert_eq!(
+            child.provider_model_reasoning.reasoning_effort.as_deref(),
+            Some(expected)
+        );
+        assert_eq!(child.tool_policy, parent.tool_policy);
+        assert_eq!(child.skill_policy, parent.skill_policy);
+        assert_eq!(child.profile_name, parent.profile_name);
+        assert_eq!(identity.profile_snapshot.as_ref(), Some(&parent));
+    }
 }
 
 #[test]

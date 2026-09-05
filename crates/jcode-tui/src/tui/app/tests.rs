@@ -2266,37 +2266,13 @@ fn assert_clear_usage_reset(app: &App) {
     assert!(!app.kv_cache.current_api_usage_recorded);
 }
 
-#[test]
-fn local_clear_resets_provider_reported_context_usage() {
-    let mut app = create_test_app();
-    seed_stale_clear_usage(&mut app);
-    seed_stale_clear_swarm_plan(&mut app);
+include!("tests/seed_stale_clear_image.rs");
 
-    assert!(super::commands::handle_session_command(&mut app, "/clear"));
+include!("tests/assert_clear_image_reset.rs");
 
-    assert_clear_usage_reset(&app);
-    assert_clear_swarm_plan_reset(&app);
-}
+include!("tests/local_clear_resets_provider_reported_context_usage.rs");
 
-#[test]
-fn remote_clear_resets_provider_reported_context_usage() {
-    let mut app = create_test_app();
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let _guard = rt.enter();
-    let mut remote = crate::tui::backend::RemoteConnection::dummy();
-    remote.mark_history_loaded();
-    app.is_remote = true;
-    seed_stale_clear_usage(&mut app);
-    seed_stale_clear_swarm_plan(&mut app);
-    app.input = "/clear".to_string();
-    app.cursor_pos = app.input.len();
-
-    rt.block_on(app.handle_remote_key(KeyCode::Enter, KeyModifiers::empty(), &mut remote))
-        .expect("remote /clear should succeed");
-
-    assert_clear_usage_reset(&app);
-    assert_clear_swarm_plan_reset(&app);
-}
+include!("tests/remote_clear_resets_provider_reported_context_usage.rs");
 
 fn seed_stale_clear_swarm_plan(app: &mut App) {
     app.swarm_plan_items = vec![crate::plan::PlanItem {

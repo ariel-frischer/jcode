@@ -306,6 +306,7 @@ pub(super) fn reset_current_session(app: &mut App) {
     app.queued_message_images.clear();
     app.pasted_contents.clear();
     app.pending_images.clear();
+    app.clear_inline_image_state();
     app.active_skill = None;
     app.improve_mode = None;
     let mut session = Session::create(None, None);

@@ -36,3 +36,4 @@ impl Drop for EnvVarGuard {
 
 #[path = "cases.rs"]
 mod cases;
+mod metadata_persistence;

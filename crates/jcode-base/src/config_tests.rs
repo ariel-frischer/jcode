@@ -459,6 +459,8 @@ fn test_env_override_swarm_model() {
     restore_env_var("JCODE_SWARM_MODEL", prev);
 }
 
+include!("config_tests/swarm_effort_parses_from_toml_and_env_override.rs");
+
 #[test]
 fn wake_mode_defaults_parses_and_env_overrides() {
     let _guard = crate::storage::lock_test_env();
@@ -859,8 +861,8 @@ fn test_generated_default_config_has_expected_user_defaults() {
         "generated default config should use low OpenAI reasoning effort"
     );
     assert!(
-        content.contains("openai_service_tier = \"priority\""),
-        "generated default config should enable OpenAI fast mode"
+        content.contains("openai_service_tier = \"off\""),
+        "generated default config should preserve standard OpenAI service tier"
     );
     assert!(
         content.contains("[tools]") && content.contains("profile = \"full\""),
@@ -1078,38 +1080,9 @@ fn test_provider_failover_defaults_match_new_behavior() {
     assert!(provider.same_provider_account_failover);
 }
 
-#[test]
-fn provider_failover_config_and_environment_precedence_is_safe() {
-    let _guard = crate::storage::lock_test_env();
-    let previous = std::env::var_os("JCODE_CROSS_PROVIDER_FAILOVER");
+include!("config_tests/provider_failover_config_and_environment_precedence_is_safe.rs");
 
-    let from_config: Config =
-        toml::from_str("[provider]\ncross_provider_failover = \"countdown\"\n")
-            .expect("config failover mode should parse");
-    assert_eq!(
-        from_config.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Countdown
-    );
-
-    crate::env::set_var("JCODE_CROSS_PROVIDER_FAILOVER", "manual");
-    let mut overridden = from_config;
-    overridden.apply_env_overrides();
-    assert_eq!(
-        overridden.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Manual
-    );
-
-    crate::env::set_var("JCODE_CROSS_PROVIDER_FAILOVER", "not-a-mode");
-    let mut invalid = Config::default();
-    invalid.apply_env_overrides();
-    assert_eq!(
-        invalid.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Manual,
-        "invalid environment values must not weaken the safe default"
-    );
-
-    restore_env_var("JCODE_CROSS_PROVIDER_FAILOVER", previous);
-}
+include!("config_tests/test_provider_failover_disabled_aliases_parse_as_manual.rs");
 
 #[test]
 fn test_native_scrollbars_default_to_enabled() {
