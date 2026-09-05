@@ -98,14 +98,13 @@ impl Registry {
             {
                 bail!("workflow registry contains invalid native ownership");
             }
-            if let Some(id) = &run.registration_id {
-                if !self
+            if let Some(id) = &run.registration_id
+                && !self
                     .registrations
                     .iter()
                     .any(|registered| &registered.id == id && registered.owner == run.owner)
-                {
-                    bail!("workflow registry contains invalid native association");
-                }
+            {
+                bail!("workflow registry contains invalid native association");
             }
             for text in [&run.snapshot.id, &run.snapshot.label, &run.snapshot.source]
                 .into_iter()
@@ -125,10 +124,10 @@ impl Registry {
             for text in [&run.id, &run.owner, &run.label] {
                 validate_text(text)?;
             }
-            if let Some(lifecycle) = &run.lifecycle {
-                if let Some(detail) = &lifecycle.detail {
-                    validate_text(detail)?;
-                }
+            if let Some(lifecycle) = &run.lifecycle
+                && let Some(detail) = &lifecycle.detail
+            {
+                validate_text(detail)?;
             }
             if let Some(snapshot) = &run.last_good {
                 if snapshot.id != run.id

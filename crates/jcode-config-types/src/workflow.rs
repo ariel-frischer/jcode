@@ -63,8 +63,10 @@ mod tests {
 
     #[test]
     fn workflow_config_rejects_unbounded_monitoring() {
-        let mut config = WorkflowConfig::default();
-        config.poll_seconds = 0;
+        let mut config = WorkflowConfig {
+            poll_seconds: 0,
+            ..WorkflowConfig::default()
+        };
         assert!(config.validate().is_err());
         config.poll_seconds = 3601;
         assert!(config.validate().is_err());

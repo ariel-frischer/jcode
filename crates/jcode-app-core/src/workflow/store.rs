@@ -135,9 +135,9 @@ impl WorkflowStore {
                     run.terminal_at = run.terminal_at.or(native.terminal_at);
                 }
             }
-            if !run
+            if run
                 .terminal_at
-                .is_some_and(|at| now.saturating_sub(at) > self.config.terminal_retention_seconds)
+                .is_none_or(|at| now.saturating_sub(at) <= self.config.terminal_retention_seconds)
             {
                 snapshots.push((run.owner.clone(), snapshot));
             }
