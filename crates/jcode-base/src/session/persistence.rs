@@ -384,8 +384,10 @@ impl Session {
         // A caller-chosen `title` (review/judge sessions, menubar sessions) is
         // explicit state just like `custom_title`, so it must persist even
         // before the first visible message (#1144). Otherwise later lookups by
-        // id find no file and silently treat the session as missing.
+        // id find no file and silently treat the session as missing. Explicit
+        // metadata-only saves and named profiles also need a restorable snapshot.
         if !self.persist_state.snapshot_exists
+            && !self.messages.is_empty()
             && !self
                 .messages
                 .iter()
@@ -393,6 +395,9 @@ impl Session {
             && !self.saved
             && self.custom_title.is_none()
             && self.title.is_none()
+            && self.profile_name.is_none()
+            && self.profile_snapshot.is_none()
+            && self.profile_restore_status.is_none()
         {
             return Ok(());
         }
