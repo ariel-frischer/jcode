@@ -358,7 +358,7 @@ phases:
     - It names the local and CI guard command and records that real-worker validation requires root approval.
   - id: T023
     title: Run focused tests, fresh build, formatting, and canonical guardrails
-    status: InProgress
+    status: Completed
     type: test
     parallel: false
     story_id: null
@@ -376,7 +376,7 @@ phases:
       edit, or cleanup occurs.
   - id: T024
     title: Perform root-gated isolated runtime and fresh-base integration safety checks
-    status: InProgress
+    status: Completed
     type: test
     parallel: false
     story_id: null
