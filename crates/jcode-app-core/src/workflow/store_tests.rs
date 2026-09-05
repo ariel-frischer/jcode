@@ -98,6 +98,17 @@ fn snapshot_persistence_failure_is_visible_and_retries_without_source_changes() 
     std::fs::remove_dir(&path).unwrap();
     let recovered = store.snapshots(111).unwrap();
     assert_eq!(recovered[0].1.health, WorkflowHealth::Running);
+    drop(store);
     let restored = WorkflowStore::open(path, enabled()).unwrap();
     assert_eq!(restored.snapshots(112).unwrap()[0].1.total, Some(1));
+}
+
+#[test]
+fn workflow_registry_has_one_writer_across_store_instances() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("private/state.json");
+    let first = WorkflowStore::open(path.clone(), enabled()).unwrap();
+    assert!(WorkflowStore::open(path.clone(), enabled()).is_err());
+    drop(first);
+    assert!(WorkflowStore::open(path, enabled()).is_ok());
 }

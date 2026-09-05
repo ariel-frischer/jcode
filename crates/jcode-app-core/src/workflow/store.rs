@@ -13,6 +13,8 @@ struct StoreState {
 }
 
 pub struct WorkflowStore {
+    // Stable sidecar inode, held until store shutdown. Never lock the atomically replaced JSON.
+    _writer_lock: Option<std::fs::File>,
     path: PathBuf,
     config: WorkflowConfig,
     state: Mutex<StoreState>,
@@ -21,12 +23,18 @@ pub struct WorkflowStore {
 impl WorkflowStore {
     pub fn open(path: PathBuf, config: WorkflowConfig) -> Result<Self> {
         config.validate().map_err(anyhow::Error::msg)?;
+        let writer_lock = if config.enabled && config.autospec_enabled {
+            Some(writer_lock(&path)?)
+        } else {
+            None
+        };
         let registry = if config.enabled && config.autospec_enabled {
             Registry::load(&path)?
         } else {
             Registry::default()
         };
         Ok(Self {
+            _writer_lock: writer_lock,
             path,
             config,
             state: Mutex::new(StoreState {
@@ -108,4 +116,29 @@ impl WorkflowStore {
         }
         Ok(snapshots)
     }
+}
+
+fn writer_lock(path: &std::path::Path) -> Result<std::fs::File> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path.with_extension("lock"))?;
+    if !file.metadata()?.is_file() {
+        bail!("workflow registry lock must be a regular file");
+    }
+    file.try_lock().map_err(|_| {
+        anyhow::anyhow!(
+            "workflow registry is owned by another observer; use that daemon or wait for it to exit"
+        )
+    })?;
+    Ok(file)
 }

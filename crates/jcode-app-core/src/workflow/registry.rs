@@ -76,6 +76,32 @@ impl Registry {
         let mut ids = HashSet::new();
         let mut roots = HashSet::new();
         for run in &self.registrations {
+            for text in [&run.id, &run.owner, &run.label] {
+                validate_text(text)?;
+            }
+            if let Some(lifecycle) = &run.lifecycle {
+                if let Some(detail) = &lifecycle.detail {
+                    validate_text(detail)?;
+                }
+            }
+            if let Some(snapshot) = &run.last_good {
+                if snapshot.id != run.id
+                    || snapshot
+                        .completed
+                        .zip(snapshot.total)
+                        .is_some_and(|(done, total)| done > total)
+                {
+                    bail!("workflow registry contains inconsistent snapshot evidence");
+                }
+                for text in [&snapshot.id, &snapshot.label, &snapshot.source]
+                    .into_iter()
+                    .chain(snapshot.stage.iter())
+                    .chain(snapshot.activity.iter())
+                    .chain(snapshot.detail.iter())
+                {
+                    validate_text(text)?;
+                }
+            }
             if run.id.is_empty()
                 || run.owner.is_empty()
                 || !run.working_dir.is_absolute()
@@ -159,6 +185,13 @@ impl Registry {
             .retain(|r| r.owner != owner || r.id != id);
         before != self.registrations.len()
     }
+}
+
+fn validate_text(text: &str) -> Result<()> {
+    if super::display_text(text) != text {
+        bail!("workflow registry contains unsafe or oversized display text");
+    }
+    Ok(())
 }
 
 pub(super) fn bounded_read(path: &Path) -> Result<Vec<u8>> {
@@ -308,6 +341,28 @@ mod tests {
         std::fs::write(&state, serde_json::to_vec(&registry).unwrap()).unwrap();
         assert!(Registry::load(&state).is_err());
         std::fs::write(&state, vec![b' '; MAX_ARTIFACT_BYTES as usize + 1]).unwrap();
+        assert!(Registry::load(&state).is_err());
+    }
+
+    #[test]
+    fn workflow_registry_rejects_unsafe_persisted_display_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("registry.json");
+        let mut registry = Registry::default();
+        let id = registry.register("owner", input(dir.path()), 10).unwrap();
+        registry.registrations[0].last_good = Some(WorkflowSnapshot {
+            id,
+            activity: Some("\u{1b}[31mforged".into()),
+            ..Default::default()
+        });
+        std::fs::write(&state, serde_json::to_vec(&registry).unwrap()).unwrap();
+        assert!(Registry::load(&state).is_err());
+        registry.registrations[0]
+            .last_good
+            .as_mut()
+            .unwrap()
+            .activity = Some("x".repeat(161));
+        std::fs::write(&state, serde_json::to_vec(&registry).unwrap()).unwrap();
         assert!(Registry::load(&state).is_err());
     }
 
