@@ -1685,7 +1685,7 @@ impl crate::tui::TuiState for App {
             diagrams,
             workspace_rows,
             workspace_animation_tick,
-            ambient_info: gather_ambient_info(crate::config::config().ambient.enabled),
+            ambient_info: gather_ambient_info(crate::config::config().ambient.enabled, session_id),
             observed_context_tokens: self.current_stream_context_tokens(),
             cache_hit_info,
             compaction_info,
