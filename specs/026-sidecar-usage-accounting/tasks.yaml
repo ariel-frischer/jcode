@@ -32,7 +32,7 @@ phases:
       tasks:
         - id: T002
           title: Add accounting serialization and invariant tests in crates/jcode-session-types/src/memory_usage.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: null
@@ -43,7 +43,7 @@ phases:
             - Cover invalid negative/overflow/subset usage and allowlisted records without text, prompts, raw errors, credentials or account identity; preserve existing serialized lifecycle forms.
         - id: T003
           title: Define stable context and observation types in crates/jcode-session-types/src/memory_usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: null

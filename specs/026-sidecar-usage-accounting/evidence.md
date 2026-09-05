@@ -6,8 +6,9 @@ Bead **jcode-cyko**, spec **026-sidecar-usage-accounting**. Assigned checkout:
 `/home/ari/repos/jcode/.worktrees/agent/jcode-cyko`, branch `agent/jcode-cyko`.
 The current implementation authorization supersedes the preparation-only language
 in the bundled spec/plan. It authorizes implementation, not provider or configuration
-changes. This invocation is explicitly **Phase 1 only**, with one setup task, T001.
-No implementation acceptance is claimed by completing that setup task.
+changes. This evidence was created during **Phase 1**, with setup task T001.
+Later phase results are recorded in [validation.md](validation.md). No end-to-end
+implementation acceptance is claimed by completing foundation tasks.
 
 Root retains Beads, provider coordination, worktree creation/removal, merge, push,
 install, shared-server reload, cleanup, final HTML report and closure. Worker may
