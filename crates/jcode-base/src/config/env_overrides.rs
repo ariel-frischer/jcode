@@ -10,6 +10,7 @@ impl Config {
         reason = "Environment override parsing is intentionally explicit and grouped by config area"
     )]
     pub(crate) fn apply_env_overrides(&mut self) {
+        self.apply_workflow_env_overrides();
         // Unattended run safety bounds stay raw until the CLI resolver applies
         // source-aware validation. In particular, retain empty and whitespace
         // values so a higher-precedence invalid value cannot silently weaken a

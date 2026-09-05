@@ -8,12 +8,14 @@ mod run_safety;
 pub use run_safety::RunSafetyConfig;
 mod serde_lenient;
 mod websearch;
+mod workflow;
 pub use keybindings::{
     KEYBINDING_DEFAULTS, KeybindingDefault, KeybindingIssue, KeybindingIssueKind,
     KeybindingPlatform, KeybindingProvenance, PlatformDefault, default_binding, default_binding_or,
     keybinding_default, keybinding_defaults_report, validate_keybinding_defaults,
 };
 pub use websearch::*;
+pub use workflow::WorkflowConfig;
 
 /// File mention completion behavior for the TUI composer.
 #[derive(Debug, Clone, Serialize, Deserialize)]

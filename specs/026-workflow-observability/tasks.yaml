@@ -15,7 +15,7 @@ phases:
     tasks:
       - id: "T001"
         title: "Add compact workflow DTO and opt-in bounded configuration"
-        status: "InProgress"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
@@ -30,7 +30,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Implement bounded registry and isolated Autospec artifact observer"
-        status: "Pending"
+        status: "InProgress"
         type: "implementation"
         parallel: false
         story_id: "US-003"

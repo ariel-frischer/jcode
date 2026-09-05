@@ -75,6 +75,12 @@ research_findings:
       alternatives_considered:
         - "Hardcode Autospec logic into main TUI"
         - "Create a general plugin ABI before a second real adapter exists"
+    - topic: "Mixed-version client compatibility"
+      decision: "Add an omitted-when-false workflow_progress boolean to Subscribe; send typed workflow events only to opted-in connection senders"
+      rationale: "Old servers ignore new Subscribe fields and old clients never receive an unknown event. SetFeature uses a closed enum and is busy-gated, so it is not the appropriate capability handshake."
+      alternatives_considered:
+        - "Broadcast a new event to every session attachment, which can break old clients"
+        - "Overload SwarmStatus with empty members, which would clear older clients' existing galleries"
 project_structure:
   documentation:
     - path: "docs/public/workflow-observability.md"
