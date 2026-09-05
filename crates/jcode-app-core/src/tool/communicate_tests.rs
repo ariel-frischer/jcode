@@ -1426,6 +1426,7 @@ impl RawClient {
         let id = self.next_id;
         self.next_id += 1;
         self.send_request(Request::Subscribe {
+            workflow_progress: false,
             id,
             working_dir: Some(working_dir.display().to_string()),
             selfdev: None,

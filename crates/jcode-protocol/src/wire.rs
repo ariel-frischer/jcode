@@ -259,6 +259,9 @@ pub enum Request {
     #[serde(rename = "subscribe")]
     Subscribe {
         id: u64,
+        /// Opt this connection into typed, coalesced workflow snapshots.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        workflow_progress: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         working_dir: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1090,6 +1093,13 @@ pub enum ServerEvent {
     /// Swarm status update (subagent/session lifecycle info)
     #[serde(rename = "swarm_status")]
     SwarmStatus { members: Vec<SwarmMemberStatus> },
+
+    /// Sent only to a connection that explicitly opted in via Subscribe.
+    #[serde(rename = "workflow_status")]
+    WorkflowStatus {
+        session_id: String,
+        workflows: Vec<jcode_background_types::workflow::WorkflowSnapshot>,
+    },
 
     /// Full swarm plan snapshot for synchronization and UI rendering.
     #[serde(rename = "swarm_plan")]

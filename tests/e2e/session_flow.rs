@@ -54,6 +54,7 @@ fn lifecycle_sidecars_preserve_session_replay_and_cleanup_compatibility() -> Res
 #[test]
 fn interactive_profile_startup_wire_is_optional_and_session_scoped() -> Result<()> {
     let request = jcode::protocol::Request::Subscribe {
+        workflow_progress: false,
         id: 17,
         working_dir: Some("/tmp/profile-e2e".to_owned()),
         selfdev: None,

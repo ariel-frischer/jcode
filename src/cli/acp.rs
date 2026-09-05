@@ -764,6 +764,7 @@ impl AcpRuntime {
         let subscribe_id = 1;
         session
             .send(&Request::Subscribe {
+                workflow_progress: false,
                 crash_on_disconnect: false,
                 id: subscribe_id,
                 working_dir: Some(cwd.display().to_string()),
@@ -817,6 +818,7 @@ impl AcpRuntime {
         let resume_id = 1;
         session
             .send(&Request::Subscribe {
+                workflow_progress: false,
                 crash_on_disconnect: false,
                 id: resume_id,
                 working_dir: Some(cwd.display().to_string()),

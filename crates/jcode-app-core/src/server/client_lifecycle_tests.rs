@@ -1359,6 +1359,7 @@ fn ping_request_is_lightweight_control_request() {
 
 fn subscribe_request(working_dir: Option<&str>) -> Request {
     Request::Subscribe {
+        workflow_progress: false,
         id: 1,
         working_dir: working_dir.map(str::to_string),
         selfdev: None,

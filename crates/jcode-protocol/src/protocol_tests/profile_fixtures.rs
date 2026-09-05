@@ -19,6 +19,7 @@ fn profile_startup_fixture_shapes_keep_selection_optional() {
 #[test]
 fn typed_profile_startup_roundtrips_without_changing_legacy_shape() {
     let request = Request::Subscribe {
+        workflow_progress: false,
         id: 9,
         working_dir: Some("/tmp/interactive-profile".to_owned()),
         selfdev: None,

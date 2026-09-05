@@ -354,6 +354,7 @@ impl RemoteConnection {
         let subscribe_start = Instant::now();
         let (working_dir, selfdev) = super::subscribe_metadata(remote_working_dir);
         conn.send_request(Request::Subscribe {
+            workflow_progress: false,
             id: conn.next_request_id,
             working_dir,
             selfdev,
