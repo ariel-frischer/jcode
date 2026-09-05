@@ -1664,6 +1664,32 @@ fn format_context_history(target: &str, messages: &[HistoryMessage]) -> ToolOutp
     ToolOutput::new(format_comm_context_history(target, messages))
 }
 
+fn read_member_report(target: &str, members: &[AgentInfo]) -> Result<ToolOutput> {
+    let member = if let Some(member) = members.iter().find(|m| m.session_id == target) {
+        member
+    } else {
+        let mut matches = members
+            .iter()
+            .filter(|m| m.friendly_name.as_deref() == Some(target));
+        let member = matches.next().ok_or_else(|| {
+            anyhow::anyhow!(
+                "No member '{target}' in your swarm. Use list to find an exact session ID."
+            )
+        })?;
+        if matches.next().is_some() {
+            anyhow::bail!("Ambiguous member '{target}'. Use an exact session ID from list.");
+        }
+        member
+    };
+    match member.latest_completion_report.as_deref() {
+        Some(report) => Ok(ToolOutput::new(report)),
+        None => anyhow::bail!(
+            "No completion report recorded for {} yet.",
+            member.session_id
+        ),
+    }
+}
+
 #[cfg(test)]
 fn format_awaited_members(
     completed: bool,
@@ -1922,11 +1948,11 @@ impl Tool for CommunicateTool {
                     "type": "string",
                     "enum": ["share", "share_append", "read", "message", "broadcast", "dm", "channel", "list", "list_channels", "channel_members",
                              "propose_plan", "approve_plan", "reject_plan", "spawn", "stop", "assign_role",
-                             "status", "report", "plan_status", "summary", "read_context", "resync_plan", "assign_task", "assign_next", "fill_slots", "run_plan", "cleanup",
+                             "status", "report", "read_report", "plan_status", "summary", "read_context", "resync_plan", "assign_task", "assign_next", "fill_slots", "run_plan", "cleanup",
                              "task_graph", "expand_node", "complete_node", "inject_gap",
                              "start", "start_task", "wake", "resume", "retry", "reassign", "replace", "salvage",
                              "subscribe_channel", "unsubscribe_channel", "await_members", "list_models"],
-                    "description": "Action. spawn requires label and should include prompt. list_models shows available models/routes."
+                    "description": "Action. spawn requires label and should include prompt. read_report retrieves the full stored completion report for target_session without preview truncation. list_models shows available models/routes."
                 },
                 "key": {
                     "type": "string",
@@ -2851,6 +2877,14 @@ impl Tool for CommunicateTool {
                 }
             }
 
+            "read_report" => {
+                let target = params.target_session.ok_or_else(|| {
+                    anyhow::anyhow!("'target_session' is required for read_report action")
+                })?;
+                let members = fetch_swarm_members(&ctx.session_id).await?;
+                read_member_report(&target, &members)
+            }
+
             "plan_status" => {
                 let summary = fetch_plan_status(&ctx.session_id).await?;
                 Ok(format_plan_status(&summary))
@@ -3304,7 +3338,7 @@ impl Tool for CommunicateTool {
 
             _ => Err(anyhow::anyhow!(
                 "Unknown action '{}'. Valid actions: share, share_append, read, message, broadcast, dm, channel, list, list_channels, channel_members, \
-                 propose_plan, approve_plan, reject_plan, spawn, stop, assign_role, status, report, plan_status, summary, read_context, \
+                 propose_plan, approve_plan, reject_plan, spawn, stop, assign_role, status, report, read_report, plan_status, summary, read_context, \
                  resync_plan, assign_task, assign_next, fill_slots, run_plan, cleanup, start, start_task, wake, resume, retry, reassign, replace, salvage, subscribe_channel, unsubscribe_channel, await_members. \
                  To read messages addressed to you, use action='read'.",
                 params.action

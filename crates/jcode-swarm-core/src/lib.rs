@@ -523,20 +523,20 @@ pub fn format_structured_completion_report(
 
 pub fn normalize_completion_report(report: Option<String>) -> Option<String> {
     let report = report?.trim().to_string();
-    if report.is_empty() {
-        return None;
-    }
+    (!report.is_empty()).then_some(report)
+}
 
+fn completion_report_preview(report: &str) -> String {
     let char_count = report.chars().count();
     if char_count <= MAX_SWARM_COMPLETION_REPORT_CHARS {
-        return Some(report);
+        return report.to_string();
     }
 
-    let suffix = "\n\n[Report truncated by jcode before delivery.]";
+    let suffix = "\n\n[Preview truncated. Full report retained; use swarm action=read_report with target_session.]";
     let keep_chars = MAX_SWARM_COMPLETION_REPORT_CHARS.saturating_sub(suffix.chars().count());
     let mut truncated: String = report.chars().take(keep_chars).collect();
     truncated.push_str(suffix);
-    Some(truncated)
+    truncated
 }
 
 fn completion_status_intro(name: &str, status: &str) -> String {
@@ -579,7 +579,10 @@ pub fn completion_notification_message(name: &str, status: &str, report: Option<
     let intro = completion_status_intro(name, status);
     let followup = completion_followup(status, report.is_some());
     match report {
-        Some(report) => format!("{intro}\n\nReport:\n{report}\n\n{followup}"),
+        Some(report) => format!(
+            "{intro}\n\nReport:\n{}\n\nFull report: swarm action=read_report target_session={name}.\n{followup}",
+            completion_report_preview(report)
+        ),
         None => format!("{intro}\n\nNo final textual report was produced. {followup}"),
     }
 }
@@ -765,19 +768,31 @@ mod tests {
     }
 
     #[test]
-    fn completion_report_normalization_trims_and_truncates() {
+    fn completion_report_normalization_preserves_full_unicode_report() {
         assert_eq!(
             normalize_completion_report(Some("  done  ".to_string())),
             Some("done".to_string())
         );
         assert_eq!(normalize_completion_report(Some("   ".to_string())), None);
-        let long = "x".repeat(MAX_SWARM_COMPLETION_REPORT_CHARS + 100);
-        let normalized = normalize_completion_report(Some(long)).unwrap();
-        assert_eq!(
-            normalized.chars().count(),
-            MAX_SWARM_COMPLETION_REPORT_CHARS
+        assert_eq!(normalize_completion_report(None), None);
+        let long = format!(
+            "{}\nTAIL-EVIDENCE",
+            "🦢é".repeat(MAX_SWARM_COMPLETION_REPORT_CHARS)
         );
-        assert!(normalized.ends_with("[Report truncated by jcode before delivery.]"));
+        let normalized = normalize_completion_report(Some(long.clone())).unwrap();
+        assert_eq!(normalized, long);
+    }
+
+    #[test]
+    fn completion_notification_bounds_preview_and_names_retrieval() {
+        let report = format!(
+            "{}TAIL-EVIDENCE",
+            "🦢".repeat(MAX_SWARM_COMPLETION_REPORT_CHARS + 100)
+        );
+        let notification = completion_notification_message("worker", "completed", Some(&report));
+        assert!(!notification.contains("TAIL-EVIDENCE"));
+        assert!(notification.chars().count() < MAX_SWARM_COMPLETION_REPORT_CHARS + 500);
+        assert!(notification.contains("read_report"));
     }
 
     #[test]
