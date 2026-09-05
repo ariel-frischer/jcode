@@ -1,0 +1,271 @@
+plan:
+  branch: "agent/jcode-h3eu-swarm-routing"
+  created: "2026-09-05"
+  spec_path: "specs/025-restore-swarm-routing/spec.yaml"
+
+summary: >-
+  Restore the optional per-worker model request only at the existing swarm tool,
+  protocol, dispatcher, assignment, and spawn-selection seams removed by b76f96561.
+  Re-establish one resolution order of explicit request, agents.swarm_model, then
+  coordinator identity, preserving route-qualified provider/auth metadata and all
+  omitted behavior. Bound list_models with deterministic selection and an explicit
+  truncation summary. Protect the downstream contract with one named regression
+  gate invoked by canonical local guardrails and CI. Begin with failing contract
+  tests, keep runtime validation behind root approval, and avoid SDK, provider,
+  config, dependency, or unrelated operator-control changes.
+
+technical_context:
+  language: "Rust 2024, Bash, Python 3, YAML"
+  framework: "Serde-tagged protocol, async shared server, tool JSON schemas, provider route catalog, Cargo tests, shell and CI guardrails"
+  primary_dependencies:
+    - name: "serde and serde_json"
+      version: "existing workspace versions"
+      purpose: "Additive optional tool and wire fields with omitted-field compatibility and schema assertions."
+    - name: "jcode-provider-core route catalog"
+      version: "workspace"
+      purpose: "Reuse existing ModelRoute and route identity data rather than creating routing logic."
+    - name: "jcode protocol and app-core"
+      version: "workspace"
+      purpose: "Carry optional model through CommSpawn, CommAssignNext, dispatch, assignment, spawn resolution, and runtime metadata."
+  storage: "Existing Session model/provider_key/route_api_method/reasoning_effort fields and swarm runtime metadata; no new persisted fields."
+  testing:
+    framework: "Cargo unit/integration tests, provider-facing tool projection tests, named Python or shell contract guard, and isolated private-socket runtime acceptance"
+    approach: "First reverse the upstream omission assertions and add failing coverage for projected schema, wire round trips, both dispatchers, assignment-created spawns, precedence/auth identity, native openai:gpt-6-astra low metadata, and oversized catalog bounds. Then make the smallest restoration, run focused tests, canonical guardrails and a fresh build, obtain root approval, and run one bounded read-only worker against the resolved fresh binary."
+  target_platform: "Jcode CLI/TUI shared-server paths on supported platforms, with final runtime evidence on the current Linux x86_64 host."
+  project_type: "cli"
+  performance_goals: "list_models output <= 12 KiB for any catalog; a synthetic 10,000-route fixture formats in <100 ms on the development host; omitted routing has zero observable behavior change."
+  constraints:
+    - "Remain in the existing worktree and branch; root owns lifecycle."
+    - "Do not mutate Beads, user configuration, SDK ownership, providers, dependencies, or coordinator model selection."
+    - "Reuse resolve_swarm_task_route and current spawn/profile route helpers where their ownership applies; do not add parallel routing."
+    - "Do not wholesale revert b76f96561 or restore unrelated SDK/operator-control edits."
+    - "Run one Cargo-heavy command at a time."
+    - "Do not start a real worker until root explicitly approves the bounded read-only runtime check."
+  scale_scope: "One optional model string per worker-creation request and route catalogs from zero to at least 10,000 synthetic entries."
+
+implementation_phases:
+  - phase: 1
+    name: "Regression-first contract exposure"
+    goal: "Make the intended downstream contract fail visibly before production restoration."
+    deliverables:
+      - "Direct and provider-projected swarm schema regressions requiring optional model while preserving effort and action branches."
+      - "Protocol round trips requiring explicit model preservation and unset omission for CommSpawn and CommAssignNext."
+      - "Forwarding regressions for full and lightweight dispatch plus explicit spawn and assignment request construction."
+    dependencies: []
+  - phase: 2
+    name: "Canonical route restoration"
+    goal: "Restore optional model propagation and one precedence resolver without changing omitted behavior."
+    deliverables:
+      - "CommunicateInput/schema and all new-worker request paths carry optional model."
+      - "CommSpawn/CommAssignNext and both server dispatch paths forward model unchanged."
+      - "Existing spawn selection accepts explicit request ahead of agents.swarm_model and coordinator inheritance, including explicit inherit."
+      - "Profile snapshot, provider key, route API method, request nonce, and mutation-key identity remain coherent."
+    dependencies: [1]
+  - phase: 3
+    name: "Assignment and runtime identity"
+    goal: "Prove every worker-creation path and runtime metadata uses the intended effective route."
+    deliverables:
+      - "assign_task, assign_next, run_plan, fill/replacement spawn paths route only newly created workers."
+      - "Existing task route resolver remains authoritative for task metadata and feeds the canonical spawn request where applicable."
+      - "openai:gpt-6-astra with low effort is covered through effective model, provider/auth route, session identity, and SwarmMemberRuntime metadata without fallback."
+    dependencies: [2]
+  - phase: 4
+    name: "Bounded route catalog"
+    goal: "Replace unbounded full-catalog rendering with deterministic useful output."
+    deliverables:
+      - "Measured baseline demonstrating current growth on a large fixture."
+      - "A deterministic selection policy that prioritizes current/configured and useful available routes, deduplicates noise, and reports omitted count."
+      - "Small, empty, duplicate, unavailable, and 10,000-route fixtures under the 12 KiB and 100 ms targets."
+    dependencies: [1]
+  - phase: 5
+    name: "Downstream contract guard"
+    goal: "Make future upstream removal fail a named canonical gate."
+    deliverables:
+      - "A named custom swarm routing contract check with actionable failures across schema/projection, wire, forwarding, precedence/auth, runtime metadata, and catalog-bound tests."
+      - "Invocation from scripts/check_guardrails.sh and the CI Quality Guardrails job."
+      - "A negative self-test or fixture proving representative contract deletion is detected independently of one unit-test name or assertion polarity."
+    dependencies: [2, 3, 4]
+  - phase: 6
+    name: "Validation and root-gated runtime"
+    goal: "Establish build, guardrail, runtime, and fresh-base integration evidence without taking lifecycle actions."
+    deliverables:
+      - "Focused test matrix, format/check results, serialized fresh build, and canonical guardrails."
+      - "Root approval checkpoint before live worker creation."
+      - "One private-socket, fresh-built, bounded read-only worker proving openai:gpt-6-astra low runtime metadata."
+      - "Fresh-base diff/rebase simulation or equivalent integration-safety evidence, with no merge, push, or cleanup."
+    dependencies: [5]
+
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "The plan targets only removed tool/wire/forwarding/resolver seams, formatter bounding, focused tests, and one required guardrail."
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "model is additive and optional; unset serialization and current agents.swarm_model/coordinator behavior are explicit regression requirements."
+    - name: "Explicit Configuration Precedence"
+      status: "PASS"
+      notes: "One resolver owns explicit > agents.swarm_model > coordinator inheritance; explicit inherit semantics and invalid/unavailable behavior are tested."
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "Protocol owns wire shape, app-core owns orchestration, provider-core remains route data authority, and no new dependency edge is planned."
+    - name: "Focused Behavioral Tests"
+      status: "PASS"
+      notes: "Tests cover each boundary and runtime outcome, including assignment, auth identity, omission, and catalog bounds."
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "No credentials are added to requests or logs; provider/auth route metadata remains non-secret identity."
+    - name: "Repository Guardrails Are Delivery Gates"
+      status: "PASS"
+      notes: "The plan requires focused tests, build, canonical guardrails, approved isolated runtime, and fresh-base safety evidence."
+    - name: "Custom-First, Upstream-Aware Simplicity"
+      status: "PASS"
+      notes: "Existing resolver and projection paths are reused; no parallel routing or duplicate SDK is introduced."
+    - name: "Outcome Ownership and Safe Autonomy"
+      status: "PASS"
+      notes: "The plan includes the reported list_models context-risk diagnosis and durable upstream-sync protection, not only field restoration."
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Acceptance requires the resolved fresh binary on a private socket and actual worker metadata after root approval."
+
+research_findings:
+  root_cause:
+    - "Upstream b76f96561 intentionally removed model from CommunicateInput/schema, CommSpawn, CommAssignNext, both dispatchers, request construction, and resolve_swarm_spawn_selection."
+    - "Current communicate_tests.rs locks the upstream policy with schema_omits_model_override_and_advertises_effort."
+    - "Current resolve_swarm_spawn_selection still contains configured-pin and coordinator inheritance logic, route-qualified selection helpers, profile snapshot preservation, and persisted coordinator fallback."
+    - "Current resolve_swarm_task_route already resolves task-node role/model/effort metadata and should not be duplicated."
+    - "format_swarm_model_list currently appends one unbounded line per ModelRoute, explaining catalog-sized output growth."
+  decisions:
+    routing: "Restore the removed optional parameter through existing seams and add it as the highest-priority input to the current spawn selection helper."
+    auth_preservation: "Resolve route-qualified explicit values through existing route/profile helpers and assert provider_key plus route_api_method at session and runtime boundaries."
+    assignments: "Forward the caller/task-derived model only when assignment creates a new worker; never retarget an existing worker."
+    catalog_bound: "Use deterministic capped rendering with current/configured route priority, deduplication, an omitted-count footer, and a hard final byte guard."
+    regression_gate: "Create one named downstream contract runner that invokes exact focused tests and structural checks, then call that runner from local and CI guardrails."
+    runtime: "After root approval, use a private socket and freshly resolved executable for one short read-only worker task, then inspect status/runtime metadata."
+
+data_model:
+  entities:
+    - name: "SwarmRoutingRequest"
+      description: "Optional per-worker routing input accepted by explicit spawn and assignment-created spawn paths."
+      fields:
+        - name: "model"
+          type: "Option<String>"
+          description: "Concrete model route or explicit inherit/coordinator sentinel."
+          constraints: "Optional; trimmed; invalid or unavailable explicit routes fail visibly; omitted remains backward compatible."
+        - name: "effort"
+          type: "Option<String>"
+          description: "Requested child reasoning effort."
+          constraints: "Existing enum semantics remain unchanged."
+        - name: "action"
+          type: "String"
+          description: "Worker-creation action or assignment path."
+          constraints: "Routing affects only newly created workers."
+      relationships:
+        - target: "EffectiveWorkerRoute"
+          type: "one-to-one"
+          description: "The canonical resolver converts each new-worker request into one immutable effective selection."
+    - name: "EffectiveWorkerRoute"
+      description: "Resolved child execution and runtime identity."
+      fields:
+        - name: "model"
+          type: "Option<String>"
+          description: "Effective bare model after route resolution."
+          constraints: "Must match an explicit valid request without silent substitution."
+        - name: "provider_key"
+          type: "Option<String>"
+          description: "Selected provider/authentication route identity."
+          constraints: "Derived from existing route ownership, never independently supplied."
+        - name: "route_api_method"
+          type: "Option<String>"
+          description: "Stable API/auth method persisted with the child session."
+          constraints: "Must remain coherent with model and provider_key."
+        - name: "effort"
+          type: "Option<String>"
+          description: "Effective reasoning effort reported in runtime metadata."
+          constraints: "Explicit low must remain low for the native OpenAI acceptance route."
+      relationships:
+        - target: "RoutingContractGate"
+          type: "many-to-one"
+          description: "Contract checks protect resolution and metadata behavior across representative routes."
+    - name: "RoutingContractGate"
+      description: "Named downstream regression gate invoked locally and in CI."
+      fields:
+        - name: "required_surfaces"
+          type: "List<String>"
+          description: "Schema, projection, wire, forwarding, precedence, metadata, and catalog checks."
+          constraints: "Must fail with actionable diagnostics when any protected surface is removed."
+        - name: "catalog_output_budget"
+          type: "usize"
+          description: "Maximum list_models formatted output size."
+          constraints: "At most 12 KiB for oversized fixtures."
+      relationships:
+        - target: "SwarmRoutingRequest"
+          type: "one-to-many"
+          description: "The gate covers explicit, omitted, inherit, and assignment-created request cases."
+
+api_contracts:
+  swarm_tool:
+    model: "Optional string on public and provider-projected schema; omitted preserves current policy; explicit inherit/coordinator forces coordinator inheritance."
+    effort: "Existing optional enum remains unchanged and combines with the selected model where supported."
+  protocol:
+    CommSpawn: "Additive optional model omitted from JSON when unset."
+    CommAssignNext: "Additive optional model omitted from JSON when unset and forwarded only into newly spawned workers."
+  runtime_metadata:
+    contract: "Effective model, provider/auth route, and effort match the created worker Session and SwarmMemberRuntime."
+  list_models:
+    contract: "Bounded deterministic text retaining current/configured context and actionable available route samples with truncation disclosure."
+
+project_structure:
+  modify:
+    - "crates/jcode-app-core/src/tool/communicate.rs and communicate_tests.rs"
+    - "crates/jcode-protocol/src/wire.rs and protocol_tests/comm_requests.rs"
+    - "crates/jcode-app-core/src/protocol_tests/comm_requests.rs"
+    - "crates/jcode-app-core/src/server/client_lifecycle.rs"
+    - "crates/jcode-app-core/src/server/client_lightweight_control.rs"
+    - "crates/jcode-app-core/src/server/comm_session.rs and comm_session_tests.rs"
+    - "crates/jcode-app-core/src/server/comm_control.rs and focused assignment tests"
+    - "scripts/check_guardrails.sh and .github/workflows/ci.yml"
+  add_if_minimal:
+    - "One named scripts/check_custom_swarm_routing_contract.py or .sh plus focused self-test/fixture"
+  reuse:
+    - "docs/CAPABILITY_ROUTING_CONTRACT.md"
+    - "server::swarm::resolve_swarm_task_route"
+    - "existing provider/tool definition projection path"
+    - "existing spawn route and profile snapshot helpers"
+
+risks:
+  - id: "RISK-001"
+    risk: "A restored bare model changes provider/auth identity or silently falls back."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Assert model, provider_key, route_api_method, profile snapshot, session identity, and runtime metadata for native and route-qualified cases."
+  - id: "RISK-002"
+    risk: "Assignment paths diverge from explicit spawn or mutate reused workers."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Cover every assignment-created spawn path and separately assert reuse does not alter an existing worker."
+  - id: "RISK-003"
+    risk: "Catalog bounding hides the configured or currently active route."
+    likelihood: "low"
+    impact: "medium"
+    mitigation: "Reserve output budget for current/configured entries and test deterministic priority before general samples."
+  - id: "RISK-004"
+    risk: "The guardrail is brittle or can be defeated by renaming a test."
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Use a named contract runner with structural assertions and stable focused behavior selectors rather than one reversed assertion."
+  - id: "RISK-005"
+    risk: "Live validation accidentally uses the shared daemon or performs mutating work."
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Require root approval, resolve the new binary, use a unique private socket, bound time/output, and give the worker a read-only metadata task."
+
+open_questions: []
+
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "dev"
+  created: "2026-09-05T05:12:52.269Z"
+  artifact_type: "plan"

@@ -14,6 +14,11 @@
 
 ## Development Workflow
 
+- **Preserve explicit swarm routing during upstream syncs.** Keep the local
+  routing contract and both CI/local gate invocations. Run
+  `bash scripts/check_swarm_routing_contract.sh` against the synchronized tree.
+  Do not replace it with upstream's operator-only model assertions or accept a
+  zero-test run. See `docs/CAPABILITY_ROUTING_CONTRACT.md` for the local contract.
 - **Keep the root checkout on `dev`.** `/home/ari/repos/jcode` is the integration
   checkout, not a disposable review checkout. Agents must not create a local
   review branch for use in this checkout or switch it to a feature, pull-request,

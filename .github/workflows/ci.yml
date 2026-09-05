@@ -96,6 +96,13 @@ jobs:
         shell: bash
         run: cargo test -p jcode-sdk parity -- --nocapture
 
+      # Keep this downstream contract when synchronizing upstream swarm policy.
+      - name: Preserve local explicit swarm routing contract
+        shell: bash
+        run: |
+          bash scripts/check_swarm_routing_contract.sh --self-test
+          bash scripts/check_swarm_routing_contract.sh
+
       - name: Enforce wildcard re-export ratchet
         shell: bash
         run: python3 scripts/check_wildcard_reexport_budget.py

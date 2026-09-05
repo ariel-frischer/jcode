@@ -102,6 +102,10 @@ run_provenance_ratchet "swallowed-error usage ratchet" check_swallowed_error_bud
 run_gate "crate dependency boundaries" python3 scripts/check_dependency_boundaries.py
 run_gate "wildcard re-export ratchet" python3 scripts/check_wildcard_reexport_budget.py
 
+# Intentional downstream behavior, not upstream's operator-only swarm policy.
+run_gate "local swarm routing contract inventory" bash scripts/check_swarm_routing_contract.sh --self-test
+run_gate "local swarm routing contract" bash scripts/check_swarm_routing_contract.sh
+
 # Onboarding state-space invariants. The onboarding flow is a graph, and the
 # properties that keep users unstuck (no dead ends, every failure has a recovery
 # edge, an escape hatch everywhere, bounded keystrokes to a settled state) are

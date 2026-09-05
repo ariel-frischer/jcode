@@ -329,22 +329,26 @@ pub(super) fn resolve_spawn_profile_snapshot(
 /// `route_api_method = openai-api-key`, which makes every spawned agent use
 /// GPT-5.5 on the OpenAI API key route regardless of the coordinator's model.
 ///
-/// Returns `None` for models without such a prefix, or for prefixes that carry
-/// no API-vs-OAuth decision (bare provider aliases, OpenRouter, Copilot, ...).
-/// Those keep their prefixed model and route correctly via the existing
-/// session-restore path.
-fn explicit_route_for_configured_model(model: &str) -> Option<SwarmSpawnSelection> {
+/// Explicit requests also pin native provider aliases through AuthRoute::parse.
+/// Configured aliases retain automatic credentials. Other providers keep their
+/// prefixed model and use the existing session-restore path.
+fn explicit_route_for_model(model: &str, explicit_request: bool) -> Option<SwarmSpawnSelection> {
     let (_, prefix, bare) = crate::provider::explicit_model_provider_prefix(model)?;
     let bare = bare.trim();
     if bare.is_empty() {
         return None;
     }
-    // Only the dual-auth (Anthropic/OpenAI OAuth-vs-API) prefixes carry an
-    // explicit credential decision worth pinning. The canonical parser maps the
+    // The canonical dual-auth (Anthropic/OpenAI OAuth-vs-API) parser maps the
     // prefix to its stable route id, which `ModelRouteApiMethod::parse` round-
     // trips back to the exact auth method when the spawned session is restored.
-    let route_id = jcode_provider_core::AuthRoute::parse_explicit_credential_prefix(prefix)?
-        .route_api_method();
+    // Explicit swarm requests use native route aliases (openai: means OAuth).
+    // Configured model prefixes retain their legacy automatic-credential meaning.
+    let route = if explicit_request {
+        jcode_provider_core::AuthRoute::parse(prefix)
+    } else {
+        jcode_provider_core::AuthRoute::parse_explicit_credential_prefix(prefix)
+    }?;
+    let route_id = route.route_api_method();
     Some(SwarmSpawnSelection {
         model: Some(bare.to_string()),
         provider_key: Some(route_id.to_string()),
@@ -380,7 +384,7 @@ fn selection_for_concrete_model(
     // (e.g. "openai-api:gpt-5.5"). Honor it directly so spawned agents do
     // NOT inherit the coordinator's model/auth and instead use the
     // requested model on the requested API route.
-    if let Some(selection) = explicit_route_for_configured_model(&model) {
+    if let Some(selection) = explicit_route_for_model(&model, false) {
         return selection;
     }
 
@@ -406,9 +410,22 @@ fn selection_for_concrete_model(
 }
 
 fn resolve_swarm_spawn_selection(
+    requested_model: Option<String>,
     configured_swarm_model: Option<String>,
     coordinator: &CoordinatorSpawnIdentity,
 ) -> SwarmSpawnSelection {
+    // Local contract: an explicit worker route wins over operator defaults.
+    if let Some(model) = requested_model
+        .map(|model| model.trim().to_string())
+        .filter(|model| !model.is_empty())
+    {
+        return if is_inherit_sentinel(&model) {
+            inherit_coordinator_selection(coordinator)
+        } else {
+            explicit_route_for_model(&model, true)
+                .unwrap_or_else(|| selection_for_concrete_model(model, coordinator))
+        };
+    }
     // Treat empty strings and the explicit "inherit"/"coordinator" sentinels as
     // "no override": spawned swarm agents should inherit the coordinator's model
     // unless `agents.swarm_model` is deliberately set to a concrete model. This
@@ -595,6 +612,7 @@ pub(super) async fn spawn_swarm_agent(
     working_dir: Option<String>,
     initial_message: Option<String>,
     spawn_mode: Option<SwarmSpawnMode>,
+    requested_model: Option<String>,
     requested_effort: Option<String>,
     label: Option<String>,
     sessions: &SessionAgents,
@@ -623,7 +641,11 @@ pub(super) async fn spawn_swarm_agent(
     let agents_config = &crate::config::config().agents;
     let configured_swarm_model = agents_config.swarm_model.clone();
     let resolved_spawn_mode = spawn_mode.unwrap_or(agents_config.swarm_spawn_mode);
-    let selection = resolve_swarm_spawn_selection(configured_swarm_model.clone(), &coordinator);
+    let selection = resolve_swarm_spawn_selection(
+        requested_model,
+        configured_swarm_model.clone(),
+        &coordinator,
+    );
     let spawn_model = selection.model.clone();
     let spawn_provider_key = selection.provider_key.clone();
     let spawn_route_api_method = selection.route_api_method.clone();
@@ -874,6 +896,7 @@ pub(super) async fn handle_comm_spawn(
     initial_message: Option<String>,
     request_nonce: Option<String>,
     spawn_mode: Option<SwarmSpawnMode>,
+    model: Option<String>,
     effort: Option<String>,
     label: Option<String>,
     client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
@@ -932,6 +955,7 @@ pub(super) async fn handle_comm_spawn(
             spawn_mode
                 .map(|mode| format!("{mode:?}"))
                 .unwrap_or_default(),
+            model.clone().unwrap_or_default(),
             effort.clone().unwrap_or_default(),
             label.clone().unwrap_or_default(),
         ],
@@ -955,6 +979,7 @@ pub(super) async fn handle_comm_spawn(
         working_dir,
         initial_message,
         spawn_mode,
+        model,
         effort,
         label,
         sessions,

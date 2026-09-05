@@ -1383,6 +1383,7 @@ async fn run_swarm_plan_loop(
                     spawn_if_needed
                 },
                 message: params.message.clone(),
+                model: params.model.clone(),
                 effort: params.effort.clone(),
             };
             match send_request(request).await {
@@ -1533,6 +1534,7 @@ async fn spawn_assignment_session(ctx: &ToolContext, params: &CommunicateInput) 
         initial_message: None,
         request_nonce: Some(fresh_spawn_request_nonce(ctx)),
         spawn_mode: params.spawn_mode.clone(),
+        model: params.model.clone(),
         effort: params.effort.clone(),
         label: None,
     };
@@ -1726,55 +1728,9 @@ fn format_channels(channels: &[SwarmChannelInfo]) -> ToolOutput {
     ToolOutput::new(format_comm_channels(channels))
 }
 
-/// Render the swarm model catalog for the `list_models` action: the current
-/// (spawn-default) model, any config pin, and one line per route with
-/// availability, auth method, and a relative cost estimate.
-fn format_swarm_model_list(
-    current_model: Option<&str>,
-    configured_swarm_model: Option<&str>,
-    model_routes: &[jcode_provider_core::ModelRoute],
-) -> String {
-    let mut out = String::new();
-    out.push_str(&format!(
-        "Current coordinator model: {}\n",
-        current_model.unwrap_or("unknown")
-    ));
-    match configured_swarm_model {
-        Some(pin) if !pin.trim().is_empty() => {
-            out.push_str(&format!("Configured agents.swarm_model pin: {pin}\n"));
-        }
-        _ => out.push_str(
-            "No agents.swarm_model pin configured (workers inherit the coordinator's model).\n",
-        ),
-    }
-    if model_routes.is_empty() {
-        out.push_str("\nNo model routes reported. Configure agents.swarm_model or use inherit.");
-        return out;
-    }
-    out.push_str("\nAvailable model routes (configure agents.swarm_model with a bare model or route-pinned value):\n");
-    for route in model_routes {
-        let availability = if route.available {
-            ""
-        } else {
-            " [unavailable]"
-        };
-        let cost = route
-            .estimated_reference_cost_micros()
-            .map(|micros| format!(" ~${:.2}/ref-task", micros as f64 / 1_000_000.0))
-            .unwrap_or_default();
-        let detail = if route.detail.is_empty() {
-            String::new()
-        } else {
-            format!(" ({})", route.detail)
-        };
-        out.push_str(&format!(
-            "- {} via {} [{}]{}{}{}\n",
-            route.model, route.provider, route.api_method, availability, cost, detail
-        ));
-    }
-    out.push_str("\nAlso pass effort (none|minimal|low|medium|high|xhigh|max) to set the spawned agent's reasoning effort.");
-    out
-}
+#[path = "communicate_model_list.rs"]
+mod model_list;
+use model_list::format_swarm_model_list;
 
 pub struct CommunicateTool {
     /// Full tool description including the user-tunable swarm prompt
@@ -1885,6 +1841,10 @@ struct CommunicateInput {
     /// threshold.
     #[serde(default)]
     tldr: Option<String>,
+    /// Per-spawn model override for spawn/assign_task/assign_next/run_plan
+    /// spawns. Takes precedence over agents.swarm_model config.
+    #[serde(default)]
+    model: Option<String>,
     /// Reasoning effort for spawned agents (none|minimal|low|medium|high|xhigh|max).
     #[serde(default)]
     effort: Option<String>,
@@ -2051,6 +2011,10 @@ impl Tool for CommunicateTool {
                     "type": "string",
                     "enum": ["visible", "headless", "inline", "auto"],
                     "description": "Spawn UI mode: visible terminal, headless, inline gallery, or auto. Defaults to inline."
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Model for new workers in spawn/assignment/run_plan. Explicit 'openai:gpt-6-astra' pins native OAuth; omit for configured default then inheritance. See list_models."
                 },
                 "effort": {
                     "type": "string",
@@ -2729,6 +2693,7 @@ impl Tool for CommunicateTool {
                     initial_message: params.spawn_initial_message(),
                     request_nonce: None,
                     spawn_mode: params.spawn_mode.clone(),
+                    model: params.model.clone(),
                     effort: params.effort.clone(),
                     label: Some(label),
                 };
@@ -3033,6 +2998,7 @@ impl Tool for CommunicateTool {
                     prefer_spawn: params.prefer_spawn,
                     spawn_if_needed: params.spawn_if_needed,
                     message: params.message.clone(),
+                    model: params.model.clone(),
                     effort: params.effort.clone(),
                 };
 
@@ -3084,6 +3050,7 @@ impl Tool for CommunicateTool {
                         prefer_spawn: params.prefer_spawn,
                         spawn_if_needed: params.spawn_if_needed,
                         message: params.message.clone(),
+                        model: params.model.clone(),
                         effort: params.effort.clone(),
                     };
 
@@ -3349,3 +3316,7 @@ impl Tool for CommunicateTool {
 #[cfg(test)]
 #[path = "communicate_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "communicate_routing_contract_tests.rs"]
+mod local_swarm_routing_contract;

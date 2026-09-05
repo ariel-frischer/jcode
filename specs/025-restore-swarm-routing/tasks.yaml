@@ -1,0 +1,528 @@
+tasks:
+  branch: agent/jcode-h3eu-swarm-routing
+  created: '2026-09-05'
+  spec_path: specs/025-restore-swarm-routing/spec.yaml
+  plan_path: specs/025-restore-swarm-routing/plan.yaml
+summary:
+  total_tasks: 24
+  total_phases: 7
+  parallel_opportunities: 10
+  estimated_complexity: high
+phases:
+- number: 1
+  title: Setup
+  purpose: Establish the shared regression-test scaffold without changing production behavior.
+  tasks:
+  - id: T001
+    title: Create the focused custom swarm routing contract test module
+    status: Completed
+    type: setup
+    parallel: false
+    story_id: null
+    file_path: crates/jcode-app-core/src/tool/communicate_routing_contract_tests.rs
+    dependencies: []
+    acceptance_criteria:
+    - The module provides reusable fixtures for direct/projected schemas, explicit and omitted wire payloads, route
+      identity, and oversized route catalogs.
+    - Fixtures use existing provider route and tool projection types and introduce no routing implementation or
+      duplicate SDK/config surface.
+  - id: T002
+    title: Register the focused routing contract test module
+    status: Completed
+    type: setup
+    parallel: false
+    story_id: null
+    file_path: crates/jcode-app-core/src/tool/communicate.rs
+    dependencies:
+    - T001
+    acceptance_criteria:
+    - The new module is compiled only for tests and can access the existing schema and list_models formatter seams.
+    - No production routing behavior changes in this task.
+- number: 2
+  title: Foundational
+  purpose: Expose all shared contract boundaries as regression-first failures before restoration.
+  tasks:
+  - id: T003
+    title: Add direct and provider-projected schema regressions
+    status: Completed
+    type: test
+    parallel: true
+    story_id: null
+    file_path: crates/jcode-app-core/src/tool/communicate_routing_contract_tests.rs
+    dependencies:
+    - T002
+    acceptance_criteria:
+    - Direct CommunicateTool schema exposes optional string model while retaining effort and valid action-specific
+      required branches.
+    - The existing OpenAI/provider-facing ToolDefinition projection exposes the same optional model field.
+    - The regression fails against the upstream-policy tree specifically because model is absent.
+  - id: T004
+    title: Add CommSpawn and CommAssignNext wire serialization regressions
+    status: Completed
+    type: test
+    parallel: true
+    story_id: null
+    file_path: crates/jcode-protocol/src/protocol_tests/comm_requests.rs
+    dependencies:
+    - T002
+    acceptance_criteria:
+    - Explicit route-qualified model values round-trip on CommSpawn and CommAssignNext.
+    - Unset model is omitted from JSON and legacy payloads without model still deserialize.
+    - Request IDs, serde tags, and unrelated fields remain unchanged.
+  - id: T005
+    title: Add app-core wire request construction regressions
+    status: Completed
+    type: test
+    parallel: true
+    story_id: null
+    file_path: crates/jcode-app-core/src/protocol_tests/comm_requests.rs
+    dependencies:
+    - T002
+    acceptance_criteria:
+    - App-core constructs explicit model values for spawn and assign-next requests.
+    - Omitted requests retain their legacy serialized shape.
+  - id: T006
+    title: Verify compiled full and lightweight dispatcher forwarding
+    status: Completed
+    type: test
+    parallel: false
+    story_id: null
+    file_path: crates/jcode-app-core/src/server/comm_control_tests.rs
+    dependencies:
+    - T004
+    - T005
+    acceptance_criteria:
+    - Handler-boundary tests observe the unchanged explicit model at the canonical spawn/assign handlers through
+      both dispatcher paths.
+    - The regressions fail before server forwarding is restored and do not require a live worker.
+    description: Review both matching request arms and compiled handler arguments for unchanged model forwarding.
+      Combine this with the wire-capture tests and private-runtime child identity check rather than introducing
+      a second server fixture.
+- number: 3
+  title: User Story 1 - Choose a swarm worker model explicitly
+  purpose: Restore explicit model and effort propagation for every new-worker path with observable provider/auth
+    identity and no silent fallback.
+  story_reference: US-001
+  independent_test: Issue synthetic explicit spawn and assignment requests for openai:gpt-6-astra with low effort
+    and assert the effective session and SwarmMemberRuntime identity.
+  tasks:
+  - id: T007
+    title: Add explicit spawn and assignment-created worker regressions
+    status: Completed
+    type: test
+    parallel: true
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/tool/communicate_tests/assignment.rs
+    dependencies:
+    - T003
+    - T006
+    acceptance_criteria:
+    - spawn, assign_task, assign_next, run_plan, fill/replacement paths preserve model only when creating a worker.
+    - Reusing an existing worker never retargets its model or effort.
+    - Existing resolve_swarm_task_route output remains authoritative for task-derived model/role/effort.
+  - id: T008
+    title: Add explicit precedence, auth route, and runtime metadata regressions
+    status: Completed
+    type: test
+    parallel: true
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/server/comm_session_tests.rs
+    dependencies:
+    - T003
+    - T006
+    acceptance_criteria:
+    - The matrix covers explicit concrete route and explicit inherit/coordinator ahead of a configured pin.
+    - Route-qualified selections preserve model, provider_key, route_api_method, profile snapshot, request identity,
+      and mutation-key distinction.
+    - openai:gpt-6-astra plus low effort reaches Session and SwarmMemberRuntime metadata without fallback.
+    - Invalid or unavailable explicit routes fail visibly instead of substituting another route.
+  - id: T009
+    title: Restore optional model on CommunicateInput, schema, and worker-creation requests
+    status: Completed
+    type: implementation
+    parallel: false
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/tool/communicate.rs
+    dependencies:
+    - T007
+    - T008
+    acceptance_criteria:
+    - CommunicateInput and the public schema expose optional model without changing effort or action validation.
+    - Explicit spawn and assignment actions forward model only to newly created workers.
+    - No config, provider, SDK, dependency, or unrelated operator-control behavior changes.
+  - id: T010
+    title: Restore optional model on CommSpawn and CommAssignNext
+    status: Completed
+    type: implementation
+    parallel: false
+    story_id: US-001
+    file_path: crates/jcode-protocol/src/wire.rs
+    dependencies:
+    - T004
+    - T009
+    acceptance_criteria:
+    - Both messages carry additive Option<String> model fields with serde default and skip-when-none compatibility.
+    - All foundational protocol regressions pass without restoring unrelated upstream-removed surfaces.
+  - id: T011
+    title: Restore model forwarding in the full server dispatcher
+    status: Completed
+    type: implementation
+    parallel: true
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/server/client_lifecycle.rs
+    dependencies:
+    - T010
+    acceptance_criteria:
+    - CommSpawn and CommAssignNext forward model unchanged to canonical handlers in the full control path.
+    - Unrelated lifecycle handling remains untouched.
+  - id: T012
+    title: Restore model forwarding in the lightweight server dispatcher
+    status: Completed
+    type: implementation
+    parallel: true
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/server/client_lightweight_control.rs
+    dependencies:
+    - T010
+    acceptance_criteria:
+    - CommSpawn and CommAssignNext forward model unchanged to canonical handlers in the lightweight path.
+    - Behavior matches the full dispatcher and does not add a second resolver.
+  - id: T013
+    title: Forward explicit and task-derived routes through assignment-created spawn handling
+    status: Completed
+    type: implementation
+    parallel: false
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/server/comm_control.rs
+    dependencies:
+    - T011
+    - T012
+    acceptance_criteria:
+    - assign_task, assign_next, run_plan, fill, retry, reassign, replacement, and plan-created workers converge
+      on the canonical spawn request.
+    - Existing resolve_swarm_task_route remains the only task-node routing authority.
+    - Reuse-only assignments do not mutate worker route or effort.
+  - id: T014
+    title: Restore explicit-first canonical spawn selection and runtime identity
+    status: Completed
+    type: implementation
+    parallel: false
+    story_id: US-001
+    file_path: crates/jcode-app-core/src/server/comm_session.rs
+    dependencies:
+    - T013
+    acceptance_criteria:
+    - One resolver applies explicit request, concrete agents.swarm_model, coordinator inheritance, then existing
+      fallback only when authoritative identity is unavailable.
+    - Explicit inherit/coordinator bypasses configured pins and preserves coordinator provider/auth identity.
+    - Route-qualified explicit values use existing route/profile helpers and preserve provider_key, route_api_method,
+      profile snapshot, effort, nonce, and mutation identity.
+    - The native openai:gpt-6-astra low focused regressions pass without silent fallback.
+- number: 4
+  title: User Story 2 - Preserve existing omitted routing behavior
+  purpose: Prove additive restoration leaves legacy and operator-controlled omitted behavior unchanged.
+  story_reference: US-002
+  independent_test: Exercise omitted and blank model with concrete, inherit, empty, and absent agents.swarm_model
+    values plus live and persisted coordinator identities.
+  tasks:
+  - id: T015
+    title: Add and pass the omitted-routing compatibility matrix
+    status: Completed
+    type: test
+    parallel: false
+    story_id: US-002
+    file_path: crates/jcode-app-core/src/server/comm_session_tests.rs
+    dependencies:
+    - T014
+    acceptance_criteria:
+    - Omitted or blank model uses a concrete agents.swarm_model pin when present.
+    - Absent, empty, or inherit configuration preserves coordinator inheritance, including busy-coordinator persisted-session
+      fallback.
+    - Coordinator model, provider/auth route, profile snapshot, and existing built-in fallback behavior remain unchanged.
+  - id: T016
+    title: Verify legacy omitted assignment and reuse behavior
+    status: Completed
+    type: test
+    parallel: false
+    story_id: US-002
+    file_path: crates/jcode-app-core/src/server/comm_control_tests.rs
+    dependencies:
+    - T015
+    acceptance_criteria:
+    - Legacy requests without model still create workers using the established configured-pin/coordinator policy.
+    - Existing-worker assignment remains reuse-only and preserves its current runtime identity.
+    - No persisted wire or session migration is required.
+- number: 5
+  title: User Story 3 - Inspect routes without excessive output
+  purpose: Diagnose and replace full-catalog rendering with a deterministic, useful, hard-bounded summary.
+  story_reference: US-003
+  independent_test: Format empty, small, duplicate, unavailable, adversarial, and 10,000-route fixtures and assert
+    content, determinism, size, and elapsed time.
+  tasks:
+  - id: T017
+    title: Add bounded list_models catalog regressions and baseline measurement
+    status: Completed
+    type: test
+    parallel: false
+    story_id: US-003
+    file_path: crates/jcode-app-core/src/tool/communicate_routing_contract_tests.rs
+    dependencies:
+    - T003
+    acceptance_criteria:
+    - The pre-fix fixture demonstrates linear full-catalog growth.
+    - The contract covers empty, small, duplicate, unavailable, adversarial, and 10,000-route catalogs.
+    - Oversized output must be deterministic, at most 12 KiB, under 100 ms on the development host, and include
+      current/configured context plus truncation guidance.
+  - id: T018
+    title: Implement deterministic bounded list_models formatting
+    status: Completed
+    type: implementation
+    parallel: false
+    story_id: US-003
+    file_path: crates/jcode-app-core/src/tool/communicate.rs
+    dependencies:
+    - T017
+    - T014
+    acceptance_criteria:
+    - Current coordinator and configured-pin context are reserved before general route samples.
+    - Selection is stable, deduplicated, availability/auth-aware, and reports the omitted count with actionable
+      discovery guidance.
+    - A final byte guard keeps every formatted result at or below 12 KiB, including adversarial route text.
+    - No provider catalog, routing policy, or configuration behavior changes.
+- number: 6
+  title: User Story 4 - Protect the custom routing contract
+  purpose: Add a named downstream regression gate that future upstream syncs cannot defeat by reversing one assertion.
+  story_reference: US-004
+  independent_test: Run the named gate successfully, then run its negative fixture to prove representative schema
+    or wire removal is detected with an actionable failure.
+  tasks:
+  - id: T019
+    title: Add the named custom swarm routing contract runner and negative self-test
+    status: Completed
+    type: test
+    parallel: false
+    story_id: US-004
+    file_path: scripts/check_custom_swarm_routing_contract.py
+    dependencies:
+    - T016
+    - T018
+    acceptance_criteria:
+    - The stable runner name references the accepted contract in docs/CAPABILITY_ROUTING_CONTRACT.md.
+    - It checks direct/projected schema, CommSpawn/CommAssignNext wire shape, both forwarding paths, assignment
+      creation/reuse, precedence/auth, openai:gpt-6-astra low metadata, and bounded catalog coverage.
+    - Structural assertions and stable focused test selectors make failures independent of one reversible assertion
+      name or polarity.
+    - A non-mutating negative fixture proves representative contract deletion is detected with an actionable surface
+      name.
+  - id: T020
+    title: Invoke the named routing contract from canonical local guardrails
+    status: Completed
+    type: implementation
+    parallel: true
+    story_id: US-004
+    file_path: scripts/check_guardrails.sh
+    dependencies:
+    - T019
+    acceptance_criteria:
+    - The canonical guardrail script invokes the named runner with a visible custom-routing label.
+    - Failures propagate a nonzero exit status and identify the broken contract surface.
+  - id: T021
+    title: Invoke the same named routing contract from CI Quality Guardrails
+    status: Completed
+    type: implementation
+    parallel: true
+    story_id: US-004
+    file_path: .github/workflows/ci.yml
+    dependencies:
+    - T019
+    acceptance_criteria:
+    - The Quality Guardrails job invokes the same repository script used locally.
+    - No duplicate CI-only contract logic or unrelated workflow changes are introduced.
+- number: 7
+  title: Polish & Cross-Cutting Concerns
+  purpose: Document the restored contract and produce reviewable validation, runtime, and fresh-base safety evidence
+    without taking root-owned lifecycle actions.
+  tasks:
+  - id: T022
+    title: Update the existing capability routing contract documentation
+    status: Completed
+    type: documentation
+    parallel: true
+    story_id: null
+    file_path: docs/CAPABILITY_ROUTING_CONTRACT.md
+    dependencies:
+    - T019
+    acceptance_criteria:
+    - The document states explicit > agents.swarm_model > coordinator inheritance, explicit inherit semantics, omitted
+      compatibility, provider/auth preservation, and list_models bounds.
+    - It names the local and CI guard command and records that real-worker validation requires root approval.
+  - id: T023
+    title: Run focused tests, fresh build, formatting, and canonical guardrails
+    status: InProgress
+    type: test
+    parallel: false
+    story_id: null
+    file_path: scripts/check_guardrails.sh
+    dependencies:
+    - T020
+    - T021
+    - T022
+    acceptance_criteria:
+    - Regression-first exposure is recorded before restoration, then all focused schema, projection, protocol, dispatcher,
+      assignment, resolver, metadata, and catalog tests pass.
+    - Cargo formatting/checks, one serialized fresh selfdev build, the named contract runner, and canonical guardrails
+      pass or unrelated baseline failures are separately evidenced.
+    - The exact resolved fresh binary path and revision are recorded; no merge, push, Bead mutation, user-config
+      edit, or cleanup occurs.
+  - id: T024
+    title: Perform root-gated isolated runtime and fresh-base integration safety checks
+    status: InProgress
+    type: test
+    parallel: false
+    story_id: null
+    file_path: specs/025-restore-swarm-routing/tasks.yaml
+    dependencies:
+    - T023
+    acceptance_criteria:
+    - Root approval is recorded before creating any real worker.
+    - The freshly built binary runs on a unique private socket and starts exactly one bounded read-only openai:gpt-6-astra
+      low worker.
+    - Observed Session and SwarmMemberRuntime metadata match model, native OpenAI provider/auth route, and low effort
+      with no fallback.
+    - A fresh-base diff/rebase simulation or equivalent read-only applicability check records the base revision
+      and conflicts without merging, pushing, switching worktrees, or cleaning up.
+dependencies:
+  user_story_order:
+  - story_id: US-001
+    depends_on: []
+    blocks:
+    - US-002
+    - US-004
+  - story_id: US-002
+    depends_on:
+    - US-001
+    blocks:
+    - US-004
+  - story_id: US-003
+    depends_on: []
+    blocks:
+    - US-004
+  - story_id: US-004
+    depends_on:
+    - US-001
+    - US-002
+    - US-003
+    blocks: []
+  phase_order:
+  - phase: 1
+    blocks:
+    - 2
+  - phase: 2
+    blocks:
+    - 3
+    - 5
+  - phase: 3
+    blocks:
+    - 4
+    - 5
+  - phase: 4
+    blocks:
+    - 6
+  - phase: 5
+    blocks:
+    - 6
+  - phase: 6
+    blocks:
+    - 7
+  - phase: 7
+    blocks: []
+parallel_execution:
+- phase: 2
+  parallel_groups:
+  - tasks:
+    - T003
+    - T004
+    - T005
+    rationale: Schema/projection, protocol serialization, and app-core request tests use different files; Cargo-heavy
+      execution must still be serialized on this host.
+- phase: 3
+  parallel_groups:
+  - tasks:
+    - T007
+    - T008
+    rationale: Assignment and resolver metadata regressions are in different focused test modules.
+  - tasks:
+    - T011
+    - T012
+    rationale: Full and lightweight dispatchers are separate files with the same already-defined wire contract.
+- phase: 6
+  parallel_groups:
+  - tasks:
+    - T020
+    - T021
+    rationale: Local guardrail and CI workflow integration modify separate files after the shared runner exists.
+- phase: 7
+  parallel_groups:
+  - tasks:
+    - T022
+    rationale: Documentation can be prepared independently after the named contract is defined; final validation
+      remains serialized.
+implementation_strategy:
+  mvp_scope:
+    phases:
+    - 1
+    - 2
+    - 3
+    - 4
+    description: Regression scaffold, shared failing contract tests, explicit worker routing restoration, and omitted-behavior
+      compatibility.
+    validation: Run focused schema/projection, wire, forwarding, assignment, precedence/auth, omitted compatibility,
+      and openai:gpt-6-astra low metadata tests without creating a live worker.
+  incremental_delivery:
+  - milestone: Regression Contract Exposed
+    phases:
+    - 1
+    - 2
+    deliverable: All removed shared contract surfaces fail visibly before production restoration.
+  - milestone: Routing MVP Complete
+    phases:
+    - 1
+    - 2
+    - 3
+    - 4
+    deliverable: Explicit routing works across every new-worker path and omitted behavior remains compatible in
+      focused tests.
+  - milestone: Bounded Discovery Complete
+    phases:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    deliverable: list_models remains useful and at most 12 KiB for oversized catalogs.
+  - milestone: Upstream-Sync Protection Ready
+    phases:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    deliverable: One named downstream contract gate runs locally and in CI with a negative self-test.
+  - milestone: Review Evidence Complete
+    phases:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    deliverable: Focused checks, build, guardrails, root-approved isolated runtime, and fresh-base safety evidence
+      are ready for root review.
+_meta:
+  version: 1.0.0
+  generator: autospec
+  generator_version: autospec dev
+  created: '2026-09-05T05:22:11Z'
+  artifact_type: tasks

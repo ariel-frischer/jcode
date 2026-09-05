@@ -7,6 +7,43 @@
 
 ## Decision summary
 
+### Local explicit-spawn compatibility guard (jcode-h3eu)
+
+The custom distribution preserves optional `swarm.model` for explicit spawn and
+new-worker assignment paths. The tool, `CommSpawn`/`CommAssignNext` wire messages,
+and both server dispatchers carry the request to the existing spawn resolver.
+Explicit model wins over `agents.swarm_model`, which wins over coordinator
+inheritance. Blank is omitted; explicit `inherit` or `coordinator` bypasses a
+configured pin. Existing workers are not retargeted by assignment requests.
+
+For an **explicit swarm request**, native `openai:gpt-6-astra` pins OpenAI OAuth,
+including when the coordinator uses an API key. The canonical `AuthRoute` parser
+also handles explicit credential prefixes such as `openai-oauth:` and
+`openai-api:`. Configured model strings retain their existing prefix semantics.
+The request's `effort` is forwarded independently. No user configuration changes
+are required.
+
+`list_models` shows at most 60 distinct routes within a 12 KiB output budget.
+Current/configured models are prioritized, then available routes. Individual
+metadata fields are Unicode-safely bounded, auth choices remain distinct, and
+the footer reports omitted entries and points to the full model picker.
+
+Before integrating an upstream sync, run:
+
+```bash
+bash scripts/check_swarm_routing_contract.sh --self-test
+bash scripts/check_swarm_routing_contract.sh
+```
+
+The same gate runs in `scripts/check_guardrails.sh` and CI's Quality Guardrails
+job. It checks that key compiled tests still exist before running the local
+schema/projection, wire, precedence/auth, and catalog contract suite. Thus deleting
+tests cannot silently pass with zero tests. Keep these downstream tests and gate
+invocations when upstream changes its swarm policy. Runtime acceptance still
+requires a freshly built private instance and actual worker route/effort metadata.
+
+### Child-task policy
+
 Swarm child-task routing has one resolver and one vocabulary. A task may optionally
 provide a `role`, `model`, and `reasoning_effort`. The resolver computes one
 immutable effective selection for the child session:

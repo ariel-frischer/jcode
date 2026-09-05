@@ -25,6 +25,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+#[path = "communicate_forwarding_contract_tests.rs"]
+mod local_swarm_routing_contract;
+
 #[test]
 fn tool_is_named_swarm() {
     assert_eq!(CommunicateTool::new().name(), "swarm");
@@ -982,13 +985,13 @@ fn schema_still_requires_action() {
 }
 
 #[test]
-fn schema_omits_model_override_and_advertises_effort() {
+fn schema_advertises_model_override_and_effort() {
     let schema = CommunicateTool::new().parameters_schema();
     let props = schema["properties"]
         .as_object()
         .expect("swarm schema should have properties");
 
-    assert!(!props.contains_key("model"));
+    assert!(props.contains_key("model"));
     assert!(props.contains_key("effort"));
     assert_eq!(
         props["effort"]["enum"],
