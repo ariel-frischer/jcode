@@ -65,6 +65,7 @@ fn test_protocol_request_roundtrip_randomized_samples() -> Result<()> {
         let allow_session_takeover = rng.random_bool(0.5);
         let crash_on_disconnect = rng.random_bool(0.5);
         let req = Request::Subscribe {
+            workflow_progress: false,
             id,
             working_dir: working_dir.clone(),
             selfdev,

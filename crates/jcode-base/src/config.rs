@@ -14,9 +14,10 @@ pub use jcode_config_types::{
     PowerConfig, ProviderConfig, ReasoningDisplayMode, RunSafetyConfig, SafetyConfig,
     SessionPickerResumeAction, SessionProfileConfig, SkillsMode, SponsorsConfig, SwarmRolePolicy,
     SwarmSpawnMode, SwarmStripLayout, TerminalConfig, UpdateChannel, WebSearchConfig,
-    WebSearchEngine, WebSearchPolicyOverride, WebSearchResilienceConfig,
+    WebSearchEngine, WebSearchPolicyOverride, WebSearchResilienceConfig, WorkflowConfig,
 };
 use serde::{Deserialize, Serialize};
+mod workflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -30,6 +31,13 @@ const CONFIG_CACHE_CHECK_INTERVAL: Duration = if cfg!(test) {
 };
 
 const CONFIG_ENV_KEYS: &[&str] = &[
+    "JCODE_WORKFLOW_ENABLED",
+    "JCODE_WORKFLOW_AUTOSPEC_ENABLED",
+    "JCODE_WORKFLOW_SHOW_PANEL",
+    "JCODE_WORKFLOW_POLL_SECONDS",
+    "JCODE_WORKFLOW_QUIET_SECONDS",
+    "JCODE_WORKFLOW_TERMINAL_RETENTION_SECONDS",
+    "JCODE_WORKFLOW_MAX_VISIBLE",
     "HOME",
     "JCODE_ACP_PROFILE",
     "JCODE_ACP_TOOL_PROFILE",
@@ -500,6 +508,8 @@ pub fn on_config_reloaded(listener: fn()) {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
+    /// Passive workflow observability, disabled by default.
+    pub workflow: WorkflowConfig,
     /// TUI `@` file mention completion configuration.
     pub file_mentions: FileMentionsConfig,
     /// Daemon behavior for autonomous wake requests.

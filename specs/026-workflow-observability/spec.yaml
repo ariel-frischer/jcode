@@ -1,0 +1,99 @@
+feature:
+  branch: "026-workflow-observability"
+  created: "2026-09-05"
+  status: "Approved"
+  input: "Build modular configurable main-TUI workflow progress and health, with a custom optional Autospec adapter and no routine main-model monitoring turns."
+user_stories:
+  - id: "US-001"
+    title: "See owned work without opening child sessions"
+    priority: "P1"
+    as_a: "main-session operator"
+    i_want: "a bounded progress box updated independently of model turns"
+    so_that: "I can see what delegated work is doing without spending tokens"
+    acceptance_scenarios:
+      - given: "monitoring enabled and owned work active"
+        when: "the main model is idle and child activity changes"
+        then: "the visible task and activity update without starting a model turn"
+  - id: "US-002"
+    title: "Distinguish quiet work from confirmed failure"
+    priority: "P1"
+    as_a: "operator"
+    i_want: "evidence-based health and sticky errors"
+    so_that: "credit exhaustion or failures cannot hide behind an active spinner"
+    acceptance_scenarios:
+      - given: "a quiet but live workflow"
+        when: "the silence threshold expires"
+        then: "show check-needed rather than failed and never restart or kill work"
+      - given: "an explicit credit exhaustion event"
+        when: "the observer receives the failure"
+        then: "show credits exhausted without leaking raw provider content"
+  - id: "US-003"
+    title: "Keep custom Autospec optional and sync-friendly"
+    priority: "P1"
+    as_a: "fork maintainer"
+    i_want: "generic progress contracts with an isolated optional adapter"
+    so_that: "users without Autospec keep unchanged behavior and upstream syncs stay small"
+requirements:
+  functional:
+    - id: "FR-001"
+      description: "MUST preserve existing behavior when disabled or unset."
+      testable: true
+      acceptance_criteria: "Default config disables monitor work and panel; explicit options round-trip and invalid values are handled."
+    - id: "FR-002"
+      description: "MUST update progress and health without routine model turns."
+      testable: true
+      acceptance_criteria: "Idle-model test observes new snapshots after child/artifact changes and zero model requests."
+    - id: "FR-003"
+      description: "MUST scope all displayed work to its initiating session."
+      testable: true
+      acceptance_criteria: "Two-session test excludes unrelated children and registered paths."
+    - id: "FR-004"
+      description: "MUST show task counts, current stage/activity and distinct activity/checkpoint ages when known."
+      testable: true
+      acceptance_criteria: "Render fixtures show counts and ages without invented ETA or completion percentage."
+    - id: "FR-005"
+      description: "MUST preserve workflow identity across phase-child transitions and client reconnect."
+      testable: true
+      acceptance_criteria: "A registered run keeps the same row ID and reconnect retrieves a bounded current snapshot."
+    - id: "FR-006"
+      description: "MUST distinguish running, quiet, waiting, blocked, failed, completed and observer errors from available evidence."
+      testable: true
+      acceptance_criteria: "Deterministic clock/event tests cover quiet live work, known errors, retry, stale observations and terminal retention."
+    - id: "FR-007"
+      description: "MUST isolate Autospec observation from generic rendering and monitoring policy."
+      testable: true
+      acceptance_criteria: "Adapter reads only explicitly registered bounded artifacts; no Autospec CLI invocation or global directory scan."
+    - id: "FR-008"
+      description: "MUST bound monitor resource use and expose malformed/missing artifacts safely."
+      testable: true
+      acceptance_criteria: "Size, registration-count, polling and display limits tested; partial YAML and missing file cases preserve last good progress with observer warning."
+    - id: "FR-009"
+      description: "MUST provide configurable enablement, panel size, polling, quiet threshold and terminal retention."
+      testable: true
+      acceptance_criteria: "Canonical TOML/environment resolution tests and documented defaults match runtime behavior."
+  non_functional:
+    - id: "NFR-001"
+      category: "security"
+      description: "Observation must not change provider settings, run commands, kill/restart controllers or leak raw logs."
+      measurable_target: "Zero observer process executions or provider calls in fake-workflow integration tests."
+    - id: "NFR-002"
+      category: "usability"
+      description: "The panel must stay readable on narrow terminals without covering input."
+      measurable_target: "Frame tests at 40, 80 and 120 columns and short terminal height."
+constraints:
+  - "Implementation Bead jcode-upir owns available local, mock, runtime and packaging validation."
+  - "Root integration checkout remains on dev; all coupled artifacts and code stay in the isolated worktree."
+  - "No user-installed configuration changes without concrete approval."
+  - "Reuse existing protocol/config/runtime ownership boundaries and avoid a generic plugin ABI."
+assumptions:
+  - "One explicit run registration is acceptable; repeated model-driven status calls are not."
+  - "Autospec task completion is implementation progress, not proof of validation or landing."
+out_of_scope:
+  - "Provider switching, billing recovery, controller restart or cancellation automation."
+  - "Desktop app, new Go SDK implementation, global process/session discovery or polling CLI terminal output."
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-05T18:57:44Z"
+  artifact_type: "spec"

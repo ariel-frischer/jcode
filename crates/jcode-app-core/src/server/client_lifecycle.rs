@@ -846,9 +846,15 @@ pub(super) async fn handle_client(
     // subscribe. Under heavy swarm file-activity load, ignored bus frames can
     // otherwise monopolize the select loop before the initial subscribe/read.
     let mut client_subscribed = false;
+    let mut workflow_subscription = super::workflow::Subscription::default();
+    let mut workflow_session_id = client_session_id.clone();
     let mut pending_request = Some(initial_request);
 
     loop {
+        if workflow_session_id != client_session_id {
+            workflow_session_id = client_session_id.clone();
+            workflow_subscription.refresh();
+        }
         let request = if let Some(request) = pending_request.take() {
             request
         } else {
@@ -872,6 +878,20 @@ pub(super) async fn handle_client(
                 if let Some(info) = connections.get_mut(&client_connection_id) {
                     info.last_seen = Instant::now();
                 }
+            }
+            _ = workflow_subscription.changed(), if client_subscribed => {
+                if let Some(event) = workflow_subscription.event(&client_session_id) {
+                    let json = encode_event(&event);
+                    // Coalesce while a client is slow. Never queue periodic snapshots
+                    // in client_event_tx or broadcast them to other attachments.
+                    let sent = tokio::time::timeout(Duration::from_secs(5), async {
+                        writer.lock().await.write_all(json.as_bytes()).await
+                    }).await;
+                    if !matches!(sent, Ok(Ok(()))) {
+                        break;
+                    }
+                }
+                continue;
             }
             done = processing_done_rx.recv() => {
                 if let Some((done_id, result, completion_report)) = done {
@@ -1644,6 +1664,7 @@ pub(super) async fn handle_client(
 
             Request::Subscribe {
                 id,
+                workflow_progress: requested_workflow_progress,
                 working_dir: subscribe_working_dir,
                 selfdev,
                 target_session_id,
@@ -1833,6 +1854,9 @@ pub(super) async fn handle_client(
                     }
                 }
                 client_subscribed = true;
+                workflow_subscription.set_enabled(
+                    requested_workflow_progress && crate::config::config().workflow.enabled,
+                );
             }
 
             Request::GetHistory { id } => {

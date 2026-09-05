@@ -1,0 +1,123 @@
+tasks:
+  branch: "agent/workflow-observability"
+  created: "2026-09-05"
+  spec_path: "specs/026-workflow-observability/spec.yaml"
+  plan_path: "specs/026-workflow-observability/plan.yaml"
+summary:
+  total_tasks: 8
+  total_phases: 4
+  parallel_opportunities: 0
+  estimated_complexity: "high"
+phases:
+  - number: 1
+    title: "Generic contracts and opt-in configuration"
+    purpose: "Foundational compatibility boundaries for all stories"
+    tasks:
+      - id: "T001"
+        title: "Add compact workflow DTO and opt-in bounded configuration"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-config-types/src/workflow.rs"
+        dependencies: []
+        acceptance_criteria:
+          - "FR-001/009: default-disabled config, canonical env precedence, bounded values and serde compatibility tests"
+          - "Generic DTOs live in dependency-light background-types and contain no Autospec schema"
+  - number: 2
+    title: "Passive owned workflow monitoring"
+    purpose: "Observe actual work and evidence-based health"
+    tasks:
+      - id: "T002"
+        title: "Implement bounded registry and isolated Autospec artifact observer"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "crates/jcode-app-core/src/workflow/mod.rs"
+        dependencies: ["T001"]
+        acceptance_criteria:
+          - "FR-003/005/007/008: explicit exclusive worktree ownership, stable run ID, safe bounded reads, recoverable snapshot persistence"
+          - "Tests reject cross-owner claims, malformed and oversized files without command execution"
+      - id: "T003"
+        title: "Add single observation registration to existing background tool"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-app-core/src/tool/bg.rs"
+        dependencies: ["T002"]
+        acceptance_criteria:
+          - "Explicit observe/unobserve actions use caller session ownership and leave source files/processes untouched"
+          - "Existing bg actions and defaults remain compatible"
+      - id: "T004"
+        title: "Integrate server-owned activity and health snapshots"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-002"
+        file_path: "crates/jcode-app-core/src/server/workflow.rs"
+        dependencies: ["T003"]
+        acceptance_criteria:
+          - "FR-002/004/005/006: server updates native and registered run snapshots with model idle"
+          - "Separate activity/checkpoint age, quiet suspicion, explicit credit/failure and observer warning"
+          - "No routine model notification, raw provider errors, controller retry or global process scans"
+  - number: 3
+    title: "Main-TUI progress and public acceptance"
+    purpose: "Make progress and actionable health visible without child navigation"
+    tasks:
+      - id: "T005"
+        title: "Render passive bounded progress box beneath main header"
+        status: "Completed"
+        type: "implementation"
+        parallel: false
+        story_id: "US-001"
+        file_path: "crates/jcode-tui/src/tui/ui_workflow.rs"
+        dependencies: ["T004"]
+        acceptance_criteria:
+          - "FR-004 and NFR-002: counts/current activity/health render at 40/80/120 columns and short heights"
+          - "Disabled/empty layout unchanged; no filesystem reads or model calls during rendering"
+      - id: "T006"
+        title: "Exercise fake producer, idle model, reconnect and failures through built runtime"
+        status: "Completed"
+        type: "test"
+        parallel: false
+        story_id: "US-002"
+        file_path: "scripts/test_workflow_runtime.py"
+        dependencies: ["T005"]
+        acceptance_criteria:
+          - "All FR mapped to focused evidence including ownership, phase transitions, explicit quota failure, silence and malformed artifacts"
+          - "Isolated-socket candidate and debug tester show real UI updates with no observer-induced provider requests"
+  - number: 4
+    title: "Polish and risk-reviewed handoff"
+    purpose: "Maintain sync-friendly documentation and safe integration lifecycle"
+    tasks:
+      - id: "T007"
+        title: "Document config, registration, limits and upstream boundaries and run polish"
+        status: "Completed"
+        type: "documentation"
+        parallel: false
+        story_id: "US-003"
+        file_path: "docs/public/workflow-observability.md"
+        dependencies: ["T006"]
+        acceptance_criteria:
+          - "Docs index and changelog match implemented interfaces and config precedence"
+          - "Focused tests, formatting and applicable guardrails pass or isolated baseline blockers are recorded"
+      - id: "T008"
+        title: "Review candidate and hand off bounded commits for risk-approved integration"
+        status: "Pending"
+        type: "test"
+        parallel: false
+        story_id: null
+        file_path: "specs/026-workflow-observability/tasks.yaml"
+        dependencies: ["T007"]
+        acceptance_criteria:
+          - "Independent read-only review addresses feature risk without expanding scope"
+          - "Explicit-file commits, HTML risk report and truthful merge-wt handoff recorded in jcode-upir"
+          - "Root stays dev; user configuration unchanged; installation and cleanup only after authorized landing"
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-05T18:57:44Z"
+  artifact_type: "tasks"

@@ -313,6 +313,18 @@ kv_cache_miss_notices = true
 # Set to "main" for bleeding edge updates every time code is pushed
 update_channel = "stable"
 
+[workflow]
+# Passive server-owned progress and health. No routine model turns.
+# Environment overrides use JCODE_WORKFLOW_<UPPERCASE_FIELD>.
+enabled = false
+# Fork-specific adapter; no Autospec installation needed when disabled.
+autospec_enabled = false
+show_panel = true
+poll_seconds = 2                 # 1..3600
+quiet_seconds = 300              # 30..86400; quiet does not mean failed
+terminal_retention_seconds = 300 # 0..86400; successful/stopped rows
+max_visible = 3                  # 1..8; preserve space for chat and input
+
 [websearch]
 # Preferred websearch engine: "duckduckgo", "bing", or "searxng".
 engine = "duckduckgo"

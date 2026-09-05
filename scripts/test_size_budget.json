@@ -3,7 +3,7 @@
   "tracked_files": {
     "crates/jcode-app-core/src/agent_tests.rs": 2837,
     "crates/jcode-app-core/src/server/client_actions_tests.rs": 1210,
-    "crates/jcode-app-core/src/server/client_lifecycle_tests.rs": 1682,
+    "crates/jcode-app-core/src/server/client_lifecycle_tests.rs": 1683,
     "crates/jcode-app-core/src/server/comm_control_tests/dag_e2e.rs": 1335,
     "crates/jcode-app-core/src/server/provider_control_tests.rs": 1393,
     "crates/jcode-app-core/src/server/swarm_persistence_tests.rs": 1241,
@@ -45,7 +45,7 @@
     "crates/jcode-tui/src/tui/ui_tests/prepare.rs": 1285,
     "crates/jcode-tui/src/tui/ui_tests/tools.rs": 1354,
     "src/cli/commands_tests.rs": 1663,
-    "tests/e2e/test_support/mod.rs": 1429
+    "tests/e2e/test_support/mod.rs": 1430
   },
   "version": 1
 }

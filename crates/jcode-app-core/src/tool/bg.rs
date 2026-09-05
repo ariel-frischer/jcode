@@ -41,6 +41,9 @@ impl BgTool {
 
 #[derive(Deserialize)]
 struct BgInput {
+    /// Explicit passive registration, never a managed task or process claim.
+    #[serde(default)]
+    observation: Option<crate::workflow::ObserveInput>,
     /// Action to perform: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, watch, delivery, subscribe, wait
     #[serde(default)]
     action: Option<String>,
@@ -521,8 +524,20 @@ impl Tool for BgTool {
                 "intent": super::intent_schema_property(),
                 "action": {
                     "type": "string",
-                    "enum": ["list", "status", "output", "tail", "cancel", "cleanup", "inspect_stale", "terminate_stale", "watch", "delivery", "subscribe", "wait"],
-                    "description": "Action. Prefer wait over polling; watch is an alias for delivery."
+                    "enum": ["list", "status", "output", "tail", "cancel", "cleanup", "inspect_stale", "terminate_stale", "watch", "delivery", "subscribe", "wait", "observe", "unobserve"],
+                    "description": "Action. Prefer wait over polling; watch is an alias for delivery. Observe registers passive workflow progress once, without waking a model or controlling a process. Unobserve removes only the caller's registration using task_id."
+                },
+                "observation": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["working_dir", "tasks_file"],
+                    "properties": {
+                        "working_dir": { "type": "string", "description": "Absolute exclusive workflow worktree, claimed for this caller session." },
+                        "tasks_file": { "type": "string", "description": "Autospec tasks YAML path within that worktree (relative or absolute)." },
+                        "status_file": { "type": "string", "description": "Optional adjunct controller JSON path inside the worktree. Not emitted by Autospec by default." },
+                        "label": { "type": "string", "description": "Short workflow display label." }
+                    },
+                    "description": "For observe only. Requires workflow.enabled and workflow.autospec_enabled. Reads bounded artifacts only, never runs commands."
                 },
                 "task_id": { "type": "string", "description": "Task ID." },
                 "task_ids": { "type": "array", "items": {"type":"string"}, "description": "Task IDs for multi-task wait/status." },
@@ -554,6 +569,11 @@ impl Tool for BgTool {
     async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
         let params: BgInput = serde_json::from_value(input)?;
         let action = resolve_action(&params)?;
+        if matches!(action.as_str(), "observe" | "unobserve") {
+            // Deliberately precedes background::global(): no managed task, wake,
+            // notification, cancellation or process ownership semantics apply.
+            return observation_action(params, &ctx.session_id, crate::workflow::global()?);
+        }
         let manager = background::global();
 
         match action.as_str() {
@@ -952,10 +972,42 @@ impl Tool for BgTool {
             }
 
             _ => Err(anyhow::anyhow!(
-                "Unknown action: {}. Valid actions: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, watch, delivery, subscribe, wait",
+                "Unknown action: {}. Valid actions: list, status, output, tail, cancel, cleanup, inspect_stale, terminate_stale, watch, delivery, subscribe, wait, observe, unobserve",
                 action
             )),
         }
+    }
+}
+
+fn observation_action(
+    params: BgInput,
+    owner: &str,
+    store: &crate::workflow::WorkflowStore,
+) -> Result<ToolOutput> {
+    match resolve_action(&params)?.as_str() {
+        "observe" => {
+            let input = params
+                .observation
+                .ok_or_else(|| anyhow::anyhow!("observe requires observation"))?;
+            let id = store.register(owner, input, crate::workflow::now_seconds())?;
+            Ok(ToolOutput::new(format!("Passive workflow observation registered: {id}. No process control or model wake is armed."))
+                .with_title("bg observe")
+                .with_metadata(json!({"task_id": id, "observing": true})))
+        }
+        "unobserve" => {
+            let id = params
+                .task_id
+                .ok_or_else(|| anyhow::anyhow!("unobserve requires task_id"))?;
+            let removed = store.unobserve(owner, &id)?;
+            Ok(ToolOutput::new(if removed {
+                "Workflow observation removed. Source artifacts and processes are unchanged."
+            } else {
+                "No matching workflow observation owned by this session."
+            })
+            .with_title("bg unobserve")
+            .with_metadata(json!({"task_id": id, "removed": removed})))
+        }
+        _ => anyhow::bail!("observation requires explicit observe or unobserve action"),
     }
 }
 
@@ -963,6 +1015,74 @@ impl Tool for BgTool {
 mod tests {
     use super::*;
     use anyhow::{Result, anyhow};
+
+    #[test]
+    fn workflow_observation_schema_is_explicit_and_caller_owned() {
+        let schema = BgTool::new().parameters_schema();
+        let actions = schema["properties"]["action"]["enum"].as_array().unwrap();
+        assert!(actions.contains(&json!("observe")));
+        assert!(actions.contains(&json!("unobserve")));
+        let observation = &schema["properties"]["observation"];
+        assert_eq!(observation["type"], "object");
+        assert_eq!(observation["additionalProperties"], false);
+        assert!(observation["properties"].get("owner").is_none());
+    }
+
+    #[test]
+    fn workflow_observation_actions_preserve_sources_and_scope() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let source = root.path().join("tasks.yaml");
+        std::fs::write(&source, "private source unchanged")?;
+        let store = crate::workflow::WorkflowStore::open(
+            root.path().join("private/state.json"),
+            crate::config::WorkflowConfig {
+                enabled: true,
+                autospec_enabled: true,
+                ..Default::default()
+            },
+        )?;
+        let input = json!({
+            "action": " Observe ",
+            "observation": {"working_dir": root.path(), "tasks_file": "tasks.yaml"},
+            "wake": true, "notify": true, "stall_wake_seconds": 30
+        });
+        let first = observation_action(serde_json::from_value(input.clone())?, "owner", &store)?;
+        let again = observation_action(serde_json::from_value(input.clone())?, "owner", &store)?;
+        assert_eq!(first.metadata, again.metadata);
+        assert!(observation_action(serde_json::from_value(input)?, "other", &store).is_err());
+        let id = first.metadata.as_ref().unwrap()["task_id"].clone();
+        let remove = json!({"action": "unobserve", "task_id": id});
+        let denied = observation_action(serde_json::from_value(remove.clone())?, "other", &store)?;
+        assert_eq!(denied.metadata.unwrap()["removed"], false);
+        assert_eq!(store.snapshots(crate::workflow::now_seconds())?.len(), 1);
+        let removed = observation_action(serde_json::from_value(remove)?, "owner", &store)?;
+        assert_eq!(removed.metadata.unwrap()["removed"], true);
+        assert!(store.snapshots(crate::workflow::now_seconds())?.is_empty());
+        assert_eq!(std::fs::read_to_string(source)?, "private source unchanged");
+        Ok(())
+    }
+
+    #[test]
+    fn workflow_observation_requires_explicit_input_and_enabled_store() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("unused/state.json");
+        let store = crate::workflow::WorkflowStore::open(path.clone(), Default::default())?;
+        for input in [
+            json!({"action":"observe"}),
+            json!({"action":"unobserve"}),
+            json!({"action":"observe", "observation":{"working_dir":root.path(),"tasks_file":"tasks.yaml"}}),
+        ] {
+            assert!(observation_action(serde_json::from_value(input)?, "owner", &store).is_err());
+        }
+        assert!(!path.exists());
+        assert!(serde_json::from_value::<BgInput>(json!({
+            "action":"observe", "observation":{"working_dir":root.path(),"tasks_file":"tasks.yaml", "owner":"spoof"}
+        })).is_err());
+        let legacy: BgInput = serde_json::from_value(json!({"intent":"Wait for tests"}))?;
+        assert!(legacy.observation.is_none());
+        assert_eq!(resolve_action(&legacy)?, "wait");
+        Ok(())
+    }
 
     #[test]
     fn status_filter_schema_any_of_branches_have_types() -> Result<()> {

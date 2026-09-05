@@ -1815,6 +1815,10 @@ impl crate::tui::TuiState for App {
         self.diagram_mode
     }
 
+    fn workflow_snapshots(&self) -> &[crate::bus::WorkflowSnapshot] {
+        &self.remote_workflows
+    }
+
     fn inline_swarm_gallery_active(&self) -> bool {
         if self.debug_force_inline_gallery {
             return !self.inline_swarm_members().is_empty();
