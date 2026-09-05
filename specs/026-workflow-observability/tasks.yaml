@@ -68,7 +68,7 @@ phases:
     tasks:
       - id: "T005"
         title: "Render passive bounded progress box beneath main header"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
@@ -79,7 +79,7 @@ phases:
           - "Disabled/empty layout unchanged; no filesystem reads or model calls during rendering"
       - id: "T006"
         title: "Exercise fake producer, idle model, reconnect and failures through built runtime"
-        status: "Pending"
+        status: "InProgress"
         type: "test"
         parallel: false
         story_id: "US-002"

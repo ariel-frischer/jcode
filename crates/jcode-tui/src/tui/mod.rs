@@ -71,6 +71,7 @@ mod ui;
 pub(crate) use ui::header::top_bar_model_display_name;
 mod ui_diff;
 pub(crate) mod ui_top_bar;
+pub(crate) mod ui_workflow;
 pub use ui_top_bar::TopBarContext;
 pub mod usage_overlay;
 pub mod visual_debug;
@@ -571,6 +572,20 @@ pub trait TuiState {
     /// deterministic preference without changing the renderer.
     fn top_bar_enabled(&self) -> bool {
         crate::config::config().display.top_bar
+    }
+
+    /// Display-only server state. Implementations must not observe sources here.
+    fn workflow_snapshots(&self) -> &[crate::bus::WorkflowSnapshot] {
+        &[]
+    }
+
+    fn workflow_panel_enabled(&self) -> bool {
+        let config = &crate::config::config().workflow;
+        config.enabled && config.show_panel
+    }
+
+    fn workflow_max_visible(&self) -> usize {
+        crate::config::config().workflow.max_visible
     }
 
     /// Whether the inline swarm gallery band should be shown above the chat.

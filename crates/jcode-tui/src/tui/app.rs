@@ -1303,6 +1303,7 @@ pub struct App {
     side_pane_images_signature_cache: std::cell::Cell<Option<(usize, u64)>>,
     // Swarm member status snapshots (remote mode only)
     remote_swarm_members: Vec<crate::protocol::SwarmMemberStatus>,
+    remote_workflows: Vec<crate::bus::WorkflowSnapshot>,
     // Latest swarm plan snapshot (local or remote server event stream)
     swarm_plan_items: Vec<crate::plan::PlanItem>,
     swarm_plan_version: Option<u64>,
