@@ -60,7 +60,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [Spawn Hook: External Control of Headed Session Spawns](SPAWN_HOOK.md)
 - [Sponsored discovery sponsor onboarding](SPONSORED_DISCOVERY_SPONSOR_ONBOARDING.md)
 - [Sponsor implementation](SPONSOR_IMPLEMENTATION.md)
-- [Swarm Architecture](SWARM_ARCHITECTURE.md)
+- [Swarm architecture](SWARM_ARCHITECTURE.md): Agent lifecycle, bounded completion notifications, and explicit full-report retrieval.
 - [Swarm as a Task DAG (Design)](SWARM_TASK_GRAPH.md)
 - [Configuring the System Prompt](SYSTEM_PROMPT_CONFIG.md)
 - [Terminal-Bench 2.0 with jcode](TERMINAL_BENCH.md)

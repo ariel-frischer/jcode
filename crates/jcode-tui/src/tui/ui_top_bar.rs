@@ -152,11 +152,20 @@ impl ProviderCreditState {
         } else {
             Self::known(provider, primary_summary, secondary_summary)
         };
-        state.primary_remaining_ratio = subscription_remaining_ratio(usage);
-        state.primary_window_label = usage
-            .primary_limit_label
-            .as_deref()
-            .and_then(sanitize_label);
+        if matches!(
+            usage.provider,
+            UsageProvider::Anthropic | UsageProvider::OpenAI
+        ) {
+            // Follow the same valid window as summary(), including weekly-only
+            // snapshots. A missing primary must not lend its label to the bar.
+            let (ratio, label) = if state.primary_summary.is_some() {
+                (usage.five_hour, usage.primary_limit_label.as_deref())
+            } else {
+                (usage.seven_day, usage.secondary_limit_label.as_deref())
+            };
+            state.primary_remaining_ratio = Some(1.0 - ratio);
+            state.primary_window_label = label.and_then(sanitize_label);
+        }
         state.fetched_at = None;
         state
     }
@@ -173,19 +182,6 @@ impl ProviderCreditState {
                 ProviderCreditStatus::Known => None,
             })
     }
-}
-
-fn subscription_remaining_ratio(usage: &UsageInfo) -> Option<f32> {
-    if !matches!(
-        usage.provider,
-        UsageProvider::Anthropic | UsageProvider::OpenAI
-    ) || !usage.five_hour.is_finite()
-        || !(0.0..=1.0).contains(&usage.five_hour)
-        || (usage.primary_limit_label.is_none() && usage.five_hour == 0.0)
-    {
-        return None;
-    }
-    Some(1.0 - usage.five_hour)
 }
 
 fn usage_window_summary(label: Option<&str>, ratio: f32, used: bool) -> Option<String> {
@@ -975,6 +971,10 @@ pub(crate) fn truncate_display_width(value: &str, max_width: usize) -> String {
 pub(crate) fn bounded_line(value: &str, max_width: usize) -> Line<'static> {
     Line::from(truncate_display_width(value, max_width))
 }
+
+#[cfg(test)]
+#[path = "ui_top_bar_credit_tests.rs"]
+mod credit_tests;
 
 #[cfg(test)]
 mod tests {

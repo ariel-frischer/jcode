@@ -122,6 +122,18 @@ concurrently would make the shared plan incoherent.
   running, or intentional cleanup/stop of an idle worker.
 - Agents should avoid sending a separate final-report DM unless they need interactive
   coordination before finishing; the automatic forwarded report is the default path.
+- The server retains the complete latest report, trimming only outer whitespace.
+  Completion notifications and await results contain bounded previews, not the
+  authoritative report. Retrieve the full text explicitly with
+  `swarm(action="read_report", target_session="<session-id>")`. This action uses
+  the existing swarm membership boundary and accepts an exact session ID or a
+  unique friendly name. Missing reports, unknown targets, and ambiguous names
+  return explicit errors. `to_session` is an alias for `target_session`.
+- `summary` summarizes tool calls and `read_context` previews conversation messages.
+  Neither is a lossless completion-report retrieval interface. Archive needed
+  reports before removing workers; retrieval addresses the latest retained member
+  report, not a historical report archive. Reports already truncated by an older
+  server cannot be reconstructed by this action.
 
 ## User Interaction
 

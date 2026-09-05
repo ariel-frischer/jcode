@@ -261,6 +261,58 @@ fn test_classify_openai_limits_does_not_duplicate_weekly_window() {
 }
 
 #[test]
+fn test_classify_openai_weekly_quota_excludes_additional_limits() {
+    // Additional pools must stay in the report, not fill the missing normal 5h slot.
+    for limit_name in ["gpt-reserve", "Model weekly", "Additional"] {
+        let json = serde_json::json!({
+            "rate_limit": {
+                "primary_window": { "used_percent": 30, "limit_window_seconds": 604800 },
+                "secondary_window": null
+            },
+            "additional_rate_limits": [
+                { "limit_name": limit_name, "rate_limit": {
+                    "primary_window": { "used_percent": 0, "limit_window_seconds": 604800 }
+                }},
+                { "limit_name": "GPT Spark", "rate_limit": {
+                    "primary_window": { "used_percent": 20, "limit_window_seconds": 18000 }
+                }}
+            ]
+        });
+        let parsed = openai_helpers::parse_openai_usage_payload(&json);
+        assert_eq!(parsed.limits.len(), 3);
+        assert_eq!(parsed.limits[1].name, format!("{limit_name} (7d)"));
+        assert_eq!(parsed.limits[1].usage_percent, 0.0);
+        let classified = openai_helpers::classify_openai_limits(&parsed.limits);
+        assert!(
+            classified.five_hour.is_none(),
+            "{limit_name}: {classified:?}"
+        );
+        let weekly = classified.seven_day.expect("normal weekly quota");
+        assert_eq!(weekly.name, "7-day window");
+        assert_eq!(weekly.usage_ratio, 0.3);
+        assert_eq!(classified.spark.unwrap().usage_ratio, 0.2);
+    }
+}
+
+#[test]
+fn test_classify_openai_additional_only_does_not_invent_account_quota() {
+    let parsed = openai_helpers::parse_openai_usage_payload(&serde_json::json!({
+        "additional_rate_limits": [{
+            "limit_name": "gpt-reserve",
+            "rate_limit": {
+                "primary_window": { "used_percent": 0, "limit_window_seconds": 604800 },
+                "secondary_window": { "used_percent": 10, "limit_window_seconds": 18000 }
+            }
+        }]
+    }));
+    assert_eq!(parsed.limits.len(), 2);
+    let classified = openai_helpers::classify_openai_limits(&parsed.limits);
+    assert!(classified.five_hour.is_none());
+    assert!(classified.seven_day.is_none());
+    assert!(classified.spark.is_none());
+}
+
+#[test]
 fn test_parse_usage_percent_supports_used_limit_shape() {
     let mut obj = serde_json::Map::new();
     obj.insert("used".to_string(), serde_json::json!(20));
@@ -560,6 +612,10 @@ fn test_parse_openai_usage_payload_prefers_wham_windows_and_additional_limits() 
     assert_eq!(parsed.limits[1].usage_percent, 50.0);
     assert_eq!(parsed.limits[2].name, "Codex Spark (5h)");
     assert_eq!(parsed.limits[2].usage_percent, 75.0);
+    let classified = openai_helpers::classify_openai_limits(&parsed.limits);
+    assert_eq!(classified.five_hour.unwrap().usage_ratio, 0.25);
+    assert_eq!(classified.seven_day.unwrap().usage_ratio, 0.5);
+    assert_eq!(classified.spark.unwrap().usage_ratio, 0.75);
 }
 
 #[test]
