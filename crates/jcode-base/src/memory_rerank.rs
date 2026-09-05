@@ -264,10 +264,11 @@ pub async fn rerank_candidates_consensus_attributed(
         return (Vec::new(), RerankOutcome::AllJudgesFailed);
     }
     let votes = votes.max(1);
+    let sidecar = sidecar.for_memory_operation(crate::sidecar::MemoryOperationKind::Rerank);
     let min_agree = min_agree.clamp(1, votes);
     if votes == 1 {
         return rerank_candidates_with_mode_attributed(
-            sidecar,
+            &sidecar,
             focused_query,
             candidates,
             RerankMode::Precision,
@@ -410,6 +411,7 @@ pub async fn rerank_candidates_with_mode_attributed(
     let prompt = build_rerank_prompt(focused_query, &pairs);
     let n = candidates.len();
 
+    let sidecar = sidecar.for_memory_operation(crate::sidecar::MemoryOperationKind::Rerank);
     let order = match sidecar.complete(LLM_RERANK_SYSTEM, &prompt).await {
         // Case 1 failure: network/transport error. Surface NOTHING; the caller
         // carries the last judge-verified set (never unvetted hybrid order).

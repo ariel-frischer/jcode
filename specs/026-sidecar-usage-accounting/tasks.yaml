@@ -60,7 +60,7 @@ phases:
       tasks:
         - id: T004
           title: Add native response normalization fixtures in crates/jcode-base/src/sidecar/usage_tests.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: US-001
@@ -71,7 +71,7 @@ phases:
             - Test reported zero separately from absence; OpenAI input includes cached reads, Claude input/cache components normalize once, reasoning stays within output; reject negative, overflow and invalid subsets field-wise.
         - id: T005
           title: Implement usage normalization in crates/jcode-base/src/sidecar/usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001
@@ -81,12 +81,12 @@ phases:
             - Normalize provider-reported optional fields using checked arithmetic and cumulative snapshot replacement, never event summation or invented zero.
             - Wire module declarations and make T004 fixtures pass without altering request payloads, completion text or existing error behavior.
         - id: T006
-          title: Add physical-attempt and exact payload regressions in crates/jcode-base/src/sidecar/tests.rs
-          status: Pending
+          title: Add physical-attempt and exact payload regressions in crates/jcode-base/src/sidecar/attempt_tests.rs
+          status: Completed
           type: test
           parallel: false
           story_id: US-001
-          file_path: crates/jcode-base/src/sidecar/tests.rs
+          file_path: crates/jcode-base/src/sidecar/attempt_tests.rs
           dependencies: [T005]
           acceptance_criteria:
             - AC-3 local mock fixtures count each real send once across votes, retry, actual-model fallback, failures and cancellation; preflight rejection and skipped/backoff work count no send.
@@ -94,7 +94,7 @@ phases:
             - Generic provider usage/retry events preserve exposed detail and explicitly mark hidden physical-attempt coverage unavailable.
         - id: T007
           title: Collect exactly-once native attempts in crates/jcode-base/src/sidecar.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001
@@ -105,12 +105,12 @@ phases:
             - Capture SSE and Claude usage before returning text/error; retain partial reported usage and safe categories, never response bodies or raw errors.
             - Adapt existing generic provider stream usage/retry contracts where exposed without claiming hidden physical retry completeness; preserve text completion wrappers and make T006 tests pass.
         - id: T008
-          title: Add all-operation attribution fixtures in crates/jcode-base/src/memory_agent/tests.rs
-          status: Pending
+          title: Add all-operation attribution fixtures in crates/jcode-base/src/memory_agent/usage_tests.rs
+          status: Completed
           type: test
           parallel: false
           story_id: US-001
-          file_path: crates/jcode-base/src/memory_agent/tests.rs
+          file_path: crates/jcode-base/src/memory_agent/usage_tests.rs
           dependencies: [T007]
           acceptance_criteria:
             - AC-2 exercise two interleaved sessions across session/legacy relevance, periodic/final/agent/TUI extraction, contradiction, rerank votes and maintenance cluster naming.
@@ -118,7 +118,7 @@ phases:
             - AC-3 reconcile exact sends and normalized input plus output, never adding reasoning again; AC-6 preserve votes2 and cadence3.
         - id: T009
           title: Thread operation ownership through crates/jcode-base/src/memory_agent.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001
@@ -130,7 +130,7 @@ phases:
             - Never use memory/activity.rs ambient UI session state for accounting; preserve routes, cadence and results.
         - id: T010
           title: Attribute legacy and session memory helpers in crates/jcode-base/src/memory.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001
@@ -141,7 +141,7 @@ phases:
             - Audit identified Sidecar call sites against T001 inventory and give every actual memory operation a closed operation kind.
         - id: T011
           title: Preserve direct agent extraction ownership in crates/jcode-app-core/src/agent/turn_execution.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001
@@ -152,7 +152,7 @@ phases:
             - Focused agent attribution test demonstrates original session rather than last-active session.
         - id: T012
           title: Preserve direct TUI extraction ownership in crates/jcode-tui/src/tui/app/turn_memory.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-001

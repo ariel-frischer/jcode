@@ -218,3 +218,186 @@ was performed. The unchanged frozen matrix remains the feature acceptance target
 
 **Next action:** execute Phase 3 in this same assigned worktree using its bundled
 context, preserving these contracts and finishing the remaining runtime outcome.
+
+
+## Phase 3, 2026-09-05 (in progress)
+
+Bead **jcode-cyko**, sidecar usage accounting. Invocation boundary: **T004–T012
+only**, all US-001. The explicit `--phase 3` flag governs this invocation despite
+broader authorization of subsequent phases. Used the bundled context first,
+including governance and skip-read metadata. No bundled artifact was separately
+read and no checklist scan occurred. Reused T001 ignore verification and frozen
+operation discovery. No new technology or dependency has been introduced.
+
+### Test-first collection and attribution evidence
+
+All Cargo commands below were prefixed with `rtk proxy bash scripts/dev_cargo.sh`,
+run in this assigned worktree with offline resolution and the host-wide Cargo gate,
+as bounded background jobs. No shared daemon, paid inference, external provider,
+persistent configuration, route, output cap, votes or cadence was changed.
+
+| Exact Cargo arguments / check | Result |
+|---|---|
+| `test -p jcode-base sidecar::usage_tests --lib --offline`, normalization stubs | Behavioral RED: 1 passed, 5 failed on missing usage. Job `689602un8a`, 365s including gate wait and first compile |
+| Same after normalization | GREEN: 6 passed. Job `111601w8lr` |
+| `test -p jcode-base sidecar::attempt_tests --lib --offline`, before send instrumentation | Initial run exposed expected terminal-close BrokenPipe in fixture server. Fixed fixture to accept only BrokenPipe/ConnectionReset |
+| Same corrected fixture, before instrumentation | Behavioral RED: all 3 failed on missing observations. Job `303905lu4w` |
+| `test -p jcode-base sidecar:: --lib --offline`, OpenAI instrumentation | GREEN: 36 passed, including unchanged payload/default/route tests. Job `414015a5a3` |
+| `test -p jcode-base sidecar::provider_attempt_tests --lib --offline`, before Claude/generic instrumentation | Behavioral RED: 2 failed on missing observations. Job `528276x4qr` |
+| `test -p jcode-base sidecar:: --lib --offline`, both native backends and generic adapter | Initial compile required explicit `Result<String>` on generic async block. After repair GREEN: 38 passed. Job `726674t1ju` |
+| `test -p jcode-base memory_agent::usage_tests --lib --offline`, before owner propagation | Behavioral RED: 1 passed, 1 failed because final extraction lost its owner. Job `894322ked7` |
+| `test -p jcode-base memory_agent:: --lib --offline`, after propagation | GREEN: 12 passed, including cadence/gating regressions and 15-record interleaved reconciliation. Job `0222718psy` |
+| `test -p jcode-base memory_agent::usage_tests --lib --offline`, after memory.rs call-site bindings | GREEN: 2 passed. Job `111792adpt` |
+
+Native transport fixtures use loopback-only ephemeral listeners, fake credentials,
+private sentinel text and clients with proxy disabled. They exercise actual HTTP
+sends, not paid endpoints. Manual failed/success/resolved-model sends reconcile
+four observations and 56 tokens, including usage reported with an HTTP failure.
+This tests the physical-send boundary, not automatic credential-based fallback
+end to end. Existing model-resolution/fallback tests separately remain passing.
+SSE fixtures split response bytes, duplicate terminals, include malformed lines,
+truncate before terminal completion, and distinguish complete/incomplete/error.
+An aborted in-flight request emits exactly one cancelled observation. Unpolled
+work and native reasoning preflight rejection emit none.
+
+The operation fixture uses the real relevance/extraction/contradiction helpers,
+real concurrent consensus, cluster-naming helper and spawned final-extraction
+helper with an injected deterministic Provider. Two sessions each retain seven
+observations, ownerless relevance retains one, request IDs are unique, vote IDs
+share one operation per session, and reported input+output reconciles to 150.
+Empty consensus emits no observation. This is an injected-provider integration
+fixture, not a complete agent/TUI session or embedding/maintenance workflow.
+Actual direct agent/TUI and memory-manager call-site bindings also need owning
+crate checks and final scope review. Do not represent these tests as AC-8
+new-binary CLI evidence or full end-to-end acceptance for every caller.
+
+### Collector contracts and remaining feature work
+
+- Optional native usage preserves zero versus absent fields. OpenAI input includes
+  cache reads, output includes reasoning. Claude uncached/read/creation components
+  are summed with checked arithmetic only when reported. Missing components stay
+  unknown. Repeated snapshots replace rather than add. Safe outcomes contain no
+  response/error/content strings.
+- Native guards are created immediately before send after credential/reasoning
+  preflight. Drop submits once and preserves cancellation. Resolved native model,
+  effort and auth class are captured, including fallback clones. Pricing stays
+  unknown until the existing public-rate adapter in later phases.
+- Generic calls use the existing complete_simple message/options and text
+  semantics while consuming exposed TokenUsage/RetryRollback events. Segments
+  retain one operation, get distinct IDs, and carry `provider_call_only`, unknown
+  auth/reasoning and no claim that hidden transport retries are completely
+  observed. Retry announcements alone do not create another segment.
+- The request-local guard submits via bounded `try_send`; no disk/pricing/logging
+  occurs on this path. An atomic loss count covers rejected/unavailable sinks.
+  Constructors currently have **no default recorder**. Phase 4 must connect the
+  controlled bounded recorder and expose loss/restart/retention uncertainty.
+  `with_observation_sender` is the integration seam, not enabled persistence.
+- Phases 4–6 still owe controls/private retention/worker fault tests, offline
+  pricing, usable per-call/session CLI, new-binary private-fixture workflow,
+  numerical hot-path budgets and complete AC-8 evidence. This invocation must not
+  skip ahead or claim those requirements completed.
+
+### Scope-bound polish in progress
+
+Loaded `/polish`. No narrower repository polish skill exists. The canonical
+`changelog/README.md` uses release JSON and skips internal-only work. No release
+entry or CLI capability is claimed at this collector stage. No docs index entry
+is needed for tracked spec evidence. Root owns the final HTML report and AC-9.
+
+Initial size ratchets reported growth in memory.rs/memory_agent.rs and a new
+oversized sidecar.rs. Only directly touched helpers will be placed in small
+owned modules to eliminate new growth. No budget will be raised. Existing
+unrelated ratchet findings remain baseline failures until independently checked.
+
+### Resumed phase-3 checkpoint, 2026-09-05
+
+The prior controller's configured 2400-second deadline was not an implementation
+failure. This invocation preserved all dirty task-owned sources and resumed T012,
+without rerunning completed task implementation or starting execution groups 4–6.
+The six execution groups implement the reviewed three-phase plan: this group is
+still collection/attribution, not the plan's final delivery phase. No controller,
+worker, worktree, configuration, route or shared-runtime mutation was initiated.
+
+Preserved surgical extractions are `memory/sidecar.rs`,
+`memory_agent/sidecar_calls.rs`, and `sidecar/accounting.rs`. The remaining moved
+`list_all().unwrap_or_default()` triggered the swallowed-error ratchet. Replaced
+it with an explicit match and fixed safe warning, preserving empty-list fallback
+and never printing the raw storage error. No ratchet baseline was changed.
+
+| Exact command / check | Result |
+|---|---|
+| `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base memory_agent:: --lib --offline` | 12 passed, 0 failed, including the interleaved 15-record ownership fixture |
+| `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base sidecar:: --lib --offline` | 40 passed, 0 failed. The preserved source includes two more normalization regressions than the earlier 38-test checkpoint |
+| `rtk proxy bash scripts/dev_cargo.sh check -p jcode-app-core -p jcode-tui --offline` | PASS, both direct agent/TUI session bindings compile, lane `164556q4q9` |
+| `rtk proxy bash scripts/dev_cargo.sh fmt --all --check` | PASS before the final safe-fallback repair |
+| `rtk proxy bash scripts/dev_cargo.sh clippy -p jcode-base -p jcode-app-core -p jcode-tui --lib --offline -- -D warnings` | FAIL, unchanged dependency `jcode-tui-mermaid/src/lib.rs:441`, `clippy::type_complexity`; lane `227187aim3`. Not a lint pass |
+| `rtk proxy python3 scripts/check_dependency_boundaries.py` | PASS |
+| Code-size, test-size, panic, swallowed-error budget scripts | Nonzero with 45, 16, 4, 21 existing-path findings after repair. Every reported file is byte-identical to `git show HEAD:<path>`. Zero changed-surface findings |
+| `rtk proxy autospec artifact specs/026-sidecar-usage-accounting/tasks.yaml` before final status update | PASS: 30 total, 11 completed, T012 in progress, 18 pending |
+| `rtk proxy git diff --check` | PASS |
+
+The failed Mermaid dependency was independently compared byte-for-byte to phase
+HEAD. The follow-up lint uses `--no-deps` to isolate the three owning crates, not
+to relabel the dependency-inclusive command as passing. Initial attempts to use
+shortened size-script names failed because those files do not exist. The actual
+canonical scripts are `check_code_size_budget.py`, `check_test_size_budget.py`,
+`check_panic_budget.py`, and `check_swallowed_error_budget.py`.
+
+#### Acceptance still owed by later execution groups
+
+- AC-1/2/3/6 have direct fixture and source-binding evidence above, not full
+  application/runtime acceptance. Automatic credential-driven fallback, full
+  embedding/maintenance invocation and actual agent/TUI-session extraction still
+  need final integration coverage. The injected helper fixture must not be called
+  a full agent/TUI test. Native Claude production remains nonstreaming as before.
+- AC-4: offline costs and usable per-call/session CLI are not implemented here.
+  Native Luna pricing is explicitly unknown. Do not substitute another model's
+  rates. Generic coverage remains `provider_call_only` with hidden physical
+  attempts unavailable, even when reported retry segments are observed.
+- AC-5: direct fixture sentinel exclusion is passing, but private bounded storage,
+  control combinations, corruption/retention/restart/loss/worker-fault tests remain
+  required. Production constructors still have no default recorder. Wire the
+  existing bounded sender seam to controlled persistence in group 4.
+- AC-7: no numerical overhead or maintained-budget acceptance is claimed. Record
+  normal/saturated timings, fixed bounds and zero extra inference in final work.
+- AC-8: owning-crate checks are not a TUI binary build or new-binary CLI/runtime
+  validation. Full broad guardrails and nonzero native routing execution are
+  reserved for the final group. The earlier 240-second exit 124 remains incomplete
+  and requires an appropriate-bound rerun. Baseline failures remain disclosed.
+- AC-9 remains root-only. No merge, push, install, reload, cleanup, HTML completion
+  report or Bead closure is authorized to this worker.
+
+**Risk: Medium for the collected phase.** Blast radius is native/generic response
+accounting and memory operation attribution, with existing completion results and
+payloads preserved. Mitigations are loopback/injected fixtures, bounded submission,
+safe metadata, explicit unknown coverage and unchanged-configuration audit.
+Rollback is a normal revert of the phase commit. Root's final inline review must
+include the remaining storage/privacy and runtime acceptance evidence.
+
+### Final phase-3 checkpoint
+
+- `rtk proxy bash scripts/dev_cargo.sh clippy -p jcode-base --lib --offline
+  --no-deps -- -D warnings`: **PASS**, lane `351957eckd`, 26.83 seconds.
+- `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base memory_agent::usage_tests
+  --lib --offline` after the safe-fallback repair: **2 passed**, 0 failed, lane
+  `259375l1pi`. The following `fmt --all --check` passed on the final source.
+- `rtk proxy bash scripts/dev_cargo.sh clippy -p jcode-base -p jcode-app-core
+  -p jcode-tui --lib --offline --no-deps -- -D warnings` failed with three
+  pre-existing app-core errors: `server/client_lifecycle.rs:3605`
+  (`too_many_arguments`), `server/state.rs:343`
+  (`needless_borrows_for_generic_args`), and `tool/bash_foreground.rs:211`
+  (`result_map_or_into_option`). All three files are byte-identical to phase HEAD.
+  No unrelated repair or warning suppression was applied. Full app/TUI lint
+  acceptance is still outstanding, not silently replaced by a narrower pass.
+- `rtk proxy autospec update-task T012 Completed`, then
+  `rtk proxy autospec artifact specs/026-sidecar-usage-accounting/tasks.yaml`:
+  **PASS**, 12 completed, 18 pending, no in-progress/blocked tasks, six groups.
+- Completion counts: group 1 **1/1**, group 2 **2/2**, group 3 **9/9**.
+  Groups 4–6 remain pending by the explicit phase boundary. US-001 has **9**
+  completed tasks, US-002 and US-003 have **0**. Three completed foundation/setup
+  tasks have no story assignment. No phase-3 task is failed or skipped.
+- Bead **jcode-cyko: sidecar usage accounting** remains open and root-owned.
+  This is a phase checkpoint, not a completed-feature or delivery report.
+
+**Next action:** execute group 4 in this preserved assigned worktree, connecting
+the bounded controlled private recorder before pricing/CLI and final validation.
