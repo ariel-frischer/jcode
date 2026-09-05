@@ -92,7 +92,11 @@ pub(super) fn classify_openai_limits(limits: &[UsageLimit]) -> OpenAIUsageData {
             spark = Some(window.clone());
         }
 
-        if !is_spark {
+        // qualify_additional_limit marks model-specific pools with a duration
+        // suffix. Keep them in the full report (and Spark above), but never use
+        // them as normal account windows or generic fallback quota.
+        let is_additional = limit.name.contains(" (") && limit.name.ends_with(')');
+        if !is_spark && !is_additional {
             if limit_mentions_five_hour(&key) && five_hour.is_none() {
                 five_hour = Some(window.clone());
             }
