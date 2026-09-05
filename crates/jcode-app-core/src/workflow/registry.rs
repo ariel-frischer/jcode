@@ -2,7 +2,7 @@
 use crate::bus::WorkflowSnapshot;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use std::io::Read;
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 
 pub(super) const MAX_ARTIFACT_BYTES: u64 = 512 * 1024;
@@ -27,15 +27,79 @@ pub(super) struct Registration {
     pub label: String,
     pub registered_at: u64,
     pub checkpoint_at: Option<u64>,
+    #[serde(default)]
+    pub activity_at: Option<u64>,
+    #[serde(default)]
+    pub terminal_at: Option<u64>,
+    #[serde(default)]
+    pub lifecycle: Option<super::ObservedLifecycle>,
     pub last_good: Option<WorkflowSnapshot>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct Registry {
     pub registrations: Vec<Registration>,
 }
 
 impl Registry {
+    pub fn load(path: &Path) -> Result<Self> {
+        let bytes = match bounded_read(path) {
+            Ok(bytes) => bytes,
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                return Ok(Self::default());
+            }
+            Err(error) => return Err(error.context("workflow registry is unreadable")),
+        };
+        let registry: Self = serde_json::from_slice(&bytes).map_err(|_| {
+            anyhow::anyhow!("workflow registry is invalid; preserve it before repair")
+        })?;
+        registry.validate()?;
+        Ok(registry)
+    }
+
+    pub fn save(&self, path: &Path) -> Result<()> {
+        self.validate()?;
+        if serde_json::to_vec(self)?.len() as u64 > MAX_ARTIFACT_BYTES {
+            bail!("workflow registry exceeds 512 KiB");
+        }
+        crate::storage::write_json_secret(path, self)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.registrations.len() > MAX_REGISTRATIONS {
+            bail!("workflow registry exceeds registration limit");
+        }
+        let mut ids = HashSet::new();
+        let mut roots = HashSet::new();
+        for run in &self.registrations {
+            if run.id.is_empty()
+                || run.owner.is_empty()
+                || !run.working_dir.is_absolute()
+                || !ids.insert(&run.id)
+                || !roots.insert(&run.working_dir)
+            {
+                bail!("workflow registry contains invalid or duplicate ownership");
+            }
+            for path in std::iter::once(&run.tasks_file).chain(run.status_file.iter()) {
+                let relative = path
+                    .strip_prefix(&run.working_dir)
+                    .context("workflow registry artifact is outside its worktree")?;
+                if relative.as_os_str().is_empty()
+                    || relative
+                        .components()
+                        .any(|c| !matches!(c, Component::Normal(_)))
+                {
+                    bail!("workflow registry artifact path is not normalized");
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn register(&mut self, owner: &str, input: ObserveInput, now: u64) -> Result<String> {
         if owner.is_empty() || !input.working_dir.is_absolute() {
             bail!("observation requires a session owner and an absolute worktree path");
@@ -81,6 +145,9 @@ impl Registry {
             label,
             registered_at: now,
             checkpoint_at: None,
+            activity_at: None,
+            terminal_at: None,
+            lifecycle: None,
             last_good: None,
         });
         Ok(id)
@@ -95,28 +162,13 @@ impl Registry {
 }
 
 pub(super) fn bounded_read(path: &Path) -> Result<Vec<u8>> {
-    if !std::fs::symlink_metadata(path)?.file_type().is_file() {
-        bail!("workflow artifact must be a regular file, not a symlink");
-    }
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        // Do not block on a FIFO or follow a leaf swapped after the metadata check.
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(path)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.len() > MAX_ARTIFACT_BYTES {
-        bail!("workflow artifact must be a regular file of at most 512 KiB");
-    }
-    let mut bytes = Vec::new();
-    file.take(MAX_ARTIFACT_BYTES + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_ARTIFACT_BYTES {
-        bail!("workflow artifact grew beyond 512 KiB");
-    }
-    Ok(bytes)
+    super::artifact::bounded_read(path)
+}
+
+pub(super) fn read_artifact(root: &Path, path: &Path) -> Result<Vec<u8>> {
+    // Revalidate on every observation, including artifacts that did not exist at registration.
+    artifact_path(root, path)?;
+    bounded_read(path)
 }
 
 fn artifact_path(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -209,5 +261,95 @@ mod tests {
             std::os::unix::fs::symlink(&file, &link).unwrap();
             assert!(bounded_read(&link).is_err());
         }
+    }
+
+    #[test]
+    fn workflow_registry_restores_identity_and_last_good_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("private/registry.json");
+        let mut registry = Registry::default();
+        let id = registry.register("owner", input(dir.path()), 10).unwrap();
+        registry.registrations[0].last_good = Some(WorkflowSnapshot {
+            id: id.clone(),
+            completed: Some(2),
+            total: Some(3),
+            ..Default::default()
+        });
+        registry.save(&state).unwrap();
+        let restored = Registry::load(&state).unwrap();
+        assert_eq!(restored.registrations[0].id, id);
+        assert_eq!(
+            restored.registrations[0]
+                .last_good
+                .as_ref()
+                .unwrap()
+                .completed,
+            Some(2)
+        );
+        std::fs::write(&state, b"{").unwrap();
+        assert!(Registry::load(&state).is_err());
+        assert!(
+            Registry::load(&dir.path().join("missing"))
+                .unwrap()
+                .registrations
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn workflow_registry_rejects_duplicate_ownership_and_oversized_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("registry.json");
+        let mut registry = Registry::default();
+        registry.register("owner", input(dir.path()), 10).unwrap();
+        let mut duplicate = registry.registrations[0].clone();
+        duplicate.owner = "intruder".into();
+        registry.registrations.push(duplicate);
+        std::fs::write(&state, serde_json::to_vec(&registry).unwrap()).unwrap();
+        assert!(Registry::load(&state).is_err());
+        std::fs::write(&state, vec![b' '; MAX_ARTIFACT_BYTES as usize + 1]).unwrap();
+        assert!(Registry::load(&state).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workflow_read_rejects_parent_replaced_with_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("specs")).unwrap();
+        let path = artifact_path(dir.path(), Path::new("specs/tasks.yaml")).unwrap();
+        std::fs::write(outside.path().join("tasks.yaml"), b"private").unwrap();
+        std::fs::remove_dir(dir.path().join("specs")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("specs")).unwrap();
+        assert!(read_artifact(dir.path(), &path).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workflow_reads_never_follow_concurrently_swapped_ancestors() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let parent = dir.path().join("specs");
+        let backup = dir.path().join("safe");
+        let link = dir.path().join("alias");
+        std::fs::create_dir(&parent).unwrap();
+        std::fs::write(parent.join("tasks.yaml"), b"public").unwrap();
+        std::fs::write(outside.path().join("tasks.yaml"), b"private").unwrap();
+        std::os::unix::fs::symlink(outside.path(), &link).unwrap();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..200 {
+                    std::fs::rename(&parent, &backup).unwrap();
+                    std::fs::rename(&link, &parent).unwrap();
+                    std::fs::rename(&parent, &link).unwrap();
+                    std::fs::rename(&backup, &parent).unwrap();
+                }
+            });
+            for _ in 0..1000 {
+                if let Ok(bytes) = read_artifact(dir.path(), &parent.join("tasks.yaml")) {
+                    assert_eq!(bytes, b"public");
+                }
+            }
+        });
     }
 }

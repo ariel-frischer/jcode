@@ -1,6 +1,20 @@
 //! Optional passive workflow observation. Never executes a command or calls a model.
+mod artifact;
 mod autospec;
+mod observer;
 mod registry;
+mod store;
+#[cfg(test)]
+mod store_tests;
+use observer::observe;
+#[cfg(test)]
+mod tests;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct ObservedLifecycle {
+    health: crate::bus::WorkflowHealth,
+    detail: Option<String>,
+}
 
 pub(super) fn display_text(value: &str) -> String {
     value

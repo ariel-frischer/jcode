@@ -30,6 +30,53 @@ enum Status {
     Blocked,
 }
 
+#[derive(Deserialize)]
+struct ControllerStatus {
+    state: ControllerState,
+    error_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ControllerState {
+    Running,
+    Waiting,
+    Retrying,
+    Blocked,
+    Failed,
+    Completed,
+    Stopped,
+}
+
+pub(super) fn parse_controller(bytes: &[u8]) -> Result<super::ObservedLifecycle> {
+    use crate::bus::WorkflowHealth;
+    let status: ControllerStatus = serde_json::from_slice(bytes)
+        .map_err(|_| anyhow::anyhow!("Invalid workflow controller artifact"))?;
+    let (health, detail) = match status.state {
+        ControllerState::Running => (WorkflowHealth::Running, None),
+        ControllerState::Waiting => (WorkflowHealth::Waiting, Some("Waiting")),
+        ControllerState::Retrying => (WorkflowHealth::Waiting, Some("Retrying")),
+        ControllerState::Blocked => (WorkflowHealth::Blocked, Some("Blocked")),
+        ControllerState::Failed => (
+            WorkflowHealth::Failed,
+            Some(match status.error_code.as_deref() {
+                Some("insufficient_quota" | "credit_balance_too_low" | "credits_exhausted") => {
+                    "Credits exhausted"
+                }
+                Some("rate_limit_exceeded") => "Rate limit failure",
+                Some("authentication_error" | "invalid_api_key") => "Authentication failure",
+                _ => "Workflow failed",
+            }),
+        ),
+        ControllerState::Completed => (WorkflowHealth::Completed, None),
+        ControllerState::Stopped => (WorkflowHealth::Stopped, Some("Stopped")),
+    };
+    Ok(super::ObservedLifecycle {
+        health,
+        detail: detail.map(str::to_owned),
+    })
+}
+
 pub(super) fn parse_tasks(bytes: &[u8]) -> Result<ArtifactProgress> {
     let document: TasksFile = serde_yaml::from_slice(bytes)
         .map_err(|_| anyhow::anyhow!("Invalid Autospec tasks artifact"))?;

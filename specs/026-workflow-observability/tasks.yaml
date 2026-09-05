@@ -30,7 +30,7 @@ phases:
     tasks:
       - id: "T002"
         title: "Implement bounded registry and isolated Autospec artifact observer"
-        status: "InProgress"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-003"
