@@ -1,0 +1,135 @@
+plan:
+  branch: "agent/workflow-observability"
+  created: "2026-09-05"
+  spec_path: "specs/026-workflow-observability/spec.yaml"
+summary: |
+  Add an opt-in server-owned workflow observer with a passive main-TUI panel.
+  Reuse existing swarm membership, activity bus events, background types, canonical config,
+  and client fanout. Keep custom Autospec parsing in a separate adapter module.
+  A single explicit bg observation registration names the task worktree and spec artifact.
+  The server observes registered files and the runtime's existing session members without
+  shelling out, running models, changing providers, or controlling workflow processes.
+technical_context:
+  language: "Rust"
+  framework: "Tokio and Ratatui"
+  primary_dependencies:
+    - name: "serde"
+      version: "workspace existing"
+      purpose: "Additive config, snapshot and registration contracts"
+    - name: "tokio"
+      version: "workspace existing"
+      purpose: "Bounded server observer scheduling and existing fanout"
+  storage: "Bounded private per-session registration and last-good snapshots under Jcode home"
+  testing:
+    framework: "Rust unit/integration tests and debug-socket tester frames"
+    approach: "Deterministic clock and fake artifacts before isolated runtime and focused guardrails"
+  target_platform: "Jcode TUI/CLI on Linux; portable observation without process control"
+  project_type: "cli"
+  performance_goals: "Zero model turns for routine monitoring; no reads while disabled; polling bounded and no I/O during rendering"
+  constraints:
+    - "No new Go implementation or SDK projection"
+    - "No installed config changes or provider switches"
+    - "No global filesystem/process scan or terminal-output parsing"
+  scale_scope: "Small bounded owned workflow set, default at most three visible rows"
+constitution_check:
+  constitution_path: ".autospec/constitution.yaml"
+  gates:
+    - name: "Surgical, Scope-Bound Changes"
+      status: "PASS"
+      notes: "One Bead and one worktree; additive modules and thin existing integration hooks"
+    - name: "Backward-Compatible User and Data Contracts"
+      status: "PASS"
+      notes: "Opt-in config and additive snapshot event; old fields/defaults preserved"
+    - name: "Layered Rust Ownership and Dependency Direction"
+      status: "PASS"
+      notes: "DTOs in background-types, config in config-types, observer in app-core, renderer in TUI"
+    - name: "Visible Failures and Trust-Boundary Validation"
+      status: "PASS"
+      notes: "Bounded regular artifact reads, ownership checks, explicit observer warnings and no raw error/log output"
+    - name: "Measured Efficiency and Runtime Truth"
+      status: "PASS"
+      notes: "Fake producer and tester validate idle-model updates and actual built candidate"
+research_findings:
+  decisions:
+    - topic: "Producer contract"
+      decision: "Observe explicit Autospec tasks YAML plus optional controller status JSON, never autospec st output"
+      rationale: "Installed status has no JSON mode; tasks artifacts are structured; controller failure must remain separate from task counts"
+      alternatives_considered:
+        - "Repeated model-run status commands waste tokens"
+        - "Global history YAML lacks reliable worktree ownership"
+    - topic: "Child association"
+      decision: "Use explicit registered worktree ownership and runtime members, preserving a stable registration ID across phase sessions"
+      rationale: "Autospec SDK createSessionOptions currently sets WorkingDir/Profile but no parent ID"
+      alternatives_considered:
+        - "Modify custom Autospec and Go SDK together, expanding scope"
+        - "Infer children from transcript text or scan all saved sessions, unsafe and expensive"
+    - topic: "Health"
+      decision: "Separate lifecycle, observed activity, checkpoint progress and observer validity"
+      rationale: "Liveness or repeated output does not prove task progress; silence alone is not failure"
+      alternatives_considered:
+        - "Single spinner with timeout"
+        - "Model-estimated completion percentage"
+    - topic: "Upstream compatibility"
+      decision: "Keep optional adapter isolated from generic transport, renderer and lifecycle"
+      rationale: "This fork-specific integration should remain removable without destabilizing native subagents"
+      alternatives_considered:
+        - "Hardcode Autospec logic into main TUI"
+        - "Create a general plugin ABI before a second real adapter exists"
+project_structure:
+  documentation:
+    - path: "docs/public/workflow-observability.md"
+      description: "Config defaults, registration examples, health semantics and privacy/compatibility boundaries"
+    - path: "docs/index.md"
+      description: "One-line documentation index entry"
+  source_code:
+    - path: "crates/jcode-background-types/src/workflow.rs"
+      description: "Generic compact snapshot DTOs"
+    - path: "crates/jcode-config-types/src/workflow.rs"
+      description: "Typed optional observer configuration"
+    - path: "crates/jcode-app-core/src/workflow/"
+      description: "Registration persistence, bounded observer and separate Autospec adapter"
+    - path: "crates/jcode-app-core/src/server/workflow.rs"
+      description: "Thin member/activity/fanout integration"
+    - path: "crates/jcode-tui/src/tui/ui_workflow.rs"
+      description: "Bounded passive renderer with no filesystem, process or model access"
+  tests:
+    - path: "crates/jcode-app-core/src/workflow/tests.rs"
+      description: "Ownership, malformed/oversize artifacts, phase transitions, failure, reconnect and zero model calls"
+    - path: "crates/jcode-tui/src/tui/ui_workflow.rs"
+      description: "Narrow/short frame, status readability and disabled behavior tests"
+implementation_phases:
+  - phase: 1
+    name: "Contracts and config"
+    goal: "Freeze generic DTOs and safe default/override behavior"
+    deliverables:
+      - "Typed snapshots, health fields and bounded config tests"
+  - phase: 2
+    name: "Observer and adapter"
+    goal: "Observe native and registered custom workflow progress without model turns"
+    dependencies:
+      - "Phase 1"
+    deliverables:
+      - "Read-only registry, explicit observation tool action, Autospec parser, server-owned scheduling and fanout"
+      - "Ownership, quiet/failure, phase continuity and persistence tests"
+  - phase: 3
+    name: "TUI and runtime acceptance"
+    goal: "Render idle-model updates and prove public integration behavior"
+    dependencies:
+      - "Phase 2"
+    deliverables:
+      - "Pinned compact main-session progress box and snapshot handling"
+      - "Tester frames and isolated-socket fake-workflow evidence"
+  - phase: 4
+    name: "Polish and integration handoff"
+    goal: "Deliver reviewed bounded commits and truthful installation/handoff state"
+    dependencies:
+      - "Phase 3"
+    deliverables:
+      - "Docs, changelog, focused checks and applicable repository guardrails"
+      - "Independent review for cross-cutting feature, risk report and merge-wt handoff"
+_meta:
+  version: "1.0.0"
+  generator: "autospec"
+  generator_version: "autospec dev"
+  created: "2026-09-05T18:57:44Z"
+  artifact_type: "plan"
