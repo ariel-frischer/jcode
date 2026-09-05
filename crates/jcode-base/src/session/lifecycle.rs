@@ -116,7 +116,7 @@ pub fn prune_lifecycle_artifacts_in_dir(
     Ok(removed)
 }
 
-fn rotate_lifecycle_artifacts(paths: &LifecycleArtifactPaths) -> Result<()> {
+pub(super) fn rotate_lifecycle_artifacts(paths: &LifecycleArtifactPaths) -> Result<()> {
     for rotation in (1..LIFECYCLE_MAX_ROTATIONS).rev() {
         let source = &paths.rotations[rotation - 1];
         let destination = &paths.rotations[rotation];

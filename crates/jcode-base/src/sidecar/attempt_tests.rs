@@ -189,3 +189,47 @@ async fn cancellation_finalizes_once_but_preflight_and_unpolled_work_do_not() {
     assert_eq!(record.usage.input_tokens, None);
     assert!(rx.try_recv().is_err());
 }
+
+#[tokio::test]
+async fn native_send_reaches_private_recorder_without_changing_result_or_payload() {
+    use crate::config::LifecycleObservabilityConfig;
+    use crate::memory_usage::{MAX_FLUSH_WAIT, Recorder};
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = Recorder::new(
+        dir.path().to_path_buf(),
+        LifecycleObservabilityConfig::default().effective_status(),
+    );
+    let mut sidecar = Sidecar::with_openai_model("gpt-5.6-luna", Some("xhigh".into()))
+        .with_memory_operation(Some("session-a"), MemoryOperationKind::Rerank)
+        .with_usage_recorder(recorder.clone());
+    sidecar.client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let body =
+        r#"{"status":"completed","usage":{"input_tokens":10,"output_tokens":4},"output":[]}"#;
+    let (url, server) = fixture("200 OK", body, false).await;
+    assert!(send(&sidecar, &url, false, "gpt-5.6-luna").await);
+    assert_eq!(
+        server.await.unwrap(),
+        build_openai_request(
+            "gpt-5.6-luna",
+            "PRIVATE_PROMPT",
+            "PRIVATE_MEMORY",
+            false,
+            Some("xhigh")
+        )
+    );
+    assert!(recorder.flush(MAX_FLUSH_WAIT));
+    let history = crate::session::memory_usage::read_in_dir(dir.path(), Some("session-a")).unwrap();
+    assert_eq!(history.calls.len(), 1);
+    assert_eq!(history.calls[0].usage.total_tokens().unwrap(), Some(14));
+    assert!(
+        !serde_json::to_string(&history)
+            .unwrap()
+            .contains("PRIVATE_")
+    );
+    assert!(recorder.shutdown(MAX_FLUSH_WAIT));
+    // The failed recorder must not change a subsequent provider result or send count.
+    let (url, server) = fixture("200 OK", body, false).await;
+    assert!(send(&sidecar, &url, false, "gpt-5.6-luna").await);
+    server.await.unwrap();
+    assert_eq!(recorder.snapshot().dropped, 1);
+}

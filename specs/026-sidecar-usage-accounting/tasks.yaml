@@ -169,7 +169,7 @@ phases:
       tasks:
         - id: T013
           title: Test private bounded storage in crates/jcode-base/src/session/memory_usage_tests.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: US-003
@@ -180,7 +180,7 @@ phases:
             - Cover malformed/oversized records, duplicates, unwritable storage, missing loss markers, restart and truncation with safe partial coverage rather than lifetime zero.
         - id: T014
           title: Implement narrow diagnostic adapter in crates/jcode-base/src/session/memory_usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-003
@@ -192,7 +192,7 @@ phases:
             - Make T013 pass without altering existing lifecycle serialized forms or unrelated cleanup.
         - id: T015
           title: Test control-aware nonblocking recorder in crates/jcode-base/src/memory_usage_tests.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: US-003
@@ -204,7 +204,7 @@ phases:
             - Verify zero uploads, unchanged inference count and no synchronous disk/pricing/inference in submission.
         - id: T016
           title: Implement bounded recorder in crates/jcode-base/src/memory_usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-003

@@ -6,6 +6,13 @@ use super::{
 use anyhow::{Context, Result};
 
 impl Sidecar {
+    /// Attach a controlled local recorder without changing inference options.
+    pub fn with_usage_recorder(mut self, recorder: crate::memory_usage::Recorder) -> Self {
+        self.usage_recorder = Some(recorder);
+        self.observation_tx = None;
+        self
+    }
+
     /// Bind an authentic owner before cloning votes or spawning detached work.
     pub fn with_memory_operation(
         mut self,
@@ -45,6 +52,7 @@ impl Sidecar {
         tx: tokio::sync::mpsc::Sender<MemoryRequestObservation>,
     ) -> Self {
         self.observation_tx = Some(tx);
+        self.usage_recorder = None;
         self
     }
 

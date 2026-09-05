@@ -105,3 +105,92 @@ pub fn session_exists(session_id: &str) -> bool {
         .map(|path| path.exists())
         .unwrap_or(false)
 }
+
+/// Fixed accounting ring: file count does not grow with session cardinality.
+pub(super) fn memory_usage_artifact_paths(base: &Path) -> LifecycleArtifactPaths {
+    let directory = base.join("memory-usage");
+    LifecycleArtifactPaths {
+        active: directory.join("requests.v1.jsonl"),
+        rotations: (1..=LIFECYCLE_MAX_ROTATIONS)
+            .map(|n| directory.join(format!("requests.v1.{n}.jsonl")))
+            .collect(),
+    }
+}
+
+/// Fail closed on links, non-regular files and non-private existing artifacts.
+/// The data root is trusted; the task-owned child must be private before use.
+pub(super) fn private_diagnostic_directory(path: &Path, create: bool) -> std::io::Result<()> {
+    if create {
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        match builder.create(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    let metadata = std::fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || !private_diagnostic_metadata(&metadata) {
+        return Err(std::io::ErrorKind::PermissionDenied.into());
+    }
+    #[cfg(windows)]
+    if create {
+        jcode_core::fs::set_directory_permissions_owner_only(path)?;
+    }
+    Ok(())
+}
+
+pub(super) fn private_diagnostic_file(path: &Path, append: bool) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).append(append).create(append);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: inspect the link itself, not its target.
+        options.custom_flags(0x00200000);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || !private_diagnostic_metadata(&metadata) {
+        return Err(std::io::ErrorKind::PermissionDenied.into());
+    }
+    #[cfg(windows)]
+    if append {
+        jcode_core::fs::set_permissions_owner_only(path)?;
+    }
+    Ok(file)
+}
+
+fn private_diagnostic_metadata(metadata: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        metadata.permissions().mode() & 0o077 == 0 && (metadata.is_dir() || metadata.nlink() == 1)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // Writer applies the existing protected owner-only ACL before data is
+        // written. Read-only reporting does not modify ACLs.
+        metadata.file_attributes() & 0x400 == 0
+    }
+}
+
+pub(super) fn current_working_dir_string() -> Option<String> {
+    // Working-directory metadata is optional when the directory was removed.
+    match std::env::current_dir() {
+        Ok(path) => Some(path.to_string_lossy().to_string()),
+        Err(_) => None,
+    }
+}

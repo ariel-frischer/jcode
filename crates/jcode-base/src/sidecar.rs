@@ -177,6 +177,7 @@ pub struct Sidecar {
     reasoning_override: Option<String>,
     memory_context: Option<MemoryCallContext>,
     observation_tx: Option<tokio::sync::mpsc::Sender<MemoryRequestObservation>>,
+    usage_recorder: Option<crate::memory_usage::Recorder>,
 }
 
 impl Sidecar {
@@ -220,6 +221,7 @@ impl Sidecar {
             provider,
             memory_context: None,
             observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
             reasoning_override: crate::config::config()
                 .agents
                 .memory_reasoning_effort
@@ -306,6 +308,7 @@ impl Sidecar {
             reasoning_override: None,
             memory_context: None,
             observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
         }
     }
 
@@ -322,6 +325,7 @@ impl Sidecar {
             reasoning_override: reasoning_effort,
             memory_context: None,
             observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
         }
     }
 
@@ -465,6 +469,7 @@ impl Sidecar {
                             reasoning_override: None,
                             memory_context: self.memory_context.clone(),
                             observation_tx: self.observation_tx.clone(),
+                            usage_recorder: self.usage_recorder.clone(),
                         };
                         claude.complete_claude(system, user_message).await
                     }

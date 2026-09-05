@@ -55,6 +55,7 @@ pub mod memory_judge_metrics;
 pub mod memory_log;
 pub mod memory_rerank;
 pub mod memory_types;
+pub mod memory_usage;
 pub mod message;
 pub mod model_pricing;
 pub mod output_style;

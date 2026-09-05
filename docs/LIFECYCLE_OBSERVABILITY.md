@@ -229,3 +229,46 @@ This feature intentionally does not add:
 - remote telemetry enablement or changes to telemetry consent;
 - benchmark campaigns, Locus integration, or a workflow engine; or
 - general transcript, prompt, command-output, or todo-content capture.
+
+
+## Memory-request accounting (experimental local adapter)
+
+Memory sidecar requests use a separate version-1, content-free accounting record.
+The adapter reuses the effective lifecycle master/persistence/structured-log controls
+above. The worker checks current effective controls before each output. Disabling
+persistence does not enable logging, and persistence failures cannot bypass the
+structured-log switch. No remote telemetry or additional inference is involved.
+
+The fixed global ring under the resolved Jcode data root is
+`memory-usage/requests.v1.jsonl` plus `.v1.1.jsonl` through `.v1.3.jsonl`, with one
+fixed `writer.lock`. This bounds storage across sessions rather than allocating an
+unbounded file set per session. It retains at most four 1 MiB files for 30 days.
+Read-only queries exclude expired files/records, and subsequent writes prune expired
+files. Records are at most 4 KiB, scans read at most 4 MiB and decode at most 4,096
+unique requests. Readers reject malformed, torn, oversized or invalid records with
+bounded static warning categories, deduplicate request IDs and sort by timestamp/ID.
+Opaque session filters are validated and never used as paths.
+
+Files are created owner-only (Unix directories 0700, files 0600). Unix links,
+hardlinks and unsafe existing permissions are refused. Windows writes reuse the
+existing protected owner-only ACL helpers and reject reparse points. Native Windows
+runtime/ACL verification remains outstanding. Reporting never changes ACLs.
+
+One worker per process consumes a fixed 256-entry nonblocking queue. Submission
+performs bounded metadata validation and `try_send`, with no filesystem, pricing,
+configuration reload or inference work. Failed queues and workers do not change
+completion results. Process-local saturating counters expose loss, invalid records,
+failed writes/log serialization and flush timeouts. Flush/shutdown waits are capped
+at 250 ms and acknowledge queued writes, not fsync or complete historical coverage.
+An abrupt process exit may lose queued records.
+
+Every retained history includes `retained_window_only` and
+`loss_history_unavailable`. An empty history, missing loss marker or zero current
+process counter must never be presented as zero lifetime consumption. Ownerless
+calls remain explicitly unattributed. Provider-hidden retry coverage remains
+`provider_call_only`. Native Luna pricing is unknown, not another model's rate.
+Pricing calculation and the operator per-call/session CLI are subsequent delivery
+steps, not capabilities claimed by this adapter checkpoint. The accounting ring is
+separate from lifecycle session deletion and expires independently under this
+bounded retention contract. It contains no prompts, memories, credentials or raw
+provider errors.

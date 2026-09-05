@@ -7,7 +7,7 @@ use jcode_session_types::memory_usage::{
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc::Sender;
 
-// Phase-4 diagnostics must include loss in its coverage reporting, including when
+// Diagnostics include this process-local loss count in coverage, including when
 // the sink is unavailable. Never emit raw records/errors from this hot path.
 static LOST_OBSERVATIONS: AtomicU64 = AtomicU64::new(0);
 
@@ -19,6 +19,7 @@ pub(super) struct Attempt {
     record: MemoryRequestObservation,
     pub usage: UsageAccumulator,
     tx: Option<Sender<MemoryRequestObservation>>,
+    recorder: Option<crate::memory_usage::Recorder>,
     finished: bool,
 }
 
@@ -67,6 +68,7 @@ impl Attempt {
             },
             usage: UsageAccumulator::default(),
             tx: sidecar.observation_tx.clone(),
+            recorder: sidecar.usage_recorder.clone(),
             finished: false,
         }
     }
@@ -94,15 +96,24 @@ impl Drop for Attempt {
         // Fixed record shape and bounded identifiers are checked before any sink.
         // try_send never waits for a slow or failed diagnostics worker.
         if self.record.validate().is_err() {
-            LOST_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+            record_loss();
             return;
         }
         if let Some(tx) = &self.tx {
             if tx.try_send(self.record.clone()).is_err() {
-                LOST_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+                record_loss();
+            }
+        } else if let Some(recorder) = &self.recorder {
+            if recorder.submit(self.record.clone()) != crate::memory_usage::SubmitOutcome::Enqueued
+            {
+                record_loss();
             }
         } else {
-            LOST_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+            record_loss();
         }
     }
+}
+
+fn record_loss() {
+    crate::memory_usage::increment(&LOST_OBSERVATIONS);
 }

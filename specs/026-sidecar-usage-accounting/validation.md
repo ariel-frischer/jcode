@@ -401,3 +401,200 @@ include the remaining storage/privacy and runtime acceptance evidence.
 
 **Next action:** execute group 4 in this preserved assigned worktree, connecting
 the bounded controlled private recorder before pricing/CLI and final validation.
+
+
+## Phase 4, 2026-09-05 (in progress)
+
+Worker executes only T013–T016 (US-003), using bundled phase-4 governance and
+skip-read metadata. Prior group 3 is committed and its 40 sidecar / 12 memory-agent
+test checkpoint is preserved. Reused T001 setup/ignore verification, no new
+technology or dependencies. Root owns all AC-9 effects and Bead closure.
+
+Storage choice: fixed global `memory-usage/requests.v1*.jsonl` ring, not unbounded
+per-session files. Reuses lifecycle 1 MiB / three rotations / 30-day constants and
+rotation implementation. Session filtering is validated and applied after bounded
+reads. A private fixed lock serializes writers/readers with nonblocking try-lock.
+Record bytes, decoded record count and safe warning variants have explicit bounds.
+Reports always include retained-window-only and loss-history-unavailable warnings:
+no missing marker, restart or empty history is evidence of zero lifetime usage.
+Reads do not mutate retention. Writes prune expired files in the fixed ring.
+
+T013 test-first: `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base
+session::memory_usage::tests --lib --offline`, lane `610014ptj8`, **0 passed / 6
+expected failures** against no-op API stubs, including roundtrip 0 vs 2, invalid
+selector acceptance and absent uncertainty. No compile error. T014 implements
+those storage contracts, with two additional actual mtime/scan/lock fixtures.
+All Cargo actions retain the host gate, offline resolution and serialized lanes.
+
+
+Storage GREEN: lane `798909cz3l`, same focused command, **6 passed**, 34.26s.
+Expanded storage regression run in lane `029279p5cw` passed **8 storage tests**,
+including actual expired-file exclusion/pruning and 10 MiB malicious-file scan
+capping plus nonblocking writer-lock contention. Recorder stubs produced **5
+expected behavioral failures** in the same `memory_usage::tests` filter: missing
+control outputs, missing persistence, invalid acceptance, unlimited queue acceptance
+and dishonest flush success. Temporary dead-code warnings describe stubs only.
+
+Private creation uses Unix 0700 directories/0600 files, rejects symlinks, hardlinks
+and unsafe existing mode bits. Windows code reuses canonical `jcode_core::fs`
+owner-only protected ACL helpers before writes, with inheritance on the directory
+and reparse-point rejection. Windows runtime/ACL evidence is not available in this
+Linux phase and remains explicitly unverified rather than a Linux-mode claim.
+
+
+Native HTTP-to-storage RED: `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base
+sidecar::attempt_tests::native_send_reaches_private_recorder --lib --offline`, lane
+`096286o2p0`, **0 passed / 1 failed**, observed 0 stored calls vs 1. The real loopback
+request and exact payload assertion passed before the missing accounting assertion.
+No live provider or real credentials were used.
+
+
+T016 implementation uses a standard-library fixed `sync_channel(256)` and
+`try_send`, with one detached 2 MiB-stack worker per process, not one worker per
+session. Submission validates bounded metadata and enqueues without config/disk/
+pricing/logging/inference work. The worker resolves current effective controls
+before each output, performs private append and emits only validated metadata plus
+a closed persistence category through the existing redacting local logger. Invalid
+records never reach either sink. Saturating atomics bound all runtime counters.
+Flush and shutdown barriers share the queue and clamp caller timeouts to 250 ms.
+They report prior losses/failures, not fsync or lifetime completeness. There is no
+inference-thread join and no shared-daemon lifecycle mutation.
+
+Global recorder initialization is outside request finalization, at Sidecar
+construction. Test builds require explicit private recorder attachment to avoid
+accidental writes into real developer diagnostics. Production default binding must
+still be validated by the final new-binary local-fixture workflow. Custom existing
+observation senders remain compatible and override the default recorder.
+
+First green-attempt lane `28819566wu` stopped at a compile error: the existing
+native OpenAI-to-Claude fallback literal needed the new recorder clone. Repaired
+that exact constructor, preserving auth/routing/payload behavior. Adding the session
+module also crossed its 1,784-line frozen budget. Moved only the five-line
+`current_working_dir_string` helper unchanged to existing `session/storage_paths.rs`
+and imported it, instead of rebaselining or unrelated cleanup.
+
+
+Focused GREEN lane `408094qsgi`: **14 tests passed**. Preliminary unoptimized
+20,000-iteration timings were clone-only baseline **93 ns/op**, enqueue + drain
+**1,244 ns/op**, saturated submission **1,165 ns/op**. Queue capacity is 256,
+with a conservative record-memory upper estimate of **231,424 bytes** excluding
+channel/allocator bookkeeping. This is direct microbenchmark evidence, not a
+maintained end-to-end latency budget or AC-7 acceptance by itself.
+
+Static changed-surface gates after explicit loss handling: dependency boundaries
+PASS. Code-size/test-size/panic/swallowed-error scripts exit nonzero on **45/16/4/21**
+pre-existing findings. Every reported source is byte-identical to phase HEAD and
+zero task-owned paths are findings. No budget file changed. Logs are retained at
+`/home/ari/.jcode/scratch/phase4-static/`. Saturating atomics use a shared explicit
+CAS loop, failed acknowledgments increment safe flush counters, and the moved
+optional cwd helper preserves None fallback without swallowing raw errors.
+
+Lane `630078mm6j`: formatting passed, expanded storage/recorder tests passed,
+**41 sidecar tests passed** including the real HTTP-to-private-storage fixture, and
+`clippy -p jcode-base --lib --offline --no-deps -- -D warnings` passed. Native
+integration observes exactly one stored request with 14 input+output tokens,
+unchanged xhigh request payload and no PRIVATE_ sentinels. After recorder shutdown,
+a second real local request still succeeds and increments the dropped counter.
+
+The final scan bound is 4,096 retained decoded requests, independently exercised
+against 4,800 valid fixture rows in the fixed four-file ring. Oversized external
+artifacts are refused on writes and byte-capped on reads, never rotated into a
+new oversized accounting artifact. Otherwise-valid records with extra prompt
+fields are rejected without including their sentinel in returned diagnostics.
+The fixed worker stack uses the conventional 2 MiB size, not a speculative small
+stack for the existing configuration parser/logger. No global config was edited.
+
+
+### Phase-4 acceptance boundaries and remaining gaps
+
+- AC-5/FR-007/FR-009: direct allowlist/private permission/controls/retention/corruption/
+  pressure/worker failure evidence now exists. Storage warnings deliberately never
+  imply complete lifetime coverage. No durable exact loss marker is invented, so
+  reporting in a later process cannot recover past drop counts. Live counters are
+  explicitly process-local. Deleting a session does not surgically rewrite the
+  global ring, whose metadata expires independently under the accepted 30-day bound.
+- AC-7: lane `630078mm6j` measured baseline **141 ns/op**, normal **1,780 ns/op**,
+  saturated **2,694 ns/op**. The two runs show expected scheduling/build variability.
+  These unoptimized averages include record cloning and (normal case) receiver
+  draining. Final group must compare final-build overhead to maintained budgets,
+  including cold/default recorder initialization. No end-to-end latency claim yet.
+- AC-4: **offline pricing and per-call/session CLI remain pending, not skipped**.
+  Native Luna rates remain unknown. Generic provider coverage stays
+  `provider_call_only`, not complete hidden physical retry accounting. Group 5 must
+  render effective controls, bounded warnings and loss-history uncertainty, not
+  treat an empty retained window or fresh process counters as lifetime zero.
+- AC-8: owning-crate tests/lint and loopback HTTP are not the TUI binary build or
+  production-default recorder/new-binary CLI/private-fixture workflow. Those checks,
+  nonzero native routing tests and appropriately bounded full broad guardrails remain
+  final-group requirements. The earlier 240-second broad timeout remains incomplete.
+  Previously isolated app/TUI and size/panic/swallowed-error baseline failures remain
+  disclosed, not waived or relabeled passing.
+- No Windows runtime/ACL or other live/paid inference validation was performed.
+  No provider payload, Luna xhigh/votes2/cadence3, output cap, routing or persistent
+  configuration change was made. No analyze or delegation occurred.
+- AC-9 and the final HTML report remain root-owned. Worker made no merge, push,
+  install, reload, new worktree, cleanup, provider or Bead mutation.
+
+**Risk: Medium for phase 4.** Blast radius is the sidecar observation finalizer,
+private local diagnostic files and local logging selected by existing controls.
+Mitigations: bounded queue/state/files/identifiers, independent control gates,
+no-follow/private creation, safe error categories, nonblocking failure isolation,
+loopback send/payload regression and explicit unknown historical coverage. Rollback
+is a normal revert of the phase commit. Required review action is root's final
+inline privacy/accounting review with final-group runtime evidence, not a new
+worker approval gate or a claim of Bead closure.
+
+
+Scope-bound polish: used the repository's focused Cargo and static ratchet
+contracts instead of the global skill's generic Make/install steps. The full
+feature release entry and broad final checks remain final-group work. Updated the
+existing lifecycle observability document with implemented adapter boundaries and
+created its required `docs/index.md` entry (no index previously existed). No
+instructions/skills, release JSON, dependencies or persistent configuration changed.
+The only extra extraction was the required small cwd helper described above.
+
+
+### Final phase-4 checkpoint
+
+Final-source lane `816662nqmx` exited **0**. Every Cargo command below ran through
+`rtk proxy bash scripts/dev_cargo.sh`, serially, offline where applicable, without
+bypassing the host gate:
+
+| Exact arguments | Final result |
+| --- | --- |
+| `test -p jcode-base memory_usage::tests --lib --offline -- --nocapture` | 15 passed, 0 failed (9 storage, 6 recorder) |
+| `test -p jcode-base sidecar:: --lib --offline` | 41 passed, 0 failed, including native send-to-storage and dead-recorder result preservation |
+| `test -p jcode-base memory_agent:: --lib --offline` | 12 passed, 0 failed, including session attribution and unchanged gating |
+| `clippy -p jcode-base --lib --offline --no-deps -- -D warnings` | PASS |
+| `fmt --all --check` | PASS |
+
+Final run measurements and test summaries:
+
+```text
+    Finished `test` profile [unoptimized] target(s) in 10.41s
+accounting submission ns/op: clone baseline=144, enqueue+drain=1575, saturated=1607; queue=256, record memory upper estimate=231424 bytes
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 1512 filtered out; finished in 0.50s
+    Finished `test` profile [unoptimized] target(s) in 0.20s
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 1486 filtered out; finished in 0.16s
+    Finished `test` profile [unoptimized] target(s) in 0.19s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 1515 filtered out; finished in 0.03s
+[stderr]     Finished `dev` profile [unoptimized] target(s) in 5.37s
+```
+
+No Rust/Clippy warning was introduced. Existing Cargo unmatched profile-package
+warnings remain unchanged. Focused lint does not replace the deferred broad suite.
+An explicit 16-path scope assertion, documentation-link check and `git diff --check`
+passed. Assigned branch remains `agent/jcode-cyko`. No unrelated files are staged.
+
+**T013–T016 complete: 4/4 phase tasks, 16/30 feature tasks.** Completed tasks per
+execution group: phase 1 **1/1**, phase 2 **2/2**, phase 3 **9/9**, phase 4 **4/4**,
+phases 5 and 6 **0** by the explicit phase boundary. Story totals are US-001 **9**,
+US-002 **0**, US-003 **4**, plus **3** setup/foundation tasks without a story.
+No phase-4 task remains failed, blocked or skipped. Expected test-first failures
+were repaired and verified. The remaining 14 feature tasks have not been executed
+by this invocation. Bead **jcode-cyko: sidecar usage accounting** remains open and
+root-owned. This is a phase checkpoint, not a feature-delivery or closure report.
+
+**Next action:** controller executes phase 5 in this preserved assigned worktree,
+using the private recorder/storage API for offline honest pricing and usable
+per-call/session text/JSON reporting, while retaining all recorded final-group gaps.
