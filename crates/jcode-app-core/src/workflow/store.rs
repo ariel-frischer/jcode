@@ -23,12 +23,12 @@ pub struct WorkflowStore {
 impl WorkflowStore {
     pub fn open(path: PathBuf, config: WorkflowConfig) -> Result<Self> {
         config.validate().map_err(anyhow::Error::msg)?;
-        let writer_lock = if config.enabled && config.autospec_enabled {
+        let writer_lock = if config.enabled {
             Some(writer_lock(&path)?)
         } else {
             None
         };
-        let registry = if config.enabled && config.autospec_enabled {
+        let registry = if config.enabled {
             Registry::load(&path)?
         } else {
             Registry::default()
@@ -78,8 +78,17 @@ impl WorkflowStore {
         Ok(true)
     }
 
+    #[cfg(test)]
     pub fn snapshots(&self, now: u64) -> Result<Vec<(String, WorkflowSnapshot)>> {
-        if !self.config.enabled || !self.config.autospec_enabled {
+        self.snapshots_with_native(now, Vec::new())
+    }
+
+    pub fn snapshots_with_native(
+        &self,
+        now: u64,
+        samples: Vec<super::NativeSample>,
+    ) -> Result<Vec<(String, WorkflowSnapshot)>> {
+        if !self.config.enabled {
             return Ok(Vec::new());
         }
         let mut state = self
@@ -87,14 +96,54 @@ impl WorkflowStore {
             .lock()
             .map_err(|_| anyhow::anyhow!("workflow registry lock unavailable"))?;
         let previous = serde_json::to_vec(&state.registry)?;
+        let mut candidate = state.registry.clone();
+        super::native::update(
+            &mut candidate,
+            samples,
+            self.config.autospec_enabled,
+            now,
+            self.config.terminal_retention_seconds,
+        )?;
+        state.registry = candidate;
         let mut snapshots = Vec::new();
-        for run in &mut state.registry.registrations {
-            let snapshot = super::observe(run, now, self.config.quiet_seconds);
+        let registry = &mut state.registry;
+        for run in registry
+            .registrations
+            .iter_mut()
+            .filter(|_| self.config.autospec_enabled)
+        {
+            let mut snapshot = super::observe(run, now, self.config.quiet_seconds);
+            let native = registry
+                .native
+                .iter()
+                .filter(|native| native.registration_id.as_deref() == Some(&run.id))
+                .max_by_key(|native| (native.started_at, &native.session_id));
+            if let Some(native) = native {
+                super::native::merge_registered(
+                    &mut snapshot,
+                    native,
+                    now,
+                    self.config.quiet_seconds,
+                );
+                if super::observer::is_terminal(snapshot.health) {
+                    run.terminal_at = run.terminal_at.or(native.terminal_at);
+                }
+            }
             if !run
                 .terminal_at
                 .is_some_and(|at| now.saturating_sub(at) > self.config.terminal_retention_seconds)
             {
                 snapshots.push((run.owner.clone(), snapshot));
+            }
+        }
+        for native in &state.registry.native {
+            if native.registration_id.is_none()
+                && !native.expired(now, self.config.terminal_retention_seconds)
+            {
+                snapshots.push((
+                    native.owner.clone(),
+                    native.snapshot(now, self.config.quiet_seconds),
+                ));
             }
         }
         state.dirty |= previous != serde_json::to_vec(&state.registry)?;

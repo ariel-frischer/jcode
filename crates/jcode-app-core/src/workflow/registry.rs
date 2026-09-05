@@ -39,6 +39,8 @@ pub(super) struct Registration {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(super) struct Registry {
     pub registrations: Vec<Registration>,
+    #[serde(default)]
+    pub native: Vec<super::native::NativeRecord>,
 }
 
 impl Registry {
@@ -70,6 +72,37 @@ impl Registry {
     }
 
     fn validate(&self) -> Result<()> {
+        if self.native.len() > super::native::MAX_NATIVE {
+            bail!("workflow registry exceeds native retention limit");
+        }
+        let mut native_ids = HashSet::new();
+        for run in &self.native {
+            validate_text(&run.session_id)?;
+            validate_text(&run.owner)?;
+            if run.owner.is_empty()
+                || run.session_id.is_empty()
+                || !native_ids.insert(&run.session_id)
+            {
+                bail!("workflow registry contains invalid native ownership");
+            }
+            if let Some(id) = &run.registration_id {
+                if !self
+                    .registrations
+                    .iter()
+                    .any(|registered| &registered.id == id && registered.owner == run.owner)
+                {
+                    bail!("workflow registry contains invalid native association");
+                }
+            }
+            for text in [&run.snapshot.id, &run.snapshot.label, &run.snapshot.source]
+                .into_iter()
+                .chain(run.snapshot.stage.iter())
+                .chain(run.snapshot.activity.iter())
+                .chain(run.snapshot.detail.iter())
+            {
+                validate_text(text)?;
+            }
+        }
         if self.registrations.len() > MAX_REGISTRATIONS {
             bail!("workflow registry exceeds registration limit");
         }
@@ -183,6 +216,10 @@ impl Registry {
         let before = self.registrations.len();
         self.registrations
             .retain(|r| r.owner != owner || r.id != id);
+        if before != self.registrations.len() {
+            self.native
+                .retain(|run| run.registration_id.as_deref() != Some(id));
+        }
         before != self.registrations.len()
     }
 }

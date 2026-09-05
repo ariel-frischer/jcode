@@ -1,11 +1,15 @@
 //! Optional passive workflow observation. Never executes a command or calls a model.
 mod artifact;
+mod native;
+pub(crate) use native::NativeSample;
 mod autospec;
 mod observer;
 mod registry;
 mod store;
 pub(crate) use registry::ObserveInput;
 pub(crate) use store::WorkflowStore;
+#[cfg(test)]
+mod native_tests;
 #[cfg(test)]
 mod store_tests;
 use observer::observe;
@@ -30,7 +34,7 @@ pub(crate) fn global() -> anyhow::Result<&'static WorkflowStore> {
                 )
             };
             open().map_err(|_: anyhow::Error| {
-                "Workflow registry unavailable; preserve and repair workflow/registry.json, then restart the server".into()
+                "Workflow registry unavailable or owned by another daemon; use that daemon or preserve registry.json before repair. Never delete a live registry.lock".into()
             })
         })
         .as_ref()

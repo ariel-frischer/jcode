@@ -52,7 +52,7 @@ phases:
           - "Existing bg actions and defaults remain compatible"
       - id: "T004"
         title: "Integrate server-owned activity and health snapshots"
-        status: "InProgress"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-002"

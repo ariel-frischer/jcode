@@ -50,6 +50,7 @@ mod swarm_mutation_state;
 mod swarm_persistence;
 mod util;
 mod workflow;
+mod workflow_native;
 
 pub(super) use self::await_members_state::AwaitMembersRuntime;
 use self::background_tasks::{
@@ -1273,7 +1274,7 @@ impl Server {
         server_start_time: Instant,
         temporary_server_policy: Option<lifecycle::TemporaryServerPolicy>,
     ) {
-        workflow::spawn();
+        workflow::spawn(Arc::clone(&self.swarm_state.members));
         // Preload the embedding model in background so warm startups get fast
         // memory recall. On a cold install, skip eager preload because the
         // first-time model download can make the first spawned client look hung

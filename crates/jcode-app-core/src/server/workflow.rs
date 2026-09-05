@@ -84,20 +84,37 @@ impl Subscription {
     }
 }
 
-pub(super) fn spawn() {
+pub(super) fn spawn(
+    members: Arc<tokio::sync::RwLock<std::collections::HashMap<String, super::state::SwarmMember>>>,
+) {
     let config = crate::config::config().workflow.clone();
     if !config.enabled {
         return;
     }
     tokio::spawn(async move {
+        let mut bus = crate::bus::Bus::global().subscribe();
+        let mut native = super::workflow_native::NativeClocks::default();
+        let mut lagged = false;
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(config.poll_seconds));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
-            tick.tick().await;
+            tokio::select! {
+                _ = tick.tick() => {},
+                event = bus.recv() => {
+                    match event {
+                        Ok(event) => native.record(&event, &*members.read().await, crate::workflow::now_seconds()),
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => lagged = true,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+                    }
+                    continue;
+                }
+            }
+            let samples = native.samples(&*members.read().await, crate::workflow::now_seconds());
             // Filesystem reads and private persistence do not block the Tokio worker.
             // Await each observation before scheduling another: no overlapping scans.
-            let observation = tokio::task::spawn_blocking(|| {
-                crate::workflow::global()?.snapshots(crate::workflow::now_seconds())
+            let observation = tokio::task::spawn_blocking(move || {
+                crate::workflow::global()?
+                    .snapshots_with_native(crate::workflow::now_seconds(), samples)
             })
             .await;
             let batch = match observation {
@@ -105,7 +122,7 @@ pub(super) fn spawn() {
                     owned.truncate(MAX_SNAPSHOTS);
                     SnapshotBatch {
                         owned,
-                        warning: None,
+                        warning: lagged.then_some("Activity events were missed; activity and checkpoint ages may be stale"),
                     }
                 }
                 _ => SnapshotBatch {
