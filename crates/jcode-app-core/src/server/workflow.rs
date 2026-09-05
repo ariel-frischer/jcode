@@ -13,6 +13,12 @@ struct SnapshotBatch {
 }
 
 impl SnapshotBatch {
+    fn new(owned: Vec<(String, WorkflowSnapshot)>, warning: Option<&'static str>) -> Self {
+        // Store populations are already bounded. Cap only after filtering by
+        // owner so one busy session cannot erase another owner's sole record.
+        Self { owned, warning }
+    }
+
     fn event(&self, session_id: &str) -> ServerEvent {
         let mut workflows: Vec<_> = self
             .owned
@@ -21,6 +27,27 @@ impl SnapshotBatch {
             .take(MAX_SNAPSHOTS)
             .map(|(_, snapshot)| snapshot.clone())
             .collect();
+        let owned_count = self
+            .owned
+            .iter()
+            .filter(|(owner, _)| owner == session_id)
+            .count();
+        if owned_count > MAX_SNAPSHOTS {
+            workflows.insert(
+                0,
+                WorkflowSnapshot {
+                    id: "workflow-capacity".into(),
+                    label: "Workflow observer".into(),
+                    health: WorkflowHealth::ObserverError,
+                    detail: Some(format!(
+                        "{} additional workflows omitted from this session snapshot",
+                        owned_count - MAX_SNAPSHOTS + 1
+                    )),
+                    ..Default::default()
+                },
+            );
+            workflows.truncate(MAX_SNAPSHOTS);
+        }
         if let Some(warning) = self.warning {
             workflows.insert(
                 0,
@@ -109,7 +136,13 @@ pub(super) fn spawn(
                     continue;
                 }
             }
-            let samples = native.samples(&*members.read().await, crate::workflow::now_seconds());
+            let (samples, native_limited) = {
+                let members = members.read().await;
+                (
+                    native.samples(&members, crate::workflow::now_seconds()),
+                    members.len() > 256,
+                )
+            };
             // Filesystem reads and private persistence do not block the Tokio worker.
             // Await each observation before scheduling another: no overlapping scans.
             let observation = tokio::task::spawn_blocking(move || {
@@ -118,13 +151,18 @@ pub(super) fn spawn(
             })
             .await;
             let batch = match observation {
-                Ok(Ok(mut owned)) => {
-                    owned.truncate(MAX_SNAPSHOTS);
-                    SnapshotBatch {
-                        owned,
-                        warning: lagged.then_some("Activity events were missed; activity and checkpoint ages may be stale"),
-                    }
-                }
+                Ok(Ok(owned)) => SnapshotBatch::new(
+                    owned,
+                    if lagged {
+                        Some(
+                            "Activity events were missed; activity and checkpoint ages may be stale",
+                        )
+                    } else if native_limited {
+                        Some("Native sampling capacity reached; some worker evidence may be stale")
+                    } else {
+                        None
+                    },
+                ),
                 _ => SnapshotBatch {
                     owned: feed().borrow().owned.clone(),
                     warning: Some(
@@ -228,5 +266,38 @@ mod tests {
             panic!()
         };
         assert!(workflows.is_empty());
+    }
+    #[test]
+    fn workflow_review_batch_does_not_discard_other_owners_before_filtering() {
+        let mut owned = vec![("a".into(), WorkflowSnapshot::default()); 256];
+        owned.push((
+            "b".into(),
+            WorkflowSnapshot {
+                id: "sole-b".into(),
+                ..Default::default()
+            },
+        ));
+        let batch = SnapshotBatch::new(owned, None);
+        let ServerEvent::WorkflowStatus { workflows, .. } = batch.event("b") else {
+            panic!("snapshot")
+        };
+        assert_eq!(workflows.len(), 1);
+        assert_eq!(workflows[0].id, "sole-b");
+    }
+    #[test]
+    fn workflow_review_per_owner_limit_has_visible_overflow() {
+        let batch = SnapshotBatch::new(vec![("a".into(), WorkflowSnapshot::default()); 320], None);
+        let ServerEvent::WorkflowStatus { workflows, .. } = batch.event("a") else {
+            panic!("snapshot")
+        };
+        assert_eq!(workflows.len(), 256);
+        assert_eq!(workflows[0].id, "workflow-capacity");
+        assert!(
+            workflows[0]
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("65 additional")
+        );
     }
 }

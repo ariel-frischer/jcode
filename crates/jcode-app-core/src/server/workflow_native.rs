@@ -41,9 +41,28 @@ impl NativeClocks {
             BusEvent::SwarmOutputTail(event) => (&event.session_id, "Streaming"),
             _ => return,
         };
-        if !members.contains_key(id) || (!self.clocks.contains_key(id) && self.clocks.len() >= 256)
-        {
+        let Some(member) = members.get(id) else {
             return;
+        };
+        if !self.clocks.contains_key(id) && self.clocks.len() >= 256 {
+            self.clocks.retain(|key, _| members.contains_key(key));
+            if self.clocks.len() >= 256 {
+                // Keep the same explicit-parent/session ordering as samples.
+                let priority = (member.report_back_to_session_id.is_none(), id.as_str());
+                let evict = self
+                    .clocks
+                    .keys()
+                    .filter_map(|key| {
+                        let existing = members.get(key)?;
+                        let existing_priority =
+                            (existing.report_back_to_session_id.is_none(), key.as_str());
+                        (existing_priority > priority).then_some((existing_priority, key.clone()))
+                    })
+                    .max_by(|a, b| a.0.cmp(&b.0))
+                    .map(|(_, key)| key);
+                let Some(evict) = evict else { return };
+                self.clocks.remove(&evict);
+            }
         }
         let clock = self.clocks.entry(id.clone()).or_default();
         clock.activity_at = Some(now);
@@ -138,10 +157,14 @@ fn lifecycle(status: &str, detail: Option<&str>) -> (WorkflowHealth, Option<&'st
             };
             (WorkflowHealth::Failed, Some(safe))
         }
-        "completed" => (WorkflowHealth::Completed, None),
+        "crashed" => (WorkflowHealth::Failed, Some("Worker crashed")),
+        "completed" | "done" => (WorkflowHealth::Completed, None),
+        "running_stale" => (WorkflowHealth::Quiet, Some("Worker activity is stale")),
         "stopped" => (WorkflowHealth::Stopped, Some("Stopped")),
         "blocked" => (WorkflowHealth::Blocked, Some("Blocked")),
-        "ready" | "idle" | "waiting" | "retrying" => (WorkflowHealth::Waiting, Some("Waiting")),
+        "ready" | "idle" | "waiting" | "retrying" | "spawned" | "queued" | "pending" | "todo" => {
+            (WorkflowHealth::Waiting, Some("Waiting"))
+        }
         "running" | "working" => (WorkflowHealth::Running, None),
         _ => (
             WorkflowHealth::ObserverError,
@@ -212,5 +235,50 @@ mod tests {
             lifecycle("failed", Some("secret")),
             (WorkflowHealth::Failed, Some("Worker failed"))
         );
+    }
+    #[test]
+    fn workflow_review_maps_authoritative_lifecycle_vocabulary() {
+        for (status, health) in [
+            ("crashed", WorkflowHealth::Failed),
+            ("done", WorkflowHealth::Completed),
+            ("running_stale", WorkflowHealth::Quiet),
+            ("spawned", WorkflowHealth::Waiting),
+            ("queued", WorkflowHealth::Waiting),
+            ("pending", WorkflowHealth::Waiting),
+            ("todo", WorkflowHealth::Waiting),
+        ] {
+            assert_eq!(lifecycle(status, None).0, health, "{status}");
+        }
+    }
+
+    #[test]
+    fn workflow_review_owned_activity_displaces_unrelated_clock_capacity() {
+        let mut members = HashMap::new();
+        let mut clocks = NativeClocks::default();
+        for n in 0..257 {
+            let id = format!("member-{n}");
+            let (tx, _) = tokio::sync::mpsc::unbounded_channel();
+            let record = serde_json::from_value(serde_json::json!({
+                "session_id": id, "swarm_enabled": true, "status": "running", "role": "agent",
+                "is_headless": true, "report_back_to_session_id": if n == 256 { Some("owner") } else { None }
+            })).unwrap();
+            members.insert(id.clone(), SwarmMember::from_record(record, tx));
+            clocks.record(
+                &BusEvent::TodoUpdated(crate::bus::TodoEvent {
+                    session_id: id,
+                    todos: vec![],
+                }),
+                &members,
+                100,
+            );
+        }
+        let owned = clocks
+            .samples(&members, 120)
+            .into_iter()
+            .find(|sample| sample.owner.is_some())
+            .unwrap();
+        assert_eq!(owned.activity_at, Some(100));
+        assert_eq!(owned.checkpoint_at, Some(100));
+        assert!(clocks.clocks.len() <= 256);
     }
 }

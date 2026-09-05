@@ -33,6 +33,10 @@ pub(super) struct Registration {
     pub terminal_at: Option<u64>,
     #[serde(default)]
     pub lifecycle: Option<super::ObservedLifecycle>,
+    #[serde(default)]
+    // Last explicit controller terminal/retry boundary; later Running metadata
+    // does not erase this recovery epoch or resurrect an older native failure.
+    pub lifecycle_at: Option<u64>,
     pub last_good: Option<WorkflowSnapshot>,
 }
 
@@ -81,6 +85,15 @@ impl Registry {
             validate_text(&run.owner)?;
             if run.owner.is_empty()
                 || run.session_id.is_empty()
+                || run.owner == run.session_id
+                || run.snapshot.id != format!("native-{}", run.session_id)
+                || run.snapshot.source != "native"
+                || run
+                    .snapshot
+                    .completed
+                    .zip(run.snapshot.total)
+                    .is_some_and(|(done, total)| done > total)
+                || super::observer::is_terminal(run.snapshot.health) != run.terminal_at.is_some()
                 || !native_ids.insert(&run.session_id)
             {
                 bail!("workflow registry contains invalid native ownership");
@@ -207,6 +220,7 @@ impl Registry {
             activity_at: None,
             terminal_at: None,
             lifecycle: None,
+            lifecycle_at: None,
             last_good: None,
         });
         Ok(id)

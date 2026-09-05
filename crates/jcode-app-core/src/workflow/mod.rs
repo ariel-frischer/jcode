@@ -50,6 +50,8 @@ pub(crate) fn now_seconds() -> u64 {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct ObservedLifecycle {
+    #[serde(default)]
+    retrying: bool,
     health: crate::bus::WorkflowHealth,
     detail: Option<String>,
 }

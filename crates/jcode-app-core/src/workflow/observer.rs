@@ -44,6 +44,12 @@ pub(super) fn observe(run: &mut Registration, now: u64, quiet_seconds: u64) -> W
             .and_then(|bytes| autospec::parse_controller(&bytes))
         {
             Ok(lifecycle) => {
+                if run.lifecycle.as_ref() != Some(&lifecycle) {
+                    if is_terminal(lifecycle.health) || lifecycle.retrying {
+                        run.lifecycle_at = Some(now);
+                    }
+                    run.terminal_at = None;
+                }
                 if run
                     .lifecycle
                     .as_ref()

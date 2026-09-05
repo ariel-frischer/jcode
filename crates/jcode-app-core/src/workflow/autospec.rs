@@ -59,6 +59,7 @@ pub(super) fn parse_controller(bytes: &[u8]) -> Result<super::ObservedLifecycle>
     use crate::bus::WorkflowHealth;
     let status: ControllerStatus = serde_json::from_slice(bytes)
         .map_err(|_| anyhow::anyhow!("Invalid workflow controller artifact"))?;
+    let retrying = matches!(&status.state, ControllerState::Retrying);
     let (health, detail) = match status.state {
         ControllerState::Running => (WorkflowHealth::Running, None),
         ControllerState::Waiting => (WorkflowHealth::Waiting, Some("Waiting")),
@@ -79,6 +80,7 @@ pub(super) fn parse_controller(bytes: &[u8]) -> Result<super::ObservedLifecycle>
         ControllerState::Stopped => (WorkflowHealth::Stopped, Some("Stopped")),
     };
     Ok(super::ObservedLifecycle {
+        retrying,
         health,
         detail: detail.map(str::to_owned),
     })

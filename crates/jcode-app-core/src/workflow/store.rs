@@ -97,15 +97,20 @@ impl WorkflowStore {
             .map_err(|_| anyhow::anyhow!("workflow registry lock unavailable"))?;
         let previous = serde_json::to_vec(&state.registry)?;
         let mut candidate = state.registry.clone();
-        super::native::update(
+        let overflow = super::native::update(
             &mut candidate,
             samples,
             self.config.autospec_enabled,
             now,
             self.config.terminal_retention_seconds,
-        )?;
+        );
         state.registry = candidate;
-        let mut snapshots = Vec::new();
+        let mut snapshots: Vec<_> = overflow.into_iter().map(|owner| (owner, WorkflowSnapshot {
+            id: "native-capacity".into(), label: "Workflow observer".into(),
+            health: WorkflowHealth::ObserverError,
+            detail: Some("Native retention capacity reached; some new workers are omitted while existing observations continue".into()),
+            ..Default::default()
+        })).collect();
         let registry = &mut state.registry;
         for run in registry
             .registrations
@@ -124,6 +129,7 @@ impl WorkflowStore {
                     native,
                     now,
                     self.config.quiet_seconds,
+                    run.lifecycle_at,
                 );
                 if super::observer::is_terminal(snapshot.health) {
                     run.terminal_at = run.terminal_at.or(native.terminal_at);

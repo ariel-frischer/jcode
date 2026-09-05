@@ -31,6 +31,10 @@ pub(super) struct NativeRecord {
     pub activity_at: Option<u64>,
     pub checkpoint_at: Option<u64>,
     pub terminal_at: Option<u64>,
+    #[serde(default)]
+    pub missing_since: Option<u64>,
+    #[serde(default)]
+    pub lifecycle_at: Option<u64>,
     pub snapshot: WorkflowSnapshot,
 }
 
@@ -44,11 +48,16 @@ impl NativeRecord {
             Some(now.saturating_sub(self.activity_at.unwrap_or(self.started_at))),
             quiet_seconds,
         );
+        if self.missing_since.is_some() && !sticky(snapshot.health) {
+            snapshot.health = WorkflowHealth::ObserverError;
+            snapshot.detail = Some("Worker absent; last known state may be stale".into());
+        }
         snapshot
     }
 
     pub fn expired(&self, now: u64, retention: u64) -> bool {
         self.terminal_at
+            .or(self.missing_since)
             .is_some_and(|at| now.saturating_sub(at) > retention)
     }
 }
@@ -59,7 +68,8 @@ pub(super) fn update(
     autospec: bool,
     now: u64,
     retention: u64,
-) -> anyhow::Result<()> {
+) -> Vec<String> {
+    let mut overflow = std::collections::BTreeSet::new();
     let present: std::collections::HashSet<_> = samples
         .iter()
         .map(|sample| sample.session_id.as_str())
@@ -76,6 +86,13 @@ pub(super) fn update(
                 .map(|run| run.session_id.clone())
         })
         .collect();
+    for run in &mut registry.native {
+        if present.contains(run.session_id.as_str()) {
+            run.missing_since = None;
+        } else {
+            run.missing_since.get_or_insert(now);
+        }
+    }
     registry.native.retain(|run| {
         !run.expired(now, retention)
             || present.contains(run.session_id.as_str())
@@ -112,7 +129,8 @@ pub(super) fn update(
                 continue;
             };
             if registry.native.len() >= MAX_NATIVE {
-                anyhow::bail!("native workflow retention limit reached");
+                overflow.insert(owner);
+                continue;
             }
             registry.native.push(NativeRecord {
                 session_id: sample.session_id.clone(),
@@ -122,6 +140,8 @@ pub(super) fn update(
                 activity_at: None,
                 checkpoint_at: None,
                 terminal_at: None,
+                missing_since: None,
+                lifecycle_at: None,
                 snapshot: WorkflowSnapshot {
                     id: format!("native-{}", sample.session_id),
                     source: "native".into(),
@@ -142,14 +162,21 @@ pub(super) fn update(
         run.activity_at = run.activity_at.max(sample.activity_at);
         run.checkpoint_at = run.checkpoint_at.max(sample.checkpoint_at);
         run.snapshot.label = super::display_text(&sample.label);
-        let keep_terminal = is_terminal(run.snapshot.health)
+        let keep_terminal = sticky(run.snapshot.health)
             && matches!(
                 sample.health,
-                WorkflowHealth::Waiting | WorkflowHealth::ObserverError
+                WorkflowHealth::Waiting | WorkflowHealth::ObserverError | WorkflowHealth::Quiet
             );
         if !keep_terminal {
+            let detail = sample.detail.map(|text| super::display_text(&text));
+            if run.lifecycle_at.is_none()
+                || run.snapshot.health != sample.health
+                || run.snapshot.detail != detail
+            {
+                run.lifecycle_at = Some(now);
+            }
             run.snapshot.health = sample.health;
-            run.snapshot.detail = sample.detail.map(|text| super::display_text(&text));
+            run.snapshot.detail = detail;
         }
         if let Some(activity) = sample.activity {
             run.snapshot.activity = Some(super::display_text(&activity));
@@ -164,7 +191,11 @@ pub(super) fn update(
             run.terminal_at = None;
         }
     }
-    Ok(())
+    overflow.into_iter().collect()
+}
+
+fn sticky(health: WorkflowHealth) -> bool {
+    is_terminal(health) || health == WorkflowHealth::Blocked
 }
 
 pub(super) fn merge_registered(
@@ -172,6 +203,7 @@ pub(super) fn merge_registered(
     native: &NativeRecord,
     now: u64,
     quiet_seconds: u64,
+    controller_override_at: Option<u64>,
 ) {
     let evidence = native.snapshot(now, quiet_seconds);
     snapshot.activity_age_secs = match (snapshot.activity_age_secs, evidence.activity_age_secs) {
@@ -187,10 +219,21 @@ pub(super) fn merge_registered(
     }
     // Adapter task counts/checkpoint and stable workflow identity never reset between native phases.
     // A successful child phase does not establish completion of its whole controller.
+    // Only newer explicit controller terminal/retry evidence can supersede
+    // retained phase outcomes. Task data or a repeated Running file cannot.
+    if controller_override_at.is_some_and(|at| {
+        at > native
+            .lifecycle_at
+            .or(native.terminal_at)
+            .unwrap_or(native.started_at)
+    }) {
+        return;
+    }
     if matches!(
         evidence.health,
         WorkflowHealth::Failed | WorkflowHealth::Blocked | WorkflowHealth::Stopped
-    ) {
+    ) || (evidence.health == WorkflowHealth::ObserverError && !sticky(snapshot.health))
+    {
         snapshot.health = evidence.health;
         snapshot.detail = evidence.detail;
     }
