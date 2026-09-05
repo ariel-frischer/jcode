@@ -3,243 +3,290 @@ plan:
   created: "2026-09-05"
   spec_path: "specs/026-sidecar-usage-accounting/spec.yaml"
 summary: |
-  Draft target for approved Bead jcode-cyko, not implementation evidence. Add optional,
-  content-free request observations at the existing sidecar transport boundary, carry
-  explicit memory-operation/session context through spawned work, and aggregate a bounded
-  local request journal for a discoverable memory usage CLI. Keep completion text/error
-  compatibility, existing requests, all routing/defaults and user configuration unchanged.
-  Reuse provider token semantics, canonical public API pricing and local diagnostics
-  controls/storage policies. Do not introduce uploads, a general telemetry framework,
-  subscription bill estimates or a new provider execution path. Three serial phases cover
-  the entire frozen matrix; root alone owns AC-9 and decides when to run tasks/implementation.
+  Add local memory-request accounting at the actual native send/response boundary,
+  preserving the existing text completion API and request behavior. Carry explicit
+  session and operation context through memory work, votes and detached extraction.
+  Normalize provider-reported optional usage once per physical attempt and aggregate
+  retained observations, never treating reasoning as additional output or unknowns
+  as zero. Use existing public API pricing contracts, not subscription cheapness,
+  and label OAuth costs as API-equivalent estimates, never actual bills.
+
+  Keep the accounting runtime in jcode-base and its stable metadata in existing
+  dependency-light types. Reuse lifecycle diagnostics controls, bounded JSONL storage
+  policy and private-file utilities through a narrow accounting adapter, without
+  moving app orchestration down or creating a general telemetry framework. Add
+  jcode memory usage text/JSON reporting. This is a proposed implementation plan
+  for jcode-cyko, not implementation evidence. Only spec and plan are produced now.
 technical_context:
-  language: "Rust, existing workspace toolchain"
-  framework: "Existing Tokio runtime and Clap CLI"
+  language: "Rust, edition 2024, current stable toolchain"
+  framework: "Tokio async runtime and existing Clap CLI"
   primary_dependencies:
-    - name: "tokio, serde, serde_json, reqwest"
-      version: "Existing workspace-locked versions; no dependency additions planned"
-      purpose: "Bounded asynchronous submission, typed local records and existing native transport"
-    - name: "jcode-message-types, jcode-memory-types, jcode-provider-core"
-      version: "Existing workspace crates"
-      purpose: "Stable usage vocabulary, memory contract ownership and pricing reuse"
-  storage: "Private bounded local diagnostic JSONL, sharing existing session diagnostic path validation/rotation policies, not memory graph or transcript content"
+    - name: "tokio"
+      version: "1"
+      purpose: "Existing bounded nonblocking channel and background worker"
+    - name: "reqwest"
+      version: "0.12"
+      purpose: "Existing native JSON/SSE transport, unchanged request payloads"
+    - name: "serde / serde_json"
+      version: "1 / 1"
+      purpose: "Optional typed usage, private JSONL and deterministic CLI JSON"
+    - name: "jcode-provider-core / jcode-message-types / jcode-session-types"
+      version: "workspace path dependencies"
+      purpose: "Reuse pricing, stream usage semantics and stable local diagnostic contracts"
+  storage: "Bounded private local diagnostic JSONL under the existing Jcode data root; no database, uploads or pricing refresh"
   testing:
-    framework: "Existing Rust unit/integration fixtures and built CLI smoke tests"
-    approach: "Synthetic responses and free local mocks only; direct parser, caller-attribution, recorder, aggregation, privacy and CLI checks before serial build/guardrails"
-  target_platform: "Existing Jcode CLI/server platforms; private-file permission assertions on Unix with existing platform-safe storage handling elsewhere"
+    framework: "Rust unit/integration tests, Tokio tests and built CLI fixture tests"
+    approach: "Direct parser and payload regressions, memory-operation reconciliation, privacy/control/fault fixtures, then serial build and guardrails; no live inference"
+  target_platform: "Existing Jcode platforms; Linux built-binary evidence in the assigned worktree, portable path handling and platform-specific private-file checks"
   project_type: "cli"
-  performance_goals: "Zero added inference requests; bounded nonblocking submission and fixed retention; before/after measurements against maintained hot-path budgets"
+  performance_goals: "Zero added inference; fixed-capacity submission and retained state; before/after normal and saturated submission timing against maintained budgets (NFR-001, AC-7)"
   constraints:
-    - "All artifacts/source only in assigned worktree. No Beads/delegation/worktree/provider/config/runtime mutation by this worker."
-    - "Preserve Luna xhigh, votes2, cadence3, request payloads, fallback decisions and caps; no inferred native OpenAI 1024 cap."
-    - "Keep base independent of app-core; stable type crates never depend on runtime storage or providers."
-    - "No new SDK/wire endpoint or TUI panel. Root builds the TUI-bearing product binary for compatibility."
-  scale_scope: "One record per actual memory request, bounded process queue and retained diagnostics across concurrent sessions; not an unbounded lifetime billing ledger"
+    - "Preserve Luna xhigh, votes2, cadence3, routing, fallback, payload and output-cap behavior. Native OpenAI currently omits max_output_tokens; do not infer a 1024 cap."
+    - "No persistent configuration edits, paid/live inference, provider/runtime activation or memory cleanup."
+    - "No prompts, memory text, raw provider errors, credentials or account identifiers in metrics or logs."
+    - "Reuse effective lifecycle enabled/persist_session_events/emit_structured_logs controls independently, including failure diagnostics."
+    - "Root alone owns Beads, tasks/implementation execution, review, worktrees, integration, push, install, report, cleanup and closure. No delegation or analyze."
+    - "No new crate or external dependency, SDK endpoint, TUI panel or shared-server change is required."
+  scale_scope: "Concurrent sessions and all memory inference operations; summaries cover only bounded retained observations, not a lifetime billing ledger"
 constitution_check:
   constitution_path: ".autospec/constitution.yaml"
   gates:
     - name: "PRIN-001 Surgical, Scope-Bound Changes"
       status: "PASS"
-      notes: "Plan only now; later scope-to-diff check limits edits to accounting, direct fixtures and indexed docs. Prior cleanup stays closed."
+      notes: "Only accounting seams and artifacts; AC-6 diff review excludes completed cleanup and tuning. PASS means plan compliance, not completed checks."
     - name: "PRIN-002 Backward-Compatible User and Data Contracts"
       status: "PASS"
-      notes: "Add optional accounting context and an additive CLI command. Test old completion signatures, response text/errors, defaults and persisted unknown-version handling."
+      notes: "Keep text completion wrappers and existing serialized lifecycle forms; additive CLI and separately versioned accounting records. AC-6 payload and compatibility tests."
     - name: "PRIN-003 Explicit Configuration Precedence"
       status: "PASS"
-      notes: "Reuse LifecycleObservabilityConfig.effective_status; no settings or defaults added/changed. Test existing master/persistence/log controls."
+      notes: "No new settings or resolver; consume existing effective lifecycle controls and resolved model/effort. AC-5/AC-6 control/default fixtures."
     - name: "PRIN-004 Layered Rust Ownership and Dependency Direction"
       status: "PASS"
-      notes: "Stable record shape belongs in memory-types, sidecar/recorder behavior in base, CLI presentation in src/cli. No base-to-app-core dependency; dependency guard validates."
+      notes: "Base owns collection/storage, type crates own metadata, root CLI owns presentation. No base-to-app dependency, new wire endpoint or duplicate provider pricing. AC-8 dependency guard."
     - name: "PRIN-005 Focused Behavioral Tests"
       status: "PASS"
-      notes: "AC-1 through AC-8 below map to direct offline fixtures and runtime checks. Exact test names/commands recorded as implemented, never claimed already passing."
+      notes: "Frozen AC-1 through AC-8 map to explicit fixture/check deliverables below; current stage runs artifact validators only."
     - name: "PRIN-006 Visible Failures and Trust-Boundary Validation"
       status: "PASS"
-      notes: "Allowlisted fields, bounded identifiers and error enums, optional usage, private storage and explicit coverage failures; sentinel/path/corruption tests."
+      notes: "Allowlisted bounded metadata, private files, safe outcome categories, incomplete coverage and control-aware failures. AC-1/AC-5 negative tests."
     - name: "PRIN-007 Repository Guardrails Are Delivery Gates"
       status: "PASS"
-      notes: "Artifact validation now; later focused tests, product/TUI build, scripts/check_guardrails.sh and scripts/check_swarm_routing_contract.sh serially. Root isolates any baseline failures."
+      notes: "AC-8 requires focused tests, TUI binary build, scripts/check_guardrails.sh and scripts/check_swarm_routing_contract.sh with nonzero tests before root landing."
     - name: "PRIN-008 Custom-First, Upstream-Aware Simplicity"
       status: "PASS"
-      notes: "Reuse existing usage/pricing/local diagnostics contracts, keep one sidecar request path and native routing gates; no new generic telemetry system."
+      notes: "Preserve native routing and custom memory settings; narrow local adapter reuses diagnostics rather than replacing lifecycle or adding telemetry."
     - name: "PRIN-009 Outcome Ownership and Safe Autonomy"
       status: "PASS"
-      notes: "All nine frozen acceptance rows retained. Worker stops at spec/plan; root owns implementation scheduling and delivery. No paid/live checks authorized."
+      notes: "All nine frozen acceptance rows retained. AC-9 is root-owned and must not be marked complete by artifact validation."
     - name: "PRIN-010 Measured Efficiency and Runtime Truth"
       status: "PASS"
-      notes: "Measure submission before/after and saturation against documented budgets. Test newly built binary on private fixtures/socket with executable identity, never old shared daemon."
+      notes: "AC-7 bounded-load measurements and AC-8 fresh-binary private-fixture/local-mock workflow evidence precede acceptance. No old shared daemon or paid tests."
 research_findings:
   decisions:
-    - topic: "Native capture and usage normalization"
-      decision: "Capture per-attempt usage alongside text internally, while preserving complete() -> Result<String> compatibility. Keep optional field-level usage and terminal status independent of text parsing success."
-      rationale: "sidecar.rs:464-520 returns only text; :947-1023 drops response.completed/incomplete payloads and errors before retaining usage. ClaudeMessagesResponse also discards _usage. Reuse StreamEvent::TokenUsage field semantics in jcode-message-types/src/lib.rs; do not import app-core TokenUsage into base."
+    - topic: "Native collection and failure boundaries"
+      decision: "Keep per-attempt optional usage beside text/error collection and finalize the observation exactly once at each real send, including cancellation and fallback."
+      rationale: |
+        sidecar.rs complete_openai_with_model owns sends; collect_openai_sse_text
+        (947-992) currently returns at completed/incomplete without usage, while
+        ClaudeMessagesResponse (1115-1135) explicitly discards usage. Attach a
+        request-local accumulator/guard before send, not before credential or
+        reasoning validation. Capture reported partial usage even if text fails.
+        SSE duplicate/cumulative snapshots replace fields rather than sum them.
       alternatives_considered:
-        - "Estimate from prompt length or default max_tokens: rejected because neither is native usage."
-        - "Count operation completions only: rejected because votes/retries/fallbacks are distinct requests."
-    - topic: "Attribution and exactly-once aggregation"
-      decision: "Pass immutable optional session context plus operation kind/id into Sidecar, clone it into spawned operations, allocate a fresh local attempt ID at each actual send boundary, and finalize once on success/error/cancellation."
-      rationale: "memory_agent.rs:171 owns final extraction session; :773 reranking; :1033 detached extraction; :1124 contradiction; :1421 cluster naming currently loses caller context. Thread context from the real caller, never current-session globals. One operation may have several vote/request IDs."
+        - "Count high-level complete calls, which loses physical fallbacks/retries"
+        - "Change existing completion return types globally, which expands compatibility risk"
+    - topic: "True operation and session ownership"
+      decision: "Pass a small explicit context through sidecar helpers and clones, assigning an operation ID at the memory operation and a fresh attempt ID per send."
+      rationale: |
+        memory_agent.rs run_final_extraction already receives session_id;
+        extract_from_context (979-1037) clones it into spawned work. Preserve
+        that identity through reranking votes, contradiction checks and cluster
+        naming, never using memory/activity.rs global UI state for attribution.
+        Enumerate additional Sidecar call sites before implementation. Ownerless
+        work uses null session ownership, not a fabricated session.
       alternatives_considered:
-        - "Task-local ambient identity: rejected because explicit spawned work may not inherit it."
-        - "Provider response ID as sole identity: rejected because errors may omit it and it is external data."
-    - topic: "Bounded local recorder without a reverse dependency"
-      decision: "Add a small domain-owned recorder in base for typed sidecar records in one globally bounded usage journal, with optional session ownership in each record. Reuse existing observability effective status, private-file helpers and diagnostic rotation/age policies. Reuse only the necessary lower-level file helpers, not a new general recorder framework."
-      rationale: "LifecycleRecorder lives in app-core (:45-155), above base, and its envelope requires a session. Sidecar also serves ownerless callers. A base-owned bounded sink avoids a dependency cycle and fictitious session identities; shared storage policies remain canonical. Existing lifecycle.rs:47 opens files without explicit private mode, so privacy must be verified rather than assumed."
+        - "Last-active-session globals or task-local context lost across tokio::spawn"
+        - "Treat one consensus result as one provider request"
+    - topic: "Reuse usage semantics without expanding wire contracts"
+      decision: "Use optional u64 fields consistent with StreamEvent::TokenUsage, with native reasoning detail in the accounting type; generic provider paths consume existing usage/retry events where exposed."
+      rationale: |
+        jcode-message-types/src/lib.rs (749-757) exposes optional input/output,
+        cache read/write and reported cost, but no reasoning field. Native
+        OpenAI input includes cache reads; normalize to total input and split
+        cache components before pricing. Claude uncached input and cache
+        read/creation are separate components. Reasoning remains within output.
+        Validate negative/overflow/subset violations without inventing values.
+        Do not count a provider completion as proof of hidden physical retries;
+        unavailable attempt detail makes coverage explicitly incomplete.
       alternatives_considered:
-        - "Import app-core LifecycleRecorder into base: rejected dependency cycle."
-        - "Put ownerless calls into a synthetic session or telemetry upload path: rejected attribution/privacy violation."
-    - topic: "Pricing without fabricated bills or network refresh"
-      decision: "Use exact resolved-model public API rates via existing provider-core pricing. If cached catalog rates are needed, add a narrow cache-only accessor to existing model_pricing, never call its refresh-triggering lookup from accounting. Persist pricing basis/rate snapshot or explicit unknown."
-      rationale: "provider-core/pricing.rs:156-220 returns None for unknown models (including current Luna); :223-237 OAuth pricing is a subscription heuristic, unsuitable for token cost. model_pricing.rs:155-180 lookup schedules a network refresh when stale. Neither is authority to invent Luna rates or actual charges."
+        - "Add reasoning to all existing stream/SDK contracts unnecessarily"
+        - "Default absent cache/reasoning/usage fields to zero"
+    - topic: "Honest offline cost estimates"
+      decision: "Use provider-core public API rate functions for the actual resolved model, with rate provenance and unknown component handling."
+      rationale: |
+        pricing.rs openai_api_pricing_with_tier (156-220) returns None for
+        unpriced models including Luna. openai_oauth_pricing (223-237) instead
+        returns monthly subscription cheapness and is unsuitable for per-call
+        cost. Use integer rate arithmetic with checked wider intermediates and
+        documented rounding; keep full estimate null when required usage/rates
+        are absent and show any known component subtotal separately. Cache
+        creation without a known rate also remains unknown. Never substitute
+        an alias price, monthly fee, or routing reference_request_cost.
       alternatives_considered:
-        - "Divide subscription price by requests or map Luna to another model: rejected."
-        - "Fetch rates on each report: rejected local-only/no-new-network scope."
-    - topic: "Minimal user interface"
-      decision: "Add jcode memory usage with optional --session <id>, --calls, and --json. Default shows bounded retained summaries grouped by authentic session plus an explicit unattributed group. Per-call output carries operation/request identities, optional usage, outcome and estimate basis."
-      rationale: "src/cli/args.rs:1164 owns MemoryCommand and src/cli/commands.rs:1610 owns dispatch. Match existing session lifecycle JSON/text conventions without new TUI or SDK contracts. All queries are local and expose effective controls/coverage."
+        - "Estimate Luna using another model's rates"
+        - "Divide subscription price into tokens or report an actual bill"
+    - topic: "Local storage reuse and layering"
+      decision: "Add a sidecar accounting adapter in jcode-base using narrowly shared diagnostic file helpers/policy, with its own versioned record shape and bounded worker."
+      rationale: |
+        session/lifecycle.rs provides 1 MiB files, 30-day retention, rotation
+        and malformed-record recovery. app-core/lifecycle_observability.rs
+        provides a 256-entry try_send model and effective sink controls, but
+        lives above base and assumes mandatory session envelopes. Reusing it
+        directly would invert dependencies or fabricate ownerless sessions.
+        Share only needed storage/path/validation primitives with a distinct
+        accounting suffix. Do not copy a second general lifecycle system or
+        modify lifecycle wire enums. Explicitly ensure private creation rather
+        than assuming existing OpenOptions honors private mode. Bound queue,
+        records, warnings, identifiers, session state and report scans. Report
+        dropped records, retention and restart/persistence uncertainty; never
+        claim completeness when a durable loss marker cannot be written.
       alternatives_considered:
-        - "TUI-only visibility or raw logs: rejected discoverability/machine-readability requirement."
+        - "Append to public/network telemetry or memory graphs"
+        - "Move the full app recorder down, alter wire events, or build an unbounded ledger"
+    - topic: "Discoverable user surface"
+      decision: "Add jcode memory usage with --session, --calls and --json; default to retained per-session summaries including an unattributed bucket."
+      rationale: |
+        src/cli/args.rs MemoryCommand, dispatch.rs map_memory_subcommand and
+        commands.rs run_memory_command_for_dir are the existing command seams.
+        Read local diagnostics only, no provider fetch, server restart or new
+        protocol. A separate command handler avoids expanding the large existing
+        command function. Validate session selectors through safe path utilities.
+      alternatives_considered:
+        - "Only log counters, which is not discoverable or machine-readable"
+        - "New TUI panel or SDK endpoint beyond approved scope"
 data_model:
   entities:
-    - name: "MemoryCallUsage"
-      description: "Versioned content-free observation for one actual transport attempt"
+    - name: "MemoryCallContext"
+      description: "Ephemeral explicit owner propagated through one logical operation"
       fields:
-        - name: "session_id, operation_id, operation_kind, request_id"
-          type: "Option<bounded identifier>, bounded identifier, closed enum, unique local identifier"
-          description: "True ownership and deduplication identity; request ID is not a provider secret or account ID"
-          constraints: "Validate IDs at trust boundary; None means genuinely ownerless, not unknown last-active session"
-        - name: "provider, resolved_model, resolved_effort, auth_class, outcome"
-          type: "bounded metadata and closed enums/options"
-          description: "Actual attempted route and sanitized success/incomplete/error/cancelled status"
-          constraints: "No arbitrary raw provider errors, URLs, prompts, memory text or credentials"
-        - name: "input_tokens, cached_input_tokens, output_tokens, reasoning_tokens"
-          type: "Option<u64> fields plus usage validity/completeness"
-          description: "Provider-native counts normalized to total input including cache and output including reasoning"
-          constraints: "Absent is null, not zero; cached <= input and reasoning <= output when known; preserve unknown subcounts"
-        - name: "estimate, pricing_basis, coverage"
-          type: "Optional existing fixed-unit cost/rates, provenance enum, completeness flags"
-          description: "Known API-equivalent estimate or explicit unknown and retained observation coverage"
-          constraints: "Output charged once; cached discount only when known; no charge inferred from missing usage or subscription plan"
-    - name: "MemoryUsageSummary"
-      description: "Deterministic aggregation of unique retained request records"
+        - name: "session_id"
+          type: "Option<String>"
+          description: "Authentic originating session or explicit absence"
+          constraints: "Validated bounded opaque identifier, never a path or inferred active session"
+        - name: "operation_id / operation_kind"
+          type: "opaque ID / closed enum"
+          description: "Correlates votes and attempts to rerank, extraction, final extraction, contradiction or cluster naming"
+          constraints: "No content-derived names; preserve through spawned work"
+      relationships:
+        - target: "MemoryRequestObservation"
+          type: "one-to-many"
+          description: "One logical operation may issue multiple physical attempts"
+    - name: "MemoryRequestObservation"
+      description: "Versioned privacy-safe observation finalized once per physical send"
       fields:
-        - name: "request_counts, known_subtotals, unknown_counts, status, warnings"
-          type: "bounded summary values and enum warnings"
-          description: "Separate complete totals from partial known subtotals, with local controls and retained-window coverage"
-          constraints: "Deduplicate request_id; never claim full-session lifetime totals after drops/rotation/restart gaps; deterministic ordering"
+        - name: "schema_version / request_id / context / recorded_at"
+          type: "u16 / opaque ID / MemoryCallContext / UTC timestamp"
+          description: "Stable identity, attribution and retained-window ordering"
+          constraints: "Unique send identity; duplicate observations do not add totals; bounded validated records"
+        - name: "provider / model / effort / auth_class / outcome"
+          type: "bounded identifiers and closed enums with optional effort"
+          description: "Actual resolved metadata and success, incomplete, error or cancelled outcome"
+          constraints: "No credentials, account identity, prompt, text or raw errors"
+        - name: "input_tokens / cached_input_tokens / cache_creation_tokens / output_tokens / reasoning_tokens"
+          type: "Option<u64> per field"
+          description: "Normalized reported totals and subsets with field-level validity"
+          constraints: "Absent is unknown; cache components do not inflate total input; reasoning <= output; checked arithmetic"
+        - name: "estimate / known_cost_subtotal / pricing_basis / coverage"
+          type: "optional fixed-precision USD / fixed-precision USD / typed provenance / typed status"
+          description: "Full estimate only when all required components are known, alongside honest partial evidence"
+          constraints: "OAuth label is API-equivalent estimate, not billed charges; no guessed model rates"
+      relationships:
+        - target: "SessionUsageSummary"
+          type: "many-to-one"
+          description: "Distinct retained observations aggregate by true session, with ownerless records separate"
+    - name: "SessionUsageSummary"
+      description: "Deterministic retained-window view, not lifetime or invoice totals"
+      fields:
+        - name: "session_id / calls / token_subtotals / cost_subtotal / unknown_counts"
+          type: "optional identifier / u64 / typed totals / fixed-precision USD / per-field counts"
+          description: "Reconcilable known values and separately visible unknown records"
+          constraints: "Reasoning not added twice; mixed known/unknown never implies complete totals"
+        - name: "window / control_status / coverage / warnings"
+          type: "time bounds / effective lifecycle status / completeness enum / bounded safe categories"
+          description: "Retention, disabled sinks, malformed data, queue loss and unavailable persistence"
+          constraints: "Absence of history is not evidence of zero lifetime consumption"
 api_contracts:
   endpoints: []
+  cli:
+    command: "jcode memory usage [--session <id>] [--calls] [--json]"
+    request: "Local read only; optional validated session filter, optional per-call detail, JSON instead of text"
+    response: "Versioned summary object with sessions, optional calls, effective controls, retained coverage and bounded warnings; sort sessions by ID and calls by timestamp/request ID"
+    errors: "Invalid selector or unsupported command input returns actionable nonzero exit; recoverable malformed records yield partial output and safe warnings"
+    compatibility: "Additive CLI only. JSON uses null for unknown values, explicit pricing basis and no billed-cost assertion. No HTTP/protocol endpoint."
 project_structure:
   documentation:
-    - path: "specs/026-sidecar-usage-accounting/{spec,plan}.yaml"
-      description: "Only artifacts produced in this stage; actual branch remains agent/jcode-cyko"
-    - path: "docs/dev/MEMORY_SIDECAR_USAGE.md and docs/index.md"
-      description: "Later implementation: CLI contract, privacy/retention, unknown semantics and budget evidence, indexed once"
+    - path: "specs/026-sidecar-usage-accounting/spec.yaml"
+      description: "Approved-scope target and frozen acceptance requirements"
+    - path: "specs/026-sidecar-usage-accounting/plan.yaml"
+      description: "This minimal proposed design and acceptance mapping"
+    - path: "docs/LIFECYCLE_OBSERVABILITY.md"
+      description: "Implementation-stage accounting command, controls, estimate/retention caveats and measured budget evidence; maintain its docs/index.md entry"
   source_code:
-    - path: "crates/jcode-base/src/sidecar.rs and sidecar/"
-      description: "Native request-boundary collection and response fixtures without changing payload/routing"
+    - path: "crates/jcode-base/src/sidecar.rs and sidecar/usage.rs"
+      description: "Native collection and context-aware compatible completion helpers; existing reasoning.rs remains behaviorally unchanged"
     - path: "crates/jcode-base/src/memory_agent.rs and memory_rerank.rs"
-      description: "Explicit context through every real memory operation, vote and spawned task"
-    - path: "crates/jcode-memory-types/src/ and crates/jcode-base/src/sidecar_usage.rs"
-      description: "Stable typed usage observations and bounded base-owned recording/aggregation"
-    - path: "crates/jcode-base/src/session/ and model_pricing.rs"
-      description: "Only necessary reuse seams for private bounded diagnostics and optional cache-only rate lookup"
-    - path: "src/cli/{args,commands,dispatch}.rs and owning CLI submodules"
-      description: "Additive memory usage command, dispatch and text/JSON rendering; follow actual module ownership"
+      description: "Explicit context through every discovered memory operation, votes and spawned work"
+    - path: "crates/jcode-session-types/src/memory_usage.rs"
+      description: "Proposed stable local accounting record types without networking/runtime dependencies"
+    - path: "crates/jcode-base/src/session/memory_usage.rs and session/storage_paths.rs"
+      description: "Narrow bounded private diagnostic adapter reusing lifecycle storage policy; module exports as required"
+    - path: "crates/jcode-base/src/memory_usage.rs"
+      description: "Bounded recorder, coverage and offline pricing/aggregation; reuse provider-core pricing without editing rates"
+    - path: "src/cli/args.rs, src/cli/dispatch.rs, src/cli/commands.rs and src/cli/memory_usage.rs"
+      description: "Additive command wiring and small read-only text/JSON handler"
   tests:
-    - path: "crates/jcode-base/src/sidecar/tests.rs and owning sidecar_usage/memory fixture modules"
-      description: "AC-1/2/3/5/6/7 direct offline regression and integration fixtures"
-    - path: "src/cli/args/tests.rs and tests/ memory usage CLI fixture tests"
-      description: "AC-4/8 discovery, text/JSON and isolated newly built CLI workflow"
+    - path: "crates/jcode-base/src/sidecar/tests.rs and sidecar/usage_tests.rs"
+      description: "AC-1 parsing, AC-3 attempt reconciliation, AC-6 exact payload/default regressions"
+    - path: "crates/jcode-base/src/memory_agent/tests.rs or existing memory-agent test module"
+      description: "AC-2 multi-session operations, votes, detached final extraction, ownerless and skipped work"
+    - path: "crates/jcode-base/src/session/memory_usage_tests.rs and memory_usage_tests.rs"
+      description: "AC-3/AC-5 arithmetic, controls, privacy, retention, pressure and failure fixtures; AC-7 bounded-load measurements"
+    - path: "tests/memory_usage_cli.rs and tests/fixtures/memory_usage/"
+      description: "AC-4/AC-8 newly built CLI/private local mock, JSON/text/help and no-network synthetic fixtures"
 implementation_phases:
   - phase: 1
-    name: "Capture and attribute native request usage"
-    goal: "FR-001/002/003/004/008; AC-1/2/3/6"
+    name: "Collect and attribute native attempts"
+    goal: "Satisfy AC-1/AC-2/AC-3/AC-6 and FR-001 through FR-004/FR-008 without changing inference behavior"
     deliverables:
-      - "Inventory all actual memory call sites before edits; tests for rerank votes, incremental/final extraction, contradiction and cluster naming, plus discovered callers. Preserve ownerless compatibility."
-      - "Typed optional usage, per-attempt identity/outcome and immutable context; parse native OpenAI SSE/JSON and Claude fallback usage. Keep existing generic provider execution and consume available native usage/attempt events without inventing hidden attempt detail."
-      - "Focused fixture tests for chunk boundaries, malformed/partial/error/cancellation, duplicate snapshots, fallback requests, concurrent sessions and exact normalized totals. Exact unchanged request/default assertions."
+      - "Inventory every live memory Sidecar call site, including rerank helpers, final extraction, contradiction, cluster naming and any additional supported operation"
+      - "Stable optional usage/context types and exactly-once physical-attempt collection for native streamed/nonstreamed OpenAI and Claude fallback; existing generic usage/retry contract adapter with honest unavailable coverage"
+      - "Direct complete/missing/partial/error/malformed/truncated/split-chunk/duplicate fixtures, exact vote/retry/fallback totals, concurrent-session and cancelled/spawned operation tests"
+      - "Exact payload/default regression evidence for Luna xhigh, votes2/cadence3, unchanged routing/fallback and omitted native max_output_tokens; preflight/skipped work produces no fictitious request"
   - phase: 2
-    name: "Bounded local accounting and honest cost aggregation"
-    goal: "FR-005/007/009; NFR-001/002/003; AC-3/5/7"
+    name: "Persist and expose honest local summaries"
+    goal: "Satisfy AC-4/AC-5 and FR-005/FR-006/FR-007/FR-009 through the existing diagnostics controls"
     dependencies:
       - "Phase 1"
     deliverables:
-      - "Bounded try-send recorder, private append/read/rotation using existing diagnostic policies, existing control resolver and bounded failure diagnostics. No new inference, uploads or pricing refresh."
-      - "No added unbounded per-session/dedup maps. Bound queue (reuse 256-entry local-recorder precedent), diagnostic warnings (32), and one global usage journal with existing 1 MiB file, three rotations and 30-day policy (at most four files, independent of session count). Queries scan only that bounded retained set and label retained-window coverage. Keep failure/drop counters fixed-size; when exact affected sessions are unavailable mark coverage conservatively rather than allocating unbounded tracking."
-      - "Known-rate fixed-unit estimates and deterministic per-request/session aggregation; explicit nulls, known subtotals, unknown counts and API-equivalent-not-billed labels. Pricing snapshots do not reinterpret historic rates."
-      - "Disabled-control, private-permission, sentinel, malformed-record/path, queue-pressure, persistence-failure, restart and retention tests; before/after hot-path timing and memory bounds documented against maintained budgets."
+      - "Bounded private recorder/storage using existing lifecycle policy and controls, fixed queue and state limits, safe loss/retention/restart/worker-failure coverage"
+      - "Offline known public API pricing arithmetic; missing Luna/rates/cache details stay unknown, reasoning remains a subset, known partial totals separate from full estimates"
+      - "Discoverable memory usage CLI text and deterministic JSON, per-session filter and calls; help, invalid/empty/mixed-unknown/zero-rate cases"
+      - "Privacy sentinels and all control combinations, private permissions, corrupt files, retention/rotation, saturated queue and unwritable storage fixtures with unchanged inference and no uploads"
   - phase: 3
-    name: "Expose CLI and prove offline end-to-end behavior"
-    goal: "FR-006/010; all acceptance rows reconciled, AC-9 handed to root"
+    name: "Validate and hand off for root-owned delivery"
+    goal: "Satisfy AC-7/AC-8, preserve AC-9 ownership and FR-010/NFR-001 through NFR-003"
     dependencies:
       - "Phase 2"
     deliverables:
-      - "memory usage --session/--calls/--json CLI help, argument validation, deterministic JSON/text and indexed user documentation."
-      - "Newly built binary consumes private synthetic diagnostics; isolated local mock drives actual memory caller -> sidecar parser -> recorder -> persisted summary. No credentials, production sessions or paid inference. Confirm binary path/revision and private socket when daemon execution is involved."
-      - "Serial focused Cargo checks, relevant TUI-bearing binary build, scripts/check_guardrails.sh and scripts/check_swarm_routing_contract.sh with nonzero matching tests. Record exact commands/results and every gap, without weakening the frozen matrix."
-      - "Return root-owned handoff for current-base review, non-rewriting landing/push, scripts/install_release.sh --fast, graceful server reload, task-owned cleanup, private HTML report and Bead closure. Worker performs none of those effects."
-acceptance_matrix:
-  - id: "AC-1"
-    frozen_requirement: "Native streamed/nonstreamed provider usage parsing including cached/reasoning and missing/incomplete/error usage"
-    requirements: "FR-001, FR-004"
-    evidence: "Focused response fixtures in phase 1, including preserved text/error behavior and invalid/missing fields"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-2"
-    frozen_requirement: "Every supported memory operation and session attribution, no guessed identity"
-    requirements: "FR-002"
-    evidence: "Call-site inventory plus deterministic actual memory-agent/sidecar integration fixtures for every operation, spawn/finalization and concurrent sessions"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-3"
-    frozen_requirement: "Vote/retry/request aggregation and reasoning-output inclusion"
-    requirements: "FR-003, FR-004, FR-005"
-    evidence: "Exact request ledger/session totals, distinct fallback attempts, duplicate cumulative-event tests and mixed unknown usage"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-4"
-    frozen_requirement: "Per-call/session user summary, unknown rates/usage and OAuth API-equivalent labels"
-    requirements: "FR-005, FR-006"
-    evidence: "Built CLI private-fixture help/text/JSON tests; per-call and session totals reconcile; no implied actual bills"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-5"
-    frozen_requirement: "Privacy/local controls, no memory text/secrets, private files, no network telemetry"
-    requirements: "FR-007, FR-009, NFR-002"
-    evidence: "Schema allowlist, sentinels, permissions, controls, corruption/path boundaries, bounded retention and network-isolated fixtures"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-6"
-    frozen_requirement: "Existing provider requests/config behavior unchanged"
-    requirements: "FR-008, NFR-003"
-    evidence: "Exact payload/default regressions and diff review; Luna xhigh/votes2/cadence3/routing/caps preserved; no persistent config edits"
-    owner: "Implementation lane; root verifies"
-  - id: "AC-7"
-    frozen_requirement: "Hot-path bounded overhead, no synchronous inference or unbounded growth"
-    requirements: "FR-009, NFR-001"
-    evidence: "Before/after timing under normal/saturated queue, fixed state/retention limits, worker failures and zero additional inference requests"
-    owner: "Implementation lane; root verifies maintained budgets"
-  - id: "AC-8"
-    frozen_requirement: "Focused tests, TUI binary build, guardrails, native routing contract and isolated newly built local runtime"
-    requirements: "FR-010, NFR-003"
-    evidence: "Serial exact checks, nonzero routing tests, local mock/fixture binary identity evidence; compilation alone is insufficient"
-    owner: "Implementation lane; root verifies/fresh-base reruns"
-  - id: "AC-9"
-    frozen_requirement: "Merge-wt fresh-base non-rewriting landing/push, fast install, graceful reload, cleanup, private HTML report and Bead closure"
-    requirements: "FR-010 and explicit root ownership constraint"
-    evidence: "Root completion report and Bead evidence after all implementation checks, not produced or claimed by this worker"
-    owner: "Root only; pending"
-risks:
-  - id: "RISK-001"
-    risk: "Medium overall: incorrect attribution or unknown counts could produce misleading usage/cost summaries"
-    likelihood: "medium"
-    impact: "medium"
-    mitigation: "Explicit context, distinct attempt IDs, optional native fields and exact cross-session/duplicate fixtures. Inline root review is the approved action; rollback removes additive accounting without touching memories/config."
-  - id: "RISK-002"
-    risk: "Metrics could leak provider error content or slow asynchronous memory work"
-    likelihood: "medium"
-    impact: "high"
-    mitigation: "Closed error enums, allowlisted bounded identifiers, private files, existing controls, nonblocking fixed queue and saturation/privacy tests. Blast radius is local diagnostics only; no uploads or inference changes."
+      - "Record exact focused test commands/results, then serial TUI-enabled binary build, scripts/check_guardrails.sh and nonzero scripts/check_swarm_routing_contract.sh checks; isolate unrelated baseline failures"
+      - "New-binary help/text/JSON and fixture/local-mock workflow under private data root and isolated socket if daemon use is needed; confirm resolved executable, no live/paid inference"
+      - "Before/after hot-path timings under normal and saturated load, fixed queue/record/state/scan bounds and zero additional requests; document numeric evidence against maintained budgets before acceptance"
+      - "Requirement-to-check evidence for every frozen AC row plus scope/config/privacy diff audit and operator docs, without claiming artifact validation proves implementation"
+      - "AC-9 ROOT ONLY: inline Medium-risk review, merge-wt fresh-base non-rewriting landing/push, install_release --fast and graceful shared-server reload, task-owned cleanup, private HTML risk report and Bead closure"
 open_questions: []
 _meta:
   version: "1.0.0"
   generator: "autospec"
   generator_version: "autospec dev"
-  created: "2026-09-05T21:54:44Z"
+  created: "2026-09-05T22:01:26Z"
   artifact_type: "plan"
