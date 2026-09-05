@@ -426,11 +426,8 @@ fn resolve_swarm_spawn_selection(
                 .unwrap_or_else(|| selection_for_concrete_model(model, coordinator))
         };
     }
-    // Treat empty strings and the explicit "inherit"/"coordinator" sentinels as
-    // "no override": spawned swarm agents should inherit the coordinator's model
-    // unless `agents.swarm_model` is deliberately set to a concrete model. This
-    // avoids the surprising case where a stale `swarm_model` config pins every
-    // spawned agent to an unrelated model/provider.
+    // Only concrete operator pins override coordinator inheritance. Empty and
+    // inherit/coordinator config values preserve the existing default behavior.
     let configured_swarm_model = configured_swarm_model
         .filter(|model| !model.trim().is_empty() && !is_inherit_sentinel(model));
 

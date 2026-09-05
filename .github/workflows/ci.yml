@@ -96,13 +96,6 @@ jobs:
         shell: bash
         run: cargo test -p jcode-sdk parity -- --nocapture
 
-      # Keep this downstream contract when synchronizing upstream swarm policy.
-      - name: Preserve local explicit swarm routing contract
-        shell: bash
-        run: |
-          bash scripts/check_swarm_routing_contract.sh --self-test
-          bash scripts/check_swarm_routing_contract.sh
-
       - name: Enforce wildcard re-export ratchet
         shell: bash
         run: python3 scripts/check_wildcard_reexport_budget.py
@@ -112,6 +105,30 @@ jobs:
         run: |
           cargo install cargo-machete --locked
           cargo machete
+
+  # Independent of upstream quality gates so baseline failures cannot hide this
+  # intentional downstream policy check during frequent synchronization.
+  local-swarm-routing:
+    name: Local Swarm Routing Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          submodules: recursive
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: local-swarm-routing
+          cache-all-crates: "true"
+      - name: Preserve local explicit swarm routing contract
+        run: |
+          bash scripts/check_swarm_routing_contract.sh --self-test
+          bash scripts/check_swarm_routing_contract.sh
 
   release-automation:
     name: Release Automation

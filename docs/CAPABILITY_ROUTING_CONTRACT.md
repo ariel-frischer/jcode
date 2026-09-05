@@ -35,9 +35,10 @@ bash scripts/check_swarm_routing_contract.sh --self-test
 bash scripts/check_swarm_routing_contract.sh
 ```
 
-The same gate runs in `scripts/check_guardrails.sh` and CI's Quality Guardrails
-job. It checks that key compiled tests still exist before running the local
-schema/projection, wire, precedence/auth, and catalog contract suite. Thus deleting
+The same gate runs in `scripts/check_guardrails.sh` and a dedicated CI job,
+independent of unrelated upstream quality failures. It checks that key compiled
+tests still exist before running the local schema/projection, wire, precedence/auth,
+and catalog contract suite. Thus deleting
 tests cannot silently pass with zero tests. Keep these downstream tests and gate
 invocations when upstream changes its swarm policy. Runtime acceptance still
 requires a freshly built private instance and actual worker route/effort metadata.
