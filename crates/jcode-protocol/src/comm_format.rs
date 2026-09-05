@@ -238,8 +238,7 @@ pub fn format_comm_members(current_session_id: &str, members: &[AgentInfo]) -> S
                 .as_deref()
                 .map(str::trim)
                 .filter(|effort| !effort.is_empty())
-                .map(|effort| format!(" ({effort})"))
-                .unwrap_or_default();
+                .map_or_else(String::new, |effort| format!(" ({effort})"));
             let model_suffix = match (
                 member.provider_name.as_deref(),
                 member.provider_model.as_deref(),

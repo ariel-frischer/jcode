@@ -565,10 +565,10 @@ use status_support::{
 };
 use theme_support::{
     accent_color, activity_indicator, activity_indicator_frame_index, ai_color, ai_text,
-    animated_tool_color, asap_color, blend_color, dim_color, file_link_color, header_icon_color,
-    header_name_color, header_session_color, pending_color, prompt_entry_bg_color,
-    prompt_entry_color, prompt_entry_shimmer_color, queued_color, rainbow_prompt_color,
-    system_message_color, tool_color, user_bg, user_color, user_text,
+    asap_color, blend_color, dim_color, file_link_color, header_icon_color, header_name_color,
+    header_session_color, pending_color, prompt_entry_bg_color, prompt_entry_color,
+    prompt_entry_shimmer_color, queued_color, rainbow_prompt_color, system_message_color,
+    tool_color, user_bg, user_color, user_text,
 };
 
 pub(crate) use jcode_tui_markdown::{CopyTargetKind, RawCopyTarget};
@@ -1523,21 +1523,7 @@ fn last_layout_state() -> &'static Mutex<Option<LayoutSnapshot>> {
     LAST_LAYOUT.get_or_init(|| Mutex::new(None))
 }
 
-pub fn record_layout_snapshot(
-    messages_area: Rect,
-    diagram_area: Option<Rect>,
-    diff_pane_area: Option<Rect>,
-    input_area: Option<Rect>,
-) {
-    record_layout_snapshot_with_top_bar(
-        messages_area,
-        diagram_area,
-        diff_pane_area,
-        input_area,
-        None,
-        0,
-    );
-}
+include!("ui_tests/layout_snapshot.rs");
 
 fn record_layout_snapshot_with_top_bar(
     messages_area: Rect,

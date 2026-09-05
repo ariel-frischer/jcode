@@ -459,32 +459,7 @@ fn test_env_override_swarm_model() {
     restore_env_var("JCODE_SWARM_MODEL", prev);
 }
 
-#[test]
-fn swarm_effort_parses_from_toml_and_env_override() {
-    let _guard = crate::storage::lock_test_env();
-    let prev = std::env::var_os("JCODE_SWARM_EFFORT");
-    restore_env_var("JCODE_SWARM_EFFORT", None);
-
-    // Public config-file interface (#1165).
-    let cfg: Config =
-        toml::from_str("[agents]\nswarm_model = \"claude-opus-5\"\nswarm_effort = \"medium\"\n")
-            .expect("config with swarm_effort parses");
-    assert_eq!(cfg.agents.swarm_effort.as_deref(), Some("medium"));
-    assert_eq!(Config::default().agents.swarm_effort, None);
-
-    crate::env::set_var("JCODE_SWARM_EFFORT", "low");
-    let mut cfg = Config::default();
-    cfg.apply_env_overrides();
-    assert_eq!(cfg.agents.swarm_effort.as_deref(), Some("low"));
-
-    crate::env::set_var("JCODE_SWARM_EFFORT", " ");
-    let mut cfg = Config::default();
-    cfg.agents.swarm_effort = Some("preset".to_string());
-    cfg.apply_env_overrides();
-    assert_eq!(cfg.agents.swarm_effort, None);
-
-    restore_env_var("JCODE_SWARM_EFFORT", prev);
-}
+include!("config_tests/swarm_effort_parses_from_toml_and_env_override.rs");
 
 #[test]
 fn wake_mode_defaults_parses_and_env_overrides() {
@@ -1105,56 +1080,9 @@ fn test_provider_failover_defaults_match_new_behavior() {
     assert!(provider.same_provider_account_failover);
 }
 
-#[test]
-fn provider_failover_config_and_environment_precedence_is_safe() {
-    let _guard = crate::storage::lock_test_env();
-    let previous = std::env::var_os("JCODE_CROSS_PROVIDER_FAILOVER");
+include!("config_tests/provider_failover_config_and_environment_precedence_is_safe.rs");
 
-    let from_config: Config =
-        toml::from_str("[provider]\ncross_provider_failover = \"countdown\"\n")
-            .expect("config failover mode should parse");
-    assert_eq!(
-        from_config.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Countdown
-    );
-
-    crate::env::set_var("JCODE_CROSS_PROVIDER_FAILOVER", "manual");
-    let mut overridden = from_config;
-    overridden.apply_env_overrides();
-    assert_eq!(
-        overridden.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Manual
-    );
-
-    crate::env::set_var("JCODE_CROSS_PROVIDER_FAILOVER", "not-a-mode");
-    let mut invalid = Config::default();
-    invalid.apply_env_overrides();
-    assert_eq!(
-        invalid.provider.cross_provider_failover,
-        super::CrossProviderFailoverMode::Manual,
-        "invalid environment values must not weaken the safe default"
-    );
-
-    restore_env_var("JCODE_CROSS_PROVIDER_FAILOVER", previous);
-}
-
-#[test]
-fn test_provider_failover_disabled_aliases_parse_as_manual() {
-    for value in ["off", "false", "disabled", "none"] {
-        let cfg: Config = toml::from_str(&format!(
-            "[provider]\ncross_provider_failover = \"{value}\"\n"
-        ))
-        .unwrap_or_else(|error| panic!("{value} should parse: {error}"));
-        assert_eq!(
-            cfg.provider.cross_provider_failover,
-            super::CrossProviderFailoverMode::Manual
-        );
-        assert_eq!(
-            super::CrossProviderFailoverMode::parse(value),
-            Some(super::CrossProviderFailoverMode::Manual)
-        );
-    }
-}
+include!("config_tests/test_provider_failover_disabled_aliases_parse_as_manual.rs");
 
 #[test]
 fn test_native_scrollbars_default_to_enabled() {

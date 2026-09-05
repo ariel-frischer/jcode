@@ -61,6 +61,7 @@ fn interactive_profile_startup_wire_is_optional_and_session_scoped() -> Result<(
         client_instance_id: Some("client-profile".to_owned()),
         client_has_local_history: false,
         allow_session_takeover: false,
+        crash_on_disconnect: false,
         terminal_env: Vec::new(),
         profile: Some(jcode::protocol::SessionProfileStartup {
             profile_name: Some("review".to_owned()),

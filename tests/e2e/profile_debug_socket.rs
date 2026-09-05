@@ -30,6 +30,7 @@ impl RawClient {
             client_instance_id: None,
             client_has_local_history: false,
             allow_session_takeover: false,
+            crash_on_disconnect: false,
             terminal_env: Vec::new(),
             profile,
         };

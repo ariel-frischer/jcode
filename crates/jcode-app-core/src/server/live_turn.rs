@@ -83,7 +83,10 @@ pub(super) async fn idle_live_agent(
         return None;
     }
 
-    agent.try_lock_owned().ok()
+    let Ok(reservation) = agent.try_lock_owned() else {
+        return None;
+    };
+    Some(reservation)
 }
 
 /// Spawn `message` as a full tracked turn in a live session.
