@@ -4,11 +4,45 @@ mod autospec;
 mod observer;
 mod registry;
 mod store;
+pub(crate) use registry::ObserveInput;
+pub(crate) use store::WorkflowStore;
 #[cfg(test)]
 mod store_tests;
 use observer::observe;
 #[cfg(test)]
 mod tests;
+
+/// Canonical process-local store shared by tools and the passive server monitor.
+/// Disabled observation never resolves storage paths or reads persisted state.
+pub(crate) fn global() -> anyhow::Result<&'static WorkflowStore> {
+    use std::sync::OnceLock;
+    static STORE: OnceLock<Result<WorkflowStore, String>> = OnceLock::new();
+    let config = &crate::config::config().workflow;
+    if !config.enabled {
+        anyhow::bail!("workflow observation is disabled");
+    }
+    STORE
+        .get_or_init(|| {
+            let open = || {
+                WorkflowStore::open(
+                    crate::storage::jcode_dir()?.join("workflow/registry.json"),
+                    config.clone(),
+                )
+            };
+            open().map_err(|_: anyhow::Error| {
+                "Workflow registry unavailable; preserve and repair workflow/registry.json, then restart the server".into()
+            })
+        })
+        .as_ref()
+        .map_err(|message| anyhow::anyhow!(message.clone()))
+}
+
+pub(crate) fn now_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct ObservedLifecycle {

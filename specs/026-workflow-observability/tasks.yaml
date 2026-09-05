@@ -41,7 +41,7 @@ phases:
           - "Tests reject cross-owner claims, malformed and oversized files without command execution"
       - id: "T003"
         title: "Add single observation registration to existing background tool"
-        status: "Pending"
+        status: "Completed"
         type: "implementation"
         parallel: false
         story_id: "US-001"
