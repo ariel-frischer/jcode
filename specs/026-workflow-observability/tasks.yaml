@@ -79,22 +79,22 @@ phases:
           - "Disabled/empty layout unchanged; no filesystem reads or model calls during rendering"
       - id: "T006"
         title: "Exercise fake producer, idle model, reconnect and failures through built runtime"
-        status: "InProgress"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: "US-002"
-        file_path: "crates/jcode-app-core/src/workflow/tests.rs"
+        file_path: "scripts/test_workflow_runtime.py"
         dependencies: ["T005"]
         acceptance_criteria:
           - "All FR mapped to focused evidence including ownership, phase transitions, explicit quota failure, silence and malformed artifacts"
-          - "Isolated-socket candidate and debug tester show real UI updates with no provider requests"
+          - "Isolated-socket candidate and debug tester show real UI updates with no observer-induced provider requests"
   - number: 4
     title: "Polish and risk-reviewed handoff"
     purpose: "Maintain sync-friendly documentation and safe integration lifecycle"
     tasks:
       - id: "T007"
         title: "Document config, registration, limits and upstream boundaries and run polish"
-        status: "Pending"
+        status: "InProgress"
         type: "documentation"
         parallel: false
         story_id: "US-003"

@@ -4,15 +4,15 @@ Bead: `jcode-upir`. Implementation remains in progress. This is the requirement-
 
 | Requirement | Check | Evidence/state |
 | --- | --- | --- |
-| FR-001/009 disabled behavior and bounds | Config default, TOML, environment and template focused tests | Foundation milestone passed, runtime disabled-work test still pending |
+| FR-001/009 disabled behavior and bounds | Config default, TOML, environment and template focused tests | Config tests and repaired-candidate disabled runtime passed: no workflow messages or registry directory |
 | FR-003 explicit ownership | Registry idempotence, conflicting owner rejection, unobserve ownership, persisted duplicate rejection | Registry identity, duplicate ownership, private persistence and transactional save tests passed |
-| FR-005 reconnect and continuity | Registry last-good round trip, live phase transition, opted-in reconnect snapshot | Persistence round trip passed, runtime pending |
+| FR-005 reconnect and continuity | Registry last-good round trip, live phase transition, opted-in reconnect snapshot | Persistence tests and actual reconnect/live A→B→A ResumeSession ownership passed |
 | FR-007/008 safe optional artifact input | Missing, malformed, oversized, leaf and ancestor symlink replacement fixtures | Bounded reads, post-registration and concurrent ancestor replacement tests passed on Linux |
-| FR-004/006 evidence-based health | Separate progress checkpoint and activity clocks, quiet-not-failed, sticky credit failure, explicit retry recovery | Observer fixtures passed, native event fixtures pending |
-| FR-002/NFR-001 idle main model | Built isolated-socket fake producer with model request counter staying zero, no observer command invocation | Pending |
-| Protocol compatibility | Legacy Subscribe omits default-false capability, new events only on opted-in connection, resume follows current session, slow-client coalescing | Pending |
-| NFR-002 bounded presentation | Actual candidate debug tester frames at 40/80/120 columns and short height | Pending |
-| Delivery | Focused checks, scoped format/lint, build, repository guardrails, independent review and HTML risk report | Pending |
+| FR-004/006 evidence-based health | Separate progress checkpoint and activity clocks, quiet-not-failed, sticky credit failure, explicit retry recovery | 37 app-core workflow tests plus fake producer, sticky credits, malformed source and explicit retry/completion runtime passed |
+| FR-002/NFR-001 idle main model | Built isolated-socket fake producer with model request counter staying zero, no observer command invocation | Repaired-candidate T006 passed, see evidence below |
+| Protocol compatibility | Legacy Subscribe omits default-false capability, new events only on opted-in connection, resume follows current session, slow-client coalescing | Repaired-candidate T006 passed, see evidence below |
+| NFR-002 bounded presentation | Actual candidate debug tester frames at 40/80/120 columns and short height | Repaired-candidate T006 passed, see evidence below |
+| Delivery | Focused checks, scoped format/lint, build, repository guardrails, independent review and HTML risk report | Focused checks/build/review/runtime passed. T007 guardrails and T008 report/landing remain pending |
 | Landing and data safety | Required risk authorization, fresh-base non-rewriting integration, push, install/reload, owned worktree cleanup | Pending. No installed configuration enablement without concrete approval |
 
 ## Resolved testing-path hazard
@@ -76,3 +76,72 @@ Source precedence is explicit: newly observed controller terminal or retry evide
 Final coordinated task `743733otow` passed 37 focused app-core `workflow` tests, five TUI `workflow_` tests, and `check -p jcode --bin jcode`, all using candidate worktree paths. Existing unmatched profile-package warnings remain. Two interim failures after repair were diagnosed as malformed test artifacts (missing phase number/empty task file), corrected to valid fixtures, and rerun. These results include absent Waiting churn across reopen without freezing artifact progress, blocked metadata/retry continuity, owned-clock starvation, late-owner batch visibility, explicit per-owner overflow, controller completion/retry/Running continuity and persisted corruption rejection. Scoped formatting and diff checks passed.
 
 An isolated selfdev executable built successfully in task `70538068ju` at the worktree's explicit `CARGO_TARGET_DIR`, but that binary represents **pre-review-repair e7b03ba**, not the latest repaired source. The initial private smoke correctly refused startup with no credentials. A second smoke used inert OAuth-shaped placeholders under a fresh private HOME/JCODE_HOME, no real credentials, and blocked HTTP(S)/ALL proxy endpoints. Task `778970d8bo` confirmed the executable via `/proc/<pid>/exe`, a real opt-in Subscribe handshake, and typed workflow updates. Runtime fixture root: `/home/ari/.jcode/scratch/wf-_tmn9csd`; probe script: `/home/ari/.jcode/scratch/workflow-smoke-probe.py`. The private server exited via the probe's cleanup. This is only handshake evidence, not full T006 acceptance. Rebuild the repaired candidate before actual fake-producer/credit/reconnect/slow-client/model-counter/tester-frame assertions.
+
+
+## T006 repaired-candidate runtime acceptance
+
+The repaired `d83ecba` executable was rebuilt by coordinated task `120127y9od`
+using the absolute candidate `scripts/dev_cargo.sh` and explicit candidate
+`CARGO_TARGET_DIR`. The maintained Linux-only, standard-library harness is
+`scripts/test_workflow_runtime.py`. It takes an absolute candidate binary and
+requires `JCODE_SCRATCH_DIR`. No installed configuration or shared daemon is used.
+
+The final maintained-harness run exited **0**. Durable evidence, including actual
+40×30, 80×30, 120×30 and 80×10 candidate frame JSON, PTY output, snapshot evidence,
+exit receipt and binary digest, is retained outside the removable worktree at
+`/home/ari/repos/jcode/.worktrees/reports/jcode-upir/runtime-20260905T2118/`.
+
+Verified through real private sockets and processes:
+
+- Caller-owned direct `bg observe`, valid fake producer task progression, safe
+  quota failure text, last-good counts across malformed artifacts, explicit retry
+  recovery, and controller completion without changing workflow identity.
+- Owner B sees no owner A workflow. Reconnect restores failure. Live
+  `ResumeSession` A→B→A follows current ownership. Legacy Subscribe receives no
+  new workflow variant. Live resume returns `History`, not initial `SessionId`.
+- Forty-eight additional registrations saturate an unread socket while a healthy
+  client continues receiving 24 producer transitions. The bounded slow writer
+  disconnects, and reconnect immediately restores the latest completed snapshot.
+- A second daemon sharing only the fixture Jcode home reports observer-unavailable
+  health rather than competing for the registry lock. A disabled daemon creates
+  no workflow registry directory and emits no workflow events, even to opt-in clients.
+- Actual candidate PTYs display failed/count/credit/checkpoint content at
+  40/80/120 columns. The 10-row terminal suppresses the panel. All four preserve
+  two-line input and remain idle with zero conversation messages. Semantic frame
+  JSON does not include workflow text, so PTY output corroborates visible content.
+- Rejecting proxy counters stay unchanged during observer-only producer and
+  backpressure intervals. Main owner histories stay empty and input/output model
+  token counters remain zero. Existing TUI onboarding/usage startup performs
+  rejected CONNECT attempts to auth/usage hosts. Those are recorded separately,
+  not mislabeled as model requests or allowed to reach the network. All auth data
+  is inert fixture text, never real credentials. No model message is submitted.
+
+Harness corrections were test-contract issues, not production repairs: snapshot
+count is `completed`, retry health is `waiting`, live resume emits `history`, and
+fresh-home onboarding must be dismissed before main-TUI capture. Visual capture
+is explicitly enabled. Atomic tester command-file replacement avoids observing
+partially written commands. Every private process/tester is cleaned up by its owner.
+
+## T007 guardrail investigation, not a passing gate
+
+Full guardrails were attempted, but are not yet acceptance evidence. An inherited
+exported `cargo` function routed an initial run back to root despite a PATH shim,
+then mixed root artifacts into the candidate target. The corrected runner removes
+`BASH_FUNC_cargo%%`, pins `JCODE_DEV_CARGO_SCRIPT` to the candidate, and uses the
+actual `/usr/sbin/cargo` behind the recursion guard. The initial assumed
+`~/.cargo/bin/cargo` does not exist on this host. Invalid runs are retained under
+`/home/ari/.jcode/scratch/workflow-guardrails/` and are not claimed as candidate passes.
+
+The corrected check found stale background-types artifacts missing `workflow`
+although the candidate exports it unconditionally. Debug dep-info includes both
+workflow-aware and workflow-absent artifacts after the erroneous root build.
+The owned guardrail process group was stopped. Invalidate candidate-local
+workspace-package build artifacts or use a clean target before rerunning, and
+verify compiler paths. Do not repeat a nested root-shim build or run parallel Cargo.
+
+Static gates also identify feature-owned fallback patterns in
+`workflow/observer.rs`, `config/workflow.rs`, and `ui_workflow.rs`, plus small
+integration-line growth in already oversized files. Resolve these without hiding
+unrelated baseline drift or blanket rebaselining. Clippy also reports an existing
+`jcode-tui-mermaid` type-complexity error that needs baseline isolation. Full
+formatting passed, but no full compile/Clippy/routing guardrail pass is claimed.
