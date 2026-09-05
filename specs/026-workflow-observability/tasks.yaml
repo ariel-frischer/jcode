@@ -105,7 +105,7 @@ phases:
           - "Focused tests, formatting and applicable guardrails pass or isolated baseline blockers are recorded"
       - id: "T008"
         title: "Review candidate and hand off bounded commits for risk-approved integration"
-        status: "Pending"
+        status: "Completed"
         type: "test"
         parallel: false
         story_id: null

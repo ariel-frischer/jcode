@@ -237,3 +237,14 @@ checkout. No fixture-owned processes remain. This satisfies T007's explicit
 passing-check-or-isolated-baseline contract and the constitution's pre-existing
 failure exception. It is not a claim that every repository gate is green.
 T008 still owns fresh-base integration, final installation and task-owned cleanup.
+
+
+## T008 landed and installed acceptance (2026-09-05)
+
+- Code merge `0464da3fb0fb6a5e44bf4baa3a079c38aee56ba6` was atomically pushed to `github/dev`; clean root `dev` fast-forwarded.
+- Fresh-base acceptance: 30 workflow, 5 TUI workflow, 99 protocol and 19 explicit routing tests passed. Full guardrails retain six proven historical failures, with unchanged changed-surface debt.
+- Canonical `scripts/install_release.sh --fast` exited 0, gracefully reloaded daemon PID 514942, and installed immutable release `0464da3fb`. `/proc/514942/exe` confirms that exact executable. The older legacy shared-server symlink is not the daemon's current executable and was left untouched.
+- Installed binary SHA256: `35ca1be6f1c254e510eda0305db1322cf6dc3d9e9f20887c8bc5ea51832f95ef`. Maintained isolated release runtime exited 0, including actual PTYs, disabled no-IO behavior, ownership/reconnect/health/backpressure checks and zero observer requests/model tokens.
+- Installed configuration hashes are unchanged. Workflow remains disabled. No provider/profile changes or live paid validation.
+- Retained release receipts: `.worktrees/reports/jcode-upir/installed-20260905T2307/`. Fresh-base receipts: `.worktrees/reports/jcode-upir/integration-20260905T2249/`.
+- Retrospective Medium-risk report: `.worktrees/reports/session-jcode-upir-20260905.html`. Final cleanup evidence is recorded in the closing Bead comment after metadata push.
