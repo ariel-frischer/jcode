@@ -94,7 +94,7 @@ phases:
     tasks:
       - id: "T007"
         title: "Document config, registration, limits and upstream boundaries and run polish"
-        status: "InProgress"
+        status: "Completed"
         type: "documentation"
         parallel: false
         story_id: "US-003"

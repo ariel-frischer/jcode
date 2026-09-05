@@ -189,3 +189,51 @@ external Cargo lane by process-exit notification before invalidating only owned
 workspace dev-profile artifacts and running focused tests plus full guardrails.
 It preserves dependency caches and the already validated selfdev executable.
 No install, shared-daemon change or installed configuration enablement occurred.
+
+### T007 completed candidate acceptance (2026-09-05 22:25 UTC)
+
+Final production commit: `8c608d751`. All owned fallback/lint findings are repaired.
+The non-gated external Cargo lane was allowed to finish without interruption.
+Owned workspace dev artifacts were then invalidated, and compiler paths verified
+inside the candidate worktree. The false missing-workflow-module failure is gone.
+
+| Final check | Result |
+| --- | --- |
+| config-types `--lib workflow::` | 3 passed |
+| base `--lib config::workflow::` | 2 passed |
+| app-core `--lib workflow::` | 30 passed |
+| TUI `--lib ui_workflow::` | 4 passed |
+| `scripts/check_guardrails.sh` | Executed completely; six isolated baseline failures remain |
+| All-target/all-feature check, format, metadata, warning budget, dependency and wildcard boundaries | Passed |
+| Explicit routing inventory/runtime contract and onboarding invariants | Passed; routing inventory requires all nine named tests |
+| Changed-crate all-target/all-feature lint diagnostic inventory | Zero diagnostics on changed lines; 19 pre-existing diagnostics retained |
+| Rebuilt isolated candidate, maintained runtime harness | Passed in 61.76 seconds |
+
+Full strict Clippy stops on the unchanged Mermaid type-complexity declaration.
+The separate changed-crate strict run exposed an owned test initializer, which was
+fixed, plus an unchanged display test. To inspect every changed crate instead of
+stopping at historical warnings, an explicitly diagnostic-only run used
+`--no-deps --all-targets --all-features -- -W clippy::all --cap-lints warn`, retained
+all JSON diagnostics, and compared primary source spans to exact base. It found
+three unique owned production lints, now repaired. The final inventory has zero
+owned diagnostics. This capped inventory is **not** represented as a strict
+Clippy pass. The provenance, code-size, test-size, panic and swallowed-error gates
+retain the exact previously isolated base debt. `cargo-machete` is unavailable and
+the repository script explicitly skips it. Host Rust is Arch stable 1.95.0.
+
+The final runtime repeated owned registration, progress, sticky credits,
+malformed artifacts, retry/completion, owner isolation, reconnect/live resume,
+backpressure disconnect/recovery, cross-process lock refusal, disabled zero-I/O,
+and real 40/80/120-column plus short-height PTYs with multiline input. Main model
+messages/tokens remain zero and observer-only request counters remain unchanged.
+Fresh-home startup auth/usage CONNECT attempts were rejected locally and recorded
+separately. No live credentials, paid request or shared daemon was used.
+
+Final binary SHA-256:
+`ab57bad550565ccabd4a0fcfac841629fe0ddc2394a71de64226b11fd67ef330`.
+Archived checks, classified diagnostics, runtime receipt, frames, raw PTYs and
+identity: `.worktrees/reports/jcode-upir/t007-final-20260905T2225/` under the root
+checkout. No fixture-owned processes remain. This satisfies T007's explicit
+passing-check-or-isolated-baseline contract and the constitution's pre-existing
+failure exception. It is not a claim that every repository gate is green.
+T008 still owns fresh-base integration, final installation and task-owned cleanup.
