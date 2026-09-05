@@ -65,13 +65,11 @@ pub(super) fn draw(
         let stage = snapshot
             .stage
             .as_deref()
-            .map(|value| format!("{}: ", safe_text(value)))
-            .unwrap_or_default();
+            .map_or_else(String::new, |value| format!("{}: ", safe_text(value)));
         let detail = snapshot
             .detail
             .as_deref()
-            .map(|value| format!("{} | ", safe_text(value)))
-            .unwrap_or_default();
+            .map_or_else(String::new, |value| format!("{} | ", safe_text(value)));
         lines.push(Line::raw(format!("{detail}{stage}{activity}")));
         lines.push(Line::raw(format!(
             "activity {} | checkpoint {}",

@@ -42,10 +42,15 @@ pub(crate) fn global() -> anyhow::Result<&'static WorkflowStore> {
 }
 
 pub(crate) fn now_seconds() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(elapsed) => elapsed.as_secs(),
+        Err(_) => {
+            crate::logging::warn(
+                "System clock precedes Unix epoch; workflow timestamps use zero until the clock is corrected",
+            );
+            0
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

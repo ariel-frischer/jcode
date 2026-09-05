@@ -87,8 +87,7 @@ fn open_regular(path: &Path) -> Result<File> {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn open_regular(path: &Path) -> Result<File> {
+fn open_regular(_path: &Path) -> Result<File> {
     // Fail closed on platforms without descriptor-relative traversal support.
-    let _ = path;
     bail!("filesystem workflow observation requires safe directory traversal support")
 }
