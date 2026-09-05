@@ -8,6 +8,9 @@ use crate::terminal_launch::{detected_resume_terminal, shell_command};
 use crate::tui::session_picker::ResumeTarget;
 use chrono::{Duration as ChronoDuration, Utc};
 
+#[path = "helpers_tests/ambient_scope.rs"]
+mod ambient_scope;
+
 struct EnvVarGuard {
     key: &'static str,
     prev: Option<std::ffi::OsString>,
@@ -439,11 +442,29 @@ fn gather_ambient_info_filters_to_session_reminders_when_ambient_disabled() {
         })
         .expect("schedule second reminder");
 
+    manager
+        .schedule(ScheduleRequest {
+            wake_in_minutes: None,
+            wake_at: Some(Utc::now() + ChronoDuration::minutes(1)),
+            context: "foreign context".to_string(),
+            priority: Priority::Normal,
+            target: ScheduleTarget::Session {
+                session_id: "session_2".to_string(),
+            },
+            created_by_session: "session_1".to_string(),
+            working_dir: None,
+            task_description: Some("foreign reminder".to_string()),
+            relevant_files: Vec::new(),
+            git_branch: None,
+            additional_context: None,
+        })
+        .expect("schedule foreign reminder");
+
     // This test exercises queue filtering, not the stale-while-revalidate cache.
     // Read synchronously while the temporary JCODE_HOME and its files are pinned:
     // an unrelated in-flight cache refresh can otherwise overwrite the cleared
     // process-global cache with data loaded under another test's JCODE_HOME.
-    let info = gather_ambient_info_inner(false).expect("ambient info");
+    let info = gather_ambient_info_inner(false, Some("session_1")).expect("ambient info");
     assert!(info.show_widget);
     assert_eq!(info.queue_count, 3);
     assert_eq!(info.reminder_count, 2);
