@@ -285,7 +285,7 @@ phases:
       tasks:
         - id: T022
           title: Measure bounded accounting overhead in crates/jcode-base/src/memory_usage_tests.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: null
@@ -296,7 +296,7 @@ phases:
             - Assert zero additional inference, bounded memory/state growth and nonblocking fail-open behavior; investigate regressions rather than inventing a passing budget.
         - id: T023
           title: Run focused acceptance checks and record results in specs/026-sidecar-usage-accounting/evidence.md
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: null
@@ -307,7 +307,7 @@ phases:
             - Diagnose failing acceptance before one bounded repair and minimal rerun; isolate unrelated baseline failures, never hide them through ratchet changes.
         - id: T024
           title: Document operator semantics and measured limits in docs/LIFECYCLE_OBSERVABILITY.md
-          status: Pending
+          status: Completed
           type: documentation
           parallel: false
           story_id: null
@@ -318,7 +318,7 @@ phases:
             - Record AC-7 numeric measurements and explicit maintained bounds with links to evidence; distinguish target claims from measured behavior.
         - id: T025
           title: Maintain tracked documentation index in docs/index.md
-          status: Pending
+          status: Completed
           type: documentation
           parallel: false
           story_id: null
@@ -329,7 +329,7 @@ phases:
             - Apply project-appropriate polish/release-note convention after checking local instructions, stage only explicitly owned files and preserve unrelated changes.
         - id: T026
           title: Build TUI-enabled binary and run serialized gates recorded in specs/026-sidecar-usage-accounting/evidence.md
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: null
@@ -340,7 +340,7 @@ phases:
             - Use rtk-prefixed commands and managed background completion for long builds/gates, never broad foreground suites or concurrent Cargo-heavy work; record toolchain, commands, exit codes and isolated baseline failures.
         - id: T027
           title: Validate executing binary offline through tests/memory_usage_cli.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: null
@@ -351,7 +351,7 @@ phases:
             - Use private data root and isolated socket only if daemon use is required, no shared-server/config/provider mutation and no paid/live inference; build alone is not runtime evidence.
         - id: T028
           title: Complete acceptance and scope audit in specs/026-sidecar-usage-accounting/evidence.md
-          status: Pending
+          status: Completed
           type: documentation
           parallel: false
           story_id: null
@@ -363,7 +363,7 @@ phases:
             - Record Medium risk, attribution/privacy/async blast radius, rollback by reverting owned commits and inline review decision; communicate any unresolved acceptance honestly.
         - id: T029
           title: Prepare explicit owned-commit handoff in specs/026-sidecar-usage-accounting/evidence.md
-          status: Pending
+          status: InProgress
           type: documentation
           parallel: false
           story_id: null

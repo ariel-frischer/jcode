@@ -110,3 +110,50 @@ fn invalid_generic_cache_subsets_keep_valid_totals() {
         assert_eq!(a.usage.cache_creation_tokens, None);
     }
 }
+
+#[test]
+fn native_openai_usage_prices_without_inventing_cache_creation() {
+    use crate::memory_usage::summary::report_in_dir;
+    use crate::session::memory_usage::{append_in_dir, tests::record};
+
+    let event = json!({"usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":20},"output_tokens":10,"output_tokens_details":{"reasoning_tokens":8}}});
+    for missing in [
+        None,
+        Some("input_tokens"),
+        Some("input_tokens_details"),
+        Some("output_tokens"),
+    ] {
+        for model in ["gpt-5.4", "gpt-5.6-luna"] {
+            let mut response = event.clone();
+            if let Some(field) = missing {
+                response["usage"].as_object_mut().unwrap().remove(field);
+            }
+            let mut parsed = UsageAccumulator::default();
+            parsed.openai(&response);
+            assert_eq!(parsed.usage.cache_creation_tokens, None);
+            let mut call = record("native");
+            call.model = model.into();
+            call.usage = parsed.usage;
+            let dir = tempfile::tempdir().unwrap();
+            append_in_dir(dir.path(), &call).unwrap();
+            let report = report_in_dir(
+                dir.path(),
+                Some("session-a"),
+                crate::config::LifecycleObservabilityConfig::default().effective_status(),
+                true,
+            )
+            .unwrap();
+            let expected = (missing.is_none() && model == "gpt-5.4").then_some(355_000);
+            assert_eq!(
+                report.sessions[0].unknown_cost_calls,
+                u64::from(expected.is_none())
+            );
+            let calls = report.calls.unwrap();
+            assert_eq!(calls[0].usage.cache_creation_tokens, None);
+            assert_eq!(calls[0].pricing.estimate_nano_usd, expected);
+            if missing.is_none() {
+                assert_eq!(calls[0].usage.total_tokens().unwrap(), Some(110));
+            }
+        }
+    }
+}

@@ -68,8 +68,10 @@ fn missing_cache_details_rates_and_creation_keep_known_components() {
     assert_eq!(estimate(&call).unwrap().known_subtotal_nano_usd, 150_000);
     assert_eq!(estimate(&call).unwrap().estimate_nano_usd, None);
     call.usage.cached_input_tokens = Some(20);
+    call.provider = "claude".into();
+    call.model = "claude-sonnet-4-6".into();
     call.usage.cache_creation_tokens = Some(5);
-    assert_eq!(estimate(&call).unwrap().known_subtotal_nano_usd, 342_500);
+    assert_eq!(estimate(&call).unwrap().known_subtotal_nano_usd, 381_000);
     assert_eq!(estimate(&call).unwrap().estimate_nano_usd, None);
     call.usage = TokenUsage::default();
     assert_eq!(estimate(&call).unwrap().estimate_nano_usd, None);
@@ -98,7 +100,7 @@ fn actual_zero_rates_and_zero_usage_are_distinct_from_absence() {
     let mut call = known("r");
     let free = rates(0, 0, Some(0));
     assert_eq!(
-        estimate_with_rates(&call.usage, Some(&free))
+        estimate_with_rates(&call.usage, Some(&free), true)
             .unwrap()
             .estimate_nano_usd,
         Some(0)
@@ -113,13 +115,13 @@ fn actual_zero_rates_and_zero_usage_are_distinct_from_absence() {
     assert_eq!(estimate(&call).unwrap().estimate_nano_usd, Some(0));
     call.usage.output_tokens = None;
     assert_eq!(
-        estimate_with_rates(&call.usage, Some(&free))
+        estimate_with_rates(&call.usage, Some(&free), true)
             .unwrap()
             .estimate_nano_usd,
         None
     );
     assert_eq!(
-        estimate_with_rates(&call.usage, None).unwrap().basis,
+        estimate_with_rates(&call.usage, None, true).unwrap().basis,
         PricingBasis::Unknown
     );
 }
@@ -133,29 +135,29 @@ fn fixed_precision_rounds_once_per_call_and_checks_wide_overflow() {
     usage.reasoning_tokens = None;
     // Each known term is 0.4 nano-USD. Sum first, round half up to 1.
     assert_eq!(
-        estimate_with_rates(&usage, Some(&rates(400, 400, None)))
+        estimate_with_rates(&usage, Some(&rates(400, 400, None)), true)
             .unwrap()
             .estimate_nano_usd,
         Some(1)
     );
     assert_eq!(
-        estimate_with_rates(&usage, Some(&rates(249, 250, None)))
+        estimate_with_rates(&usage, Some(&rates(249, 250, None)), true)
             .unwrap()
             .estimate_nano_usd,
         Some(0)
     );
     assert_eq!(
-        estimate_with_rates(&usage, Some(&rates(250, 250, None)))
+        estimate_with_rates(&usage, Some(&rates(250, 250, None)), true)
             .unwrap()
             .estimate_nano_usd,
         Some(1)
     );
     usage.input_tokens = Some(u64::MAX);
     usage.output_tokens = Some(0);
-    assert!(estimate_with_rates(&usage, Some(&rates(u64::MAX, 0, None))).is_err());
+    assert!(estimate_with_rates(&usage, Some(&rates(u64::MAX, 0, None)), true).is_err());
     usage.cached_input_tokens = Some(u64::MAX);
     usage.cache_creation_tokens = Some(1);
-    assert!(estimate_with_rates(&usage, Some(&rates(1, 1, Some(1)))).is_err());
+    assert!(estimate_with_rates(&usage, Some(&rates(1, 1, Some(1))), true).is_err());
 }
 
 #[test]

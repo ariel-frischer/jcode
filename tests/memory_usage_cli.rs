@@ -9,6 +9,8 @@ use std::{
 
 #[path = "memory_usage_cli/network_guard.rs"]
 mod network_guard;
+#[path = "memory_usage_cli/runtime.rs"]
+mod runtime;
 
 fn invoke(home: &Path, args: &[&str]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_jcode"));
@@ -152,6 +154,7 @@ fn json_calls_sessions_unknowns_and_zero_reconcile_deterministically() {
         ]
     );
     assert_eq!(report["calls"][0]["pricing"]["estimate_nano_usd"], 355_000);
+    assert!(report["calls"][0]["usage"]["cache_creation_tokens"].is_null());
     assert!(report["calls"][1]["pricing"]["estimate_nano_usd"].is_null());
     assert_eq!(report["calls"][2]["attempt_coverage"], "provider_call_only");
     assert!(report["calls"][3]["usage"]["output_tokens"].is_null());

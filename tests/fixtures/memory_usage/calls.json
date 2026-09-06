@@ -16,7 +16,7 @@
     "usage": {
       "input_tokens": 0,
       "cached_input_tokens": 0,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": 0,
       "reasoning_tokens": 0
     },
@@ -44,7 +44,7 @@
     "usage": {
       "input_tokens": 100,
       "cached_input_tokens": 20,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": 10,
       "reasoning_tokens": 8
     },
@@ -72,7 +72,7 @@
     "usage": {
       "input_tokens": 40,
       "cached_input_tokens": null,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": null,
       "reasoning_tokens": null
     },
@@ -128,7 +128,7 @@
     "usage": {
       "input_tokens": 100,
       "cached_input_tokens": 20,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": 10,
       "reasoning_tokens": 8
     },
@@ -156,7 +156,7 @@
     "usage": {
       "input_tokens": 100,
       "cached_input_tokens": 20,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": 10,
       "reasoning_tokens": 8
     },
@@ -184,7 +184,7 @@
     "usage": {
       "input_tokens": 100,
       "cached_input_tokens": 20,
-      "cache_creation_tokens": 0,
+      "cache_creation_tokens": null,
       "output_tokens": 10,
       "reasoning_tokens": 8
     },

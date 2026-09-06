@@ -27,7 +27,8 @@ preparation-stage ownership restriction, not the frozen acceptance criteria.
 
 Source: `/home/ari/.jcode/scratch/jcode-cyko/comments.json`, acceptance comment
 `01a0738b-af58-7bf0-ae8a-89f24f8d3957`, 2026-09-05T21:48:49Z.
-The nine rows below retain the complete frozen wording. None has passed yet.
+The nine rows below retain the complete frozen wording. Current evidence and
+limitations are mapped below; original setup wording is not a completion claim.
 
 <!-- frozen-acceptance-start -->
 1) Native streamed/nonstreamed provider usage parsing including cached/reasoning and missing/incomplete/error usage -> focused response fixtures.
@@ -51,29 +52,28 @@ The nine rows below retain the complete frozen wording. None has passed yet.
 
 ## Requirement-to-task-to-check matrix
 
-Only T001 is bundled in this phase. Later task IDs are deliberately not guessed.
-The task column gives T001's evidence obligation and the later implementation
-work item by name. Later invocations must bind their actual task IDs and exact test
-names here or in `validation.md` before marking the corresponding work complete.
-Commands below are acceptance targets, **not executed evidence**. Fixture module
-names are planned until implemented. All Cargo work must be serialized through the
-repository's `scripts/dev_cargo.sh` when selfdev tooling would target root.
+Phase 6 reuses the frozen scope and the completed work from phases 1–5.
+Exact commands, counts, regression failures/repairs, binary identities and remaining
+gaps are retained in [validation.md](validation.md). The final full-feature CLI
+lane is `2658475t5f`, native routing lane `070919jnvx`, and complete broad gate
+lane `288530j1uy`. Broad gates completed with **six isolated baseline failures**,
+not a clean pass or timeout. Root-owned delivery has not occurred.
 
-| Requirement | Frozen rows | Task / later work item | Planned command or check | Current result |
-|---|---|---|---|---|
-| FR-001 native optional usage | AC-1 | T001 mapping; native usage parser fixtures | Focused jcode-base sidecar usage tests: streamed/nonstreamed OpenAI and Claude, split chunks, duplicate terminal, missing/malformed/partial/error/truncated usage, reported zero vs absent | Not run, implementation pending |
-| FR-002 authentic attribution | AC-2 | T001 inventory; explicit memory call context | Deterministic memory-agent/sidecar integration fixtures for every inventory row below, two concurrent sessions, spawned/cancelled work, explicit ownerless calls | Not run, implementation pending |
-| FR-003 actual attempts once | AC-3 | T001 mapping; request-boundary accounting | Exact send-ledger reconciliation across two votes, retries, resolved fallback, failures and cumulative events; preflight/skipped work has no send | Not run, implementation pending |
-| FR-004 subset normalization | AC-1, AC-3 | T001 mapping; usage normalization tests | Assert total = normalized input + output, reasoning <= output, no cache double charge, invalid subsets/overflow unknown | Not run, implementation pending |
-| FR-005 honest estimates | AC-4 | T001 mapping; offline pricing aggregation | Known/zero/missing rates, missing cache rates, unpriced actual Luna, partial usage, mixed models, integer arithmetic and OAuth labeling fixtures | Not run, implementation pending |
-| FR-006 discoverable summaries | AC-4 | T001 mapping; memory usage CLI and integration fixtures | Newly built `jcode memory usage --help`, `--session <fixture-id> --calls --json`, text, empty/invalid selectors, deterministic ordering and null unknowns | Not run, implementation pending |
-| FR-007 privacy and controls | AC-5 | T001 mapping; private bounded diagnostic adapter | All enabled/persist_session_events/emit_structured_logs combinations, sentinel absence, private permissions, bounded identifiers, malformed stored records, no uploads | Not run, implementation pending |
-| FR-008 behavior compatibility | AC-6 | T001 mapping; exact request/default regression fixtures | Exact native payload and fallback/default tests, omitted native OpenAI max_output_tokens, Luna xhigh/votes2/cadence3 preserved; explicit config/scope diff review | Not run, implementation pending |
-| FR-009 visible incompleteness | AC-5, AC-7 | T001 mapping; recorder pressure and failure fixtures | Queue saturation, worker death, unwritable storage, restart, retention/rotation and bounded flush tests preserve results and expose partial coverage | Not run, implementation pending |
-| FR-010 delivery evidence | AC-7, AC-8, AC-9 | T001 mapping; final validation and root handoff | Focused tests, TUI binary build, `rtk proxy bash scripts/check_guardrails.sh`, `rtk proxy bash scripts/check_swarm_routing_contract.sh` with nonzero tests, private deterministic new-binary workflow; AC-9 root only | Not run, implementation pending |
-| NFR-001 bounded overhead | AC-7 | T001 mapping; hot-path measurements | Before/after normal/saturated submission timings with numeric maintained-budget comparison, fixed queue/state/scan bounds, zero added inference | Not run, implementation pending |
-| NFR-002 local privacy | AC-5 | T001 mapping; negative privacy fixtures | No sensitive sentinel in stored/logged/rendered metrics, no network telemetry, private files and every effective control combination | Not run, implementation pending |
-| NFR-003 ownership and quality | AC-6, AC-8 | T001 mapping; dependency and compatibility gates | Dependency boundaries and guardrails, no duplicate pricing/telemetry framework, compatible text completion API and no unrelated cleanup | Not run, implementation pending |
+| Requirement | Frozen rows | Actual tasks / checks | Current result |
+|---|---|---|---|
+| FR-001 native optional usage | AC-1 | T004–T008, T023: 42 sidecar tests, split/error/partial/duplicate/native parser fixtures | PASS focused fixtures |
+| FR-002 authentic attribution | AC-2 | T009–T012, T023/T027: 12 memory-agent tests, 15 interleaved operation observations, production-default two-session/10-send mock workflow | PASS supported-operation fixtures; no complete interactive agent/TUI session replay |
+| FR-003 actual attempts once | AC-3 | T004–T012, T023/T027: native physical-send, cancellation, votes, exposed generic segments, duplicated snapshots and per-call/session reconciliation | PASS exposed attempts; hidden provider attempts explicitly unavailable |
+| FR-004 subset normalization | AC-1, AC-3 | T002/T003/T004/T017/T023: 9 type tests, parser/price regressions, checked arithmetic, input+output total without extra reasoning | PASS |
+| FR-005 honest estimates | AC-4 | T017/T018/T023: 7 price/summary tests, native parser → storage → report, known 355,000 nano-USD with raw creation null, unknown Luna and missing details/rates | PASS; static rates may be stale, not actual bills |
+| FR-006 discoverable summaries | AC-4 | T019–T021/T027: 9 default-feature CLI-target tests including child/probe helpers, 8-control production recorder matrix, captured help/text/JSON/filter/invalid selector | PASS Linux fixture workflow |
+| FR-007 privacy and controls | AC-5 | T013–T016/T023/T027: private files, schema/sentinel/retention/corruption/controls tests; child and CLI network syscall denial | PASS Linux x86_64; Windows ACL runtime unverified |
+| FR-008 behavior compatibility | AC-6 | T012/T023/T028: unchanged config/defaults/reasoning/rates/manifests/scripts, byte-identical native OpenAI request builder and 42 sidecar regressions | PASS scoped checks; no persistent config changes |
+| FR-009 visible incompleteness | AC-5, AC-7 | T013–T016/T022/T023: fixed queue/scan/record state, worker failure, saturation, shutdown, rotation/restart and safe warnings | PASS retained-only contract; historical losses remain unknown |
+| FR-010 delivery evidence | AC-7, AC-8, AC-9 | T022–T029: full TUI build, all-target/all-feature check, 19 native routing tests, offline fresh binary, complete broad gate | PARTIAL: six isolated baseline gates fail; T030/AC-9 root-only |
+| NFR-001 bounded overhead | AC-7 | T022/T026: before/after 20,000 samples, 5 cold starts, unoptimized dev and selfdev profiles, fixed 256 queue and existing pressure ceiling | PASS focused bounds; no optimized/full-daemon budget certification |
+| NFR-002 local privacy | AC-5 | T013–T016/T027: all 8 controls, private raw fixture, rendered sentinel absence, network guard positive control | PASS Linux x86_64 |
+| NFR-003 ownership and quality | AC-6, AC-8 | T025–T028: no new dependencies/cycles/config, preserved public APIs, changed-surface lint/static checks, full guardrail isolation | Changed surface passes; full broad suite FAILED on baseline findings |
 
 Global acceptance invariant: every summary covers **retained observed requests**,
 not complete lifetime usage. Unknown requests/fields/costs remain separate from
@@ -138,3 +138,45 @@ phase introduces none of those technologies, so no ignore files were changed.
 No project configuration values or credentials were read into output.
 
 See [validation.md](validation.md) for exact executed checks and outstanding gaps.
+
+
+## Phase-6 handoff and risk
+
+**Local execution complete through T029. Not MERGE-READY.** T030/AC-9 stays
+Pending and exclusively root-owned. Full guardrails ran to completion (765.91s,
+exit 1): existing Mermaid Clippy, provenance, code/test-size, panic and swallowed-
+error gates failed. Each was isolated from this task's changed surface, without
+rebaselining or source allowances. `cargo machete` is unavailable. Default-feature
+TUI build, full all-target/all-feature check, focused tests, 19 native routing tests,
+onboarding and final 9-test CLI suite passed. Diagnostic root-test lint excluded
+only the proven existing too_many_arguments category and is not a full-lint pass.
+
+Current direct capture manifest:
+`/home/ari/.jcode/scratch/jcode-cyko/phase6-cli/manifest.json`.
+It records the final executed `target/debug/jcode`, SHA-256
+`8a9987c0da0fadda7ba58ebf27d7012cf411068746f852c35154109c8554abcb`,
+305,242,880 bytes, commands/results and unchanged private fixture state. The
+kernel-denied default-feature integration suite independently exercises that
+built CLI plus the production-default recorder. No shared daemon was used.
+
+**Remaining boundaries:** complete interactive agent/TUI sessions and automatic
+credential-based fallback were not replayed end to end. Direct operation/native
+send/model-resolution fixtures and owning-crate checks provide narrower evidence.
+Windows ACL/runtime, optimized performance and a complete canonical daemon-budget
+report are unverified. Native Luna prices, hidden transport attempts, historical
+losses, static-rate freshness and tier/context premiums remain explicitly unknown,
+not invented zeros or invoices. The broad baseline failures require root disposition
+before claiming full AC-8 acceptance; they were not silently waived by task statuses.
+
+**Risk: Medium.** Blast radius is memory-operation attribution, asynchronous local
+accounting/storage and offline cost presentation. Mitigations are bounded validated
+metadata, independent controls, private retention, nonblocking fail-open submission,
+exact fixtures and known/unknown separation. No inference request/config/routing/cap
+changes or added paid calls. Rollback is ordinary reversion of this feature's owned
+commits, with retained diagnostics still subject to existing controls and retention.
+This worker performed inline scope/privacy review and no delegation. Root retains
+final review, fresh-base landing/push/install/reload/cleanup, private HTML report
+and closure. No root-owned delivery effect or human approval was claimed.
+
+**Next action:** root reviews the isolated AC-8 failures and remaining evidence
+boundaries, then decides readiness for its T030 delivery workflow.

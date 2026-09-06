@@ -819,3 +819,284 @@ ownership assertion and `git diff --check` pass. Only this task's paths are stag
 
 **Next action:** controller executes phase 6 in the preserved assigned worktree,
 finishing frozen acceptance evidence and handing AC-9 delivery back to root.
+
+## Root acceptance review: native OpenAI pricing gap (2026-09-06)
+
+**Acceptance-critical, must resolve in phase 6 before claiming completion.**
+Native `sidecar/usage.rs` intentionally preserves `cache_creation_tokens=None`
+because OpenAI Responses exposes no separately priced cache-write component.
+`memory_usage/pricing.rs` currently requires `Some(created)` to calculate uncached
+input and also adds a separately unknown creation-cost component. Consequently
+real OpenAI responses with fully reported input/cache/output cannot produce a full
+API-equivalent estimate even for a known-priced model. Fixtures inventing
+`cache_creation_tokens=Some(0)` can mask this integration bug.
+
+Implement the small backend-aware pricing correction: OpenAI ordinary input cost
+uses total input minus cached input, with no separate creation-cost requirement.
+Preserve the original raw usage field as None. Anthropic separately priced cache
+creation remains unknown without a canonical rate. Add a native-parser-to-summary
+regression using a known-priced OpenAI model and the actual Responses usage shape,
+plus unknown Luna and missing cached/input/output cases. Verify exact arithmetic
+without adding reasoning twice. This is an in-scope root acceptance correction,
+not a config, route or payload change. Phase 6 may fix/test/commit this bounded
+correction. Root still retains merge/push/install/cleanup/closure. Record the result
+below this finding rather than deleting it.
+
+
+## Phase 6, 2026-09-06 (in progress)
+
+Executing only T022–T029. T030/AC-9 remains Pending and root-only. Read the
+phase-6 context metadata first and used bundled governance and phase tasks.
+No skip-listed artifact or nonexistent checklist directory was separately read.
+Preserved root's dirty acceptance finding above and all prior phase commits.
+T001 ignore verification still applies, with no new technology or dependency.
+
+### Native OpenAI pricing correction
+
+Root's finding reproduced in `native_openai_usage_prices_without_inventing_cache_creation`:
+native Responses parser → private storage → session/call report. Before repair,
+job `669855sgq9` exited 101 with **0 passed / 1 failed**, expected unknown-cost
+count 0 but observed 1. This is a behavioral RED, not a compiler failure.
+The correction supplies backend-specific billable components only. OpenAI ordinary
+input is total minus cached input, without separately requiring/charging cache
+creation. The original `cache_creation_tokens=None` remains in stored/rendered
+usage. Anthropic separately priced cache creation still requires its own known
+rate and usage. No payload, provider-rate table, model alias or config changed.
+The regression includes known gpt-5.4, explicitly unknown Luna, absent input,
+absent cached details and absent output. Known arithmetic is **355,000 nano-USD**:
+80×2500 + 20×250 + 10×15000. Reasoning 8 is already within output 10, total 110.
+
+### T022 measurement evidence
+
+All commands use `rtk proxy bash scripts/dev_cargo.sh`, offline resolution, this
+worktree target, host-wide Cargo gate and serialized managed jobs. Stable-distribution
+Rust is 1.95.0 (59807616e, Arch Linux); upstream stable parity is not independently
+verified. No persistent routing, runtime or build configuration edits.
+
+- Before: `test -p jcode-base submission_reports_bounded_normal_and_saturated_overhead --lib --offline -- --nocapture`, job `592673p74j`, exit 0, **1 passed**.
+  20,000 iterations: clone-only **97 ns/op**, enqueue+drain **1,079 ns/op**,
+  saturated submission **1,047 ns/op**.
+- After: `test -p jcode-base memory_usage::tests:: --lib --offline -- --nocapture`,
+  job `741377z29u`, exit 0, **16 passed** (7 recorder, 9 matching storage tests).
+  Same 20,000 iterations: clone-only **79 ns/op**, enqueue+drain **1,161 ns/op**,
+  saturated **1,164 ns/op**. Changes are +82/+117 ns versus the phase-start samples.
+  Pricing is not on submission's path. These are unoptimized same-host diagnostics,
+  not an optimized full-daemon benchmark or zero-overhead claim.
+- Five explicit private-root cold recorder samples `(initialization ns, first submit ns)`:
+  `(69821,9999), (31810,11121), (19977,4157), (22262,3186), (17633,8666)`.
+  Each created a real worker, persisted exactly one record, flushed and shut down.
+- Preserved existing pressure ceiling: 1,000 full-queue submissions within 1 second.
+  The measurement test now also checks its equivalent catastrophic 1 ms/op ceiling
+  for warm/saturated averages. No tighter microsecond budget was invented or raised.
+- Fixed queue **256**, queued-record upper estimate **231,424 bytes**, excluding
+  allocator/channel overhead, worker stack reservation **2 MiB**, no per-session
+  collector map. One in-flight worker record, four 1 MiB files, 4 KiB record limit,
+  4 MiB report scan, 4,096 distinct retained records/session buckets at most,
+  closed finite warning enums, identifier fields at most 128 bytes, flush ≤250 ms.
+- `docs/RUNTIME_PERFORMANCE_BUDGET.md` contains daemon/client/frame/round-trip
+  budgets, not a dedicated sidecar-submit microsecond ratchet. Those metrics
+  cannot be certified from this microbenchmark. Full canonical runtime-budget
+  collection and optimized samples are not claimed by this focused evidence.
+
+T022 is complete as a bounded measurement task, not a claim of full feature
+acceptance. T023 focused type/parser/attempt/operation/storage/pricing suite,
+job `7726035ced`, exited 0. Exact count extraction and production-default
+recorder/new-binary integration evidence follow below. Broad gates remain pending.
+
+
+### T023 focused checks and fixture diagnosis
+
+Job `7726035ced` ran these serial commands, all exit 0:
+
+| Arguments following `rtk proxy bash scripts/dev_cargo.sh` | Selected tests | AC |
+| --- | --- | --- |
+| `test -p jcode-session-types memory_usage --lib --offline` | 9 passed | 1,3,4,5 |
+| `test -p jcode-base sidecar:: --lib --offline` | 42 passed, including native-parser pricing GREEN | 1,3,4,6 |
+| `test -p jcode-base memory_agent:: --lib --offline` | 12 passed | 2,3,6 |
+| `test -p jcode-base memory_usage:: --lib --offline -- --nocapture` | 23 passed | 3,4,5,7 |
+
+Added a production (non-cfg(test)) default-recorder integration in the existing
+CLI test target. It forks a child with an empty environment and private HOME/
+JCODE_HOME, installs only an in-process deterministic Provider, invokes real
+relevance/extraction/contradiction and two-vote rerank operations for two sessions,
+then reads that actual worker's storage with the newly built CLI. Neither recorder
+nor observation channel is injected. Both child and CLI have the existing per-child
+Linux x86_64 syscall network denial. All eight control combinations are exercised.
+
+Initial lane `8961414u90` selected 9 tests: **8 passed, 1 failed**, exit 101.
+The failure was the fixture expecting backend_name `fixture`, while the established
+public backend label is `provider`. Corrected only that assertion, not production
+behavior. The intended per-observation provider remains the resolved `fixture`.
+Minimal rerun is job `97729000mm`. This failed run is not acceptance evidence.
+
+
+The corrected production-default fixture `97729000mm` passed **1 selected test**,
+exit 0, covering all eight independent control combinations in isolated children.
+Each child observes exactly **10 actual mock-provider invocations**, no added
+inference, two interleaved sessions, duplicated usage snapshots counted once,
+and default-worker accepted=10/dropped=0. When enabled+persistent, the newly built
+CLI reports exactly two sessions × five calls, input 40/output 10 each. Otherwise
+it reports no persisted calls. All costs for the deliberately unknown mock model
+remain unknown. CLI directory/mtime/content snapshots are unchanged and rendered
+metrics contain no PRIVATE_ sentinels. Non-test default-recorder construction is
+exercised, not bypassed by cfg(test)'s disabled global recorder.
+
+Cold Sidecar::new constructor samples (ns), controls in false/true nested order:
+`20996867, 22765944, 21299117, 21890502, 23904412, 22659123, 20914752, 23525507`.
+These include existing auth/config/client initialization, not only new recorder
+startup. They are not presented as incremental accounting overhead or a daemon
+startup-budget pass. Pure recorder initialization is measured separately above.
+
+T024 operator docs now explain OpenAI-versus-Anthropic cache-creation semantics,
+unknown pricing, measured timings and explicit bounds. T025 updates the existing
+one-line docs index entry. Changed Markdown links resolve. Loaded /polish, honored
+repository release-JSON ownership, and did not invent CHANGELOG.yaml, bump a
+release or run root-owned install. No new standalone docs need an index entry.
+
+Static check manifest: `/home/ari/.jcode/scratch/jcode-cyko/phase6-static/manifest.json`.
+Code-size/test-size/panic/swallowed-error checks return nonzero for **43/16/4/20**
+paths, respectively. Every reported path is byte-identical to phase-base
+`55dcc5c06`. Zero changed paths are findings. Dependency boundaries and
+`git diff --check` pass. No baseline, allowance or provenance ledger was changed.
+
+
+### T026 final default build and full guardrails
+
+`rtk proxy bash scripts/dev_cargo.sh build -p jcode --bin jcode --offline`
+completed successfully, job `060973ov3y`, exit 0, **201.78 seconds**. This is the
+full default-feature, TUI-enabled debug binary, not the earlier optional-stack-off
+iteration. No installed binary or shared daemon was touched.
+
+Initial final-build manifest is retained at
+`/home/ari/.jcode/scratch/jcode-cyko/phase6-cli/build-manifest.json`.
+Resolved executable: this worktree's `target/debug/jcode`, **300,220,192 bytes**,
+SHA-256 `a2b21f3d7772a5b652d3a988b57e6c02907127c712b34e50f63fac63d3e47c09`.
+The final offline suite will recheck identity after any Cargo relink.
+
+Full `rtk proxy bash scripts/check_guardrails.sh` is running as job `288530j1uy`,
+with a **1,800-second** hard bound, not the previous 240-second cutoff. Its
+invocation-only shell Cargo function forwards every Cargo action to this
+worktree's `scripts/dev_cargo.sh`, bypassing recursion with `JCODE_IN_DEV_CARGO`.
+`CARGO_NET_OFFLINE=true`, `JCODE_REMOTE_CARGO=0`; host gate remains enabled.
+No script, config, ratchet or routing inventory is changed.
+
+Completed checkpoints: module declarations, formatting, **cargo check --all-targets
+--all-features**, lockfile, warning budget, dependency boundaries, wildcard exports
+and routing inventory pass. Full Clippy fails on the already-recorded unchanged
+`crates/jcode-tui-mermaid/src/lib.rs:441` type_complexity. Static ratchet failures
+are unchanged as isolated above. Provenance additionally fails with 43 diagnostics:
+its validator, ledger, three budget inputs and cited missing/reconciled scopes are
+unchanged from feature-base `4de91e285`. Full output is retained in
+`phase6-static/provenance.txt`. This is not a clean broad-gate pass. Routing and
+onboarding execution are still in the same serialized lane at this checkpoint.
+
+Byte-identity assertions against `4de91e285` also pass for config defaults,
+sidecar/reasoning.rs, provider-core pricing, Cargo.toml/Cargo.lock, swarm-routing
+and guardrail scripts. Luna xhigh/votes2/cadence3 and output-cap behavior remain
+unchanged; native payload regressions verify the omission of max_output_tokens.
+
+
+Full guardrail job `288530j1uy` **completed in 765.91 seconds**, exit **1**,
+not a timeout. Native routing and onboarding execution passed. Six gates failed:
+full Clippy, quality-ratchet provenance, code-size, test-size, panic and
+swallowed-error ratchets. Their pre-existing inputs/findings are isolated above.
+`cargo machete` was explicitly skipped because it is not installed. No package
+installation or new dependency was authorized/attempted. Cargo manifests/lockfile
+are unchanged and dependency-boundary checks pass, but this is not an unused-
+dependency-tool pass. Full all-target/all-feature checking completed successfully,
+closing the earlier 240-second incomplete-check gap without mislabeling lint.
+
+The canonical guardrail script captures successful test output internally. A
+standalone execution of the unchanged native routing script is now running to
+retain exact nonzero counts, followed serially by optimized selfdev recorder
+measurements, clean base Clippy and diagnostic root CLI-test Clippy. The latter
+uses only invocation-level `-A clippy::too_many_arguments` for the previously
+proven root baseline. It must not be substituted for the failed full Clippy gate.
+
+
+Standalone native routing job `070919jnvx` exited 0: **19 passed**, zero failed,
+including the nine required inventory names. This is nonzero execution through
+`scripts/check_swarm_routing_contract.sh`, not just its inventory self-test.
+The same serialized job also passed **16 selfdev-profile recorder/storage tests**,
+clean `clippy -p jcode-base --lib --offline --no-deps -- -D warnings`, and diagnostic
+`clippy -p jcode --test memory_usage_cli --offline --no-deps -- -D warnings
+-A clippy::too_many_arguments`. No source allowance or config was modified.
+
+**Profile clarification:** Cargo reports this repository/host's `selfdev` test
+profile as **unoptimized**, not optimized. The planned optimized wording above
+must not be mistaken for measured optimized evidence. Actual selfdev samples,
+20,000 iterations: clone **110 ns/op**, enqueue+drain **1,139 ns/op**, saturated
+**1,044 ns/op**. Five cold `(start ns, submit ns)` pairs:
+`(142979,21500), (27321,5420), (23434,4378), (21902,2715), (16741,2976)`.
+Existing catastrophic pressure and fixed-state bounds passed. No build/profile
+configuration was changed to manufacture a different performance result.
+
+T026 is complete as an execution/isolation task. Its full guardrail result is
+still **FAILED on six isolated baseline gates**, not waived. A clean repository-
+wide AC-8 pass and unused-dependency-tool evidence remain unavailable. The final
+T027 lane uses full default features and the actual native-shaped CLI fixture:
+OpenAI cache-creation fields are null, and the CLI must still retain the exact
+known 355,000 nano-USD price without rewriting that raw unknown field.
+
+
+### T027 final runtime evidence
+
+`rtk proxy bash scripts/dev_cargo.sh test -p jcode --test memory_usage_cli --offline
+-- --nocapture` passed **9 tests**, zero failures, with **full default features**.
+The following `fmt --all --check` also passed. Job `2658475t5f`, exit 0,
+230.09 seconds including the full-feature test build. Six scenario tests include
+five read-only CLI cases and the production-default recorder matrix. Two network
+probe/control tests and the child entrypoint account for the other three names.
+The parent invokes that child explicitly for all eight controls; an uninvoked child
+entrypoint is not presented as separate behavioral coverage.
+
+The eight full-feature cold Sidecar constructor samples (ns) were
+`50355218,44399398,32695988,30999227,28513102,35229834,28996571,26641742`.
+Each child's actual provider count was exactly 10. These include the full existing
+constructor and cannot be compared as incremental accounting overhead to the
+optional-feature-off constructor samples. The focused recorder samples above
+remain the comparable bounded hot-path evidence.
+
+Final executed binary was relinked by the default-feature integration-test build:
+`target/debug/jcode`, **305,242,880 bytes**, SHA-256
+`8a9987c0da0fadda7ba58ebf27d7012cf411068746f852c35154109c8554abcb`.
+This is not the earlier initial-build hash or any installed/shared-server binary.
+Direct help, per-session calls JSON, calls text and invalid selector captures are
+retained in `/home/ari/.jcode/scratch/jcode-cyko/phase6-cli/`, with commands and
+identity in `manifest.json`. Expected exits were **0/0/0/1**. The native known call
+retains raw creation null and full **355,000 nano-USD** estimate; session-a has
+three calls, **4,555,000 known nano-USD**, two unknown-cost calls. Source fixture
+paths/mtimes/content and binary digest were unchanged across captures. Captures
+are separate from the passing kernel-denied integration suite, not independently
+claimed to install a syscall guard. No private sentinels appeared in output.
+
+### T028 acceptance and scope audit
+
+`evidence.md` now maps all ten FRs and three NFRs to current tasks, actual tests and
+explicit gaps. **All nine frozen acceptance rows are byte-identical** to the
+preserved phase-base evidence. Changed-document relative links resolve.
+The native OpenAI request-builder body is byte-identical to feature-base
+`4de91e285`, protected config/manifest/script paths have no diff, and no dependency
+or new pricing table was introduced. The phase-six production change is solely
+backend-aware cost components. All other phase-six Rust changes are tests.
+
+No clean global acceptance is claimed: full broad guardrails fail on the six
+isolated existing gates, cargo-machete is unavailable, Windows runtime/ACL and
+complete interactive agent/TUI/automatic credential fallback remain unverified.
+Supported-operation helpers, mock production-recorder workflow, native send and
+model-resolution fixtures supply the narrower direct evidence. Selfdev/dev samples
+are unoptimized, not a full optimized/canonical daemon performance report. Native
+Luna price and provider-hidden attempts remain explicitly unknown, as required.
+No private data, prompts or errors were added to metric fields. No config/routing/
+model/effort/vote/cadence/cap changes, live inference, delegation, Bead mutation,
+merge/push/install/reload or task-worktree cleanup occurred.
+
+**Risk: Medium**, with attribution/privacy/async storage/cost-presentation blast
+radius. Mitigations are schema validation, private bounded state, independent
+controls, fail-open queue behavior, exact native pricing and no-network fixtures.
+Rollback is ordinary reversion of the task-owned commits. Worker review was inline
+and scope-bound, not an invented independent review or human approval. Root owns
+final acceptance/disposition and AC-9 delivery, HTML risk report and closure.
+
+**Not MERGE-READY.** Local task execution is not a waiver of the full AC-8 failures.
+Root must review those isolated baseline exceptions and remaining evidence boundaries.

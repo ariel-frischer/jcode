@@ -309,9 +309,13 @@ Generic providers without supported static rates remain unknown, and
 Input includes cached reads and cache creations. Output includes reasoning, which
 is never charged a second time. Uncached input is priced only when its cache split
 is known. Zero tokens need no component rate, but absent tokens are unknown.
-The canonical pricing contract has no cache-creation rate/TTL, so nonzero or absent
-creation usage prevents a full estimate. A missing cache-read rate matters only
-for a nonzero/unknown cached component. Known components still contribute a subtotal.
+OpenAI ordinary input is total input minus cached input. It has no separately
+charged cache-write component, so native `cache_creation_tokens: null` stays
+unchanged and does not prevent a full estimate. Anthropic does have a separate
+creation component. The canonical pricing contract has no creation rate/TTL, so
+nonzero or absent Anthropic creation usage prevents a full estimate. A missing
+cache-read rate matters only for a nonzero/unknown cached component. Known
+components still contribute a subtotal.
 
 Rates are integer micro-USD per million tokens. Checked `u128` numerators are
 summed and rounded half up **once per call** to nano-USD (10^-9 USD), then checked
@@ -319,3 +323,29 @@ into `u64`. Overflow leaves the excluded contribution unknown with an explicit
 `arithmetic_overflow` warning, never a wrapped or silently saturated exact total.
 Per-call estimates are recalculated from observed usage when reporting rather than
 trusting persisted cost values. These are retained-window comparisons, not invoices.
+
+### Measured accounting limits
+
+Linux x86_64, Rust 1.95.0, unoptimized test profile, 2026-09-06: 20,000 submissions
+measured clone-only baseline **97 ns/op**, enqueue+drain **1,079 ns/op**, and full
+queue submission **1,047 ns/op**. After the final pricing/test changes, the same
+probe measured **79 / 1,161 / 1,164 ns/op**, respectively. Pricing runs only on
+explicit reports, never during submission. Five cold private-worker starts took
+**17,633–69,821 ns**, first submissions **3,186–11,121 ns**. These are diagnostic
+samples, not optimized daemon latency measurements or an invented microsecond SLA.
+The existing catastrophic pressure check remains 1,000 saturated submissions in
+under one second. The focused probe also checks the equivalent 1 ms/op ceiling.
+
+The 256 queued records have a conservative payload estimate of **231,424 bytes**,
+excluding channel/allocator bookkeeping, plus at most one worker-owned record.
+The worker reserves a **2 MiB** stack. There is no collector per-session map.
+Read/report state is capped at **4,096 records**, hence at most that many session
+buckets, with **seven storage** and **two report** warning categories. Identifier
+fields are capped at 128 bytes. File, scan, record and flush limits are documented
+above and exercised by saturation, corruption, retention and failed-worker tests.
+
+See [the acceptance record](../specs/026-sidecar-usage-accounting/validation.md)
+for exact commands, raw samples, production-default recorder/private CLI fixtures,
+and remaining validation gaps. The separate
+[runtime performance contract](RUNTIME_PERFORMANCE_BUDGET.md) is not certified by
+these submission measurements.

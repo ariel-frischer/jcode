@@ -168,6 +168,9 @@ fn submission_reports_bounded_normal_and_saturated_overhead() {
         assert_eq!(recorder.submit(sample.clone()), SubmitOutcome::Dropped);
     }
     let saturated = start.elapsed().as_nanos() / iterations;
+    // Reuse the existing pressure test's catastrophic ceiling (1000 submits
+    // within one second), not a newly invented microsecond acceptance budget.
+    assert!(normal < 1_000_000 && saturated < 1_000_000);
     assert_eq!(recorder.snapshot().dropped, iterations as u64);
     let queue_record_bound =
         QUEUE_CAPACITY * (std::mem::size_of::<MemoryRequestObservation>() + 5 * 128);
@@ -175,4 +178,23 @@ fn submission_reports_bounded_normal_and_saturated_overhead() {
     eprintln!(
         "accounting submission ns/op: clone baseline={baseline}, enqueue+drain={normal}, saturated={saturated}; queue={QUEUE_CAPACITY}, record memory upper estimate={queue_record_bound} bytes"
     );
+}
+
+#[test]
+fn cold_recorder_start_and_first_submission_are_measured_separately() {
+    let mut samples = Vec::new();
+    for _ in 0..5 {
+        let dir = tempfile::tempdir().unwrap();
+        let start = Instant::now();
+        let recorder = Recorder::new(dir.path().to_owned(), controls(true, true, false));
+        let cold_ns = start.elapsed().as_nanos();
+        let start = Instant::now();
+        assert_eq!(recorder.submit(record("cold")), SubmitOutcome::Enqueued);
+        let submit_ns = start.elapsed().as_nanos();
+        assert!(recorder.flush(MAX_FLUSH_WAIT));
+        assert_eq!(read_in_dir(dir.path(), None).unwrap().calls.len(), 1);
+        assert!(recorder.shutdown(MAX_FLUSH_WAIT));
+        samples.push((cold_ns, submit_ns));
+    }
+    eprintln!("cold recorder (initialization ns, first submission ns), 5 samples: {samples:?}");
 }

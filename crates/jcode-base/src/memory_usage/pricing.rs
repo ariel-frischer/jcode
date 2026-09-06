@@ -21,22 +21,26 @@ pub(super) fn estimate(call: &MemoryRequestObservation) -> Result<CostEstimate, 
         "claude" | "anthropic" => pricing::anthropic_api_pricing(&call.model),
         _ => None,
     };
-    estimate_with_rates(&call.usage, rates.as_ref())
+    estimate_with_rates(&call.usage, rates.as_ref(), call.provider != "openai")
 }
 
 pub(super) fn estimate_with_rates(
     usage: &TokenUsage,
     rates: Option<&RouteCheapnessEstimate>,
+    separate_creation: bool,
 ) -> Result<CostEstimate, ValidationError> {
     usage.validate()?;
     let Some(rates) = rates else {
         return Ok(unknown());
     };
-    let uncached = match (
-        usage.input_tokens,
-        usage.cached_input_tokens,
-        usage.cache_creation_tokens,
-    ) {
+    // OpenAI has no separately charged cache-write component. Do not mutate
+    // the raw absent field or require a fictitious reported zero to price it.
+    let creation = if separate_creation {
+        usage.cache_creation_tokens
+    } else {
+        Some(0)
+    };
+    let uncached = match (usage.input_tokens, usage.cached_input_tokens, creation) {
         (Some(input), Some(read), Some(created)) => {
             input.checked_sub(read).and_then(|n| n.checked_sub(created))
         }
@@ -50,7 +54,7 @@ pub(super) fn estimate_with_rates(
         ),
         // The canonical contract exposes no creation rate or cache TTL. Do not
         // invent an Anthropic multiplier or charge creations as ordinary input.
-        (usage.cache_creation_tokens, None),
+        (creation, None),
         (usage.output_tokens, rates.output_price_per_mtok_micros),
     ];
     let mut known = 0_u128;
