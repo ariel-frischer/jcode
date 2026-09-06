@@ -1,5 +1,7 @@
 use super::openai_stream_runtime::{
-    stream_response, stream_response_websocket_persistent, try_persistent_ws_continuation,
+    ContinuationDisposition, finish_failed_recovery, handle_persistent_ws_result,
+    saved_tool_result_ids, stream_response, stream_response_websocket_persistent,
+    try_persistent_ws_continuation,
 };
 use super::*;
 
@@ -39,6 +41,7 @@ impl Provider for OpenAIProvider {
         }
 
         let input = build_responses_input(messages);
+        let saved_result_ids = saved_tool_result_ids(messages);
         let input_item_count = input.len();
         let api_tools = build_tools(tools);
         let model_id = self.model_id().await;
@@ -221,6 +224,7 @@ impl Provider for OpenAIProvider {
 
         tokio::spawn(async move {
             let stream_task = async move {
+                let mut recovering_missing_tool_output = false;
                 // Attempt persistent WebSocket continuation first
                 if use_websocket_transport {
                     // Track output: a continuation that streams partial output
@@ -239,73 +243,26 @@ impl Provider for OpenAIProvider {
                     drop(attempt_tx);
                     let saw_output = attempt_guard.finish().await;
 
-                    match continuation_result {
-                        PersistentWsResult::Success => {
-                            log_openai_stream_lifecycle(
-                                jcode_base::logging::LogLevel::Info,
-                                "persistent_reuse_success",
-                                vec![
-                                    ("model", model_for_transport.clone()),
-                                    ("transport", "websocket".to_string()),
-                                ],
-                            );
-                            record_websocket_success(
-                                &websocket_cooldowns,
-                                &websocket_failure_streaks,
-                                &model_for_transport,
-                            )
-                            .await;
-                            return;
-                        }
-                        PersistentWsResult::NotAvailable => {
-                            log_openai_stream_lifecycle(
-                                jcode_base::logging::LogLevel::Info,
-                                "persistent_reuse_unavailable",
-                                vec![
-                                    ("model", model_for_transport.clone()),
-                                    ("transport", "websocket".to_string()),
-                                ],
-                            );
-                            jcode_base::logging::info(
-                                "No persistent WS connection available; using fresh connection",
-                            );
-                        }
-                        PersistentWsResult::Failed(err) => {
-                            log_openai_stream_lifecycle(
-                                jcode_base::logging::LogLevel::Warn,
-                                "persistent_reuse_failed",
-                                vec![
-                                    ("model", model_for_transport.clone()),
-                                    ("transport", "websocket".to_string()),
-                                    ("error", err.clone()),
-                                ],
-                            );
-                            jcode_base::logging::warn(&format!(
-                                "Persistent WS continuation failed: {}; using fresh connection",
-                                err
-                            ));
-                            if saw_output {
-                                // The failed continuation already streamed
-                                // partial output; the fresh connection below
-                                // replays the response from the top, so roll
-                                // the partial output back on the consumer.
-                                let _ = tx
-                                    .send(Ok(StreamEvent::RetryRollback {
-                                        attempt: 1,
-                                        max: MAX_RETRIES,
-                                    }))
-                                    .await;
-                            }
-                            let mut guard = persistent_ws.lock().await;
-                            *guard = None;
-                            log_openai_stream_lifecycle(
-                                jcode_base::logging::LogLevel::Warn,
-                                "persistent_state_reset",
-                                vec![
-                                    ("model", model_for_transport.clone()),
-                                    ("reason", "persistent_reuse_failed".to_string()),
-                                ],
-                            );
+                    if tx.is_closed() {
+                        return;
+                    }
+
+                    match handle_persistent_ws_result(
+                        continuation_result,
+                        saw_output,
+                        &saved_result_ids,
+                        &input,
+                        &persistent_ws,
+                        &tx,
+                        &model_for_transport,
+                        &websocket_cooldowns,
+                        &websocket_failure_streaks,
+                    )
+                    .await
+                    {
+                        ContinuationDisposition::Finished => return,
+                        ContinuationDisposition::Fresh { recovering } => {
+                            recovering_missing_tool_output = recovering;
                         }
                     }
                 }
@@ -460,6 +417,16 @@ impl Provider for OpenAIProvider {
                     let saw_output = attempt_guard.finish().await;
 
                     match result {
+                        Err(failure) if recovering_missing_tool_output => {
+                            *persistent_ws.lock().await = None;
+                            finish_failed_recovery(failure, &tx).await;
+                            return;
+                        }
+                        Err(OpenAIStreamFailure::Terminal(event)) => {
+                            *persistent_ws.lock().await = None;
+                            let _ = tx.send(Ok(event)).await;
+                            return;
+                        }
                         Ok(()) => {
                             log_openai_stream_lifecycle(
                                 jcode_base::logging::LogLevel::Info,
