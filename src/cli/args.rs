@@ -1160,59 +1160,7 @@ pub(crate) enum AmbientCommand {
     RunVisible,
 }
 
-#[derive(Subcommand, Debug)]
-pub(crate) enum MemoryCommand {
-    /// List all stored memories
-    List {
-        /// Filter by scope (project, global, all)
-        #[arg(short, long, default_value = "all")]
-        scope: String,
-
-        /// Filter by tag
-        #[arg(short, long)]
-        tag: Option<String>,
-    },
-
-    /// Search memories by query
-    Search {
-        /// Search query
-        query: String,
-
-        /// Use semantic search (embedding-based) instead of keyword
-        #[arg(short, long)]
-        semantic: bool,
-    },
-
-    /// Export memories to a JSON file
-    Export {
-        /// Output file path
-        output: String,
-
-        /// Export scope (project, global, all)
-        #[arg(short, long, default_value = "all")]
-        scope: String,
-    },
-
-    /// Import memories from a JSON file
-    Import {
-        /// Input file path
-        input: String,
-
-        /// Import scope (project, global)
-        #[arg(short, long, default_value = "project")]
-        scope: String,
-
-        /// Overwrite existing memories with same ID
-        #[arg(long)]
-        overwrite: bool,
-    },
-
-    /// Show memory statistics
-    Stats,
-
-    /// Clear test memory storage (used by debug sessions)
-    ClearTest,
-}
+pub(crate) use super::memory_usage::MemoryCommand;
 
 #[cfg(test)]
 mod tests;

@@ -8,6 +8,7 @@ pub mod dispatch;
 pub mod hot_exec;
 pub mod login;
 pub mod macos_notification_broker;
+pub(crate) mod memory_usage;
 pub mod output;
 pub mod proctitle;
 pub(crate) mod profile;

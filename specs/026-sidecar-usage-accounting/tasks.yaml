@@ -222,7 +222,7 @@ phases:
       tasks:
         - id: T017
           title: Test offline pricing and retained aggregation in crates/jcode-base/src/memory_usage_tests.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: US-002
@@ -234,7 +234,7 @@ phases:
             - Full estimate stays null with missing required usage/rates; known component subtotal and per-field unknown counts remain separate; OAuth basis says API-equivalent, not billed.
         - id: T018
           title: Implement honest offline summaries in crates/jcode-base/src/memory_usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-002
@@ -246,7 +246,7 @@ phases:
             - Sort sessions by identifier and calls by timestamp/request ID, expose retained window, control status, partial coverage and bounded warnings; make T017 tests pass.
         - id: T019
           title: Add private CLI fixture tests in tests/memory_usage_cli.rs
-          status: Pending
+          status: Completed
           type: test
           parallel: false
           story_id: US-002
@@ -258,7 +258,7 @@ phases:
             - Tests use isolated private data root, no credential lookup or network and newly built executable, never the shared daemon.
         - id: T020
           title: Wire additive memory usage command in src/cli/args.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-002
@@ -269,7 +269,7 @@ phases:
             - Keep presentation in a separate handler, not additional large command-function logic; command parsing tests cover valid/invalid combinations.
         - id: T021
           title: Render read-only usage reports in src/cli/memory_usage.rs
-          status: Pending
+          status: Completed
           type: implementation
           parallel: false
           story_id: US-002

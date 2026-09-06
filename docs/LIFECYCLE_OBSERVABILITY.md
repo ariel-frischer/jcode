@@ -267,8 +267,55 @@ Every retained history includes `retained_window_only` and
 process counter must never be presented as zero lifetime consumption. Ownerless
 calls remain explicitly unattributed. Provider-hidden retry coverage remains
 `provider_call_only`. Native Luna pricing is unknown, not another model's rate.
-Pricing calculation and the operator per-call/session CLI are subsequent delivery
-steps, not capabilities claimed by this adapter checkpoint. The accounting ring is
-separate from lifecycle session deletion and expires independently under this
-bounded retention contract. It contains no prompts, memories, credentials or raw
-provider errors.
+The accounting ring is separate from lifecycle session deletion and expires
+independently under this bounded retention contract. It contains no prompts,
+memories, credentials or raw provider errors.
+
+### Offline per-call and session summaries
+
+```bash
+jcode memory usage
+jcode memory usage --session <session-id> --calls
+jcode memory usage --session <session-id> --calls --json
+jcode memory usage --help
+```
+
+The command reads only retained local accounting metadata. It does not contact a
+provider, consult credentials, refresh pricing, start/connect a daemon, initialize
+memory graphs, migrate configuration, clean files, or emit telemetry. Its early
+read-only startup path still uses the canonical configuration loader and effective
+lifecycle controls. Invalid config yields a safe nonzero error without quoting its
+contents. Controls shown are **current effective controls**, not a reconstruction
+of past enabled/disabled intervals. Disabling recording now does not erase history.
+
+JSON schema version 1 includes `controls`, `coverage`, `pricing_policy`, bounded
+`storage_warnings`/`warnings`, and `sessions`. `--calls` adds request observations
+with authentic session/operation/request IDs, resolved provider/model/effort/auth,
+outcome, optional normalized usage, attempt coverage and recalculated pricing.
+Sessions sort by ID (the null/unattributed bucket first), calls by timestamp then
+request ID. Unknown values are JSON `null`, not fabricated zeroes. Per-field
+`known_subtotal`/`unknown_calls` and `known_cost_subtotal_nano_usd`/
+`unknown_cost_calls` stay separate. No retained observations means `unavailable`,
+not zero lifetime use. Session IDs are bounded opaque identifiers, never paths.
+
+Costs are **API-equivalent estimates, not actual billed charges**, including
+native OAuth. The existing provider-core static standard-tier public API table
+owns supported model rates. No alias substitution, subscription allocation or
+routing reference-request cost is used. Static rates may be stale, and actual
+service-tier/long-context premiums are unavailable. Native Luna stays unpriced.
+Generic providers without supported static rates remain unknown, and
+`provider_call_only` explicitly warns that hidden transport attempts are unavailable.
+
+Input includes cached reads and cache creations. Output includes reasoning, which
+is never charged a second time. Uncached input is priced only when its cache split
+is known. Zero tokens need no component rate, but absent tokens are unknown.
+The canonical pricing contract has no cache-creation rate/TTL, so nonzero or absent
+creation usage prevents a full estimate. A missing cache-read rate matters only
+for a nonzero/unknown cached component. Known components still contribute a subtotal.
+
+Rates are integer micro-USD per million tokens. Checked `u128` numerators are
+summed and rounded half up **once per call** to nano-USD (10^-9 USD), then checked
+into `u64`. Overflow leaves the excluded contribution unknown with an explicit
+`arithmetic_overflow` warning, never a wrapped or silently saturated exact total.
+Per-call estimates are recalculated from observed usage when reporting rather than
+trusting persisted cost values. These are retained-window comparisons, not invoices.

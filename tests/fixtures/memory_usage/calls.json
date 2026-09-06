@@ -1,0 +1,198 @@
+[
+  {
+    "schema_version": 1,
+    "request_id": "r-zero",
+    "context": {
+      "session_id": "session-b",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": 0,
+      "cached_input_tokens": 0,
+      "cache_creation_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-pro",
+    "context": {
+      "session_id": "session-a",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.4-pro",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": 100,
+      "cached_input_tokens": 20,
+      "cache_creation_tokens": 0,
+      "output_tokens": 10,
+      "reasoning_tokens": 8
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-partial",
+    "context": {
+      "session_id": "session-b",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "error",
+    "usage": {
+      "input_tokens": 40,
+      "cached_input_tokens": null,
+      "cache_creation_tokens": 0,
+      "output_tokens": null,
+      "reasoning_tokens": null
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-ownerless",
+    "context": {
+      "session_id": null,
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openrouter",
+    "model": "gpt-5.4",
+    "effort": "xhigh",
+    "auth_class": "unknown",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": null,
+      "cached_input_tokens": null,
+      "cache_creation_tokens": null,
+      "output_tokens": null,
+      "reasoning_tokens": null
+    },
+    "attempt_coverage": "provider_call_only",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-luna",
+    "context": {
+      "session_id": "session-a",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": 100,
+      "cached_input_tokens": 20,
+      "cache_creation_tokens": 0,
+      "output_tokens": 10,
+      "reasoning_tokens": 8
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-known",
+    "context": {
+      "session_id": "session-a",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": 100,
+      "cached_input_tokens": 20,
+      "cache_creation_tokens": 0,
+      "output_tokens": 10,
+      "reasoning_tokens": 8
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  },
+  {
+    "schema_version": 1,
+    "request_id": "r-known",
+    "context": {
+      "session_id": "session-a",
+      "operation_id": "operation-fixture",
+      "operation_kind": "rerank"
+    },
+    "recorded_at": "2026-09-05T00:00:00Z",
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "effort": "xhigh",
+    "auth_class": "oauth",
+    "outcome": "success",
+    "usage": {
+      "input_tokens": 100,
+      "cached_input_tokens": 20,
+      "cache_creation_tokens": 0,
+      "output_tokens": 10,
+      "reasoning_tokens": 8
+    },
+    "attempt_coverage": "physical_attempt",
+    "pricing": {
+      "basis": "unknown",
+      "estimate_nano_usd": null,
+      "known_subtotal_nano_usd": 0
+    }
+  }
+]

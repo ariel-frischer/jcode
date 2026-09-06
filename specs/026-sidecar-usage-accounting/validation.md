@@ -598,3 +598,224 @@ root-owned. This is a phase checkpoint, not a feature-delivery or closure report
 **Next action:** controller executes phase 5 in this preserved assigned worktree,
 using the private recorder/storage API for offline honest pricing and usable
 per-call/session text/JSON reporting, while retaining all recorded final-group gaps.
+
+
+## Phase 5, 2026-09-05 (in progress)
+
+Only T017–T021 (US-002) execute in this invocation. Bundled phase-5 metadata
+was read first, with no separate skip-list/checklist reads. Prior phase 4 is
+committed (`895b7691e`) and clean. Its final tests, ignore/setup verification and
+known remaining gaps were reused, not redone as implementation tasks. Root retains
+Beads, worktrees, all AC-9 effects and the final HTML report.
+
+T017 behavioral RED: `rtk proxy bash scripts/dev_cargo.sh test -p jcode-base
+memory_usage::summary::tests --lib --offline`, lane `278492226t`, **0 passed / 7
+failed** against compilable no-op report/pricing shapes, 30.61 seconds. Failures
+were missing costs/rounding/sessions/uncertainty, not compilation errors.
+T018 GREEN: same command, lane `4381221fj9`, **7 passed**, 21.09 seconds.
+
+The reporter reuses provider-core static standard-tier API rate functions for
+actual supported provider/model names, never subscription cheapness or a network
+refresh. Unknown Luna, missing cache rates/details and creation rates remain
+unknown. Known component numerators use checked u128, are summed before half-up
+rounding once per call to nano-USD, then checked into u64. Token and aggregate-cost
+overflow preserves representable contributions and explicitly flags an excluded
+unknown contribution, never wraps or calls a saturated number an exact subtotal.
+Pricing is recomputed at read time, not trusted from stored estimates.
+
+The canonical static table may lag current rates and has no per-call service-tier
+or long-context premiums. The output discloses this limitation rather than
+claiming a bill. No rates or persistent configuration were changed. Zero-rate
+arithmetic is tested through the same calculator with synthetic canonical rate
+objects; no production free-model alias or CLI-only rate injection is added.
+
+T019 adds private mixed-session/corrupt fixtures and new-binary CLI tests. Source
+inspection found normal startup can migrate/harden config, clean files, and emit
+first-run telemetry before dispatch. The usage command therefore requires a
+narrow early read-only path before startup effects, verified with byte-for-byte
+private data-root snapshots. This is necessary AC-4/5 behavior, not an adjacent
+startup redesign. TUI remains compiled even with optional default features off.
+The focused root binary test uses `--no-default-features --offline`; final full
+feature guardrails remain group 6 work.
+
+T019 behavioral RED: `rtk proxy bash scripts/dev_cargo.sh test -p jcode --test
+memory_usage_cli --no-default-features --offline -- --test-threads=1`, lane
+`681023i4rt`, **0 passed / 5 failed**, 170.73 seconds including first root/TUI
+binary compilation. Expected missing `usage` command/help, no compiler failure.
+All invocations used cleared environment, private HOME/JCODE_HOME/XDG roots,
+telemetry opt-out and `--no-update`, not real credentials or the shared daemon.
+
+T020 parser checkpoint: `rtk proxy bash scripts/dev_cargo.sh test -p jcode --lib
+cli::memory_usage::tests --no-default-features --offline`, lane `996886qfx3`,
+**1 passed**, 19.58 seconds. Valid default and explicit options parse; missing
+values, spurious positionals and unknown options fail.
+
+Necessary narrow extraction: moved only the touched MemoryCommand enum and
+map_memory_subcommand function to the new CLI handler, preserving the original
+argument reexport and mapping alias. This avoids growing already oversized
+args.rs/dispatch.rs. Moved MemorySubcommand metadata with a compatibility reexport
+from commands.rs. MemoryManager is lazy at the existing match boundary, so usage
+does not create sidecars or load graphs. Other memory operations keep their
+existing methods and behavior. No budget, dependency or payload changes.
+
+T021 first CLI GREEN: lane `224184zb5h`, same five private-fixture tests,
+**5 passed**, 6.04 seconds. Deterministic complete JSON, unknown costs/usage,
+zero usage, mixed sessions and per-call identities, text labels, invalid selectors,
+all eight controls, corrupt stored rows and malformed config pass.
+
+The remaining touched commands.rs ratchets predated this phase (its LOC actually
+decreased), but rather than deliver a touched oversized dispatcher, the existing
+run_memory_command/for_dir functions now move together to the new memory CLI
+module with original public/test reexports. Only the lazy manager and usage match
+are new behavior. The moved optional-current-directory `.ok()` becomes an explicit
+safe warning plus the same None fallback. Original import tests will be rerun.
+This is a bounded extraction of the exact function being changed, not graph logic
+cleanup or a budget increase.
+
+Lane `54238598gf` stopped at an introduced test-helper compile error before
+executing the guarded tests. Two overlapping edits to the same test file lost
+the snapshot signature while retaining its tuple-valued insertion. Restored the
+consistent directory/mtime/content snapshot signature, with subsequent edits
+serialized per file. Extraction also exposed now-unused imports in commands.rs.
+This failed lane is not a validation pass; remaining chained checks did not run.
+
+After full touched-dispatch extraction, static scripts report **43 code-size,
+16 test-size, 4 panic and 20 swallowed-error paths**, all byte-identical to
+phase-base HEAD. No changed path is a finding. Dependency boundaries pass. Raw
+static outputs are in `/home/ari/.jcode/scratch/phase5-static/`. No rebaseline.
+
+Corrected lane `668137i321` passed **7 integration tests** (five CLI scenarios
+plus the kernel guard probe/check), **2 parser/routing tests**, and **2 existing
+project-import tests**, then failed only at root Clippy. CLI subprocesses now
+run under a Linux x86_64 per-child seccomp filter killing socket/connect/send
+syscalls before effects. The positive control independently observes SIGSYS on
+socket creation. No persistent sandbox or daemon settings change. Successful
+CLI tests prove this workflow performs zero guarded network calls, not merely
+that opt-out/proxy flags were supplied. Non-Linux-x86_64 runs do not get this
+syscall evidence and must not claim it. File/directory/mtime/content snapshots
+verify no new state directories or same-content rewrites as well as no changed
+record/config bytes.
+
+Root lint command: `rtk proxy bash scripts/dev_cargo.sh clippy -p jcode-base
+-p jcode --lib --no-default-features --offline --no-deps -- -D warnings`.
+It fails on exactly one existing root error, `src/cli/tui_launch.rs:84`,
+`clippy::too_many_arguments` (8/7). That file was compared byte-for-byte to
+phase HEAD and is unchanged. No unrelated fix, blanket lint allowance or
+relabeling of this command as passing. Full AC-8 lint remains outstanding.
+
+### Final focused accounting and executable evidence
+
+Lane `825194xzhc` passed `test -p jcode-base memory_usage:: --lib --offline
+-- --nocapture`: **22 passed** (7 summary/pricing, 9 storage, 6 recorder), 0 failed.
+`clippy -p jcode-base --lib --offline --no-deps -- -D warnings` passed. All Cargo
+commands used `rtk proxy bash scripts/dev_cargo.sh` and the host-wide gate.
+The following root `--test memory_usage_cli` Clippy attempt hit the same unchanged
+tui_launch baseline before test-target lint and did not reach its chained fmt.
+A separate fmt and diagnostic lint run excludes only that proven baseline category
+via invocation-only `-A clippy::too_many_arguments`; it is not a clean full-lint
+claim and does not change any source attribute, config or ratchet allowance.
+
+Current unoptimized microbenchmark: clone-only **195 ns/op**, enqueue+drain
+**1,643 ns/op**, saturated submission **1,345 ns/op**, 20,000 iterations. Fixed
+queue **256**, conservative queued-record upper estimate **231,424 bytes**,
+excluding channel/allocator bookkeeping. The reporter adds no work to the
+submission path: pricing/aggregation runs only on explicit CLI reads. These
+measurements preserve preliminary evidence, not maintained-budget or final
+optimized-runtime AC-7 acceptance. Final group still owns that comparison.
+
+Direct captured CLI evidence is retained outside this worktree under
+`/home/ari/.jcode/scratch/jcode-cyko/phase5-cli-20260906/`: `manifest.json`,
+`help.txt`, `session-json.txt`, `text.txt` and the private synthetic source root.
+The manifest records resolved executable identity, byte size, SHA-256 and commands.
+Each captured command exited 0 with empty stderr and zero PRIVATE_ sentinels.
+The session-a JSON reconciles **3 calls**, **4,555,000 known nano-USD**, and
+**2 unknown-cost calls** (unpriced native Luna and missing pro cache rate).
+The underlying fixture root is unchanged in paths, mtimes and contents.
+These captures are separate from the passing kernel-guarded integration tests.
+
+Resolved binary: `/home/ari/repos/jcode/.worktrees/agent/jcode-cyko/target/debug/jcode`
+
+SHA-256: `77207c0e4a4bdfb58f2d9cbf2ba5ffb050cea80a141f0d2fda2a5b66634edb93`
+
+Size: **232,983,472 bytes**. This is the worktree TUI-enabled debug
+binary, not PATH's launcher or the shared-server symlink. Optional PDF/embeddings/
+Bedrock default stacks were off for focused CLI iteration; the full-feature build/
+guardrail contract remains final-group work. No install or activation occurred.
+
+### Final phase-5 checkpoint and requirement mapping
+
+Lane `956924zqlp` exited 0. `fmt --all --check` passes on final source.
+Diagnostic root integration-test Clippy with only the already-proven
+`too_many_arguments` baseline category excluded also passes. The original root
+Clippy command remains failed, not converted into a clean gate. No new warning
+suppression, config or budget was committed. Existing Cargo profile-package
+selection warnings remain unchanged.
+
+| Phase-5 task | Acceptance evidence | Result |
+| --- | --- | --- |
+| T017 / T018, FR-005, AC-3/4 | 7 direct price/aggregation tests: real zeros versus absence, cache split, reasoning subset, unknown Luna/models/rates, mixed sessions/ownerless, duplicates, rounding, invalid/overflow and fixed read bounds | PASS |
+| T019, FR-006/007, AC-4/5 | Five new-binary fixture scenarios, eight control combinations, malformed records/config, invalid/missing sessions, help, deterministic JSON/text and content/mtime/directory snapshots | PASS |
+| T020, FR-006, AC-4/6 | Two parser/routing tests plus two existing project-import regressions after surgical extraction | PASS |
+| T021, FR-006/009, AC-4/5 | Actual captured CLI help, per-session JSON and calls text with resolved binary hash; unknown costs, retained/loss/hidden-attempt warnings and current controls | PASS |
+| AC-5 offline enforcement | All CLI fixtures under Linux x86_64 syscall denial; guard positive control SIGSYS; zero provider calls/network sends | PASS on this host |
+| AC-7 bounded submission | 22 accounting tests include existing queue/pressure fixtures and preliminary numeric timings above | Direct evidence, final maintained-budget check outstanding |
+| AC-8 phase-local quality | Format, base Clippy, unchanged-baseline static ratchets, root TUI-enabled debug CLI build/tests, diagnostic test lint | Focused checks pass; full root/broad gates outstanding |
+| AC-9 | Root-only delivery effects | Not attempted, not worker-completed |
+
+Scope-bound polish followed repository Cargo commands, not generic Make/install
+steps. Updated the existing operator documentation and its index entry. The
+repository changelog is per-release JSON written by the release workflow, not
+CHANGELOG.yaml; no release entry/version or new changelog system was fabricated
+for this phase. No AGENTS/skill/model/profile/routing/cap change.
+
+#### Remaining gaps, not waived or marked passed
+
+- Final group must exercise the production-default recorder and remaining full
+  operation/agent/TUI/fallback integration boundaries identified in groups 3–4.
+  Injected/helper tests and stored CLI fixtures do not prove every application
+  invocation or live provider. No paid/live inference is authorized.
+- Native Luna API pricing is explicitly **unknown**. Hidden provider retries stay
+  **provider_call_only**. Historical drops/disabled intervals remain unknowable
+  without a durable lifetime ledger, so reports always disclose retained-only
+  and loss-history-unavailable coverage. None of these are fictitious zeroes.
+- Static provider-core pricing may lag public changes. Its existing Sonnet-5 row
+  still describes introductory pricing through 2026-08-31. This phase does not
+  update rates or claim current invoices. Output explicitly discloses static
+  standard-tier provenance, possible staleness and missing tier/context premiums.
+- AC-7 still needs final-build/cold-recorder and maintained-budget comparison,
+  not just the preliminary submission microbenchmarks reproduced here.
+- AC-8 still needs the final required build and full broad guardrails with an
+  appropriate time bound, plus nonzero native swarm-routing contract execution.
+  The earlier 240-second broad exit 124 was not a pass. Previously isolated
+  app/TUI/Mermaid and static baseline findings remain recorded, with the unchanged
+  root tui_launch lint added above. No ratchet was raised to hide them.
+- Windows/runtime ACL and other unsupported-platform evidence remains unverified.
+  The no-network syscall filter evidence applies only to Linux x86_64.
+- AC-9, Medium-risk final review, fresh-base merge/push, install_release --fast,
+  graceful shared-server reload, cleanup, private HTML report and Bead closure
+  are exclusively root-owned and remain unexecuted.
+
+**T017–T021: 5/5 phase tasks complete, 21/30 feature tasks complete.** Execution
+groups: 1 **1/1**, 2 **2/2**, 3 **9/9**, 4 **4/4**, 5 **5/5**, 6 **0/9**.
+Completed story tasks: US-001 **9**, US-002 **5**, US-003 **4**, plus **3**
+setup/foundation tasks. No phase-5 task is blocked, failed or skipped after the
+recorded repairs. The nine phase-6 tasks were not executed by this invocation.
+Bead **jcode-cyko: sidecar usage accounting** remains open/root-owned.
+
+**Risk: Medium.** Blast radius is offline memory CLI dispatch, read-only local
+metadata rendering and cost comparisons. No inference payload, configured Luna
+xhigh/votes2/cadence3, routing, caps or persistent config is changed. Mitigations
+are canonical type/pricing/control reuse, bounded private reads, safe error labels,
+kernel-enforced offline fixtures, compatibility regressions and explicit unknown
+coverage. Rollback is a normal revert of the phase commit. Required review action
+is root's final inline accounting/privacy review with the remaining AC matrix,
+not a new worker approval gate or a feature-completion claim.
+
+Final lane `228282sacf` exited 0: seven guarded CLI tests pass after setting a
+per-child zero core limit for the intentional SIGSYS probe, final formatting
+passes, and Autospec validates **21 completed / 9 pending / 0 blocked**. The
+captured executable SHA-256 still matches the final binary. An explicit 18-path
+ownership assertion and `git diff --check` pass. Only this task's paths are staged.
+
+**Next action:** controller executes phase 6 in the preserved assigned worktree,
+finishing frozen acceptance evidence and handing AC-9 delivery back to root.
