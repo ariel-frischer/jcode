@@ -167,18 +167,6 @@ impl OpenAITransportMode {
     }
 }
 
-#[derive(Debug)]
-enum OpenAIStreamFailure {
-    FallbackToHttps(anyhow::Error),
-    Other(anyhow::Error),
-}
-
-impl From<anyhow::Error> for OpenAIStreamFailure {
-    fn from(err: anyhow::Error) -> Self {
-        Self::Other(err)
-    }
-}
-
 #[expect(
     clippy::upper_case_acronyms,
     reason = "transport names mirror user-facing configuration values like https and websocket"
@@ -1347,9 +1335,9 @@ impl OpenAIProvider {
 #[path = "openai/stream.rs"]
 mod stream;
 
+use self::openai_stream_runtime::{OpenAIStreamFailure, is_retryable_error, openai_access_token};
 #[cfg(test)]
-use self::openai_stream_runtime::try_persistent_ws_continuation;
-use self::openai_stream_runtime::{PersistentWsResult, is_retryable_error, openai_access_token};
+use self::openai_stream_runtime::{PersistentWsResult, try_persistent_ws_continuation};
 
 use self::stream::{OpenAIResponsesStream, parse_openai_response_event};
 #[cfg(test)]
