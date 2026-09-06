@@ -59,6 +59,7 @@ include!("tests/file_mention_picker.rs");
 include!("tests/skill_invocation_multi_word.rs");
 include!("tests/session_feedback_skill.rs");
 include!("tests/prompt_history_cross_session.rs");
+include!("tests/ssh_remote.rs");
 #[test]
 fn ctrl_p_opens_categorized_command_palette_and_filters_entries() {
     let mut app = create_test_app();

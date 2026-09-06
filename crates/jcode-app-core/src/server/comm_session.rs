@@ -429,6 +429,7 @@ fn resolve_swarm_spawn_selection(
     // Only concrete operator pins override coordinator inheritance. Empty and
     // inherit/coordinator config values preserve the existing default behavior.
     let configured_swarm_model = configured_swarm_model
+        .map(|model| model.trim().to_string())
         .filter(|model| !model.trim().is_empty() && !is_inherit_sentinel(model));
 
     match configured_swarm_model {
@@ -657,7 +658,7 @@ pub(super) async fn spawn_swarm_agent(
     let configured_swarm_model = agents_config.swarm_model.clone();
     let resolved_spawn_mode = spawn_mode.unwrap_or(agents_config.swarm_spawn_mode);
     let selection = resolve_swarm_spawn_selection(
-        requested_model,
+        requested_model.clone(),
         configured_swarm_model.clone(),
         &coordinator,
     );
@@ -674,7 +675,8 @@ pub(super) async fn spawn_swarm_agent(
         spawn_effort.as_deref(),
     );
     crate::logging::info(&format!(
-        "Swarm spawn model resolution: requested_effort={:?} configured_swarm_effort={:?} configured_swarm_model={:?} coordinator_model={:?} coordinator_provider_key={:?} coordinator_route={:?} -> spawn_model={:?} spawn_provider_key={:?} spawn_route={:?}",
+        "Swarm spawn model resolution: requested_model={:?} requested_effort={:?} configured_swarm_effort={:?} configured_swarm_model={:?} coordinator_model={:?} coordinator_provider_key={:?} coordinator_route={:?} -> spawn_model={:?} spawn_provider_key={:?} spawn_route={:?}",
+        requested_model,
         requested_effort,
         agents_config.swarm_effort,
         configured_swarm_model,

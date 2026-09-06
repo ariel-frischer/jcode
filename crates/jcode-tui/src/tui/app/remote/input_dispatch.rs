@@ -1,5 +1,6 @@
 use super::super::{PendingRemoteMessage, PendingSplitPrompt};
 use super::*;
+use crate::tui::app as app_mod;
 
 #[expect(
     clippy::too_many_arguments,
@@ -194,6 +195,21 @@ pub(in crate::tui::app) async fn submit_remote_slash_input(
 ) -> Result<()> {
     let raw_input = prepared.raw_input.clone();
 
+    if crate::tui::is_ssh_remote() {
+        let trimmed = prepared.expanded.trim();
+        if app_mod::commands_dispatch::handle_ssh_unsupported_command(app, trimmed) {
+            return Ok(());
+        }
+        if matches!(
+            trimmed.split_whitespace().next(),
+            Some("/cancel" | "/stop" | "/help" | "/?" | "/commands" | "/diff")
+        ) {
+            app_mod::commands_dispatch::dispatch_local_command(app, trimmed);
+            return Ok(());
+        }
+        // Only the server knows remote skills and their multi-word names.
+        return submit_prepared_remote_input(app, remote, prepared).await;
+    }
     // Profile controls are client-owned state transitions. Handle them before
     // the skill/remote-turn routing so a remote client never sends `/profile`
     // to the provider as ordinary user text.

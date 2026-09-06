@@ -1368,6 +1368,7 @@ fn subscribe_request(working_dir: Option<&str>) -> Request {
         client_has_local_history: false,
         allow_session_takeover: false,
         crash_on_disconnect: false,
+        continue_on_disconnect: false,
         terminal_env: Vec::new(),
         profile: None,
     }
@@ -1403,6 +1404,39 @@ fn interactive_profile_startup_rejects_empty_names_before_provider_setup() {
         .expect_err("whitespace-only profile names must fail at the lifecycle boundary");
     assert!(error.contains("cannot be empty"));
     assert!(validate_initial_profile(None).is_ok());
+}
+
+#[test]
+fn remote_subscribe_requires_an_existing_server_directory() -> anyhow::Result<()> {
+    let directory = tempfile::tempdir()?;
+    let file = directory.path().join("not-a-directory");
+    std::fs::write(&file, "file")?;
+    let missing = directory.path().join("missing");
+    for path in [&file, &missing] {
+        let mut request = subscribe_request(path.to_str());
+        assert!(
+            initial_subscribe_working_dir(&request).is_ok(),
+            "local subscription behavior remains unchanged"
+        );
+        if let Request::Subscribe {
+            continue_on_disconnect,
+            ..
+        } = &mut request
+        {
+            *continue_on_disconnect = true;
+        }
+        assert!(
+            initial_subscribe_working_dir(&request)
+                .unwrap_err()
+                .contains("must exist and be a directory on the server")
+        );
+    }
+    assert_eq!(
+        validated_subscribe_working_dir(directory.path().to_str(), true)
+            .expect("existing directory"),
+        directory.path().to_str().unwrap()
+    );
+    Ok(())
 }
 
 #[tokio::test]
@@ -1977,6 +2011,14 @@ async fn lightweight_comm_request_skips_full_session_initialization() {
         other => panic!("expected error response, got {other:?}"),
     }
 
+    line.clear();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), client_reader.read_line(&mut line))
+            .await
+            .expect("non-Ping lightweight command must close its one-shot connection")
+            .expect("read EOF"),
+        0,
+    );
     drop(client_writer);
     server_task
         .await
@@ -2022,4 +2064,12 @@ async fn interactive_session_fixture_isolates_metadata_and_counts_provider_reque
         .expect("fixture provider should accept a request");
     assert_eq!(first.provider_request_count(), 1);
     assert_eq!(second.provider_request_count(), 0);
+}
+
+#[test]
+fn soft_interrupt_dispatch_starts_idle_session_and_queues_busy_session() {
+    assert!(should_start_idle_soft_interrupt(false, false, false));
+    assert!(!should_start_idle_soft_interrupt(true, false, false));
+    assert!(!should_start_idle_soft_interrupt(false, true, false));
+    assert!(!should_start_idle_soft_interrupt(false, false, true));
 }

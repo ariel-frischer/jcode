@@ -25,8 +25,8 @@ pub(super) fn format_swarm_model_list(
         field(current_model.unwrap_or("unknown"))
     );
     match configured_swarm_model.filter(|pin| !pin.trim().is_empty()) {
-        Some(pin) => out.push_str(&format!("Configured agents.swarm_model pin: {}\n", field(pin))),
-        None => out.push_str("No agents.swarm_model pin configured (workers inherit the coordinator unless model is supplied).\n"),
+        Some(pin) => out.push_str(&format!("Configured agents.swarm_model default: {}\n", field(pin))),
+        None => out.push_str("No agents.swarm_model default configured (workers inherit the coordinator unless model is passed).\n"),
     }
     if model_routes.is_empty() {
         out.push_str("\nNo model routes reported. Pass model explicitly or omit it to inherit.");

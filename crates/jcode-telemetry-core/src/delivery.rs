@@ -230,7 +230,8 @@ fn record_test_payload(_payload: &Value) -> bool {
     false
 }
 
-pub(super) fn send_payload(payload: Value, mode: DeliveryMode) -> bool {
+pub(super) fn send_payload(mut payload: Value, mode: DeliveryMode) -> bool {
+    super::concurrency::mark_legacy_concurrency_unavailable(&mut payload);
     if record_test_payload(&payload) {
         return true;
     }

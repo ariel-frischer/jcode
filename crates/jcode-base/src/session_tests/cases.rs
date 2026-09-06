@@ -1364,6 +1364,30 @@ fn crash_recovery_ignores_lifecycle_sidecars_and_rotations() -> Result<()> {
 }
 
 include!("cases/untouched_sessions.rs");
+#[test]
+fn empty_fork_is_persisted_before_first_visible_message() -> Result<()> {
+    let _env_lock = lock_env();
+    let temp_home = tempfile::tempdir()?;
+    let _home = EnvVarGuard::set("JCODE_HOME", temp_home.path().as_os_str());
+    let mut child = Session::create(Some("session_empty_parent".into()), None);
+    child.append_fork_notice("session_empty_parent", "empty parent");
+    assert_eq!(child.visible_conversation_message_count(), 0);
+    child.save()?;
+
+    let restored = Session::load(&child.id)?;
+    assert_eq!(restored.parent_id.as_deref(), Some("session_empty_parent"));
+    assert_eq!(restored.visible_conversation_message_count(), 0);
+    assert!(
+        restored
+            .messages
+            .last()
+            .unwrap()
+            .content_preview()
+            .contains("forked")
+    );
+    assert!(!session_path("session_empty_parent")?.exists());
+    Ok(())
+}
 
 include!("cases/titled_sessions.rs");
 

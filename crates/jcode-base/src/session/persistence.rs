@@ -386,6 +386,9 @@ impl Session {
         // before the first visible message (#1144). Otherwise later lookups by
         // id find no file and silently treat the session as missing. Explicit
         // metadata-only saves and named profiles also need a restorable snapshot.
+        // id find no file and silently treat the session as missing.
+        // Parent linkage is also explicit state: an empty fork carries only a
+        // hidden fork notice but must be loadable when its new client attaches.
         if !self.persist_state.snapshot_exists
             && !self.messages.is_empty()
             && !self
@@ -398,6 +401,7 @@ impl Session {
             && self.profile_name.is_none()
             && self.profile_snapshot.is_none()
             && self.profile_restore_status.is_none()
+            && self.parent_id.is_none()
         {
             return Ok(());
         }

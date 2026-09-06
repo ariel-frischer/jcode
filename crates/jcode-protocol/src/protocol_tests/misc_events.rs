@@ -283,6 +283,7 @@ fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result
         client_has_local_history: true,
         allow_session_takeover: true,
         crash_on_disconnect: true,
+        continue_on_disconnect: true,
         terminal_env: vec![("ZELLIJ_SESSION_NAME".to_string(), "sessionB".to_string())],
         profile: None,
     };
@@ -298,6 +299,7 @@ fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result
         client_has_local_history,
         allow_session_takeover,
         crash_on_disconnect,
+        continue_on_disconnect,
         terminal_env,
         ..
     } = decoded
@@ -312,6 +314,7 @@ fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result
     assert!(client_has_local_history);
     assert!(allow_session_takeover);
     assert!(crash_on_disconnect);
+    assert!(continue_on_disconnect);
     assert_eq!(
         terminal_env,
         vec![("ZELLIJ_SESSION_NAME".to_string(), "sessionB".to_string())]
@@ -332,6 +335,7 @@ fn test_subscribe_request_defaults_optional_flags() -> Result<()> {
         client_has_local_history,
         allow_session_takeover,
         crash_on_disconnect,
+        continue_on_disconnect,
         terminal_env,
         ..
     } = decoded
@@ -346,6 +350,7 @@ fn test_subscribe_request_defaults_optional_flags() -> Result<()> {
     assert!(!client_has_local_history);
     assert!(!allow_session_takeover);
     assert!(!crash_on_disconnect);
+    assert!(!continue_on_disconnect);
     assert!(terminal_env.is_empty());
     Ok(())
 }
@@ -576,4 +581,36 @@ fn workflow_status_event_roundtrips_owned_bounded_evidence() {
     assert_eq!(value["type"], "workflow_status");
     let decoded: ServerEvent = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), value);
+}
+
+
+#[test]
+fn test_native_ssh_pong_capability_is_backward_compatible() -> Result<()> {
+    let legacy: ServerEvent = serde_json::from_str(r#"{"type":"pong","id":7}"#)?;
+    assert!(matches!(
+        legacy,
+        ServerEvent::Pong {
+            id: 7,
+            native_ssh_protocol: None
+        }
+    ));
+    let modern = ServerEvent::Pong {
+        id: 7,
+        native_ssh_protocol: Some(1),
+    };
+    let json = serde_json::to_value(&modern)?;
+    assert_eq!(json["native_ssh_protocol"], 1);
+    assert!(matches!(
+        serde_json::from_value::<ServerEvent>(json)?,
+        ServerEvent::Pong {
+            id: 7,
+            native_ssh_protocol: Some(1)
+        }
+    ));
+    assert!(
+        serde_json::to_value(&legacy)?
+            .get("native_ssh_protocol")
+            .is_none()
+    );
+    Ok(())
 }

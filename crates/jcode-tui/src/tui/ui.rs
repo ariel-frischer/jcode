@@ -77,6 +77,8 @@ mod onboarding;
 mod output_style;
 #[path = "ui_overlays.rs"]
 mod overlays;
+#[path = "ui_panel_image_preview.rs"]
+pub(crate) mod panel_image_preview;
 #[path = "ui_pinned.rs"]
 mod pinned_ui;
 #[path = "ui_prepare.rs"]
@@ -2828,6 +2830,7 @@ fn split_top_bar_surface(area: Rect, requested_rows: u16) -> (Option<Rect>, Rect
 }
 
 fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
+    panel_image_preview::clear_regions();
     let area = frame.area().intersection(*frame.buffer_mut().area());
     if area.width == 0 || area.height == 0 {
         return;
@@ -2847,6 +2850,18 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     // Uses Color::Reset (terminal default bg) so text selection highlighting works
     // natively in all terminal emulators.
     clear_area(frame, area);
+
+    if let Some(hash) = app.panel_image_preview() {
+        panel_image_preview::draw_preview(frame, area, hash);
+        finalize_frame_metrics(
+            app,
+            total_start,
+            Duration::ZERO,
+            total_start.elapsed(),
+            None,
+        );
+        return;
+    }
 
     if let Some(scroll) = app.changelog_scroll() {
         overlays::draw_changelog_overlay(frame, area, scroll, app);

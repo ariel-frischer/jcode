@@ -77,7 +77,23 @@ pub(crate) use session_search::spawn_recent_index_warmup;
 
 mod session_tool_policy;
 use session_tool_policy::session_tool_policy;
+pub(crate) use session_tool_policy::{SessionToolPolicyRegistration, register_session_tool_policy};
+#[cfg(test)]
 pub(crate) use session_tool_policy::{clear_session_tool_policy, set_session_tool_policy};
+
+#[cfg(test)]
+pub(crate) fn session_tool_policy_allows_tool_for_test(
+    session_id: &str,
+    tool_name: &str,
+) -> Option<bool> {
+    session_tool_policy(session_id).map(|policy| {
+        policy
+            .allowed_tools
+            .as_ref()
+            .is_none_or(|allowed| tool_name_is_allowed(allowed, tool_name))
+            && !tool_name_is_disabled(&policy.disabled_tools, tool_name)
+    })
+}
 
 /// Apply the current session policy to an MCP server tool invoked through a
 /// fixed deferred surface. Explicitly enabling the fixed surface authorizes its
@@ -132,6 +148,26 @@ pub struct Registry {
     compaction: Arc<RwLock<CompactionManager>>,
 }
 
+/// Non-owning handle used by tools stored inside a registry.
+///
+/// A tool cannot strongly own the registry containing it without creating an
+/// Arc cycle. Upgrade this handle only for the duration of a tool call.
+pub(super) struct WeakRegistry {
+    tools: std::sync::Weak<RwLock<HashMap<String, Arc<dyn Tool>>>>,
+    skills: Arc<RwLock<SkillRegistry>>,
+    compaction: Arc<RwLock<CompactionManager>>,
+}
+
+impl WeakRegistry {
+    pub(super) fn upgrade(&self) -> Option<Registry> {
+        Some(Registry {
+            tools: self.tools.upgrade()?,
+            skills: Arc::clone(&self.skills),
+            compaction: Arc::clone(&self.compaction),
+        })
+    }
+}
+
 impl Clone for Registry {
     fn clone(&self) -> Self {
         Self {
@@ -145,6 +181,14 @@ impl Clone for Registry {
 }
 
 impl Registry {
+    fn downgrade(&self) -> WeakRegistry {
+        WeakRegistry {
+            tools: Arc::downgrade(&self.tools),
+            skills: Arc::clone(&self.skills),
+            compaction: Arc::clone(&self.compaction),
+        }
+    }
+
     fn shared_skills_registry() -> Arc<RwLock<SkillRegistry>> {
         SkillRegistry::shared_registry()
     }
@@ -342,7 +386,7 @@ impl Registry {
         Self::insert_tool(
             &mut tools_map,
             "batch",
-            batch::BatchTool::new(registry.clone()),
+            batch::BatchTool::new(registry.downgrade()),
         );
         Self::insert_tool(
             &mut tools_map,

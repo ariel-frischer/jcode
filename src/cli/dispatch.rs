@@ -20,6 +20,7 @@ use super::{
 };
 use provider_init::ProviderChoice;
 
+#[cfg(any(target_os = "linux", test))]
 fn is_file_controlled_debug_client() -> bool {
     std::env::var_os("JCODE_DEBUG_CMD_PATH").is_some()
 }
@@ -71,6 +72,16 @@ fn arm_debug_client_parent_death_signal() {}
 
 pub(crate) async fn run_main(mut args: Args) -> Result<()> {
     arm_debug_client_parent_death_signal();
+    if args.ssh.is_some() {
+        // A remote session ID and working directory belong to the remote host.
+        // Do not run local resume lookup, provider bootstrap, or self-dev setup.
+        return super::ssh::run(args).await;
+    }
+    // Import is a narrow stdin-only credential operation. Do not trigger config
+    // migrations, provider discovery, or unrelated credential imports first.
+    if let Some(Command::Auth(AuthCommand::Import { json, .. })) = &args.command {
+        return super::auth_import::run(&args.provider, *json);
+    }
     resolve_resume_arg(&mut args)?;
 
     // Migrate legacy config defaults before the config cache is populated.
@@ -159,7 +170,27 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             tui_launch::run_client().await?;
         }
         #[cfg(unix)]
-        Some(Command::ApiBridge { api_socket }) => {
+        Some(Command::ApiBridge { api_socket, stdio }) => {
+            if stdio {
+                crate::env::set_var("JCODE_NON_INTERACTIVE", "1");
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(30),
+                    spawn_server(
+                        &args.provider,
+                        args.model.as_deref(),
+                        args.provider_profile.as_deref(),
+                    ),
+                )
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("api --stdio: timed out starting the jcode server")
+                })??;
+                jcode_harness_api_server::run_bridge_stdio(
+                    jcode_harness_api_server::legacy_socket_path(),
+                )
+                .await?;
+                return Ok(());
+            }
             // The daemon must be up for the bridge to translate onto, and a
             // user running this to try the SDK has usually never started one.
             // Starting it here turns "connection refused, good luck" into a
@@ -190,6 +221,24 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             jcode_harness_api_server::run_bridge(api_socket, legacy_socket).await?;
         }
         Some(Command::Server { action }) => match action {
+            #[cfg(unix)]
+            ServerCommand::Stdio => {
+                crate::env::set_var("JCODE_NON_INTERACTIVE", "1");
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(30),
+                    spawn_server_with_executable(
+                        &args.provider,
+                        args.model.as_deref(),
+                        args.provider_profile.as_deref(),
+                        Some(std::env::current_exe()?),
+                    ),
+                )
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("server stdio: timed out starting the remote daemon")
+                })??;
+                super::ssh_transport::run_stdio(server::socket_path()).await?;
+            }
             ServerCommand::Start { json } => {
                 spawn_server(
                     &args.provider,
@@ -262,6 +311,8 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             auth_code,
             json,
             complete,
+            flow_id,
+            cancel,
             no_validate,
             google_access_tier,
             api_base,
@@ -278,6 +329,8 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
                     auth_code,
                     json,
                     complete,
+                    flow_id,
+                    cancel,
                     no_validate,
                     google_access_tier: google_access_tier.map(|tier| match tier {
                         super::args::GoogleAccessTierArg::Full => {
@@ -333,6 +386,7 @@ pub(crate) async fn run_main(mut args: Args) -> Result<()> {
             debug::run_debug_command(&command, &arg, session, socket, wait).await?;
         }
         Some(Command::Auth(subcmd)) => match subcmd {
+            AuthCommand::Import { .. } => unreachable!("auth import handled before bootstrap"),
             AuthCommand::Status { json } => commands::run_auth_status_command(json)?,
             AuthCommand::Doctor {
                 provider,
@@ -1282,7 +1336,7 @@ pub(crate) async fn spawn_server(
     model: Option<&str>,
     provider_profile: Option<&str>,
 ) -> Result<()> {
-    spawn_server_inner(provider_choice, model, provider_profile, None).await
+    spawn_server_inner(provider_choice, model, provider_profile, None, None).await
 }
 
 /// Start a server for a structured run that owns a session-profile overlay.
@@ -1297,7 +1351,14 @@ pub(crate) async fn spawn_profile_server(
     provider_profile: Option<&str>,
     profile_name: &str,
 ) -> Result<()> {
-    spawn_server_inner(provider_choice, model, provider_profile, Some(profile_name)).await
+    spawn_server_inner(
+        provider_choice,
+        model,
+        provider_profile,
+        Some(profile_name),
+        None,
+    )
+    .await
 }
 
 fn profile_shared_daemon_error(profile_name: &str, socket_path: &std::path::Path) -> anyhow::Error {
@@ -1319,11 +1380,21 @@ fn ensure_profile_server_bootstrap(
     Ok(())
 }
 
+async fn spawn_server_with_executable(
+    provider_choice: &ProviderChoice,
+    model: Option<&str>,
+    provider_profile: Option<&str>,
+    executable: Option<std::path::PathBuf>,
+) -> Result<()> {
+    spawn_server_inner(provider_choice, model, provider_profile, None, executable).await
+}
+
 async fn spawn_server_inner(
     provider_choice: &ProviderChoice,
     model: Option<&str>,
     provider_profile: Option<&str>,
     profile_name: Option<&str>,
+    executable: Option<std::path::PathBuf>,
 ) -> Result<()> {
     let socket_path = server::socket_path();
     let server_running = server_is_running_at(&socket_path).await;
@@ -1360,8 +1431,10 @@ async fn spawn_server_inner(
     startup_profile::mark("server_spawn_start");
     output::stderr_info("Starting server...");
     let client_requested_selfdev = selfdev::client_selfdev_requested();
-    let exe = build::shared_server_update_candidate(client_requested_selfdev)
-        .map(|(path, _)| path)
+    let exe = executable
+        .or_else(|| {
+            build::shared_server_update_candidate(client_requested_selfdev).map(|(path, _)| path)
+        })
         .or_else(|| std::env::current_exe().ok())
         .ok_or_else(|| anyhow::anyhow!("Could not determine executable path for server spawn"))?;
     let mut cmd = ProcessCommand::new(&exe);

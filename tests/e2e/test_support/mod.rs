@@ -363,6 +363,7 @@ impl WsTestClient {
         self.send_request(Request::Subscribe {
             workflow_progress: false,
             crash_on_disconnect: false,
+            continue_on_disconnect: false,
             id,
             working_dir: Some(working_dir),
             selfdev: None,

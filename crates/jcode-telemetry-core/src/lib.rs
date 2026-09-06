@@ -1,7 +1,9 @@
 use jcode_logging as logging;
 use jcode_storage as storage;
+mod concurrency;
 mod delivery;
 mod lifecycle;
+pub use concurrency::{ConcurrencySession, begin_concurrency_session};
 pub mod onboarding_trace;
 mod state_support;
 use chrono::{DateTime, NaiveDate, Utc};
@@ -993,10 +995,6 @@ fn increment_turn_tool_category(state: &mut TurnTelemetry, category: ToolCategor
     }
 }
 
-fn observe_session_concurrency(state: &mut SessionTelemetry) {
-    state.max_concurrent_sessions = state.max_concurrent_sessions.max(observe_active_sessions());
-}
-
 fn update_turn_activity_timestamp(turn: &mut TurnTelemetry, now: Instant) {
     if now >= turn.last_activity_at {
         turn.last_activity_at = now;
@@ -1273,7 +1271,6 @@ pub fn record_command_family(command: &str) {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         mark_command_family_usage(state, command);
         if let Some(turn) = state.current_turn.as_mut() {
             update_turn_activity_timestamp(turn, Instant::now());
@@ -1495,7 +1492,6 @@ fn maybe_emit_session_start() {
         if state.start_event_sent {
             return;
         }
-        observe_session_concurrency(state);
         let (schema_version, build_channel, git_checkout, ci, from_cargo) = telemetry_envelope();
         SessionStartEvent {
             event_id: new_event_id(),
@@ -1781,8 +1777,9 @@ fn begin_session_with_mode(
     let (previous_session_gap_secs, sessions_started_24h, sessions_started_7d) = get_or_create_id()
         .map(|id| update_session_start_history(&id, started_at_utc))
         .unwrap_or((None, 0, 0));
-    let (active_sessions_at_start, other_active_sessions_at_start) =
-        register_active_session(&session_id);
+    // The process-global accumulator cannot attribute logical Agent concurrency.
+    // These legacy struct fields are stripped from all emitted payloads.
+    let (active_sessions_at_start, other_active_sessions_at_start) = (0, 0);
     let state = SessionTelemetry {
         session_id,
         correlation_id,
@@ -1936,7 +1933,6 @@ pub fn record_turn() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let now = Instant::now();
         let previous_last_activity = state
             .current_turn
@@ -1998,7 +1994,6 @@ pub fn record_assistant_response() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let now = Instant::now();
         if state.first_assistant_response_ms.is_none() {
             state.first_assistant_response_ms = Some(now_ms_since(state.started_at));
@@ -2021,7 +2016,6 @@ pub fn record_memory_injected(_count: usize, _age_ms: u64) {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         state.feature_memory_used = true;
         if let Some(turn) = state.current_turn.as_mut() {
             turn.feature_memory_used = true;
@@ -2035,7 +2029,6 @@ pub fn record_tool_call() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let now = Instant::now();
         state.tool_calls += 1;
         if state.first_tool_call_ms.is_none() {
@@ -2056,7 +2049,6 @@ pub fn record_tool_failure() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         state.tool_failures += 1;
         if let Some(turn) = state.current_turn.as_mut() {
             turn.tool_failures += 1;
@@ -2070,7 +2062,6 @@ pub fn record_connection_type(connection: &str) {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let normalized = sanitize_telemetry_label(connection).to_ascii_lowercase();
         if normalized.contains("websocket/persistent-reuse") {
             state.transport_persistent_ws_reuse += 1;
@@ -2103,7 +2094,6 @@ pub fn record_token_usage(
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let cache_read = cache_read_input_tokens.unwrap_or(0);
         let cache_creation = cache_creation_input_tokens.unwrap_or(0);
         let total = input_tokens
@@ -2147,7 +2137,6 @@ pub fn record_error(category: ErrorCategory) {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         if let Some(turn) = state.current_turn.as_mut() {
             update_turn_activity_timestamp(turn, Instant::now());
         }
@@ -2176,7 +2165,6 @@ pub fn record_provider_switch() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         if let Some(turn) = state.current_turn.as_mut() {
             update_turn_activity_timestamp(turn, Instant::now());
         }
@@ -2189,7 +2177,6 @@ pub fn record_model_switch() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         if let Some(turn) = state.current_turn.as_mut() {
             update_turn_activity_timestamp(turn, Instant::now());
         }
@@ -2202,7 +2189,6 @@ pub fn record_user_cancelled() {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         state.user_cancelled_count = state.user_cancelled_count.saturating_add(1);
         if let Some(turn) = state.current_turn.as_mut() {
             update_turn_activity_timestamp(turn, Instant::now());
@@ -2239,7 +2225,6 @@ pub fn record_todo_gate(kind: TodoGateKind) {
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let counter = match kind {
             TodoGateKind::Ownership => &mut state.todo_gate_ownership_count,
             TodoGateKind::ClosedFeedbackLoop
@@ -2275,7 +2260,6 @@ pub fn record_tool_execution(name: &str, input: &Value, succeeded: bool, latency
     if let Ok(mut guard) = SESSION_STATE.lock()
         && let Some(ref mut state) = *guard
     {
-        observe_session_concurrency(state);
         let now = Instant::now();
         state.executed_tool_calls += 1;
         state.tool_latency_total_ms = state.tool_latency_total_ms.saturating_add(latency_ms);

@@ -101,6 +101,7 @@ pub(super) async fn create_headless_session(
         profile_name,
         profile_snapshot,
         profile_restore_status,
+        report_back_to_session_id.clone(),
     );
     new_agent.set_memory_enabled(memory_enabled);
     // Inline swarm mode renders a live gallery of worker viewports in the
