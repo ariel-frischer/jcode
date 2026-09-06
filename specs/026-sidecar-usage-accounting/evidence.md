@@ -180,3 +180,8 @@ and closure. No root-owned delivery effect or human approval was claimed.
 
 **Next action:** root reviews the isolated AC-8 failures and remaining evidence
 boundaries, then decides readiness for its T030 delivery workflow.
+
+Implementation/test commit: `d8e32604c9ab233bc910d50025c15accc5d298d3`. The following receipt commit
+contains only task completion and handoff metadata. Feature progress is **29/30**,
+phase 6 **8/9** with root-only T030 Pending. See validation.md for per-phase and
+per-story totals.

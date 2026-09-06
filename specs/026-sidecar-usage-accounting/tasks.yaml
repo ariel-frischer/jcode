@@ -363,7 +363,7 @@ phases:
             - Record Medium risk, attribution/privacy/async blast radius, rollback by reverting owned commits and inline review decision; communicate any unresolved acceptance honestly.
         - id: T029
           title: Prepare explicit owned-commit handoff in specs/026-sidecar-usage-accounting/evidence.md
-          status: InProgress
+          status: Completed
           type: documentation
           parallel: false
           story_id: null

@@ -1100,3 +1100,35 @@ final acceptance/disposition and AC-9 delivery, HTML risk report and closure.
 
 **Not MERGE-READY.** Local task execution is not a waiver of the full AC-8 failures.
 Root must review those isolated baseline exceptions and remaining evidence boundaries.
+
+
+### T029 owned-commit receipt and phase completion
+
+Implementation/test/evidence commit: **`d8e32604c9ab233bc910d50025c15accc5d298d3`**,
+`fix(memory): validate sidecar accounting and native cost estimates`.
+Exactly 12 explicit task-owned paths were staged after branch/status and scope
+assertions. The commit retains root's original native-pricing finding and adds
+its verified correction. This receipt and generated task-status update are a
+separate Markdown/status commit, not a source change requiring another build.
+Tested source bytes are unchanged from the implementation commit. No merge,
+push, install, reload, worktree removal or Bead closure occurred.
+
+**Phase 6: T022–T029, 8/8 worker-executable tasks complete.** The phase contains
+9 tasks overall: T030 is **Pending**, reserved for root and not skipped/waived.
+**Feature: 29/30 tasks complete.** Execution groups: 1 **1/1**, 2 **2/2**,
+3 **9/9**, 4 **4/4**, 5 **5/5**, 6 **8/9**. Completed user-story tasks:
+US-001 **9**, US-002 **5**, US-003 **4**, plus **11** unassigned setup/foundation/
+validation tasks. Phase 6 adds no story-specific tasks. No worker task is blocked
+or left in progress; the six failed baseline guardrails remain failed checks,
+not secretly converted to passing checks by these execution statuses.
+
+Final validation status: native correction, focused suites, default-feature TUI
+build, full all-target/all-feature check, 19 routing tests, production-default
+private mock/CLI workflow and format pass. Full guardrails **FAIL** on six isolated
+pre-existing findings; cargo-machete and the broader/platform evidence boundaries
+above remain unverified. **Not MERGE-READY.** Bead jcode-cyko, sidecar usage
+accounting, remains open and root-owned. No final HTML/closure report was generated
+because AC-9 explicitly reserves it for root.
+
+**Next action:** root reviews the isolated AC-8 failures and remaining evidence
+boundaries before deciding readiness for its T030 delivery workflow.
