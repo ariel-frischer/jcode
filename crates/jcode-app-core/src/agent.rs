@@ -791,6 +791,7 @@ impl Agent {
 
     /// A connection may only be a viewer attaching to an existing Agent.
     /// Do not count its provisional session before that choice is resolved.
+    #[cfg(test)]
     pub(crate) fn new_provisional_with_initial_working_dir(
         provider: Arc<dyn Provider>,
         registry: Registry,
@@ -829,6 +830,7 @@ impl Agent {
     /// Construct a new interactive session from the CLI's validated,
     /// credential-free profile handoff. The profile policy is copied into this
     /// Agent only; no process-global config or registry state is changed.
+    #[cfg(test)]
     pub(crate) fn new_with_initial_working_dir_and_profile(
         provider: Arc<dyn Provider>,
         registry: Registry,
