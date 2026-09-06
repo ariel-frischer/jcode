@@ -28,6 +28,7 @@ pub(super) fn ssh_unsupported_command(input: &str) -> bool {
             | "/account"
             | "/accounts"
             | "/config"
+            | "/profile"
             | "/permissions"
             | "/permission"
             | "/agents"
@@ -305,6 +306,7 @@ mod tests {
             "/logout all",
             "/account add",
             "/config edit",
+            "/profile astra-low",
             "/permissions",
             "/open /etc/passwd",
             "/git",
