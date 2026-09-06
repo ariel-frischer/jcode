@@ -52,7 +52,11 @@ pub(crate) async fn handle_persistent_ws_result(
                         " Automatic recovery stopped because {reason}. No tools were rerun. Inspect the saved conversation before resuming."
                     ));
                 }
-                let _ = tx.send(Ok(event)).await;
+                if tx.send(Ok(event)).await.is_err() {
+                    jcode_base::logging::info(
+                        "OpenAI recovery consumer disconnected before terminal error delivery",
+                    );
+                }
                 return ContinuationDisposition::Finished;
             }
             // The original full request is immutable and has no
@@ -71,7 +75,11 @@ pub(crate) async fn handle_persistent_ws_result(
         }
         PersistentWsResult::Terminal(event) => {
             *persistent_ws.lock().await = None;
-            let _ = tx.send(Ok(event)).await;
+            if tx.send(Ok(event)).await.is_err() {
+                jcode_base::logging::info(
+                    "OpenAI consumer disconnected before terminal error delivery",
+                );
+            }
             return ContinuationDisposition::Finished;
         }
         PersistentWsResult::Success => {
@@ -123,12 +131,18 @@ pub(crate) async fn handle_persistent_ws_result(
                 // partial output; the fresh connection below
                 // replays the response from the top, so roll
                 // the partial output back on the consumer.
-                let _ = tx
+                if tx
                     .send(Ok(StreamEvent::RetryRollback {
                         attempt: 1,
                         max: MAX_RETRIES,
                     }))
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    jcode_base::logging::info(
+                        "OpenAI consumer disconnected before retry rollback delivery",
+                    );
+                }
             }
             let mut guard = persistent_ws.lock().await;
             *guard = None;
@@ -224,5 +238,7 @@ pub(crate) async fn finish_failed_recovery(
             anyhow::anyhow!("OpenAI full-history recovery failed: {error:#}. {ADVICE}"),
         ),
     };
-    let _ = tx.send(event).await;
+    if tx.send(event).await.is_err() {
+        jcode_base::logging::info("OpenAI recovery consumer disconnected before failure delivery");
+    }
 }
