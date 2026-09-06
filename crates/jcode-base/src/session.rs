@@ -41,6 +41,7 @@ mod lifecycle;
 mod load_telemetry;
 mod maintenance;
 mod memory_profile;
+pub mod memory_usage;
 mod model;
 mod persistence;
 mod render;
@@ -73,6 +74,7 @@ pub use render::{
     render_messages, render_messages_and_images, render_messages_and_images_with_compacted_history,
     summarize_tool_calls,
 };
+use storage_paths::current_working_dir_string;
 pub use storage_paths::session_journal_path_from_snapshot;
 #[cfg(test)]
 pub(crate) use storage_paths::session_path_in_dir;
@@ -285,12 +287,6 @@ const MAX_SESSION_JOURNAL_BYTES: u64 = 512 * 1024;
 
 /// Max number of environment snapshots to retain per session
 const MAX_ENV_SNAPSHOTS: usize = 8;
-
-fn current_working_dir_string() -> Option<String> {
-    std::env::current_dir()
-        .ok()
-        .map(|p| p.to_string_lossy().to_string())
-}
 
 fn env_flag_enabled(name: &str) -> bool {
     std::env::var(name)

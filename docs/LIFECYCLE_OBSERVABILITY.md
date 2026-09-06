@@ -229,3 +229,123 @@ This feature intentionally does not add:
 - remote telemetry enablement or changes to telemetry consent;
 - benchmark campaigns, Locus integration, or a workflow engine; or
 - general transcript, prompt, command-output, or todo-content capture.
+
+
+## Memory-request accounting (experimental local adapter)
+
+Memory sidecar requests use a separate version-1, content-free accounting record.
+The adapter reuses the effective lifecycle master/persistence/structured-log controls
+above. The worker checks current effective controls before each output. Disabling
+persistence does not enable logging, and persistence failures cannot bypass the
+structured-log switch. No remote telemetry or additional inference is involved.
+
+The fixed global ring under the resolved Jcode data root is
+`memory-usage/requests.v1.jsonl` plus `.v1.1.jsonl` through `.v1.3.jsonl`, with one
+fixed `writer.lock`. This bounds storage across sessions rather than allocating an
+unbounded file set per session. It retains at most four 1 MiB files for 30 days.
+Read-only queries exclude expired files/records, and subsequent writes prune expired
+files. Records are at most 4 KiB, scans read at most 4 MiB and decode at most 4,096
+unique requests. Readers reject malformed, torn, oversized or invalid records with
+bounded static warning categories, deduplicate request IDs and sort by timestamp/ID.
+Opaque session filters are validated and never used as paths.
+
+Files are created owner-only (Unix directories 0700, files 0600). Unix links,
+hardlinks and unsafe existing permissions are refused. Windows writes reuse the
+existing protected owner-only ACL helpers and reject reparse points. Native Windows
+runtime/ACL verification remains outstanding. Reporting never changes ACLs.
+
+One worker per process consumes a fixed 256-entry nonblocking queue. Submission
+performs bounded metadata validation and `try_send`, with no filesystem, pricing,
+configuration reload or inference work. Failed queues and workers do not change
+completion results. Process-local saturating counters expose loss, invalid records,
+failed writes/log serialization and flush timeouts. Flush/shutdown waits are capped
+at 250 ms and acknowledge queued writes, not fsync or complete historical coverage.
+An abrupt process exit may lose queued records.
+
+Every retained history includes `retained_window_only` and
+`loss_history_unavailable`. An empty history, missing loss marker or zero current
+process counter must never be presented as zero lifetime consumption. Ownerless
+calls remain explicitly unattributed. Provider-hidden retry coverage remains
+`provider_call_only`. Native Luna pricing is unknown, not another model's rate.
+The accounting ring is separate from lifecycle session deletion and expires
+independently under this bounded retention contract. It contains no prompts,
+memories, credentials or raw provider errors.
+
+### Offline per-call and session summaries
+
+```bash
+jcode memory usage
+jcode memory usage --session <session-id> --calls
+jcode memory usage --session <session-id> --calls --json
+jcode memory usage --help
+```
+
+The command reads only retained local accounting metadata. It does not contact a
+provider, consult credentials, refresh pricing, start/connect a daemon, initialize
+memory graphs, migrate configuration, clean files, or emit telemetry. Its early
+read-only startup path still uses the canonical configuration loader and effective
+lifecycle controls. Invalid config yields a safe nonzero error without quoting its
+contents. Controls shown are **current effective controls**, not a reconstruction
+of past enabled/disabled intervals. Disabling recording now does not erase history.
+
+JSON schema version 1 includes `controls`, `coverage`, `pricing_policy`, bounded
+`storage_warnings`/`warnings`, and `sessions`. `--calls` adds request observations
+with authentic session/operation/request IDs, resolved provider/model/effort/auth,
+outcome, optional normalized usage, attempt coverage and recalculated pricing.
+Sessions sort by ID (the null/unattributed bucket first), calls by timestamp then
+request ID. Unknown values are JSON `null`, not fabricated zeroes. Per-field
+`known_subtotal`/`unknown_calls` and `known_cost_subtotal_nano_usd`/
+`unknown_cost_calls` stay separate. No retained observations means `unavailable`,
+not zero lifetime use. Session IDs are bounded opaque identifiers, never paths.
+
+Costs are **API-equivalent estimates, not actual billed charges**, including
+native OAuth. The existing provider-core static standard-tier public API table
+owns supported model rates. No alias substitution, subscription allocation or
+routing reference-request cost is used. Static rates may be stale, and actual
+service-tier/long-context premiums are unavailable. Native Luna stays unpriced.
+Generic providers without supported static rates remain unknown, and
+`provider_call_only` explicitly warns that hidden transport attempts are unavailable.
+
+Input includes cached reads and cache creations. Output includes reasoning, which
+is never charged a second time. Uncached input is priced only when its cache split
+is known. Zero tokens need no component rate, but absent tokens are unknown.
+OpenAI ordinary input is total input minus cached input. It has no separately
+charged cache-write component, so native `cache_creation_tokens: null` stays
+unchanged and does not prevent a full estimate. Anthropic does have a separate
+creation component. The canonical pricing contract has no creation rate/TTL, so
+nonzero or absent Anthropic creation usage prevents a full estimate. A missing
+cache-read rate matters only for a nonzero/unknown cached component. Known
+components still contribute a subtotal.
+
+Rates are integer micro-USD per million tokens. Checked `u128` numerators are
+summed and rounded half up **once per call** to nano-USD (10^-9 USD), then checked
+into `u64`. Overflow leaves the excluded contribution unknown with an explicit
+`arithmetic_overflow` warning, never a wrapped or silently saturated exact total.
+Per-call estimates are recalculated from observed usage when reporting rather than
+trusting persisted cost values. These are retained-window comparisons, not invoices.
+
+### Measured accounting limits
+
+Linux x86_64, Rust 1.95.0, unoptimized test profile, 2026-09-06: 20,000 submissions
+measured clone-only baseline **97 ns/op**, enqueue+drain **1,079 ns/op**, and full
+queue submission **1,047 ns/op**. After the final pricing/test changes, the same
+probe measured **79 / 1,161 / 1,164 ns/op**, respectively. Pricing runs only on
+explicit reports, never during submission. Five cold private-worker starts took
+**17,633–69,821 ns**, first submissions **3,186–11,121 ns**. These are diagnostic
+samples, not optimized daemon latency measurements or an invented microsecond SLA.
+The existing catastrophic pressure check remains 1,000 saturated submissions in
+under one second. The focused probe also checks the equivalent 1 ms/op ceiling.
+
+The 256 queued records have a conservative payload estimate of **231,424 bytes**,
+excluding channel/allocator bookkeeping, plus at most one worker-owned record.
+The worker reserves a **2 MiB** stack. There is no collector per-session map.
+Read/report state is capped at **4,096 records**, hence at most that many session
+buckets, with **seven storage** and **two report** warning categories. Identifier
+fields are capped at 128 bytes. File, scan, record and flush limits are documented
+above and exercised by saturation, corruption, retention and failed-worker tests.
+
+See [the acceptance record](../specs/026-sidecar-usage-accounting/validation.md)
+for exact commands, raw samples, production-default recorder/private CLI fixtures,
+and remaining validation gaps. The separate
+[runtime performance contract](RUNTIME_PERFORMANCE_BUDGET.md) is not certified by
+these submission measurements.

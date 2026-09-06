@@ -16,6 +16,10 @@ fn sync_output_style_from_config() {
 }
 
 pub async fn run() -> Result<()> {
+    // Local accounting must run before logging, telemetry, cleanup and migrations.
+    if let Some(result) = super::memory_usage::try_run_offline(std::env::args_os()) {
+        return result;
+    }
     startup_profile::init();
 
     terminal::install_panic_hook();

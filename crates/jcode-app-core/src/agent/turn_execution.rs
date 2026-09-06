@@ -1028,7 +1028,10 @@ impl Agent {
         }
 
         // Extract using sidecar
-        let sidecar = crate::sidecar::Sidecar::new();
+        let sidecar = crate::sidecar::Sidecar::new().with_memory_operation(
+            Some(&self.session.id),
+            crate::sidecar::MemoryOperationKind::IncrementalExtraction,
+        );
         match sidecar.extract_memories(&transcript).await {
             Ok(extracted) if !extracted.is_empty() => {
                 let manager = self

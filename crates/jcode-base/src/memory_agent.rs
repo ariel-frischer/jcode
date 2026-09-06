@@ -27,6 +27,8 @@ use crate::sidecar::Sidecar;
 /// Context from a retrieval operation for post-retrieval maintenance
 #[derive(Debug, Clone)]
 struct RetrievalContext {
+    /// Origin of detached maintenance, never the ambient UI session.
+    session_id: String,
     /// Memory IDs that were verified as relevant by Haiku
     verified_ids: Vec<String>,
     /// Memory IDs that were retrieved but rejected by Haiku
@@ -165,72 +167,6 @@ fn manager_for_working_dir(working_dir: Option<&str>) -> MemoryManager {
     match working_dir {
         Some(dir) if !dir.trim().is_empty() => MemoryManager::new().with_project_dir(dir),
         _ => MemoryManager::new(),
-    }
-}
-
-async fn run_final_extraction(transcript: String, session_id: String, working_dir: Option<String>) {
-    crate::logging::info(&format!(
-        "Final extraction starting for session {} ({} chars)",
-        session_id,
-        transcript.len()
-    ));
-
-    let sidecar = crate::sidecar::Sidecar::new();
-    let manager = manager_for_working_dir(working_dir.as_deref());
-
-    let existing: Vec<String> = manager
-        .list_all()
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|e| e.active)
-        .map(|e| e.content)
-        .collect();
-
-    let result = sidecar
-        .extract_memories_with_existing(&transcript, &existing)
-        .await;
-
-    match result {
-        Ok(extracted) if !extracted.is_empty() => {
-            let mut stored_count = 0;
-
-            for mem in &extracted {
-                let category = crate::memory::MemoryCategory::from_extracted(&mem.category);
-
-                let trust = match mem.trust.as_str() {
-                    "high" => crate::memory::TrustLevel::High,
-                    "low" => crate::memory::TrustLevel::Low,
-                    _ => crate::memory::TrustLevel::Medium,
-                };
-
-                let entry = crate::memory::MemoryEntry::new(category, &mem.content)
-                    .with_source(&session_id)
-                    .with_trust(trust);
-
-                if manager.remember_project(entry).is_ok() {
-                    stored_count += 1;
-                }
-            }
-
-            if stored_count > 0 {
-                crate::logging::info(&format!(
-                    "Final extraction for session {}: stored {} memories",
-                    session_id, stored_count
-                ));
-            }
-        }
-        Ok(_) => {
-            crate::logging::info(&format!(
-                "Final extraction for session {}: no memories extracted",
-                session_id
-            ));
-        }
-        Err(e) => {
-            crate::logging::info(&format!(
-                "Final extraction for session {} failed: {}",
-                session_id, e
-            ));
-        }
     }
 }
 
@@ -405,8 +341,13 @@ impl MemoryAgent {
     /// Built fresh on each call rather than cached at construction so that
     /// login changes (gaining or losing access to a provider/credentials) are
     /// reflected immediately without restarting the agent.
-    fn live_sidecar(&self) -> Option<Sidecar> {
-        memory::memory_llm_judge_available().then(Sidecar::new)
+    fn live_sidecar(
+        &self,
+        session_id: &str,
+        kind: crate::sidecar::MemoryOperationKind,
+    ) -> Option<Sidecar> {
+        memory::memory_llm_judge_available()
+            .then(|| Sidecar::new().with_memory_operation(Some(session_id), kind))
     }
 
     /// Reset all agent state
@@ -770,7 +711,9 @@ impl MemoryAgent {
             should_run_rerank(ss.turn_count, ss.last_rerank_turn, cadence, topic_changed)
         };
 
-        let relevant = if let Some(sidecar) = self.live_sidecar() {
+        let relevant = if let Some(sidecar) =
+            self.live_sidecar(session_id, crate::sidecar::MemoryOperationKind::Rerank)
+        {
             if should_rerank {
                 let agents = &crate::config::config().agents;
                 let votes = agents.memory_rerank_votes.max(1);
@@ -868,6 +811,7 @@ impl MemoryAgent {
             .collect();
 
         let retrieval_ctx = RetrievalContext {
+            session_id: session_id.to_string(),
             verified_ids: verified_ids.clone(),
             rejected_ids,
             context_snippet: jcode_core::util::truncate_str(&context, 200).to_string(),
@@ -980,7 +924,10 @@ impl MemoryAgent {
         // Memory extraction requires the LLM. Skip when sidecar mode is off OR
         // (sidecar mode on but) no LLM backend is reachable. Re-checked live so a
         // login change is reflected without a restart.
-        let Some(sidecar) = self.live_sidecar() else {
+        let Some(sidecar) = self.live_sidecar(
+            session_id,
+            crate::sidecar::MemoryOperationKind::IncrementalExtraction,
+        ) else {
             crate::logging::info(&format!(
                 "Incremental extraction skipped for session {}: LLM judge unavailable",
                 session_id
@@ -1306,7 +1253,9 @@ impl MemoryAgent {
             // 5. Periodic cluster refinement
             let tick = MAINTENANCE_TICK.fetch_add(1, Ordering::Relaxed) + 1;
             if tick.is_multiple_of(CLUSTER_REFINEMENT_INTERVAL) && ctx.verified_ids.len() >= 2 {
-                match refine_clusters(&memory_manager, &ctx.verified_ids).await {
+                match refine_clusters(&memory_manager, &ctx.verified_ids, Some(&ctx.session_id))
+                    .await
+                {
                     Ok(stats) => {
                         if stats.clusters_touched > 0 {
                             memory::add_event(MemoryEventKind::MaintenanceCluster {
@@ -1374,6 +1323,7 @@ struct ClusterRefinementStats {
 async fn refine_clusters(
     manager: &MemoryManager,
     verified_ids: &[String],
+    session_id: Option<&str>,
 ) -> Result<ClusterRefinementStats> {
     if verified_ids.len() < 2 {
         return Ok(ClusterRefinementStats::default());
@@ -1418,7 +1368,7 @@ async fn refine_clusters(
                     .filter_map(|id| project_graph.get_memory(id))
                     .map(|m| jcode_core::util::truncate_str(&m.content, 80).to_string())
                     .collect();
-                if let Ok(name) = name_cluster_with_sidecar(&member_contents).await
+                if let Ok(name) = name_cluster_with_sidecar(&member_contents, session_id).await
                     && let Some(cluster) = project_graph.clusters.get_mut(cluster_id)
                 {
                     cluster.name = Some(name);
@@ -1443,33 +1393,6 @@ async fn refine_clusters(
     }
 
     Ok(out)
-}
-
-async fn name_cluster_with_sidecar(member_contents: &[String]) -> Result<String> {
-    if !memory::memory_sidecar_enabled() {
-        let fallback = infer_candidate_tag(&member_contents.join(" "))
-            .unwrap_or_else(|| "shared context".to_string());
-        return Ok(fallback);
-    }
-
-    let sidecar = Sidecar::new();
-    let mut prompt = String::from(
-        "These memories were retrieved together. Give this cluster a short descriptive name (2-4 words, no quotes):\n",
-    );
-    for (i, content) in member_contents.iter().enumerate() {
-        prompt.push_str(&format!("{}. {}\n", i + 1, content));
-    }
-    let name = sidecar
-        .complete(
-            "You name memory clusters. Reply with ONLY the cluster name, 2-4 words, no quotes or punctuation.",
-            &prompt,
-        )
-        .await?;
-    let name = name.trim().to_string();
-    if name.is_empty() || name.len() > 60 {
-        anyhow::bail!("Invalid cluster name");
-    }
-    Ok(name)
 }
 
 fn apply_cluster_assignment(
@@ -1947,3 +1870,10 @@ pub fn stats() -> MemoryAgentStats {
 #[cfg(test)]
 #[path = "memory_agent_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "memory_agent/usage_tests.rs"]
+mod usage_tests;
+
+#[path = "memory_agent/sidecar_calls.rs"]
+mod sidecar_calls;
+use sidecar_calls::{name_cluster_with_sidecar, run_final_extraction};

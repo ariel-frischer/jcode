@@ -1,0 +1,432 @@
+tasks:
+    branch: agent/jcode-cyko
+    created: '2026-09-05'
+    spec_path: specs/026-sidecar-usage-accounting/spec.yaml
+    plan_path: specs/026-sidecar-usage-accounting/plan.yaml
+summary:
+    total_tasks: 30
+    total_phases: 6
+    parallel_opportunities: 0
+    estimated_complexity: high
+phases:
+    - number: 1
+      title: Setup
+      purpose: Freeze execution evidence and reuse supplied discovery; maps to approved plan phase 1 without changing plan.yaml.
+      tasks:
+        - id: T001
+          title: Record frozen acceptance and discovered operation checklist in specs/026-sidecar-usage-accounting/evidence.md
+          status: Completed
+          type: setup
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: []
+          acceptance_criteria:
+            - Copy all nine frozen acceptance rows from /home/ari/.jcode/scratch/jcode-cyko/comments.json without narrowing them; add requirement-to-task-to-command/result columns for FR-001 through FR-010 and NFR-001 through NFR-003.
+            - Reuse /home/ari/repos/jcode/.worktrees/reports/jcode-cyko/worker-sidecar-contracts-20260905.md; verify only identified seams when editing, not full rediscovery.
+            - Enumerate legacy/session relevance, periodic/final/agent/TUI extraction, contradiction, rerank/votes and cluster naming; distinguish skipped non-inference work.
+            - Record current authorization supersedes stage-local planning-only text; root owns Beads, merge, push, install, reload, cleanup and closure. No analyze, delegation, provider/config mutation or paid/live inference.
+    - number: 2
+      title: Foundational
+      purpose: Stable dependency-light contracts needed by all stories; maps to approved plan phase 1.
+      tasks:
+        - id: T002
+          title: Add accounting serialization and invariant tests in crates/jcode-session-types/src/memory_usage.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: null
+          file_path: crates/jcode-session-types/src/memory_usage.rs
+          dependencies: [T001]
+          acceptance_criteria:
+            - Write failing tests for optional usage versus reported zero, closed operation/outcome/auth enums, bounded identifiers, null owner and stable versioned round-trip serialization.
+            - Cover invalid negative/overflow/subset usage and allowlisted records without text, prompts, raw errors, credentials or account identity; preserve existing serialized lifecycle forms.
+        - id: T003
+          title: Define stable context and observation types in crates/jcode-session-types/src/memory_usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: null
+          file_path: crates/jcode-session-types/src/memory_usage.rs
+          dependencies: [T002]
+          acceptance_criteria:
+            - Define MemoryCallContext, MemoryRequestObservation and SessionUsageSummary with optional u64 usage, authentic optional session, logical operation ID and distinct send ID, resolved metadata, coverage and fixed-precision pricing provenance.
+            - Export through crates/jcode-session-types/src/lib.rs without adding runtime dependencies or changing existing wire enums; make T002 tests pass.
+    - number: 3
+      title: User Story 1 - Understand each memory request and its session totals
+      purpose: Collect and attribute actual attempts without inference changes; maps to approved plan phase 1.
+      story_reference: US-001
+      independent_test: Synthetic response and concurrent-operation fixtures reconcile distinct sends, votes, fallbacks and retained usage under authentic session/operation ownership without external inference.
+      tasks:
+        - id: T004
+          title: Add native response normalization fixtures in crates/jcode-base/src/sidecar/usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/sidecar/usage_tests.rs
+          dependencies: [T003]
+          acceptance_criteria:
+            - AC-1 tests cover streamed and nonstreamed OpenAI and Claude complete/incomplete/failed/malformed/missing usage/details, partial usage before error, truncated streams, split chunks and duplicate cumulative terminal events.
+            - Test reported zero separately from absence; OpenAI input includes cached reads, Claude input/cache components normalize once, reasoning stays within output; reject negative, overflow and invalid subsets field-wise.
+        - id: T005
+          title: Implement usage normalization in crates/jcode-base/src/sidecar/usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/sidecar/usage.rs
+          dependencies: [T004]
+          acceptance_criteria:
+            - Normalize provider-reported optional fields using checked arithmetic and cumulative snapshot replacement, never event summation or invented zero.
+            - Wire module declarations and make T004 fixtures pass without altering request payloads, completion text or existing error behavior.
+        - id: T006
+          title: Add physical-attempt and exact payload regressions in crates/jcode-base/src/sidecar/attempt_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/sidecar/attempt_tests.rs
+          dependencies: [T005]
+          acceptance_criteria:
+            - AC-3 local mock fixtures count each real send once across votes, retry, actual-model fallback, failures and cancellation; preflight rejection and skipped/backoff work count no send.
+            - AC-6 compare exact request bodies/defaults, preserving Luna xhigh, existing route/fallback and native OpenAI omission of max_output_tokens rather than assuming a 1024 cap.
+            - Generic provider usage/retry events preserve exposed detail and explicitly mark hidden physical-attempt coverage unavailable.
+        - id: T007
+          title: Collect exactly-once native attempts in crates/jcode-base/src/sidecar.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/sidecar.rs
+          dependencies: [T006]
+          acceptance_criteria:
+            - Add compatible context-aware helpers and request-local guard at actual send after preflight, finalizing once on success, incomplete, error or cancellation with actual model/provider/effort.
+            - Capture SSE and Claude usage before returning text/error; retain partial reported usage and safe categories, never response bodies or raw errors.
+            - Adapt existing generic provider stream usage/retry contracts where exposed without claiming hidden physical retry completeness; preserve text completion wrappers and make T006 tests pass.
+        - id: T008
+          title: Add all-operation attribution fixtures in crates/jcode-base/src/memory_agent/usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/memory_agent/usage_tests.rs
+          dependencies: [T007]
+          acceptance_criteria:
+            - AC-2 exercise two interleaved sessions across session/legacy relevance, periodic/final/agent/TUI extraction, contradiction, rerank votes and maintenance cluster naming.
+            - Assert spawned/final work retains original owner after session close, vote clones share operation but not send ID, ownerless work remains null and non-LLM/skipped work creates no observation.
+            - AC-3 reconcile exact sends and normalized input plus output, never adding reasoning again; AC-6 preserve votes2 and cadence3.
+        - id: T009
+          title: Thread operation ownership through crates/jcode-base/src/memory_agent.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/memory_agent.rs
+          dependencies: [T008]
+          acceptance_criteria:
+            - Carry explicit session/context through RetrievalContext, process_context, extraction/final extraction, maintenance spawns, refine_clusters and naming; bind context before vote clones.
+            - Preserve operation identity through crates/jcode-base/src/memory_rerank.rs consensus helpers and sidecar contradiction calls, assigning fresh IDs at distinct logical operations.
+            - Never use memory/activity.rs ambient UI session state for accounting; preserve routes, cadence and results.
+        - id: T010
+          title: Attribute legacy and session memory helpers in crates/jcode-base/src/memory.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-base/src/memory.rs
+          dependencies: [T009]
+          acceptance_criteria:
+            - Preserve explicit session in relevance helpers and clones and extraction; legacy relevance without a real owner uses null rather than fabricated ownership.
+            - Audit identified Sidecar call sites against T001 inventory and give every actual memory operation a closed operation kind.
+        - id: T011
+          title: Preserve direct agent extraction ownership in crates/jcode-app-core/src/agent/turn_execution.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-app-core/src/agent/turn_execution.rs
+          dependencies: [T010]
+          acceptance_criteria:
+            - Pass originating agent session to extraction context without changing turn behavior; verify actual repository path against discovery before editing and update this task path if ownership moved.
+            - Focused agent attribution test demonstrates original session rather than last-active session.
+        - id: T012
+          title: Preserve direct TUI extraction ownership in crates/jcode-tui/src/tui/app/turn_memory.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-001
+          file_path: crates/jcode-tui/src/tui/app/turn_memory.rs
+          dependencies: [T011]
+          acceptance_criteria:
+            - Pass originating TUI session to extraction context without adding a TUI panel or changing execution; verify actual repository path against discovery before editing and update this task path if ownership moved.
+            - Run T008 exact tests and reconcile every inventory operation with no cross-session attribution or fictitious sends.
+    - number: 4
+      title: User Story 3 - Retain privacy and existing memory behavior
+      purpose: Establish bounded controlled diagnostics before reporting; maps to approved plan phase 2.
+      story_reference: US-003
+      independent_test: Private fixtures exercise every effective lifecycle control combination, sentinel privacy, permissions, retention, corrupt records, queue pressure and worker/storage failure while inference results and request counts remain unchanged.
+      tasks:
+        - id: T013
+          title: Test private bounded storage in crates/jcode-base/src/session/memory_usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-003
+          file_path: crates/jcode-base/src/session/memory_usage_tests.rs
+          dependencies: [T012]
+          acceptance_criteria:
+            - AC-5 fixtures verify private file creation, safe identifiers/path traversal rejection, bounded record/file/scan limits, 1 MiB rotation and 30-day retention using existing lifecycle policy.
+            - Cover malformed/oversized records, duplicates, unwritable storage, missing loss markers, restart and truncation with safe partial coverage rather than lifetime zero.
+        - id: T014
+          title: Implement narrow diagnostic adapter in crates/jcode-base/src/session/memory_usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-003
+          file_path: crates/jcode-base/src/session/memory_usage.rs
+          dependencies: [T013]
+          acceptance_criteria:
+            - Reuse lifecycle storage policy and narrow shared private-file/path helpers in session/storage_paths.rs, adding module exports only as needed; use distinct versioned accounting suffix under resolved data root.
+            - Keep all file/state/scan/identifier bounds explicit, recover corrupt data safely and expose loss/retention/restart uncertainty; do not move app orchestration into base or invent a general telemetry framework.
+            - Make T013 pass without altering existing lifecycle serialized forms or unrelated cleanup.
+        - id: T015
+          title: Test control-aware nonblocking recorder in crates/jcode-base/src/memory_usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-003
+          file_path: crates/jcode-base/src/memory_usage_tests.rs
+          dependencies: [T014]
+          acceptance_criteria:
+            - AC-5 test every enabled/persist_session_events/emit_structured_logs combination independently, including error diagnostics, with sensitive sentinels absent from stored, logged and rendered records.
+            - Saturated fixed queue, dead worker, failed flush and shutdown must not fail/block inference; bounded loss counters and safe warnings expose incomplete accounting even when durable markers cannot be saved.
+            - Verify zero uploads, unchanged inference count and no synchronous disk/pricing/inference in submission.
+        - id: T016
+          title: Implement bounded recorder in crates/jcode-base/src/memory_usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-003
+          file_path: crates/jcode-base/src/memory_usage.rs
+          dependencies: [T015]
+          acceptance_criteria:
+            - Use fixed-capacity try_send and bounded worker/state/warnings with effective existing lifecycle controls and bounded shutdown, no new config or dependencies.
+            - Connect native attempt finalization to nonblocking submission, derive safe structured diagnostics without weakening logging redaction and preserve inference results on all recorder failures.
+            - Make T015 tests pass with explicit unavailable/partial coverage for disabled sinks, dropped records and persistence uncertainty.
+    - number: 5
+      title: User Story 2 - Inspect honest local usage and cost summaries
+      purpose: Offline pricing and discoverable reporting over bounded observations; maps to approved plan phase 2.
+      story_reference: US-002
+      independent_test: Newly built memory usage command reads private synthetic fixtures offline, returns sorted JSON/text, reconciles call/session totals and visibly separates unknowns, partial subtotals and API-equivalent estimates.
+      tasks:
+        - id: T017
+          title: Test offline pricing and retained aggregation in crates/jcode-base/src/memory_usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-002
+          file_path: crates/jcode-base/src/memory_usage_tests.rs
+          dependencies: [T016]
+          acceptance_criteria:
+            - AC-3/AC-4 cover distinct request deduplication, concurrent sessions, ownerless bucket, known/unknown usage, genuine zero rates, missing cache rates, mixed models and unpriced actual Luna.
+            - Assert normalized cache components charged once, reasoning not charged beyond output, checked fixed-precision arithmetic/rounding and overflow handling.
+            - Full estimate stays null with missing required usage/rates; known component subtotal and per-field unknown counts remain separate; OAuth basis says API-equivalent, not billed.
+        - id: T018
+          title: Implement honest offline summaries in crates/jcode-base/src/memory_usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-002
+          file_path: crates/jcode-base/src/memory_usage.rs
+          dependencies: [T017]
+          acceptance_criteria:
+            - Reuse provider-core static public API rates for actual resolved model, never OAuth monthly cheapness, alias substitution, routing reference_request_cost or network model-pricing refresh.
+            - Aggregate bounded distinct retained observations with checked wider integer intermediates and documented rounding, optional full estimates and separate known subtotals/unknown counts.
+            - Sort sessions by identifier and calls by timestamp/request ID, expose retained window, control status, partial coverage and bounded warnings; make T017 tests pass.
+        - id: T019
+          title: Add private CLI fixture tests in tests/memory_usage_cli.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: US-002
+          file_path: tests/memory_usage_cli.rs
+          dependencies: [T018]
+          acceptance_criteria:
+            - Add synthetic fixtures under tests/fixtures/memory_usage/ covering empty, known, partial, corrupt, unknown Luna, real zero and mixed-session records with privacy sentinels.
+            - AC-4 assert help discovery, --session filtering, invalid selector nonzero exit, --calls, deterministic parsed --json, text labels and explicit unattributed/retained-only coverage.
+            - Tests use isolated private data root, no credential lookup or network and newly built executable, never the shared daemon.
+        - id: T020
+          title: Wire additive memory usage command in src/cli/args.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-002
+          file_path: src/cli/args.rs
+          dependencies: [T019]
+          acceptance_criteria:
+            - Add MemoryCommand usage with --session, --calls and --json and connect existing src/cli/dispatch.rs and src/cli/commands.rs seams without changing other commands or protocol.
+            - Keep presentation in a separate handler, not additional large command-function logic; command parsing tests cover valid/invalid combinations.
+        - id: T021
+          title: Render read-only usage reports in src/cli/memory_usage.rs
+          status: Completed
+          type: implementation
+          parallel: false
+          story_id: US-002
+          file_path: src/cli/memory_usage.rs
+          dependencies: [T020]
+          acceptance_criteria:
+            - Implement versioned deterministic JSON with null unknowns and text explicitly labeling OAuth API-equivalent estimates, known subtotal, unknown counts, controls and retained coverage, never actual billing or lifetime totals.
+            - Validate selectors using safe storage paths, report malformed data as recoverable partial evidence, and emit actionable nonzero invalid-input errors without leaking raw stored content.
+            - Add module export as needed and make T019 fixture tests pass without provider fetch, daemon restart or network access.
+    - number: 6
+      title: Polish & Cross-Cutting Concerns
+      purpose: Complete approved plan phase 3 evidence and hand off reserved root-owned delivery; no implementation acceptance from artifact validation alone.
+      tasks:
+        - id: T022
+          title: Measure bounded accounting overhead in crates/jcode-base/src/memory_usage_tests.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: null
+          file_path: crates/jcode-base/src/memory_usage_tests.rs
+          dependencies: [T021]
+          acceptance_criteria:
+            - AC-7 record before/after normal and saturated submission timings against maintained hot-path budgets with reproducible load/sample counts and explicit queue/record/session/warning/scan bounds.
+            - Assert zero additional inference, bounded memory/state growth and nonblocking fail-open behavior; investigate regressions rather than inventing a passing budget.
+        - id: T023
+          title: Run focused acceptance checks and record results in specs/026-sidecar-usage-accounting/evidence.md
+          status: Completed
+          type: test
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: [T022]
+          acceptance_criteria:
+            - Run exact targeted type/parser/attempt/operation/storage/recorder/pricing/CLI tests serially, record command, nonzero selected test count, result and AC mapping for AC-1 through AC-7.
+            - Diagnose failing acceptance before one bounded repair and minimal rerun; isolate unrelated baseline failures, never hide them through ratchet changes.
+        - id: T024
+          title: Document operator semantics and measured limits in docs/LIFECYCLE_OBSERVABILITY.md
+          status: Completed
+          type: documentation
+          parallel: false
+          story_id: null
+          file_path: docs/LIFECYCLE_OBSERVABILITY.md
+          dependencies: [T023]
+          acceptance_criteria:
+            - Document memory usage help/examples, optional fields, offline actual-model pricing, OAuth API-equivalent not billed labels, unattributed work, independent controls and incomplete retained-window semantics.
+            - Record AC-7 numeric measurements and explicit maintained bounds with links to evidence; distinguish target claims from measured behavior.
+        - id: T025
+          title: Maintain tracked documentation index in docs/index.md
+          status: Completed
+          type: documentation
+          parallel: false
+          story_id: null
+          file_path: docs/index.md
+          dependencies: [T024]
+          acceptance_criteria:
+            - Maintain one-line entry for updated lifecycle observability documentation and any new tracked documentation, without unrelated index cleanup.
+            - Apply project-appropriate polish/release-note convention after checking local instructions, stage only explicitly owned files and preserve unrelated changes.
+        - id: T026
+          title: Build TUI-enabled binary and run serialized gates recorded in specs/026-sidecar-usage-accounting/evidence.md
+          status: Completed
+          type: test
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: [T025]
+          acceptance_criteria:
+            - AC-8 run relevant TUI-enabled binary build, scripts/check_guardrails.sh and bash scripts/check_swarm_routing_contract.sh serially after focused checks, verifying nonzero routing tests.
+            - Use rtk-prefixed commands and managed background completion for long builds/gates, never broad foreground suites or concurrent Cargo-heavy work; record toolchain, commands, exit codes and isolated baseline failures.
+        - id: T027
+          title: Validate executing binary offline through tests/memory_usage_cli.rs
+          status: Completed
+          type: test
+          parallel: false
+          story_id: null
+          file_path: tests/memory_usage_cli.rs
+          dependencies: [T026]
+          acceptance_criteria:
+            - AC-8 resolve and record new executable identity and run help/text/JSON/filter/per-call private-fixture checks plus local-mock memory operation reconciliation against that binary.
+            - Use private data root and isolated socket only if daemon use is required, no shared-server/config/provider mutation and no paid/live inference; build alone is not runtime evidence.
+        - id: T028
+          title: Complete acceptance and scope audit in specs/026-sidecar-usage-accounting/evidence.md
+          status: Completed
+          type: documentation
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: [T027]
+          acceptance_criteria:
+            - Trace every frozen row and FR/NFR to actual evidence, explicitly leaving AC-9 root-owned; no summary-only completion or claims that artifact validation proves behavior.
+            - Audit changed files for no config/routing/model/effort/vote/cadence/output-cap changes, no secrets/content uploads, no new dependency cycles or parallel pricing/telemetry framework.
+            - Record Medium risk, attribution/privacy/async blast radius, rollback by reverting owned commits and inline review decision; communicate any unresolved acceptance honestly.
+        - id: T029
+          title: Prepare explicit owned-commit handoff in specs/026-sidecar-usage-accounting/evidence.md
+          status: Completed
+          type: documentation
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: [T028]
+          acceptance_criteria:
+            - Verify agent/jcode-cyko branch and diff/status, stage explicit owned files only and commit task-owned validated changes without merge, push, Bead/provider mutation or cleanup.
+            - Supply root commit IDs, evidence paths, acceptance gaps and MERGE-READY only if local acceptance passes; no worktree removal or closure by worker.
+        - id: T030
+          title: ROOT ONLY record AC-9 delivery receipt in specs/026-sidecar-usage-accounting/evidence.md
+          status: Pending
+          type: documentation
+          parallel: false
+          story_id: null
+          file_path: specs/026-sidecar-usage-accounting/evidence.md
+          dependencies: [T029]
+          acceptance_criteria:
+            - Reserved for root, never executable or markable complete by worker; return handoff at T029 and leave this task Pending.
+            - Root uses merge-wt for fresh-base non-rewriting validation/landing/push, install_release.sh --fast and graceful shared-server reload, task-owned cleanup, private HTML report and Bead closure.
+            - Root report uses existing dev-workflow template outside removable worktree and records Medium risk/rationale/blast radius/rollback/review, actual validation, changed commits, unresolved issues and exactly one next action; link report and final delivery evidence in Bead.
+dependencies:
+    user_story_order:
+        - story_id: US-001
+          depends_on: []
+          blocks: [US-003, US-002]
+        - story_id: US-003
+          depends_on: [US-001]
+          blocks: [US-002]
+        - story_id: US-002
+          depends_on: [US-001, US-003]
+          blocks: []
+    phase_order:
+        - phase: 1
+          blocks: [2]
+        - phase: 2
+          blocks: [3]
+        - phase: 3
+          blocks: [4]
+        - phase: 4
+          blocks: [5]
+        - phase: 5
+          blocks: [6]
+        - phase: 6
+          blocks: []
+parallel_execution: []
+implementation_strategy:
+    mvp_scope:
+        phases: [1, 2, 3, 4, 5]
+        description: All three P1 stories are necessary for a useful privacy-safe operator MVP; collection-only phase 3 is an internal milestone, not delivered user visibility. Phase 6 validation remains mandatory before acceptance.
+        validation: Reconcile synthetic sends across every operation/session and run newly built offline CLI fixtures with control/privacy/unknown-pricing checks; complete phase 6 gates before root delivery.
+    incremental_delivery:
+        - milestone: Collect and attribute native attempts (approved plan phase 1)
+          phases: [1, 2, 3]
+          deliverable: Stable typed usage and complete operation attribution with exact physical-send and unchanged-payload fixtures.
+        - milestone: Persist and expose honest local summaries (approved plan phase 2)
+          phases: [4, 5]
+          deliverable: Bounded private controlled diagnostics and offline call/session CLI summaries with honest unknown costs.
+        - milestone: Validate and hand off for root-owned delivery (approved plan phase 3)
+          phases: [6]
+          deliverable: Focused and fresh-binary evidence, serialized gates and owned commits handed to root; AC-9 remains reserved until root performs it.
+_meta:
+    version: 1.0.0
+    generator: autospec
+    generator_version: autospec dev
+    created: '2026-09-05T22:08:10Z'
+    artifact_type: tasks

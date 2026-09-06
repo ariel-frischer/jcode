@@ -31,7 +31,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [jcode iOS App](IOS_APP.md)
 - [Jcode Cloud on AWS](JCODE_CLOUD_AWS.md)
 - [Keybinding conflict detection](KEYMAP_CONFLICTS.md)
-- [Lifecycle observability](LIFECYCLE_OBSERVABILITY.md)
+- [Lifecycle observability](LIFECYCLE_OBSERVABILITY.md): Local lifecycle streams, bounded private memory-request accounting, offline per-call/session CLI, backend-aware API-equivalent costs, measured bounds, controls and retention caveats.
 - [Language Server Protocol (LSP)](LSP.md)
 - [Memory Architecture Design](MEMORY_ARCHITECTURE.md)
 - [Memory Regression Budget](MEMORY_BUDGET.md)

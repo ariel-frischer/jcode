@@ -9,6 +9,10 @@
 
 use crate::auth;
 use anyhow::{Context, Result};
+use attempt::Attempt;
+pub use jcode_session_types::memory_usage::MemoryOperationKind;
+use jcode_session_types::memory_usage::{AuthClass, RequestOutcome};
+use jcode_session_types::memory_usage::{MemoryCallContext, MemoryRequestObservation};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -16,6 +20,25 @@ use std::sync::Arc;
 
 #[path = "sidecar/reasoning.rs"]
 pub(crate) mod reasoning;
+
+#[path = "sidecar/accounting.rs"]
+mod accounting;
+#[path = "sidecar/attempt.rs"]
+mod attempt;
+#[path = "sidecar/provider_usage.rs"]
+mod provider_usage;
+#[path = "sidecar/usage.rs"]
+mod usage;
+pub use attempt::lost_observations as lost_memory_observations;
+#[cfg(test)]
+#[path = "sidecar/attempt_tests.rs"]
+mod attempt_tests;
+#[cfg(test)]
+#[path = "sidecar/provider_attempt_tests.rs"]
+mod provider_attempt_tests;
+#[cfg(test)]
+#[path = "sidecar/usage_tests.rs"]
+mod usage_tests;
 
 /// Fast/cheap OpenAI model used when Codex credentials are available.
 pub const SIDECAR_OPENAI_MODEL: &str = "gpt-5.6-luna";
@@ -152,9 +175,20 @@ pub struct Sidecar {
     /// per-model behavior applies. Used by the memory benchmark to pin
     /// GPT-5.5 with no thinking.
     reasoning_override: Option<String>,
+    memory_context: Option<MemoryCallContext>,
+    observation_tx: Option<tokio::sync::mpsc::Sender<MemoryRequestObservation>>,
+    usage_recorder: Option<crate::memory_usage::Recorder>,
 }
 
 impl Sidecar {
+    #[cfg(test)]
+    pub(crate) fn test_provider(provider: Arc<dyn crate::provider::Provider>) -> Self {
+        let mut sidecar = Self::with_openai_model(provider.model(), None);
+        sidecar.backend = SidecarBackend::Provider;
+        sidecar.provider = Some(provider);
+        sidecar
+    }
+
     /// Create a new sidecar client, auto-selecting the best available backend.
     /// Prefers OpenAI (GPT-5.6 Luna with no reasoning) if creds exist, falls back to Claude.
     pub fn new() -> Self {
@@ -185,6 +219,9 @@ impl Sidecar {
             max_tokens: DEFAULT_MAX_TOKENS,
             backend,
             provider,
+            memory_context: None,
+            observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
             reasoning_override: crate::config::config()
                 .agents
                 .memory_reasoning_effort
@@ -269,6 +306,9 @@ impl Sidecar {
             backend: SidecarBackend::Claude,
             provider: None,
             reasoning_override: None,
+            memory_context: None,
+            observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
         }
     }
 
@@ -283,6 +323,9 @@ impl Sidecar {
             backend: SidecarBackend::OpenAI,
             provider: None,
             reasoning_override: reasoning_effort,
+            memory_context: None,
+            observation_tx: None,
+            usage_recorder: crate::memory_usage::default_recorder(),
         }
     }
 
@@ -295,23 +338,6 @@ impl Sidecar {
         }
     }
 
-    /// Simple completion - send a prompt, get a response.
-    /// Routes to the correct API based on the detected backend.
-    pub async fn complete(&self, system: &str, user_message: &str) -> Result<String> {
-        if self.backend != SidecarBackend::OpenAI && self.reasoning_override.is_some() {
-            anyhow::bail!(
-                "Memory reasoning effort is configured for OpenAI, but the resolved sidecar model '{}' uses the {} backend; select an OpenAI memory model or remove agents.memory_reasoning_effort",
-                self.model,
-                self.backend_name()
-            );
-        }
-        match self.backend {
-            SidecarBackend::OpenAI => self.complete_openai(system, user_message).await,
-            SidecarBackend::Claude => self.complete_claude(system, user_message).await,
-            SidecarBackend::Provider => self.complete_via_provider(system, user_message).await,
-        }
-    }
-
     /// Complete via the live agent provider (`complete_simple`).
     ///
     /// This is the universal path: it works for every provider jcode supports,
@@ -319,13 +345,7 @@ impl Sidecar {
     /// collects the streamed `TextDelta`s into a single string. The provider was
     /// forked at construction time, so it carries the user's selected model.
     async fn complete_via_provider(&self, system: &str, user_message: &str) -> Result<String> {
-        let provider = self.provider.as_ref().context(
-            "No active provider registered for sidecar; memory features require a logged-in provider",
-        )?;
-        provider
-            .complete_simple(user_message, system)
-            .await
-            .context("Sidecar completion via active provider failed")
+        provider_usage::complete(self, system, user_message).await
     }
 
     /// Complete via OpenAI Responses API.
@@ -447,6 +467,9 @@ impl Sidecar {
                             backend: SidecarBackend::Claude,
                             provider: None,
                             reasoning_override: None,
+                            memory_context: self.memory_context.clone(),
+                            observation_tx: self.observation_tx.clone(),
+                            usage_recorder: self.usage_recorder.clone(),
                         };
                         claude.complete_claude(system, user_message).await
                     }
@@ -493,31 +516,52 @@ impl Sidecar {
             }
         }
 
-        let response = builder
-            .json(&request)
-            .send()
-            .await
-            .context("Failed to send request to OpenAI API")
-            .map_err(OpenAiSidecarError::other)?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(OpenAiSidecarError::Api { status, body });
-        }
-
-        if is_chatgpt_mode {
-            collect_openai_sse_text(response)
+        let mut attempt = Attempt::new(
+            self,
+            "openai",
+            model,
+            reasoning_effort,
+            if is_chatgpt_mode {
+                AuthClass::Oauth
+            } else {
+                AuthClass::ApiKey
+            },
+        );
+        let result = async {
+            let response = builder
+                .json(&request)
+                .send()
                 .await
-                .map_err(OpenAiSidecarError::other)
-        } else {
-            let result: serde_json::Value = response
-                .json()
-                .await
-                .context("Failed to parse OpenAI API response")
+                .context("Failed to send request to OpenAI API")
                 .map_err(OpenAiSidecarError::other)?;
-            extract_openai_response_text(&result).map_err(OpenAiSidecarError::other)
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                if let Ok(value) = serde_json::from_str(&body) {
+                    attempt.usage.openai(&value);
+                }
+                return Err(OpenAiSidecarError::Api { status, body });
+            }
+
+            if is_chatgpt_mode {
+                collect_openai_sse_text(response, &mut attempt.usage)
+                    .await
+                    .map_err(OpenAiSidecarError::other)
+            } else {
+                let result: serde_json::Value = response
+                    .json()
+                    .await
+                    .context("Failed to parse OpenAI API response")
+                    .map_err(OpenAiSidecarError::other)?;
+                attempt.usage.outcome = RequestOutcome::Success;
+                attempt.usage.openai(&result);
+                extract_openai_response_text(&result).map_err(OpenAiSidecarError::other)
+            }
         }
+        .await;
+        attempt.finish(result.is_err());
+        result
     }
 
     /// Complete via Claude Messages API
@@ -572,7 +616,7 @@ impl Sidecar {
             }],
         };
 
-        let response = crate::provider::anthropic::apply_oauth_attribution_headers(
+        let builder = crate::provider::anthropic::apply_oauth_attribution_headers(
             self.client
                 .post(CLAUDE_API_URL)
                 .header("Authorization", format!("Bearer {}", creds.access_token))
@@ -585,12 +629,8 @@ impl Sidecar {
                 .header("content-type", "application/json")
                 .json(&request),
             &crate::provider::anthropic::new_oauth_request_id(),
-        )
-        .send()
-        .await
-        .context("Failed to send request to Claude API")?;
-
-        Self::parse_claude_response(response).await
+        );
+        self.send_claude_request(builder, AuthClass::Oauth).await
     }
 
     /// Direct API-key completion path (`x-api-key`).
@@ -614,26 +654,28 @@ impl Sidecar {
             }],
         };
 
-        let response = self
+        let builder = self
             .client
             .post(CLAUDE_API_KEY_URL)
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .header("anthropic-beta", "prompt-caching-2024-07-31")
             .header("content-type", "application/json")
-            .json(&request)
-            .send()
-            .await
-            .context("Failed to send request to Claude API")?;
-
-        Self::parse_claude_response(response).await
+            .json(&request);
+        self.send_claude_request(builder, AuthClass::ApiKey).await
     }
 
     /// Shared response parsing for both Claude credential paths.
-    async fn parse_claude_response(response: reqwest::Response) -> Result<String> {
+    async fn parse_claude_response(
+        response: reqwest::Response,
+        usage: &mut usage::UsageAccumulator,
+    ) -> Result<String> {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            if let Ok(value) = serde_json::from_str(&error_text) {
+                usage.claude(&value);
+            }
             return Err(SidecarHttpError {
                 provider: "Claude",
                 status,
@@ -642,10 +684,14 @@ impl Sidecar {
             .into());
         }
 
-        let result: ClaudeMessagesResponse = response
+        let value: serde_json::Value = response
             .json()
             .await
             .context("Failed to parse Claude API response")?;
+        usage.outcome = RequestOutcome::Success;
+        usage.claude(&value);
+        let result: ClaudeMessagesResponse =
+            serde_json::from_value(value).context("Failed to parse Claude API response")?;
 
         let text = result
             .content
@@ -683,7 +729,10 @@ Be conservative - only say "yes" if the memory would actually be useful for the 
             memory_content, current_context
         );
 
-        let response = self.complete(system, &prompt).await?;
+        let response = self
+            .for_memory_operation(MemoryOperationKind::Relevance)
+            .complete(system, &prompt)
+            .await?;
 
         // Parse response
         let mut is_relevant = false;
@@ -719,7 +768,10 @@ Be conservative - only say "yes" if the memory would actually be useful for the 
             existing_content, new_content
         );
 
-        let response = self.complete(system, &prompt).await?;
+        let response = self
+            .for_memory_operation(MemoryOperationKind::ContradictionCheck)
+            .complete(system, &prompt)
+            .await?;
         let trimmed = response.trim().to_uppercase();
         Ok(trimmed.starts_with("YES"))
     }
@@ -778,7 +830,18 @@ Output ONLY the formatted lines, no other text. If no NEW memories worth extract
             }
         }
 
-        let response = self.complete(&system, transcript).await?;
+        let kind =
+            if self.memory_context.as_ref().is_some_and(|context| {
+                context.operation_kind == MemoryOperationKind::FinalExtraction
+            }) {
+                MemoryOperationKind::FinalExtraction
+            } else {
+                MemoryOperationKind::IncrementalExtraction
+            };
+        let response = self
+            .for_memory_operation(kind)
+            .complete(&system, transcript)
+            .await?;
 
         let memories = response
             .lines()
@@ -944,7 +1007,10 @@ pub struct ExtractedMemory {
 ///
 /// Parses `data: <json>` lines and accumulates text deltas from
 /// `response.output_text.delta` events, stopping on completion/done.
-async fn collect_openai_sse_text(response: reqwest::Response) -> Result<String> {
+async fn collect_openai_sse_text(
+    response: reqwest::Response,
+    usage: &mut usage::UsageAccumulator,
+) -> Result<String> {
     use futures::StreamExt;
     let mut stream = response.bytes_stream();
     let mut text = String::new();
@@ -963,7 +1029,11 @@ async fn collect_openai_sse_text(response: reqwest::Response) -> Result<String> 
                 if data == "[DONE]" {
                     return Ok(text);
                 }
-                if let Ok(event) = serde_json::from_str::<SseEvent>(data) {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(data) {
+                    usage.openai(&value);
+                    let Ok(event) = serde_json::from_value::<SseEvent>(value) else {
+                        continue;
+                    };
                     match event.kind.as_str() {
                         "response.output_text.delta" => {
                             if let Some(delta) = event.delta {
@@ -1114,8 +1184,6 @@ fn is_anthropic_oauth_forbidden(err: &anyhow::Error) -> bool {
 #[derive(Deserialize)]
 struct ClaudeMessagesResponse {
     content: Vec<ClaudeContentBlock>,
-    #[serde(rename = "usage")]
-    _usage: Option<ClaudeUsage>,
 }
 
 #[derive(Deserialize)]
@@ -1125,14 +1193,6 @@ enum ClaudeContentBlock {
     Text { text: String },
     #[serde(other)]
     Other,
-}
-
-#[derive(Deserialize)]
-struct ClaudeUsage {
-    #[serde(rename = "input_tokens")]
-    _input_tokens: u32,
-    #[serde(rename = "output_tokens")]
-    _output_tokens: u32,
 }
 
 #[cfg(test)]

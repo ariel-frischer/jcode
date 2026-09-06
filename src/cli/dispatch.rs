@@ -6,9 +6,8 @@ use std::process::{Command as ProcessCommand, Stdio};
 use std::time::Instant;
 
 use super::args::{
-    AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, MemoryCommand,
-    ModelCommand, ProviderCommand, RestartCommand, ServerCommand, SessionCommand,
-    TranscriptModeArg,
+    AmbientCommand, Args, AuthCommand, CloudCommand, CloudSessionsCommand, Command, ModelCommand,
+    ProviderCommand, RestartCommand, ServerCommand, SessionCommand, TranscriptModeArg,
 };
 use crate::{
     agent, auth, build, provider, provider_catalog, server, session, setup_hints, startup_profile,
@@ -690,28 +689,7 @@ fn resolve_resume_id(resume_id: &str) -> Result<String> {
     }
 }
 
-fn map_memory_subcommand(subcmd: MemoryCommand) -> commands::MemorySubcommand {
-    match subcmd {
-        MemoryCommand::List { scope, tag } => commands::MemorySubcommand::List { scope, tag },
-        MemoryCommand::Search { query, semantic } => {
-            commands::MemorySubcommand::Search { query, semantic }
-        }
-        MemoryCommand::Export { output, scope } => {
-            commands::MemorySubcommand::Export { output, scope }
-        }
-        MemoryCommand::Import {
-            input,
-            scope,
-            overwrite,
-        } => commands::MemorySubcommand::Import {
-            input,
-            scope,
-            overwrite,
-        },
-        MemoryCommand::Stats => commands::MemorySubcommand::Stats,
-        MemoryCommand::ClearTest => commands::MemorySubcommand::ClearTest,
-    }
-}
+use super::memory_usage::map_subcommand as map_memory_subcommand;
 
 fn map_ambient_subcommand(subcmd: AmbientCommand) -> commands::AmbientSubcommand {
     match subcmd {

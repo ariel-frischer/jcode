@@ -7,6 +7,9 @@ use std::collections::HashSet;
 /// protocol clients.
 pub mod lifecycle;
 
+/// Versioned local memory-request accounting metadata, without content payloads.
+pub mod memory_usage;
+
 /// Identifies a session to resume, across the agent backends jcode can import
 /// from. This is pure data (only ids/paths) with no UI dependency; it lives in
 /// `jcode-session-types` so the foundation/import layer can match on it without

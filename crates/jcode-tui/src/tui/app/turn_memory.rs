@@ -215,7 +215,10 @@ impl App {
             .filter(|e| e.active)
             .map(|e| e.content)
             .collect();
-        let sidecar = crate::sidecar::Sidecar::new();
+        let sidecar = crate::sidecar::Sidecar::new().with_memory_operation(
+            Some(&self.session.id),
+            crate::sidecar::MemoryOperationKind::IncrementalExtraction,
+        );
         match sidecar
             .extract_memories_with_existing(&transcript, &existing)
             .await
