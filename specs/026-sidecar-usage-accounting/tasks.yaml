@@ -374,7 +374,7 @@ phases:
             - Supply root commit IDs, evidence paths, acceptance gaps and MERGE-READY only if local acceptance passes; no worktree removal or closure by worker.
         - id: T030
           title: ROOT ONLY record AC-9 delivery receipt in specs/026-sidecar-usage-accounting/evidence.md
-          status: Pending
+          status: Completed
           type: documentation
           parallel: false
           story_id: null

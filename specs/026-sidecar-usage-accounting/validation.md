@@ -1151,3 +1151,35 @@ supersedes the conservative worker handoff disposition, not the failure evidence
 Medium risk remains approved. AC-9 installation, activation, receipt and cleanup
 remain root-owned pending. A failed shell evidence append was repaired before
 staging; source and test results were unaffected.
+
+
+## Root AC-9 delivery receipt, 2026-09-06
+
+Landed and pushed merge adfbe843566d586c2916163a82d62f3fba86282a to dev.
+Canonical scripts/install_release.sh --fast finished release build in 2m45s,
+exit 0. Launcher/current/stable and shared-server are pinned to installed version
+adfbe8435. The installer gracefully reloaded the live server. Follow-up reload
+JSON reported had_listener=true, forced=false, already_current=true and
+handoff_ready=true. Running ancestor PID 514942 resolves to the same immutable
+adfbe8435 executable. No force-stop or credential/config/routing changes.
+
+Installed release SHA-256: 9fae06077830307acf0d55e57d077be5c0680371d0e99c4f44452a9ad6ad5605.
+Installed private-fixture CLI smoke passed: session-a has three calls, 4,555,000
+known nano-USD and two unknown-cost calls. Fixture paths/bytes/mtimes unchanged,
+no PRIVATE_ sentinels. This complements the nine full-feature kernel-denied CLI
+tests and the 95 fresh-base focused checks, not a paid inference test.
+
+All source/acceptance evidence and private runtime receipts are retained under
+.worktrees/reports/jcode-cyko/. Required static HTML risk report:
+.worktrees/reports/session-jcode-cyko-20260906.html. Six unchanged baseline gates
+remain disclosed under PRIN-007, not falsely marked as global passes.
+The completed read-only worker was stopped; no task controller or Cargo work
+remains. The clean merged feature worktree and local branch were safely removed.
+Only this documentation-receipt integration staging remains until this commit is
+pushed, then the root removes it and records final cleanup/closure on the Bead.
+This receipt changes no executable source, so installed code remains adfbe8435.
+Installer stale-server cleanup safely refused due to explicit JCODE_SOCKET and
+retired no processes. Canonical promotion independently fixed the shared-server
+channel pin, and actual daemon identity was verified afterward.
+
+Next action: inspect local accounting with `jcode memory usage --calls`.
