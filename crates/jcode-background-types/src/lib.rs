@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+pub mod workflow;
 
 /// Status of a background task.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

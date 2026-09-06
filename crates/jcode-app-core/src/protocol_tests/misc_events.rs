@@ -198,6 +198,7 @@ fn test_set_feature_roundtrip() -> Result<()> {
 #[test]
 fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result<()> {
     let req = Request::Subscribe {
+        workflow_progress: false,
         id: 89,
         working_dir: Some("/tmp/project".to_string()),
         selfdev: Some(true),

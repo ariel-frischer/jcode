@@ -51,6 +51,7 @@ pub mod startup_profile;
 pub mod tool;
 pub mod turn_cancel_registry;
 pub mod update;
+pub mod workflow;
 
 #[cfg(test)]
 #[path = "lifecycle_observability_tests.rs"]

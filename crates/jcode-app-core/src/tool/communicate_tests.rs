@@ -1426,6 +1426,7 @@ impl RawClient {
         let id = self.next_id;
         self.next_id += 1;
         self.send_request(Request::Subscribe {
+            workflow_progress: false,
             id,
             working_dir: Some(working_dir.display().to_string()),
             selfdev: None,
@@ -1825,3 +1826,4 @@ fn run_plan_terminal_summary_includes_recorded_failure_reasons() {
 include!("communicate_tests/input_format.rs");
 include!("communicate_tests/end_to_end.rs");
 include!("communicate_tests/assignment.rs");
+include!("communicate_tests/report_retrieval.rs");

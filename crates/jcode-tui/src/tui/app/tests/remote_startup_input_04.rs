@@ -136,3 +136,58 @@ fn test_handle_server_event_swarm_status_announces_member_completion() {
         Some("🐝 ant done · 1/2 active".to_string())
     );
 }
+
+#[test]
+fn workflow_snapshots_are_scoped_and_session_switch_clears_them() {
+    let mut app = create_test_app();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _guard = rt.enter();
+    let mut remote = crate::tui::backend::RemoteConnection::dummy();
+    app.remote_session_id = Some("owned".into());
+    let event = |session: &str| crate::protocol::ServerEvent::WorkflowStatus {
+        session_id: session.into(),
+        workflows: vec![crate::bus::WorkflowSnapshot {
+            label: "Owned workflow".into(),
+            ..Default::default()
+        }],
+    };
+    assert!(!app.handle_server_event(event("other"), &mut remote));
+    assert!(app.workflow_snapshots().is_empty());
+    assert!(app.handle_server_event(event("owned"), &mut remote));
+    assert_eq!(app.workflow_snapshots().len(), 1);
+    let history = |session: &str| {
+        serde_json::from_value(serde_json::json!({
+            "type": "history", "id": 1, "session_id": session, "messages": []
+        }))
+        .unwrap()
+    };
+    app.handle_server_event(history("owned"), &mut remote);
+    assert_eq!(
+        app.workflow_snapshots().len(),
+        1,
+        "same-session GetHistory must retain snapshot"
+    );
+    app.handle_server_event(
+        crate::protocol::ServerEvent::SessionId {
+            session_id: "owned".into(),
+        },
+        &mut remote,
+    );
+    assert_eq!(app.workflow_snapshots().len(), 1);
+    app.handle_server_event(
+        crate::protocol::ServerEvent::SessionId {
+            session_id: "next".into(),
+        },
+        &mut remote,
+    );
+    assert!(app.workflow_snapshots().is_empty());
+    assert!(!app.handle_server_event(event("owned"), &mut remote));
+    assert!(app.workflow_snapshots().is_empty());
+    app.handle_server_event(event("next"), &mut remote);
+    assert_eq!(app.workflow_snapshots().len(), 1);
+    app.handle_server_event(history("third"), &mut remote);
+    assert!(
+        app.workflow_snapshots().is_empty(),
+        "history-based resume must clear old owner"
+    );
+}

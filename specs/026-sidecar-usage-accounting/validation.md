@@ -1132,3 +1132,22 @@ because AC-9 explicitly reserves it for root.
 
 **Next action:** root reviews the isolated AC-8 failures and remaining evidence
 boundaries before deciding readiness for its T030 delivery workflow.
+
+## Root fresh-base acceptance, 2026-09-06
+
+Merged current github/dev 4b6b634d2 without rewriting. The sole docs/index.md
+conflict retains the full current index and the accounting entry. No Rust conflicts.
+Direct combined-tree checks passed: 9 accounting types, 42 sidecar, 23 usage,
+12 ownership and 9 full-default CLI tests (95 selected, zero failures).
+Full guardrails completed in 305 seconds. Formatting, all-target/all-feature check,
+lockfile, warning budget, dependency and wildcard guards, native routing and
+onboarding passed. Six broad baseline gates still fail, not a clean broad pass.
+Root reran all five static validators and byte-verified all 71 reported existing
+Rust paths against current github/dev. Scripts, budgets and manifests unchanged
+relative to that base. No changed-surface finding.
+Evidence: ~/.jcode/scratch/jcode-cyko/fresh-base/{results.txt,*.log,baseline-comparison.json}.
+Root accepts isolated existing failures under constitution PRIN-007. This
+supersedes the conservative worker handoff disposition, not the failure evidence.
+Medium risk remains approved. AC-9 installation, activation, receipt and cleanup
+remain root-owned pending. A failed shell evidence append was repaired before
+staging; source and test results were unaffected.

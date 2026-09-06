@@ -1685,7 +1685,7 @@ impl crate::tui::TuiState for App {
             diagrams,
             workspace_rows,
             workspace_animation_tick,
-            ambient_info: gather_ambient_info(crate::config::config().ambient.enabled),
+            ambient_info: gather_ambient_info(crate::config::config().ambient.enabled, session_id),
             observed_context_tokens: self.current_stream_context_tokens(),
             cache_hit_info,
             compaction_info,
@@ -1813,6 +1813,10 @@ impl crate::tui::TuiState for App {
 
     fn diagram_mode(&self) -> crate::config::DiagramDisplayMode {
         self.diagram_mode
+    }
+
+    fn workflow_snapshots(&self) -> &[crate::bus::WorkflowSnapshot] {
+        &self.remote_workflows
     }
 
     fn inline_swarm_gallery_active(&self) -> bool {

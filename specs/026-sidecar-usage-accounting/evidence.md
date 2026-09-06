@@ -185,3 +185,11 @@ Implementation/test commit: `d8e32604c9ab233bc910d50025c15accc5d298d3`. The foll
 contains only task completion and handoff metadata. Feature progress is **29/30**,
 phase 6 **8/9** with root-only T030 Pending. See validation.md for per-phase and
 per-story totals.
+
+## Root disposition after fresh-base validation
+
+Root reproduced 95 passing focused/default-CLI tests on current dev plus this
+feature. Full guardrails completed with six unchanged baseline failures and 71
+independently byte-verified failing paths. Constitution PRIN-007 permits acceptance
+with disclosed baseline debt, not a clean global pass. See validation.md.
+AC-9 remains pending until installation, activation and task-owned cleanup.

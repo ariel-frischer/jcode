@@ -82,6 +82,7 @@ impl Client {
         };
 
         let request = Request::Subscribe {
+            workflow_progress: false,
             id,
             working_dir: Some(working_dir),
             selfdev,

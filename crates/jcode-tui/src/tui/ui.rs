@@ -2991,6 +2991,13 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
             .suppression_reason
             .map(|reason| format!("{reason:?}"));
     }
+    let session_area = super::ui_workflow::draw(
+        frame,
+        session_area,
+        app.workflow_snapshots(),
+        app.workflow_panel_enabled(),
+        app.workflow_max_visible(),
+    );
     let swarm_page_active = app.swarm_panel_full_page();
 
     // Check diagram display mode and get active diagrams early so we can

@@ -122,6 +122,7 @@ The clearest examples of my custom delta include:
 - **Configurable debugging:** DAP debugger operations, adapter setup and
   launch transport, policy controls, and CLI/configuration switches for
   disabling the debugger when it is not wanted.
+- **Experimental passive workflow progress:** an opt-in, server-owned main-TUI box for owned subagents and explicitly registered artifact workflows, with separate activity/checkpoint ages and safe health evidence. See the [workflow guide](docs/public/workflow-observability.md).
 - **Experimental LSP feedback:** language-neutral diagnostics, navigation, and
   edit synchronization based on the Oh My Pi LSP design. Language servers are
   explicitly opt-in and remain disabled by default to avoid TypeScript/Rust

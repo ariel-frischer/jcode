@@ -1,6 +1,7 @@
 use crate::message::ToolCall;
 use crate::side_panel::SidePanelSnapshot;
 use crate::todo::TodoItem;
+pub use jcode_background_types::workflow::{WorkflowHealth, WorkflowSnapshot, observed_health};
 pub use jcode_background_types::{
     BackgroundTaskCompleted, BackgroundTaskProgress, BackgroundTaskProgressEvent,
     BackgroundTaskProgressKind, BackgroundTaskProgressSource, BackgroundTaskStalled,

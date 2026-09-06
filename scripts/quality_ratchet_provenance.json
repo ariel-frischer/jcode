@@ -1,5 +1,5 @@
 {
-  "accepted_merged_state": "f73e07cd5c6cecebe384ee30101ef644555cfe55",
+  "accepted_merged_state": "81adbe1b1a4ee737032e368873a912622e765722",
   "reconciliation_bead": "jcode-l89.5",
   "records": [
     {
@@ -104,7 +104,7 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-004",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 2405 + owned delta 3 = 2408; actual base 2447, candidate 2450. Existing excess 42 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "50016216bbd25ad07d0cdb7f3e8cdd9879bf6e51",
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
@@ -113,13 +113,16 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "9cd2e4acd0af4cf998d50537339dbcc36458bb3a",
         "bc0e25de668724ee90f45d6934ca0256d8310f6e",
-        "dda81e8fb9fc1fae443f2931f1ef10c196f34812"
+        "dda81e8fb9fc1fae443f2931f1ef10c196f34812",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c",
+        "30be182ea415f935f1446e20093ffb6047c38648"
       ],
       "previous_value": 2376,
-      "reconciled_value": 2405,
+      "reconciled_value": 2408,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-app-core/src/server.rs",
       "source_bead_search": {
@@ -168,7 +171,7 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-006",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/client_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-app-core/src/server/client_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 3643 + owned delta 24 = 3667; actual base 3772, candidate 3796. Existing excess 129 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "189c58880307aae10c4bfd687ac4807a24e9a42e",
         "77c5119b9c342746389148d30dfc8189878eecda",
@@ -178,13 +181,15 @@
         "05e4a3e2cf250a4ba2c6ed7c5cfa4ce02abae380",
         "8f5891a8c6b6d0c9767741646c7759ecea04b325",
         "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
-        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c"
       ],
       "previous_value": 3416,
-      "reconciled_value": 3643,
+      "reconciled_value": 3667,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-app-core/src/server/client_lifecycle.rs",
       "source_bead_search": {
@@ -895,17 +900,19 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-033",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-protocol/src/wire.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-protocol/src/wire.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1553 + owned delta 10 = 1563; actual base 1682, candidate 1692. Existing excess 129 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "f553ef97ad3712ac0027d2ed628c7561ac09c4a8",
         "1396b383e8dd464cafb89e9c0f231325a0c6824d",
-        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c"
       ],
       "previous_value": 1531,
-      "reconciled_value": 1553,
+      "reconciled_value": 1563,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-protocol/src/wire.rs",
       "source_bead_search": {
@@ -1099,7 +1106,7 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-041",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 2609 + owned delta 1 = 2610; actual base 2635, candidate 2636. Existing excess 26 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "16c55a5a28cccbec328ead81eb42201afce59a41",
         "16fc0290c6b5b7522a11acfd20ab54412a287a71",
@@ -1112,13 +1119,15 @@
         "c3b9c963822fc5e69ff9792678e75c3f22f0bac4",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "9afc59c2042bf467f94dee2cb71e9935685fd71c",
-        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 2582,
-      "reconciled_value": 2609,
+      "reconciled_value": 2610,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/app.rs",
       "source_bead_search": {
@@ -1361,7 +1370,7 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-050",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/remote/server_events.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/remote/server_events.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 3049 + owned delta 14 = 3063; actual base 3129, candidate 3143. Existing excess 80 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
         "a770cdf9767487eeb5caaf22ec3e20e7bc39b708",
@@ -1374,13 +1383,15 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "1396b383e8dd464cafb89e9c0f231325a0c6824d",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
-        "19e6cdc51836f43b7bd036de07b6025de6d59e1b"
+        "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 2858,
-      "reconciled_value": 3049,
+      "reconciled_value": 3063,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/app/remote/server_events.rs",
       "source_bead_search": {
@@ -1456,7 +1467,7 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-053",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_lifecycle.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1405 + owned delta 2 = 1407; actual base 1415, candidate 1417. Existing excess 10 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "358757cf4fa570c6f9224cec981bcbcc6622bd69",
         "aea5d98a2ad6f6e2a59b1286fd6b0b0b3b571c00",
@@ -1465,13 +1476,15 @@
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "9afc59c2042bf467f94dee2cb71e9935685fd71c",
-        "1bd235b5fd4613b3527a2a37f98b55732bd1daca"
+        "1bd235b5fd4613b3527a2a37f98b55732bd1daca",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 1387,
-      "reconciled_value": 1405,
+      "reconciled_value": 1407,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/app/tui_lifecycle.rs",
       "source_bead_search": {
@@ -1487,20 +1500,22 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-054",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_state.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/app/tui_state.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 2478 + owned delta 4 = 2482; actual base 2569, candidate 2573. Existing excess 91 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "06cc40fb6bb4d7b14fb0f9614a34c27e8212ad69",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
         "9afc59c2042bf467f94dee2cb71e9935685fd71c",
         "e42bad3f7b8c4a580aeca8b9cd5dd9df963d94b1",
-        "2c8735f69e28ce22c86d35e418fe19e6d2e4f197"
+        "2c8735f69e28ce22c86d35e418fe19e6d2e4f197",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 2431,
-      "reconciled_value": 2478,
+      "reconciled_value": 2482,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/app/tui_state.rs",
       "source_bead_search": {
@@ -1516,17 +1531,20 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-055",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/backend.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/backend.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1928 + owned delta 4 = 1932; actual base 2001, candidate 2005. Existing excess 73 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "19e6cdc51836f43b7bd036de07b6025de6d59e1b",
         "8775cf6851a074b54bb74d8e3748a41f5f89bea7",
-        "c7991d8cfebbc56e8ca81d295b2d9194c0558090"
+        "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 1882,
-      "reconciled_value": 1928,
+      "reconciled_value": 1932,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/backend.rs",
       "source_bead_search": {
@@ -1566,19 +1584,21 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-057",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1944 + owned delta 15 = 1959; actual base 2040, candidate 2055. Existing excess 96 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "02d6d96112dc4d7e7bebe402f244465b5d922b19",
         "751024bc1814a65b3e68a336354eb2dc59825701",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "9c1647da3632970a1361e3a49ed344180353cc6c",
-        "9afc59c2042bf467f94dee2cb71e9935685fd71c"
+        "9afc59c2042bf467f94dee2cb71e9935685fd71c",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 1902,
-      "reconciled_value": 1944,
+      "reconciled_value": 1959,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/mod.rs",
       "source_bead_search": {
@@ -1620,17 +1640,19 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-059",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- crates/jcode-tui/src/tui/ui.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 3776 + owned delta 7 = 3783; actual base 4004, candidate 4011. Existing excess 228 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "5da90ec9722b72c567966e486ac7df65627b8fb1",
-        "6f743f264aafb16281782ea5480438cc52ff05e8"
+        "6f743f264aafb16281782ea5480438cc52ff05e8",
+        "e7b03ba808261410ef1c38d0fd28fe25f7f5b1f2"
       ],
       "previous_value": 3685,
-      "reconciled_value": 3776,
+      "reconciled_value": 3783,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-tui/src/tui/ui.rs",
       "source_bead_search": {
@@ -1774,18 +1796,20 @@
       "baseline_commit": "535d55f4cd7dfac35357648d442653e16d020eac",
       "category": "code_size",
       "id": "QR-065",
-      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/acp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log 535d55f4cd7dfac35357648d442653e16d020eac..HEAD -- src/cli/acp.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 2189 + owned delta 2 = 2191; actual base 2191, candidate 2193. Existing excess 2 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "f411ffc18614a38ad614f0903c2afa78431b3b87",
         "6459bd52605305cf61e33d244a02a8692ff14887",
         "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
-        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c"
       ],
       "previous_value": 2078,
-      "reconciled_value": 2189,
+      "reconciled_value": 2191,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "src/cli/acp.rs",
       "source_bead_search": {
@@ -2030,7 +2054,7 @@
       "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
       "category": "test_size",
       "id": "QR-074",
-      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lifecycle_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- crates/jcode-app-core/src/server/client_lifecycle_tests.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1682 + owned delta 1 = 1683; actual base 2024, candidate 2025. Existing excess 342 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "1983f15425723f4d99b98fa1ab7b32c04acd568d",
         "66758cf9fab0470812552da8797002d74d8dc503",
@@ -2041,13 +2065,15 @@
         "52b04102d4e36d1f69c750cae4e3ebb8b16047ff",
         "fefae76c2f9d14c6fd7923b3adefe8ecec4bd3fa",
         "c7991d8cfebbc56e8ca81d295b2d9194c0558090",
-        "f73e07cd5c6cecebe384ee30101ef644555cfe55"
+        "f73e07cd5c6cecebe384ee30101ef644555cfe55",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c"
       ],
       "previous_value": 1534,
-      "reconciled_value": 1682,
+      "reconciled_value": 1683,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "crates/jcode-app-core/src/server/client_lifecycle_tests.rs",
       "source_bead_search": {
@@ -2838,18 +2864,20 @@
       "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
       "category": "test_size",
       "id": "QR-102",
-      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- tests/e2e/test_support/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget.",
+      "merged_state_evidence": "git log ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67..HEAD -- tests/e2e/test_support/mod.rs identifies the listed owning commits, and the current measured state is enforced by the reconciled budget. jcode-upir scoped extension: baseline allowance 1429 + owned delta 1 = 1430; actual base 1430, candidate 1431. Existing excess 1 is preserved, not accepted. Candidate ancestry is pinned separately from final integration evidence.",
       "owning_commits": [
         "189c58880307aae10c4bfd687ac4807a24e9a42e",
         "76bd9a811c6cb86ded882be7376f01af37b35ec7",
         "84510b891c5eafd1a789133ce7ada738674d6078",
-        "c0dc6f192fe5d4ea8d8b48b32c2137e28e0858fa"
+        "c0dc6f192fe5d4ea8d8b48b32c2137e28e0858fa",
+        "565d0b90e1bfa3c41713ec601edd3b40d747ed3c"
       ],
       "previous_value": 1427,
-      "reconciled_value": 1429,
+      "reconciled_value": 1430,
       "reconciliation_bead": "jcode-l89.5",
       "review_disposition_ids": [
-        "T003-HIST-NO-APPLICABLE-REVIEW"
+        "T003-HIST-NO-APPLICABLE-REVIEW",
+        "JCODE-UPIR-SCOPED-WIRING"
       ],
       "scope": "tests/e2e/test_support/mod.rs",
       "source_bead_search": {
@@ -4332,9 +4360,14 @@
       "source_beads": []
     },
     {
-      "id": "QR-144",
+      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
       "category": "swallowed_error",
-      "scope": "file:crates/jcode-tui/src/tui/app/remote.rs",
+      "id": "QR-144",
+      "merged_state_evidence": "Fresh-base reconciliation at f73e07cd5c6cecebe384ee30101ef644555cfe55 traces metric-causal commits for file:crates/jcode-tui/src/tui/app/remote.rs and preserves only measured growth.",
+      "owning_commits": [
+        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
+        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
+      ],
       "previous_value": {
         "dot_ok": 0,
         "let_underscore": 11,
@@ -4345,24 +4378,19 @@
         "let_underscore": 11,
         "unwrap_or_default": 1
       },
-      "baseline_commit": "ad65a2b7d33ed3179f6f1f2e20f21d215bb31b67",
-      "owning_commits": [
-        "bd4b7adb2c6d3e992582c9dc40f550357af3dd6b",
-        "004db5fdd555203e27eb0a1dc73a738aeb76904b"
-      ],
       "reconciliation_bead": "jcode-l89.5",
-      "source_bead_search": {
-        "query": "crates/jcode-tui/src/tui/app/remote.rs",
-        "status": "all",
-        "limit": 5,
-        "result": "not_found",
-        "matched_beads": []
-      },
-      "source_beads": [],
       "review_disposition_ids": [
         "T003-HIST-NO-APPLICABLE-REVIEW"
       ],
-      "merged_state_evidence": "Fresh-base reconciliation at f73e07cd5c6cecebe384ee30101ef644555cfe55 traces metric-causal commits for file:crates/jcode-tui/src/tui/app/remote.rs and preserves only measured growth."
+      "scope": "file:crates/jcode-tui/src/tui/app/remote.rs",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [],
+        "query": "crates/jcode-tui/src/tui/app/remote.rs",
+        "result": "not_found",
+        "status": "all"
+      },
+      "source_beads": []
     }
   ],
   "review_dispositions": [
@@ -4575,6 +4603,33 @@
       "evidence": "The bounded T002 inventory names no applicable review; provenance validation and current merged-state measurements provide the ratchet evidence.",
       "id": "T003-HIST-NO-APPLICABLE-REVIEW",
       "source": "specs/015-reconcile-quality-ratchets/validation.md#historical-ratchet-delta-and-ownership-inventory"
+    },
+    {
+      "concern": "Optional passive workflow wiring adds lines to existing oversized composition and compatibility files. Unrelated base drift must remain visible.",
+      "disposition": "rejected_with_evidence",
+      "evidence": "Reviewed exact c2a7d18a3..81adbe1b1 diffs. New implementation lives in bounded workflow modules. The 11 production deltas total 86 LOC for module/startup hooks, opt-in transport, current-session isolation, generic TUI accessors/render hook and closed-enum Subscribe constructors. Two test constructor deltas total 2 LOC. Only these measured deltas are added to budgets, not current total LOC. Base provenance/panic/swallowed failures are independently reproduced and not rebaselined. See specs/026-workflow-observability/acceptance.md T007.",
+      "id": "JCODE-UPIR-SCOPED-WIRING",
+      "source": "jcode-upir T007 inline review, 2026-09-05; builds on archived independent workflow review and T006 runtime acceptance"
+    }
+  ],
+  "scoped_extensions": [
+    {
+      "accepted_source_commit": "81adbe1b1a4ee737032e368873a912622e765722",
+      "base_commit": "c2a7d18a3",
+      "bead": "jcode-upir",
+      "integration_status": "candidate, final landing evidence belongs to the Bead report",
+      "policy": "Only additive wiring deltas are accepted. Historical reconciliation ownership and unresolved baseline drift are unchanged.",
+      "previous_accepted_merged_state": "f73e07cd5c6cecebe384ee30101ef644555cfe55",
+      "review_disposition_id": "JCODE-UPIR-SCOPED-WIRING",
+      "source_bead_search": {
+        "limit": 5,
+        "matched_beads": [
+          "jcode-upir"
+        ],
+        "query": "Main-TUI workflow progress",
+        "result": "found",
+        "status": "all"
+      }
     }
   ],
   "version": 1

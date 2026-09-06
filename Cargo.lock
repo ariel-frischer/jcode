@@ -3153,6 +3153,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2 0.10.9",
  "similar",
  "tar",
@@ -3507,6 +3508,7 @@ name = "jcode-protocol"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "jcode-background-types",
  "jcode-batch-types",
  "jcode-config-types",
  "jcode-message-types",

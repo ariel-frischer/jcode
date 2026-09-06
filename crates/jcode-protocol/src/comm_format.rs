@@ -635,8 +635,11 @@ pub fn format_comm_awaited_members_with_reports(
                 &duplicate_names,
             );
             output.push_str(&format!(
-                "\n--- {} ({}) ---\n{}\n",
-                name, member.status, report
+                "\n--- {} ({}) ---\n{}\nFull report: swarm action=read_report target_session={}.\n",
+                name,
+                member.status,
+                truncate_comm_completion_report(report),
+                member.session_id
             ));
         }
     }
@@ -664,6 +667,27 @@ pub fn format_comm_channels(channels: &[SwarmChannelInfo]) -> String {
 #[cfg(test)]
 mod truncation_tests {
     use super::*;
+
+    #[test]
+    fn await_report_preview_is_bounded_and_points_to_full_retrieval() {
+        let report = format!("{}TAIL-EVIDENCE", "🦢".repeat(5000));
+        let members = vec![AwaitedMemberStatus {
+            session_id: "worker-id".into(),
+            friendly_name: Some("worker".into()),
+            status: "completed".into(),
+            done: true,
+            completion_report: Some(report.clone()),
+        }];
+        let out = format_comm_awaited_members_with_reports(true, "done", &members, &HashMap::new());
+        assert!(!out.contains("TAIL-EVIDENCE"));
+        assert!(out.chars().count() < 4500);
+        assert!(out.contains("read_report"));
+        assert!(out.contains("worker-id"));
+        assert_eq!(
+            members[0].completion_report.as_deref(),
+            Some(report.as_str())
+        );
+    }
 
     #[test]
     fn history_truncation_handles_multibyte_boundaries() {

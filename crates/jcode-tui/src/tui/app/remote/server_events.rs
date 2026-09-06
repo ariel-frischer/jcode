@@ -1457,6 +1457,9 @@ pub(in crate::tui::app) fn handle_server_event(
             false
         }
         ServerEvent::SessionId { session_id } => {
+            if app.remote_session_id.as_deref() != Some(session_id.as_str()) {
+                app.remote_workflows.clear();
+            }
             remote.set_session_id(session_id.clone());
             app.remote_session_id = Some(session_id.clone());
             crate::set_current_session(&session_id);
@@ -1674,6 +1677,7 @@ pub(in crate::tui::app) fn handle_server_event(
             let session_changed = prev_session_id.as_deref() != Some(session_id.as_str());
 
             if session_changed {
+                app.remote_workflows.clear();
                 app.rate_limit_pending_message = None;
                 app.rate_limit_reset = None;
                 app.connection_type = None;
@@ -2189,6 +2193,16 @@ pub(in crate::tui::app) fn handle_server_event(
         ServerEvent::SidePanelState { snapshot } => {
             app.set_side_panel_snapshot(snapshot);
             false
+        }
+        ServerEvent::WorkflowStatus {
+            session_id,
+            workflows,
+        } => {
+            if app.remote_session_id.as_deref() != Some(session_id.as_str()) {
+                return false;
+            }
+            app.remote_workflows = workflows.into_iter().take(256).collect();
+            true
         }
         ServerEvent::SwarmStatus { members } => {
             if app.swarm_enabled {

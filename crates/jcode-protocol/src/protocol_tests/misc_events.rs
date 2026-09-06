@@ -274,6 +274,7 @@ fn test_jcode_subscription_set_route_is_wire_safe() -> Result<()> {
 #[test]
 fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result<()> {
     let req = Request::Subscribe {
+        workflow_progress: false,
         id: 89,
         working_dir: Some("/tmp/project".to_string()),
         selfdev: Some(true),
@@ -534,4 +535,45 @@ fn test_message_end_carries_provider_stop_reason() -> Result<()> {
     let json = encode_event(&ServerEvent::MessageEnd { stop_reason: None });
     assert!(!json.contains("stop_reason"), "unexpected field: {json}");
     Ok(())
+}
+#[test]
+fn workflow_subscription_capability_is_opt_in_and_omitted_for_legacy_clients() {
+    let legacy: Request =
+        serde_json::from_value(serde_json::json!({"type":"subscribe", "id":1})).unwrap();
+    assert!(
+        serde_json::to_value(&legacy)
+            .unwrap()
+            .get("workflow_progress")
+            .is_none()
+    );
+    let enabled: Request = serde_json::from_value(
+        serde_json::json!({"type":"subscribe", "id":1, "workflow_progress":true}),
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&enabled).unwrap()["workflow_progress"],
+        true
+    );
+}
+
+#[test]
+fn workflow_status_event_roundtrips_owned_bounded_evidence() {
+    use jcode_background_types::workflow::{WorkflowHealth, WorkflowSnapshot};
+    let event = ServerEvent::WorkflowStatus {
+        session_id: "owner".into(),
+        workflows: vec![WorkflowSnapshot {
+            id: "run".into(),
+            completed: Some(2),
+            total: Some(4),
+            activity_age_secs: Some(10),
+            checkpoint_age_secs: Some(30),
+            health: WorkflowHealth::Failed,
+            detail: Some("Credits exhausted".into()),
+            ..Default::default()
+        }],
+    };
+    let value = serde_json::to_value(&event).unwrap();
+    assert_eq!(value["type"], "workflow_status");
+    let decoded: ServerEvent = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), value);
 }
