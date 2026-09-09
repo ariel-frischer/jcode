@@ -918,8 +918,12 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 push_queued_suffix(&mut spans, &queued_suffix);
                 Line::from(spans)
             }
-            ProcessingStatus::Thinking(_start) => {
-                let mut label = format!(" thinking… {}", format_elapsed(elapsed));
+            ProcessingStatus::Thinking(start) => {
+                let mut label = format!(
+                    " thinking… {} · turn {}",
+                    format_elapsed(start.elapsed().as_secs_f32()),
+                    format_elapsed(elapsed)
+                );
                 append_transport_context(&mut label, app);
                 let mut spans = vec![
                     Span::styled(spinner, Style::default().fg(ai_color())),

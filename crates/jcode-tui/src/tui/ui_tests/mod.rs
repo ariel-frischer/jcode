@@ -131,6 +131,7 @@ struct TestState {
     anim_elapsed: f32,
     now_ms: u64,
     time_since_activity: Option<Duration>,
+    elapsed: Option<Duration>,
     remote_startup_phase_active: bool,
     inline_view_state: Option<crate::tui::InlineViewState>,
     inline_interactive_state: Option<crate::tui::InlineInteractiveState>,
@@ -249,7 +250,7 @@ impl crate::tui::TuiState for TestState {
         Vec::new()
     }
     fn elapsed(&self) -> Option<Duration> {
-        None
+        self.elapsed
     }
     fn status(&self) -> ProcessingStatus {
         self.status.clone()
@@ -538,6 +539,8 @@ mod prepared_messages_tests;
 mod rendering;
 #[path = "swarm_buffer.rs"]
 mod swarm_buffer;
+#[path = "thinking_status.rs"]
+mod thinking_status;
 #[path = "tools.rs"]
 mod tools;
 #[path = "top_bar.rs"]
