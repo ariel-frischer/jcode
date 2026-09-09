@@ -105,10 +105,14 @@ Long silent reasoning is not proof of a lost request. Recovery can restart usefu
 generation and consume additional quota. Increase the budgets or disable the new
 watchdog for workloads that intentionally reason silently for longer.
 
-The TUI separately labels current thinking-phase time and cumulative `turn` time.
-The latter includes tool rounds and automatic follow-ups, so a 15-minute turn does
-not imply a single 15-minute provider request. Retry status remains separate from
-the total-turn clock.
+The TUI separately labels current thinking/connection-attempt time and cumulative
+`turn` time. The latter includes tool rounds and automatic follow-ups, so a
+15-minute turn does not imply a single 15-minute provider request. Connection
+status names the provider, for example `OpenAI: connecting… 2s · turn 1h 11m`.
+Running tools do not repeat the previous provider's transport details: a bash
+command cannot be mislabeled as still opening the previous WebSocket. Finished
+connection setup details disappear during thinking/streaming, while actual
+inactivity warnings remain visible. Retry status remains separate from turn time.
 
 ### Other harnesses
 
