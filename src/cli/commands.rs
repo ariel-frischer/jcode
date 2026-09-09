@@ -2585,6 +2585,7 @@ pub(crate) async fn run_single_message_with_agent(
     result
 }
 
+#[cfg(unix)]
 async fn run_single_message_command_schema(
     choice: &super::provider_init::ProviderChoice,
     model: Option<&str>,
@@ -2792,11 +2793,7 @@ async fn run_single_message_command_schema(
     _choice: &super::provider_init::ProviderChoice,
     _model: Option<&str>,
     _provider_profile: Option<&str>,
-    _reasoning_effort: Option<&str>,
-    _profile_run_options: Option<&super::profile::ProfileRunOptions>,
-    _resume_session: Option<&str>,
-    _message: &str,
-    _schema_path: &str,
+    _options: RunSingleMessageSchemaOptions<'_>,
 ) -> Result<()> {
     anyhow::bail!("jcode run --schema currently requires a Unix API bridge")
 }
