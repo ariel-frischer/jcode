@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: fork-release-${{ github.sha }}
+  group: fork-release-main
   cancel-in-progress: false
 
 permissions: {}
@@ -16,11 +16,13 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   JCODE_CI: "1"
+  RUSTUP_TOOLCHAIN: stable
 
 jobs:
   prepare:
     name: Prepare exact source metadata
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -74,6 +76,7 @@ jobs:
     name: Build Linux (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: prepare
+    timeout-minutes: 180
     permissions:
       contents: read
     strategy:
@@ -98,6 +101,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Preserve the inherited ARM64/Termux emulated-TLS build contract.
+      - uses: dtolnay/rust-toolchain@nightly
+        if: matrix.compat_container != true
+        with:
+          targets: aarch64-unknown-linux-gnu
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fork-release-${{ matrix.target }}
+
       - name: Build portable Linux x86_64 release binary
         if: matrix.compat_container == true
         shell: bash
@@ -118,9 +132,11 @@ jobs:
           JCODE_RELEASE_BUILD: "1"
           JCODE_CI_BUILD: "1"
           JCODE_BUILD_SEMVER: ${{ needs.prepare.outputs.release_tag }}
+          RUSTUP_TOOLCHAIN: nightly
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-Z tls-model=emulated"
         run: |
           set -euo pipefail
-          cargo build --locked --release --target "${{ matrix.target }}" -p jcode --bin jcode
+          cargo build -Z build-std=std,panic_abort --locked --release --target "${{ matrix.target }}" -p jcode --bin jcode
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/jcode" "dist/${{ matrix.artifact }}"
           chmod +x "dist/${{ matrix.artifact }}"
@@ -138,6 +154,7 @@ jobs:
     name: Build macOS (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: prepare
+    timeout-minutes: 120
     permissions:
       contents: read
     strategy:
@@ -186,6 +203,7 @@ jobs:
     name: Build Windows (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: prepare
+    timeout-minutes: 150
     permissions:
       contents: read
     strategy:
@@ -234,6 +252,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/jcode.exe" "dist/${{ matrix.artifact }}.exe"
           tar -czf "dist/${{ matrix.artifact }}.tar.gz" -C dist "${{ matrix.artifact }}.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows archive creation failed' }
           & "target/${{ matrix.target }}/release/jcode.exe" --version
           if ($LASTEXITCODE -ne 0) { throw 'Windows binary failed to run --version' }
 
@@ -249,6 +268,7 @@ jobs:
   publish:
     name: Publish complete fork CLI release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [prepare, build-linux, build-macos, build-windows]
     permissions:
       actions: read
@@ -303,7 +323,10 @@ jobs:
           workflow_attempt=${GITHUB_RUN_ATTEMPT}
           EOF
 
-          scripts/generate_release_notes.sh "$RELEASE_TAG" > release_notes.md
+          # The new tag does not exist yet. Supply the nearest ancestor tag so
+          # the first run does not put the repository's entire history in notes.
+          previous_tag="$(git describe --tags --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
+          scripts/generate_release_notes.sh "$RELEASE_TAG" "$previous_tag" > release_notes.md
           cat >> release_notes.md <<EOF
 
           ## Build provenance
@@ -352,19 +375,26 @@ jobs:
           fi
 
           if [[ -z "$existing_tag_sha" ]]; then
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --draft \
-              --target "$SOURCE_SHA" \
-              --title "$RELEASE_TAG" \
-              --notes-file release_notes.md
+            # Draft creation need not materialize a Git ref. Create the exact
+            # ref explicitly, without force, before asking GitHub for a draft.
+            git push origin "$SOURCE_SHA:refs/tags/$RELEASE_TAG"
             existing_tag_sha="$(remote_tag_sha)"
           fi
 
           [[ "$existing_tag_sha" == "$SOURCE_SHA" ]] || {
-            echo "Release tag $RELEASE_TAG does not point to source commit $SOURCE_SHA after draft creation: $existing_tag_sha" >&2
+            echo "Release tag $RELEASE_TAG does not point to source commit $SOURCE_SHA after tag creation: $existing_tag_sha" >&2
             exit 1
           }
+
+          if [[ "$release_state" != "true" ]]; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --verify-tag \
+              --target "$SOURCE_SHA" \
+              --title "$RELEASE_TAG" \
+              --notes-file release_notes.md
+          fi
           echo "already_published=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload assets and publish release

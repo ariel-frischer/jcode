@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -107,7 +108,12 @@ class MainReleaseTests(unittest.TestCase):
             set(publish_needs), {"prepare", "build-linux", "build-macos", "build-windows"}
         )
         self.assertIn("scripts/build_linux_compat.sh dist", text)
-        self.assertGreaterEqual(text.count("cargo build --locked --release"), 2)
+        self.assertIn("cargo build --locked --release", text)
+        self.assertIn("cargo build -Z build-std=std,panic_abort --locked --release", text)
+        self.assertIn('"-Z tls-model=emulated"', text)
+        self.assertEqual(workflow["concurrency"]["group"], "fork-release-main")
+        for job in workflow["jobs"].values():
+            self.assertIn("timeout-minutes", job)
         self.assertIn("'--locked'", text)
         for artifact in (
             "jcode-linux-x86_64",
@@ -175,6 +181,12 @@ class MainReleaseTests(unittest.TestCase):
             git(repo, "tag", release_tag, wrong_sha)
             git(repo, "push", "origin", f"refs/tags/{release_tag}")
 
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_gh = fake_bin / "gh"
+            fake_gh.write_text("#!/bin/sh\nexit 1\n")
+            fake_gh.chmod(0o755)
+
             result = run_bash(
                 script,
                 repo,
@@ -183,6 +195,7 @@ class MainReleaseTests(unittest.TestCase):
                 GITHUB_REPOSITORY="ariel-frischer/jcode",
                 GH_TOKEN="test-token",
                 GITHUB_OUTPUT=str(root / "output"),
+                PATH=f"{fake_bin}:{os.environ['PATH']}",
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("does not point to source commit", result.stderr)
@@ -215,9 +228,8 @@ class MainReleaseTests(unittest.TestCase):
                     if [[ "$1" == release && "$2" == view ]]; then
                       if [[ -f "$GH_STATE" ]]; then printf '%s\n' "$(cat "$GH_STATE")"; else exit 1; fi
                     elif [[ "$1" == release && "$2" == create ]]; then
-                      git tag "$3" "$GITHUB_SHA"
-                      git push origin "refs/tags/$3" >/dev/null
-                      printf '%s\n' draft > "$GH_STATE"
+                      git ls-remote --exit-code origin "refs/tags/$3" >/dev/null
+                      printf '%s\n' true > "$GH_STATE"
                     else
                       echo "unexpected gh invocation: $*" >&2
                       exit 2
@@ -244,6 +256,13 @@ class MainReleaseTests(unittest.TestCase):
             self.assertEqual(log.read_text().count("release create"), 1)
             tag_ref = git(repo, "ls-remote", "origin", "refs/tags/v2026.9.17")
             self.assertEqual(tag_ref.split()[0], source_sha)
+
+            # A previous run may have created its tag but failed before it
+            # created a draft. Keep the real ref and remove only mock API state.
+            state.unlink()
+            recovered = run_bash(script, repo, **environment)
+            self.assertEqual(recovered.returncode, 0, recovered.stderr)
+            self.assertEqual(log.read_text().count("release create"), 2)
 
             state.write_text("false\n")
             before = log.read_text()
@@ -280,6 +299,61 @@ class MainReleaseTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn("--draft=false", log.read_text())
+
+    def test_missing_assets_fail_before_notes_or_publishing(self):
+        script = step_script(load_workflow(), "publish", "Validate release assets and generate provenance")
+        with tempfile.TemporaryDirectory() as temporary:
+            result = run_bash(script, Path(temporary), RELEASE_TAG="v2026.9.17")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Missing release asset", result.stderr)
+
+    def test_assets_produce_checksums_provenance_and_scoped_notes(self):
+        script = step_script(load_workflow(), "publish", "Validate release assets and generate provenance")
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary) / "repo"
+            init_repo(repo)
+            git(repo, "tag", "v0.83.0")
+            (repo / "source.txt").write_text("new release\n")
+            git(repo, "add", "source.txt")
+            git(repo, "commit", "-m", "feat: release candidate")
+            source_sha = git(repo, "rev-parse", "HEAD")
+            (repo / "scripts").mkdir()
+            helper = repo / "scripts/generate_release_notes.sh"
+            helper.write_text((ROOT / "scripts/generate_release_notes.sh").read_text())
+            helper.chmod(0o755)
+            artifacts = repo / "artifacts"
+            artifacts.mkdir()
+            names = [f"jcode-{platform}-{arch}.{suffix}"
+                     for platform in ("linux", "macos", "windows")
+                     for arch in ("x86_64", "aarch64")
+                     for suffix in (("exe", "tar.gz") if platform == "windows" else ("tar.gz",))]
+            for name in names:
+                (artifacts / name).write_bytes(name.encode())
+            result = run_bash(script, repo, RELEASE_TAG="v2026.9.17",
+                              GITHUB_REPOSITORY="ariel-frischer/jcode", GITHUB_SHA=source_sha,
+                              GITHUB_RUN_ID="123", GITHUB_RUN_ATTEMPT="1")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = {f"{hashlib.sha256(name.encode()).hexdigest()}  {name}" for name in names}
+            self.assertEqual(set((repo / "SHA256SUMS").read_text().splitlines()), expected)
+            self.assertIn(f"source_sha={source_sha}", (repo / "BUILD-PROVENANCE.txt").read_text())
+            notes = (repo / "release_notes.md").read_text()
+            self.assertIn("release candidate", notes)
+            self.assertNotIn("- source\n", notes)
+            self.assertIn("Windows artifacts are unsigned", notes)
+
+    def test_metadata_rejects_invalid_source_and_run_number(self):
+        script = step_script(load_workflow(), "prepare", "Compute deterministic release metadata")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo = root / "repo"
+            source_sha = init_repo(repo)
+            for source, run_number in (("0" * 40, "17"), (source_sha, "0"), (source_sha, "bad")):
+                with self.subTest(source=source, run_number=run_number):
+                    result = run_bash(script, repo, SOURCE_SHA=source, RUN_NUMBER=run_number,
+                                      GITHUB_OUTPUT=str(root / "output"),
+                                      GITHUB_STEP_SUMMARY=str(root / "summary"))
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertFalse((root / "output").exists())
 
 
 if __name__ == "__main__":

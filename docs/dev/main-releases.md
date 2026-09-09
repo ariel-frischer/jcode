@@ -13,6 +13,9 @@ or promotes commits. Ariel chooses each `dev` to `main` promotion.
 - The publisher verifies that an existing tag points to the triggering commit.
   A collision fails the workflow rather than moving a tag. Re-running a run
   reuses its deterministic tag. A release that is already public is not changed.
+- Release runs are serialized so an older build cannot overwrite the latest
+  release after a newer build. GitHub keeps one running and one pending run per
+  concurrency group, replacing the pending run if more promotions arrive.
 - Publication is draft-first. Linux x86_64, Linux ARM64, macOS ARM64, macOS
   x86_64, Windows x86_64, and Windows ARM64 artifacts must all build and pass
   artifact validation before the draft is created and published.
