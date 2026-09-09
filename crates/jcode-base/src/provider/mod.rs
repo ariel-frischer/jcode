@@ -116,7 +116,9 @@ pub fn active_provider_fork() -> Option<Arc<dyn Provider>> {
 /// [`stream_timeout`] for the base budget and the reasoning-effort scaling that
 /// keeps long silent thinks from looking like dead connections (issue #434).
 pub use stream_timeout::{
-    MAX_STREAM_IDLE_TIMEOUT_MULTIPLIER, max_stream_idle_timeout, stream_idle_timeout,
+    MAX_STREAM_IDLE_TIMEOUT_MULTIPLIER, OPENAI_STALL_TIMEOUT_SECS_DEFAULT,
+    OPENAI_STALL_TIMEOUT_SECS_MAX, OPENAI_STALL_TIMEOUT_SECS_MIN, max_stream_idle_timeout,
+    openai_stall_recovery_enabled, openai_stall_timeout_secs, stream_idle_timeout,
     stream_idle_timeout_for_effort, stream_idle_timeout_multiplier_for_effort,
     stream_watchdog_timeout_for_provider,
 };

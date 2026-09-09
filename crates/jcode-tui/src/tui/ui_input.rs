@@ -737,6 +737,10 @@ fn collect_transport_context_labels(
 fn transport_context_labels(app: &dyn TuiState) -> Vec<String> {
     collect_transport_context_labels(
         app.status_detail()
+            .filter(|detail| {
+                matches!(app.status(), ProcessingStatus::Connecting(_))
+                    || !matches!(detail.trim(), "fresh websocket" | "websocket healthcheck")
+            })
             .and_then(|detail| normalize_status_detail(&detail)),
         app.connection_type()
             .map(|conn| display_connection_type(&conn))
@@ -886,18 +890,20 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 Line::from(spans)
             }
             ProcessingStatus::Connecting(ref phase) => {
-                let mut label = format!(
-                    " {}… {}",
-                    connection_phase_label(phase),
-                    format_elapsed(elapsed)
-                );
-                append_transport_context(&mut label, app);
                 // "Suspiciously long" is measured per connection attempt, not
                 // across the whole turn, so later round-trips don't immediately
                 // render yellow just because the turn has been running a while.
                 let phase_elapsed = app
                     .connection_phase_elapsed()
-                    .map_or(elapsed, |d| d.as_secs_f32());
+                    .map_or(0.0, |d| d.as_secs_f32());
+                let mut label = format!(
+                    " {}: {}… {} · turn {}",
+                    provider_name,
+                    connection_phase_label(phase),
+                    format_elapsed(phase_elapsed),
+                    format_elapsed(elapsed)
+                );
+                append_transport_context(&mut label, app);
                 let label_color = match phase {
                     crate::message::ConnectionPhase::Retrying { .. } => rgb(255, 193, 7),
                     crate::message::ConnectionPhase::Authenticating if phase_elapsed > 10.0 => {
@@ -918,8 +924,12 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                 push_queued_suffix(&mut spans, &queued_suffix);
                 Line::from(spans)
             }
-            ProcessingStatus::Thinking(_start) => {
-                let mut label = format!(" thinking… {}", format_elapsed(elapsed));
+            ProcessingStatus::Thinking(start) => {
+                let mut label = format!(
+                    " thinking… {} · turn {}",
+                    format_elapsed(start.elapsed().as_secs_f32()),
+                    format_elapsed(elapsed)
+                );
                 append_transport_context(&mut label, app);
                 let mut spans = vec![
                     Span::styled(spinner, Style::default().fg(ai_color())),
@@ -1032,14 +1042,8 @@ pub(super) fn draw_status(frame: &mut Frame, app: &dyn TuiState, area: Rect, pen
                         Style::default().fg(dim_color()),
                     ));
                 }
-                for label in transport_context_labels(app) {
-                    spans.push(Span::styled(
-                        format!(" · {}", label),
-                        Style::default().fg(dim_color()),
-                    ));
-                }
                 spans.push(Span::styled(
-                    format!(" · {}", format_elapsed(elapsed)),
+                    format!(" · turn {}", format_elapsed(elapsed)),
                     Style::default().fg(dim_color()),
                 ));
 

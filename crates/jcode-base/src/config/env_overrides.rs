@@ -915,6 +915,19 @@ impl Config {
                 self.provider.openai_service_tier = Some(trimmed);
             }
         }
+        if let Ok(v) = std::env::var("JCODE_OPENAI_STALL_RECOVERY")
+            && let Some(parsed) = parse_env_bool(&v)
+        {
+            self.provider.openai_stall_recovery = parsed;
+        }
+        if let Ok(v) = std::env::var("JCODE_OPENAI_STALL_TIMEOUT_SECS")
+            && let Ok(parsed) = v.trim().parse::<u64>()
+            && (jcode_config_types::OPENAI_STALL_TIMEOUT_SECS_MIN
+                ..=jcode_config_types::OPENAI_STALL_TIMEOUT_SECS_MAX)
+                .contains(&parsed)
+        {
+            self.provider.openai_stall_timeout_secs = parsed;
+        }
         if let Ok(v) = std::env::var("JCODE_OPENAI_NATIVE_COMPACTION_MODE") {
             let trimmed = v.trim().to_ascii_lowercase();
             if !trimmed.is_empty() {

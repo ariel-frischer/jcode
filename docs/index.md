@@ -44,7 +44,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [Onboarding sandbox](ONBOARDING_SANDBOX.md)
 - [Robust Onboarding: An Explicit State-Space Graph + Privacy-Preserving Trace Telemetry](ONBOARDING_STATE_GRAPH.md)
 - [OpenRelay Discovery test](OPENRELAY_DISCOVERY_TEST.md)
-- [OpenAI WebSocket transport and prewarming](OPENAI_WEBSOCKET.md)
+- [OpenAI WebSocket transport, prewarming, and configurable stalled-output recovery](OPENAI_WEBSOCKET.md)
 - [OpenAI WebSocket validation](OPENAI_WEBSOCKET_VALIDATION.md)
 - [Provider Doctor](PROVIDER_DOCTOR.md)
 - [jcode Docs](README.md)

@@ -6,6 +6,11 @@ impl Config {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "unknown".to_string());
         let memory_reasoning_summary = memory_reasoning_summary(self);
+        let configured_openai_stall_timeout_secs = self.provider.openai_stall_timeout_secs;
+        let effective_openai_stall_timeout_secs = configured_openai_stall_timeout_secs.clamp(
+            jcode_config_types::OPENAI_STALL_TIMEOUT_SECS_MIN,
+            jcode_config_types::OPENAI_STALL_TIMEOUT_SECS_MAX,
+        );
         let mut effective_disabled_tools: Vec<String> =
             self.tools.selection().disabled_tools.into_iter().collect();
         effective_disabled_tools.sort();
@@ -94,6 +99,8 @@ impl Config {
 - OpenAI reasoning effort: {}
 - Anthropic reasoning effort: {}
 - OpenAI transport: {}
+- OpenAI stall recovery: {}
+- OpenAI stall timeout: {}s base, effort-scaled (configured: {}s)
 - OpenAI service tier: {}
 - OpenAI native compaction: {}
 - OpenAI native compaction threshold ratio: {:.2}
@@ -279,6 +286,9 @@ impl Config {
                 .openai_transport
                 .as_deref()
                 .unwrap_or("(auto)"),
+            self.provider.openai_stall_recovery,
+            effective_openai_stall_timeout_secs,
+            configured_openai_stall_timeout_secs,
             self.provider
                 .openai_service_tier
                 .as_deref()

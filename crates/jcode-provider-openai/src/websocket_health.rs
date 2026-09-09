@@ -52,6 +52,67 @@ pub fn is_stream_activity_event(_event: &StreamEvent) -> bool {
     true
 }
 
+/// Returns true only for substantive model output that should refresh a
+/// native OpenAI stall deadline. Transport heartbeats and protocol lifecycle
+/// events are intentionally excluded because they can continue indefinitely
+/// while the model makes no progress.
+pub fn is_meaningful_stream_progress(event: &StreamEvent) -> bool {
+    match event {
+        StreamEvent::TextDelta(value)
+        | StreamEvent::ThinkingDelta(value)
+        | StreamEvent::ToolInputDelta(value) => !value.is_empty(),
+        StreamEvent::OpenAIReasoning {
+            summary,
+            encrypted_content,
+            ..
+        } => {
+            summary.iter().any(|value| !value.is_empty())
+                || encrypted_content
+                    .as_deref()
+                    .is_some_and(|value| !value.is_empty())
+        }
+        StreamEvent::MessageEnd { .. } => true,
+        StreamEvent::GeneratedImage { path, .. } => !path.is_empty(),
+        StreamEvent::Compaction {
+            openai_encrypted_content,
+            ..
+        } => openai_encrypted_content
+            .as_deref()
+            .is_some_and(|value| !value.is_empty()),
+        StreamEvent::NativeToolCall {
+            tool_name, input, ..
+        } => !tool_name.is_empty() || !input.is_null(),
+        _ => false,
+    }
+}
+
+/// Returns true when a raw Responses API frame contains nonempty model output.
+/// This complements [`is_meaningful_stream_progress`] for websocket tool
+/// argument deltas, which are buffered by the parser until the call completes.
+pub fn is_meaningful_websocket_payload(data: &str) -> bool {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(data) else {
+        return false;
+    };
+    let Some(kind) = value.get("type").and_then(|kind| kind.as_str()) else {
+        return false;
+    };
+    match kind {
+        "response.output_text.delta"
+        | "response.reasoning.delta"
+        | "response.reasoning_summary_text.delta"
+        | "response.function_call_arguments.delta" => value
+            .get("delta")
+            .and_then(|delta| delta.as_str())
+            .is_some_and(|delta| !delta.is_empty()),
+        "response.output_text.done" => value
+            .get("text")
+            .and_then(|text| text.as_str())
+            .is_some_and(|text| !text.is_empty()),
+        "response.completed" | "response.incomplete" => true,
+        _ => false,
+    }
+}
+
 /// Returns true when `data` parses as a structured Responses API stream event
 /// (a JSON object whose `type` is a `response.*` event or a top-level `error`).
 /// These frames carry model output and must be parsed as protocol events even

@@ -1409,6 +1409,10 @@ impl Default for FeatureConfig {
     }
 }
 
+pub const OPENAI_STALL_TIMEOUT_SECS_DEFAULT: u64 = 300;
+pub const OPENAI_STALL_TIMEOUT_SECS_MIN: u64 = 1;
+pub const OPENAI_STALL_TIMEOUT_SECS_MAX: u64 = 3600;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProviderConfig {
@@ -1422,6 +1426,13 @@ pub struct ProviderConfig {
     pub anthropic_reasoning_effort: Option<String>,
     /// OpenAI transport mode (auto|websocket|https)
     pub openai_transport: Option<String>,
+    /// Enable native OpenAI recovery when model output stops making meaningful progress.
+    /// Default: true. Overridable via `JCODE_OPENAI_STALL_RECOVERY`.
+    pub openai_stall_recovery: bool,
+    /// Base seconds without meaningful native OpenAI output before recovery.
+    /// Reasoning effort scales this budget. Default: 300. Overridable via
+    /// `JCODE_OPENAI_STALL_TIMEOUT_SECS`.
+    pub openai_stall_timeout_secs: u64,
     /// OpenAI service tier override (priority|fast|flex|off). Standard is the default.
     pub openai_service_tier: Option<String>,
     /// OpenAI native compaction mode: "auto", "explicit", or "off".
@@ -1467,6 +1478,8 @@ impl Default for ProviderConfig {
             openai_reasoning_effort: Some("low".to_string()),
             anthropic_reasoning_effort: None,
             openai_transport: None,
+            openai_stall_recovery: true,
+            openai_stall_timeout_secs: OPENAI_STALL_TIMEOUT_SECS_DEFAULT,
             openai_service_tier: Some("off".to_string()),
             openai_native_compaction_mode: "auto".to_string(),
             openai_native_compaction_threshold_tokens: 200_000,

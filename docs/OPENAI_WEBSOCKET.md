@@ -63,6 +63,68 @@ logs include `ws_prewarm_ready`, `ws_prewarm_hit`, `ws_prewarm_miss`, and
 `ws_prewarm_unavailable`. A hit uses the normal `websocket/persistent-reuse`
 connection label. Logs do not include credential identities or warmup inputs.
 
+## Stalled output recovery
+
+Native OpenAI Responses streams, including HTTPS fallback, have an enabled-by-default
+meaningful-progress watchdog:
+
+```toml
+[provider]
+openai_stall_recovery = true
+openai_stall_timeout_secs = 300
+```
+
+The timeout is seconds without substantive model output, not total turn duration.
+Text, reasoning, and streamed tool arguments refresh it. Transport pings, SSE
+comments, empty deltas, and lifecycle-only traffic do not. A timeout uses the
+existing provider retry/fallback path, with three total attempts on the fresh
+request path. Partial output is rolled back before replay and unusable persistent
+state is discarded. This does not add a poke loop or replay already executed local
+tools. Cancellation remains available while waiting for output.
+
+Set `openai_stall_recovery = false` to disable this new watchdog while retaining
+the existing transport timeouts and retry behavior. The base range is 1–3600
+seconds. Persisted numeric values outside that range are clamped at runtime.
+Reasoning effort uses the existing multiplier: low/medium 1×, high 2×, xhigh 3×,
+max 4×. Existing `[provider] stream_idle_timeout_secs` and WebSocket first-event
+and completion limits remain independent and can expire earlier. Raising only
+the new setting does not extend those existing limits.
+
+Server environment variables override persisted settings:
+
+- `JCODE_OPENAI_STALL_RECOVERY`: normal boolean spellings such as `true`, `false`,
+  `on`, and `off`.
+- `JCODE_OPENAI_STALL_TIMEOUT_SECS`: an integer from 1 through 3600.
+
+Empty, invalid, or out-of-range environment values leave the persisted/default
+value unchanged. `/config` reports the configured and effective base timeout.
+No client-only setting changes a remote server's provider policy. Restart or
+deliberately reload that server to activate a new build or server environment.
+
+Long silent reasoning is not proof of a lost request. Recovery can restart useful
+generation and consume additional quota. Increase the budgets or disable the new
+watchdog for workloads that intentionally reason silently for longer.
+
+The TUI separately labels current thinking/connection-attempt time and cumulative
+`turn` time. The latter includes tool rounds and automatic follow-ups, so a
+15-minute turn does not imply a single 15-minute provider request. Connection
+status names the provider, for example `OpenAI: connecting… 2s · turn 1h 11m`.
+Running tools do not repeat the previous provider's transport details: a bash
+command cannot be mislabeled as still opening the previous WebSocket. Finished
+connection setup details disappear during thinking/streaming, while actual
+inactivity warnings remain visible. Retry status remains separate from turn time.
+
+### Other harnesses
+
+Checked 2026-09-09: [Codex's configuration reference](https://developers.openai.com/codex/config-reference)
+documents `stream_idle_timeout_ms` (300000 ms by default), `stream_max_retries`
+(5), and separate HTTP request retries (4). [OpenCode's LLM adapter](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/llm.ts)
+passes an abort signal to provider execution, aborts it when its stream scope
+closes, and explicitly controls the AI SDK retry count (`input.retries ?? 0`).
+These support using transport deadlines, deliberate retry ownership, and
+cancellation rather than injecting generic continuation prompts. They do not
+prove either harness can distinguish every lost request from silent reasoning.
+
 ## Verification
 
 Run the runtime's offline regression suite:

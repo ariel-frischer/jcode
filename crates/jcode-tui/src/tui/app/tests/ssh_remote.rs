@@ -79,6 +79,7 @@ fn ssh_remote_subscribe_keeps_remote_only_id_and_filters_control_done() {
             let mut connection = crate::tui::backend::RemoteConnection::connect_with_session(
                 Some("remote-only-session"), Some("ssh-client"), true, false,
                 Some("/remote/project"),
+                None,
             ).await.unwrap();
             let (stream, _) = listener.accept().await.unwrap();
             let (reader, mut writer) = stream.into_split();
@@ -238,8 +239,8 @@ fn ssh_remote_header_guides_remote_login_and_hides_local_scheduler() {
         assert!(text.contains("/remote-only-skill"), "{text}");
         app.remote_skills.clear();
         assert!(crate::tui::TuiState::available_skills(&app).is_empty());
-        assert!(super::helpers::gather_ambient_info(false).is_none());
-        assert!(super::helpers::gather_ambient_info(true).is_none());
+        assert!(super::helpers::gather_ambient_info(false, None).is_none());
+        assert!(super::helpers::gather_ambient_info(true, None).is_none());
         let info = crate::tui::TuiState::info_widget_data(&app);
         assert!(info.ambient_info.is_none());
         assert!(info.git_info.is_none());

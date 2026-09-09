@@ -120,9 +120,13 @@ pub(super) fn format_status_for_debug(app: &dyn TuiState) -> String {
         }
         ProcessingStatus::Sending => "Sending...".to_string(),
         ProcessingStatus::Connecting(ref phase) => format!("{}...", phase),
-        ProcessingStatus::Thinking(_start) => {
+        ProcessingStatus::Thinking(start) => {
             let elapsed = app.elapsed().map(|d| d.as_secs_f32()).unwrap_or(0.0);
-            format!("Thinking... ({:.1}s)", elapsed)
+            format!(
+                "Thinking... ({:.1}s · turn {:.1}s)",
+                start.elapsed().as_secs_f32(),
+                elapsed
+            )
         }
         ProcessingStatus::Streaming => {
             let (input, output) = app.streaming_tokens();

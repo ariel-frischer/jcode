@@ -27,7 +27,7 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
-use std::sync::{Arc, LazyLock, RwLock as StdRwLock, Weak};
+use std::sync::{Arc, LazyLock, Mutex as StdMutex, RwLock as StdRwLock, Weak};
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock, mpsc};
@@ -1417,7 +1417,8 @@ mod websocket_health;
 
 use self::websocket_health::{
     WEBSOCKET_FALLBACK_NOTICE, WEBSOCKET_FIRST_EVENT_TIMEOUT_SECS,
-    classify_websocket_fallback_reason, is_stream_activity_event, is_websocket_activity_payload,
+    classify_websocket_fallback_reason, is_meaningful_stream_progress,
+    is_meaningful_websocket_payload, is_stream_activity_event, is_websocket_activity_payload,
     is_websocket_fallback_notice, is_websocket_first_activity_payload, record_websocket_fallback,
     record_websocket_success, summarize_websocket_fallback_reason, websocket_activity_timeout_kind,
     websocket_cooldown_remaining, websocket_next_activity_timeout_secs_with_completion,

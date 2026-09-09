@@ -16,7 +16,8 @@ use self::openai_rate_limit_format::format_rate_limit_error;
 mod openai_stream_timeout;
 pub(super) use self::openai_stream_timeout::reasoning_payload;
 use self::openai_stream_timeout::{
-    effective_https_idle_timeout, effective_ws_completion_timeout_secs,
+    effective_https_idle_timeout, effective_openai_stall_timeout_secs,
+    effective_stream_wait_timeout, effective_ws_completion_timeout_secs,
 };
 
 pub(super) async fn openai_access_token(
@@ -81,309 +82,9 @@ pub(super) async fn force_refresh_openai_token(
     Ok(new_access_token)
 }
 
-/// Stream the response from OpenAI API
-pub(super) async fn stream_response(
-    client: Client,
-    credentials: Arc<RwLock<CodexCredentials>>,
-    request: Value,
-    initial_status_detail: String,
-    tx: mpsc::Sender<Result<StreamEvent>>,
-) -> Result<(), OpenAIStreamFailure> {
-    use jcode_message_types::ConnectionPhase;
-    let request_model = openai_request_model(&request);
-    let stream_started_at = Instant::now();
-    log_openai_stream_lifecycle(
-        jcode_base::logging::LogLevel::Info,
-        "https_request_start",
-        vec![
-            ("model", request_model.clone()),
-            ("transport", "https".to_string()),
-        ],
-    );
-    let usage_snapshot = jcode_base::usage::get_openai_usage_sync();
-    jcode_base::logging::info(&format!(
-        "OpenAI limit diag: starting fresh HTTPS request usage=({})",
-        usage_snapshot.diagnostic_fields()
-    ));
-    emit_status_detail(&tx, initial_status_detail).await;
-    emit_connection_phase(&tx, ConnectionPhase::Authenticating).await;
-    let access_token = openai_access_token(&credentials).await?;
-    let creds = credentials.read().await;
-    let is_chatgpt_mode = !creds.refresh_token.is_empty() || creds.id_token.is_some();
-    let url = OpenAIProvider::responses_url(&creds);
-    let account_id = creds.account_id.clone();
-    drop(creds);
-
-    let mut builder = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Type", "application/json");
-
-    if is_chatgpt_mode {
-        builder = builder.header("originator", ORIGINATOR);
-        if let Some(account_id) = account_id.as_ref() {
-            builder = builder.header("chatgpt-account-id", account_id);
-        }
-    }
-
-    emit_connection_phase(&tx, ConnectionPhase::SendingRequest).await;
-    let connect_start = std::time::Instant::now();
-    let idle_timeout = effective_https_idle_timeout(&request);
-
-    let response = jcode_provider_core::transport::send_with_initial_response_timeout(
-        builder.json(&request),
-        idle_timeout,
-    )
-    .await
-    .context("Failed to send request to OpenAI API")
-    .map_err(OpenAIStreamFailure::Other)?;
-
-    let connect_ms = connect_start.elapsed().as_millis();
-    jcode_base::logging::info(&format!(
-        "HTTP connection established in {}ms (status={})",
-        connect_ms,
-        response.status()
-    ));
-    log_openai_stream_lifecycle(
-        jcode_base::logging::LogLevel::Info,
-        "https_connected",
-        vec![
-            ("model", request_model.clone()),
-            ("status", response.status().as_u16().to_string()),
-            ("connect_ms", connect_ms.to_string()),
-        ],
-    );
-    if response.status().is_success() && usage_snapshot.exhausted() {
-        jcode_base::logging::warn(&format!(
-            "OpenAI limit diag: fresh HTTPS request accepted while local usage indicates exhausted usage=({})",
-            usage_snapshot.diagnostic_fields()
-        ));
-    }
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let retry_after = jcode_provider_core::retry_after::retry_after(response.headers());
-
-        let body = jcode_base::util::http_error_body(response, "HTTP error").await;
-        log_openai_stream_lifecycle(
-            jcode_base::logging::LogLevel::Warn,
-            "https_http_error",
-            vec![
-                ("model", request_model.clone()),
-                ("status", status.as_u16().to_string()),
-                (
-                    "retry_after_secs",
-                    retry_after
-                        .map(|hint| hint.remaining().as_secs().to_string())
-                        .unwrap_or_else(|| "none".to_string()),
-                ),
-                ("body", body.clone()),
-                (
-                    "elapsed_ms",
-                    stream_started_at.elapsed().as_millis().to_string(),
-                ),
-            ],
-        );
-
-        if let Some(reason) = classify_unavailable_model_error(status, &body)
-            && let Some(model_name) = request.get("model").and_then(|m| m.as_str())
-        {
-            jcode_base::provider::record_model_unavailable_for_account(model_name, &reason);
-            jcode_base::logging::warn(&format!(
-                "Recorded OpenAI model '{}' as unavailable: {}",
-                model_name, reason
-            ));
-        }
-
-        // Check if we need to refresh token
-        if should_refresh_token(status, &body) {
-            // The server rejected our access token (401/403). Proactively
-            // refresh it in place so the retry loop reconnects with a fresh
-            // token instead of surfacing a raw "Token refresh needed" error.
-            let refresh_token = {
-                let creds = credentials.read().await;
-                creds.refresh_token.clone()
-            };
-
-            if refresh_token.is_empty() {
-                return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                    "OpenAI rejected the access token and no refresh token is available; run /login to re-authenticate: {}",
-                    body
-                )));
-            }
-
-            match force_refresh_openai_token(&credentials, &refresh_token).await {
-                Ok(_) => {
-                    jcode_base::logging::info(
-                        "OpenAI access token rejected; refreshed credentials and will retry",
-                    );
-                    // Surface a retryable error so the retry loop reconnects
-                    // with the freshly refreshed token.
-                    return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                        "openai token refreshed, retrying: {}",
-                        body
-                    )));
-                }
-                Err(refresh_err) => {
-                    return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                        "OpenAI token refresh failed; run /login to re-authenticate: {refresh_err:#}"
-                    )));
-                }
-            }
-        }
-
-        // For rate limits, format structured payloads into a readable message.
-        let msg = if status == StatusCode::TOO_MANY_REQUESTS {
-            format_rate_limit_error(&body, retry_after.map(|hint| hint.remaining()))
-        } else {
-            format!("OpenAI API error {}: {}", status, body)
-        };
-        return Err(OpenAIStreamFailure::Other(
-            jcode_provider_core::retry_after::error_with_retry_after(msg, retry_after),
-        ));
-    }
-
-    emit_connection_phase(&tx, ConnectionPhase::WaitingForResponse).await;
-
-    let _ = tx
-        .send(Ok(StreamEvent::ConnectionType {
-            connection: "https/sse".to_string(),
-        }))
-        .await;
-
-    // Stream the response
-    let mut stream = OpenAIResponsesStream::new(response.bytes_stream());
-    let mut saw_message_end = false;
-
-    // Idle timeout between streamed events. Without this, a silently dead
-    // connection (or a provider that never emits) would hang forever; with a
-    // hardcoded short value, slow reasoning models that think silently for
-    // minutes get cancelled prematurely. Resolved from
-    // `[provider] stream_idle_timeout_secs` / `JCODE_STREAM_IDLE_TIMEOUT_SECS`
-    // (issue #434).
-    use futures::StreamExt;
-    loop {
-        let result = match tokio::time::timeout(idle_timeout, stream.next()).await {
-            Ok(Some(result)) => result,
-            Ok(None) => break, // stream ended normally
-            Err(_) => {
-                log_openai_stream_lifecycle(
-                    jcode_base::logging::LogLevel::Warn,
-                    "https_stream_idle_timeout",
-                    vec![
-                        ("model", request_model.clone()),
-                        ("idle_timeout_secs", idle_timeout.as_secs().to_string()),
-                        (
-                            "elapsed_ms",
-                            stream_started_at.elapsed().as_millis().to_string(),
-                        ),
-                    ],
-                );
-                return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                    "Stream read timeout: no data received for {} seconds",
-                    idle_timeout.as_secs()
-                )));
-            }
-        };
-        match result {
-            Ok(event) => {
-                if matches!(event, StreamEvent::MessageEnd { .. }) {
-                    saw_message_end = true;
-                }
-                if let StreamEvent::Error { message, .. } = &event {
-                    if let Some(model_name) = request.get("model").and_then(|m| m.as_str()) {
-                        maybe_record_runtime_model_unavailable_from_stream_error(
-                            model_name, message,
-                        );
-                    }
-                    if is_retryable_error(&message.to_lowercase()) {
-                        log_openai_stream_lifecycle(
-                            jcode_base::logging::LogLevel::Warn,
-                            "https_stream_retryable_error",
-                            vec![
-                                ("model", request_model.clone()),
-                                ("error", message.clone()),
-                                (
-                                    "elapsed_ms",
-                                    stream_started_at.elapsed().as_millis().to_string(),
-                                ),
-                            ],
-                        );
-                        return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                            "Stream error: {}",
-                            message
-                        )));
-                    }
-                    return Err(OpenAIStreamFailure::Terminal(event));
-                }
-                if tx.send(Ok(event)).await.is_err() {
-                    // Receiver dropped, stop streaming
-                    log_openai_stream_lifecycle(
-                        jcode_base::logging::LogLevel::Warn,
-                        "consumer_dropped",
-                        vec![
-                            ("model", request_model.clone()),
-                            ("transport", "https".to_string()),
-                            (
-                                "elapsed_ms",
-                                stream_started_at.elapsed().as_millis().to_string(),
-                            ),
-                        ],
-                    );
-                    return Ok(());
-                }
-            }
-            Err(e) => {
-                log_openai_stream_lifecycle(
-                    jcode_base::logging::LogLevel::Warn,
-                    "https_stream_error",
-                    vec![
-                        ("model", request_model.clone()),
-                        ("error", e.to_string()),
-                        (
-                            "elapsed_ms",
-                            stream_started_at.elapsed().as_millis().to_string(),
-                        ),
-                    ],
-                );
-                return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-                    "Stream error: {}",
-                    e
-                )));
-            }
-        }
-    }
-
-    if !saw_message_end {
-        log_openai_stream_lifecycle(
-            jcode_base::logging::LogLevel::Warn,
-            "https_eof_before_message_end",
-            vec![
-                ("model", request_model.clone()),
-                (
-                    "elapsed_ms",
-                    stream_started_at.elapsed().as_millis().to_string(),
-                ),
-            ],
-        );
-        return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
-            "OpenAI HTTPS stream ended before message completion marker"
-        )));
-    }
-
-    log_openai_stream_lifecycle(
-        jcode_base::logging::LogLevel::Info,
-        "https_stream_complete",
-        vec![
-            ("model", request_model),
-            (
-                "elapsed_ms",
-                stream_started_at.elapsed().as_millis().to_string(),
-            ),
-        ],
-    );
-    Ok(())
-}
+#[path = "openai_https_stream.rs"]
+mod openai_https_stream;
+pub(super) use openai_https_stream::stream_response;
 
 pub(super) fn is_ws_upgrade_required(err: &WsError) -> bool {
     match err {
@@ -814,6 +515,8 @@ pub(super) async fn try_persistent_ws_continuation(
     let mut saw_api_activity = false;
     let mut logged_first_server_event = false;
     let ws_completion_timeout_secs = effective_ws_completion_timeout_secs(&continuation_request);
+    let meaningful_timeout_secs = effective_openai_stall_timeout_secs(&continuation_request);
+    let mut last_meaningful_progress_at = Instant::now();
 
     loop {
         if stream_started.elapsed() >= Duration::from_secs(ws_completion_timeout_secs) {
@@ -839,19 +542,42 @@ pub(super) async fn try_persistent_ws_continuation(
                 ));
             }
         };
-        let next_item =
-            match tokio::time::timeout(Duration::from_secs(timeout_secs), state.ws_stream.next())
-                .await
-            {
+        let Some(wait_timeout) = effective_stream_wait_timeout(
+            Duration::from_secs(timeout_secs),
+            last_meaningful_progress_at,
+            meaningful_timeout_secs,
+        ) else {
+            return PersistentWsResult::Failed(format!(
+                "timed out waiting for meaningful OpenAI stream progress ({}s) on persistent WS",
+                meaningful_timeout_secs.unwrap_or(0)
+            ));
+        };
+        let next_item = tokio::select! {
+            biased;
+            _ = tx.closed() => {
+                consumer_dropped = true;
+                break;
+            }
+            result = tokio::time::timeout(wait_timeout, state.ws_stream.next()) => match result {
                 Ok(item) => item,
                 Err(_) => {
+                    let meaningful_stall = meaningful_timeout_secs.is_some_and(|secs| {
+                        last_meaningful_progress_at.elapsed() >= Duration::from_secs(secs)
+                    });
+                    if meaningful_stall {
+                        return PersistentWsResult::Failed(format!(
+                            "timed out waiting for meaningful OpenAI stream progress ({}s) on persistent WS",
+                            meaningful_timeout_secs.unwrap_or(0)
+                        ));
+                    }
                     return PersistentWsResult::Failed(format!(
                         "timed out waiting for {} websocket activity on persistent WS ({}s)",
                         websocket_activity_timeout_kind(saw_api_activity),
                         timeout_secs
                     ));
                 }
-            };
+            }
+        };
 
         let Some(result) = next_item else {
             if saw_response_completed {
@@ -884,6 +610,7 @@ pub(super) async fn try_persistent_ws_continuation(
                 } else {
                     is_websocket_first_activity_payload(&text)
                 };
+                let mut made_meaningful_progress = is_meaningful_websocket_payload(&text);
 
                 // Extract response_id from response.created event
                 if new_response_id.is_none()
@@ -922,6 +649,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     if is_stream_activity_event(&event) {
                         made_api_activity = true;
                     }
+                    if is_meaningful_stream_progress(&event) {
+                        made_meaningful_progress = true;
+                    }
                     if matches!(event, StreamEvent::MessageEnd { .. }) {
                         saw_response_completed = true;
                     }
@@ -951,6 +681,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     if is_stream_activity_event(&event) {
                         made_api_activity = true;
                     }
+                    if is_meaningful_stream_progress(&event) {
+                        made_meaningful_progress = true;
+                    }
                     if matches!(event, StreamEvent::MessageEnd { .. }) {
                         saw_response_completed = true;
                     }
@@ -967,6 +700,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     let now = Instant::now();
                     last_api_activity_at = now;
                     state.last_activity_at = now;
+                }
+                if made_meaningful_progress {
+                    last_meaningful_progress_at = Instant::now();
                 }
                 if saw_response_completed {
                     break;
@@ -1212,6 +948,8 @@ pub(super) async fn stream_response_websocket_persistent(
     let connected_at = Instant::now();
     let mut logged_first_server_event = false;
     let ws_completion_timeout_secs = effective_ws_completion_timeout_secs(&request_event);
+    let meaningful_timeout_secs = effective_openai_stall_timeout_secs(&request_event);
+    let mut last_meaningful_progress_at = Instant::now();
 
     loop {
         if !saw_response_completed
@@ -1249,15 +987,37 @@ pub(super) async fn stream_response_websocket_persistent(
                 }
             ))
         })?;
-        let next_item = tokio::time::timeout(Duration::from_secs(timeout_secs), ws_stream.next())
-            .await
-            .map_err(|_| {
-                OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
-                    "WebSocket stream timed out waiting for {} websocket activity ({}s)",
-                    websocket_activity_timeout_kind(saw_api_activity),
-                    timeout_secs
-                ))
-            })?;
+        let Some(wait_timeout) = effective_stream_wait_timeout(
+            Duration::from_secs(timeout_secs),
+            last_meaningful_progress_at,
+            meaningful_timeout_secs,
+        ) else {
+            return Err(OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                "WebSocket stream timed out waiting for meaningful OpenAI stream progress ({}s)",
+                meaningful_timeout_secs.unwrap_or(0)
+            )));
+        };
+        let next_item = tokio::select! {
+            biased;
+            _ = tx.closed() => return Ok(()),
+            result = tokio::time::timeout(wait_timeout, ws_stream.next()) => result.map_err(|_| {
+                let meaningful_stall = meaningful_timeout_secs.is_some_and(|secs| {
+                    last_meaningful_progress_at.elapsed() >= Duration::from_secs(secs)
+                });
+                if meaningful_stall {
+                    OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                        "WebSocket stream timed out waiting for meaningful OpenAI stream progress ({}s)",
+                        meaningful_timeout_secs.unwrap_or(0)
+                    ))
+                } else {
+                    OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                        "WebSocket stream timed out waiting for {} websocket activity ({}s)",
+                        websocket_activity_timeout_kind(saw_api_activity),
+                        timeout_secs
+                    ))
+                }
+            })?,
+        };
 
         let Some(result) = next_item else {
             if saw_response_completed {
@@ -1317,6 +1077,7 @@ pub(super) async fn stream_response_websocket_persistent(
                     } else {
                         is_websocket_first_activity_payload(&text)
                     };
+                    let mut made_meaningful_progress = is_meaningful_websocket_payload(&text);
                     if let Some(event) = parse_openai_response_event(
                         &text,
                         &mut saw_text_delta,
@@ -1327,6 +1088,9 @@ pub(super) async fn stream_response_websocket_persistent(
                     ) {
                         if is_stream_activity_event(&event) {
                             made_api_activity = true;
+                        }
+                        if is_meaningful_stream_progress(&event) {
+                            made_meaningful_progress = true;
                         }
                         if matches!(event, StreamEvent::MessageEnd { .. }) {
                             saw_response_completed = true;
@@ -1365,6 +1129,9 @@ pub(super) async fn stream_response_websocket_persistent(
                         if is_stream_activity_event(&event) {
                             made_api_activity = true;
                         }
+                        if is_meaningful_stream_progress(&event) {
+                            made_meaningful_progress = true;
+                        }
                         if let StreamEvent::Error { message, .. } = &event {
                             if let Some(model_name) = request_model.as_deref() {
                                 maybe_record_runtime_model_unavailable_from_stream_error(
@@ -1401,6 +1168,9 @@ pub(super) async fn stream_response_websocket_persistent(
                     if made_api_activity {
                         saw_api_activity = true;
                         last_api_activity_at = Instant::now();
+                    }
+                    if made_meaningful_progress {
+                        last_meaningful_progress_at = Instant::now();
                     }
                     if saw_response_completed {
                         break;

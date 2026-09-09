@@ -116,6 +116,7 @@ async fn missing_output_scenario_with_codes(
     let (ws_stream, _) = connect_async(format!("ws://{addr}")).await.unwrap();
     *provider.persistent_ws.lock().await = Some(PersistentWsState {
         ws_stream,
+        identity: openai_websocket_prewarm::prewarm_identity(&*provider.credentials.read().await),
         last_response_id: "resp_stale".into(),
         connected_at: Instant::now(),
         last_activity_at: Instant::now(),

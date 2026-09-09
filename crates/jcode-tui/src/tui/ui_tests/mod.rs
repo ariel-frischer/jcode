@@ -114,6 +114,8 @@ struct TestState {
     cursor_pos: usize,
     provider_name: Option<String>,
     provider_model: Option<String>,
+    connection_type: Option<String>,
+    status_detail: Option<String>,
     working_dir: Option<String>,
     info_widget_data: info_widget::InfoWidgetData,
     suppress_info_widgets: bool,
@@ -131,6 +133,8 @@ struct TestState {
     anim_elapsed: f32,
     now_ms: u64,
     time_since_activity: Option<Duration>,
+    elapsed: Option<Duration>,
+    connection_phase_elapsed: Option<Duration>,
     remote_startup_phase_active: bool,
     inline_view_state: Option<crate::tui::InlineViewState>,
     inline_interactive_state: Option<crate::tui::InlineInteractiveState>,
@@ -225,10 +229,10 @@ impl crate::tui::TuiState for TestState {
         None
     }
     fn connection_type(&self) -> Option<String> {
-        None
+        self.connection_type.clone()
     }
     fn status_detail(&self) -> Option<String> {
-        None
+        self.status_detail.clone()
     }
     fn mcp_servers(&self) -> Vec<(String, usize)> {
         Vec::new()
@@ -249,7 +253,11 @@ impl crate::tui::TuiState for TestState {
         Vec::new()
     }
     fn elapsed(&self) -> Option<Duration> {
-        None
+        self.elapsed
+    }
+
+    fn connection_phase_elapsed(&self) -> Option<Duration> {
+        self.connection_phase_elapsed
     }
     fn status(&self) -> ProcessingStatus {
         self.status.clone()
@@ -538,6 +546,8 @@ mod prepared_messages_tests;
 mod rendering;
 #[path = "swarm_buffer.rs"]
 mod swarm_buffer;
+#[path = "thinking_status.rs"]
+mod thinking_status;
 #[path = "tools.rs"]
 mod tools;
 #[path = "top_bar.rs"]
