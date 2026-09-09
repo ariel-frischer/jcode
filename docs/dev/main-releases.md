@@ -4,6 +4,11 @@ The fork release workflow is intentionally triggered only by a push to `main`.
 The `dev` branch remains the normal development branch, and no workflow merges
 or promotes commits. Ariel chooses each `dev` to `main` promotion.
 
+When Ariel explicitly requests a release, follow the repository-local
+[`/jcode-release` skill](../../.claude/skills/jcode-release/SKILL.md). It requires
+a release-ready candidate, recorded publication approval, and real hosted/artifact
+verification. A preview, automatic continuation, or passing test is not approval.
+
 ## Release contract
 
 - `.github/workflows/release.yml` checks out the triggering commit using the exact
@@ -26,11 +31,12 @@ or promotes commits. Ariel chooses each `dev` to `main` promotion.
 
 ## First promotion
 
-This change does not create `main`, change the repository default branch, or run a
-release. After the workflow lands, create or promote `main` deliberately, then
-push the selected commit. A first real run is still required to validate hosted
-runner availability, cross-platform toolchains, and the compatibility-container
-build.
+If `main` does not exist, its first creation/push starts release CI. Only perform
+that action for an explicitly requested release using the approved immutable
+candidate SHA. Do not change the repository default branch as a side effect.
+For subsequent releases, verify main ancestry before the approved promotion.
+Real hosted builds and downloaded artifacts must be validated, not inferred from
+offline workflow checks.
 
 ## Runtime update boundary
 

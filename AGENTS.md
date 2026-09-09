@@ -14,6 +14,11 @@
 
 ## Development Workflow
 
+- **Release only when Ariel explicitly asks.** Use `/jcode-release` from
+  `.claude/skills/jcode-release/SKILL.md` for stable custom-fork releases. Ordinary
+  development, validation, automatic continuations, and completed tasks do not
+  authorize promoting `dev`, pushing public `main`, or publishing a release.
+
 - **Preserve explicit swarm routing during upstream syncs.** Keep the local
   routing contract and both CI/local gate invocations. Run
   `bash scripts/check_swarm_routing_contract.sh` against the synchronized tree.
