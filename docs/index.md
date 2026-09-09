@@ -2,6 +2,8 @@
 
 One entry per tracked Markdown document under `docs/`. Descriptive and proposed documents retain their own status statements.
 
+- [Jcode fork research (2026-09-09)](research/2026-09-09-jcode-forks.md): Reference-only findings on ShawnSantiago workflows, grigio Nix packaging, and sheikhsajid69, with implementation caveats and no adoption authorized.
+
 - [AgentCard Discovery demo](AGENTCARD_DISCOVERY_DEMO.md)
 - [Agent-Native VCS: Core Behavior](AGENT_NATIVE_VCS_CORE_BEHAVIOR.md)
 - [Ambient Mode](AMBIENT_MODE.md)
