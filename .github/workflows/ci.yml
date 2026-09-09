@@ -137,8 +137,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install PyYAML for workflow tests
+        run: python3 -m pip install --user --disable-pip-version-check PyYAML
+
       - name: Test Discord release announcements
         run: python3 -m unittest -v scripts/test_post_discord_release.py
+
+      - name: Test main-only fork release workflow
+        run: python3 -m unittest -v scripts/test_main_release.py
 
       - name: Compile release automation scripts
         run: python3 -m py_compile scripts/post_discord_release.py scripts/test_post_discord_release.py

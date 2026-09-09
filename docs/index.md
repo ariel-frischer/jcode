@@ -84,6 +84,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [Account Contract Conformance Tests and Test Vectors](dev/ACCOUNT_CONTRACT_CONFORMANCE_TESTS.md)
 - [Account Flows: Observability, Privacy, and Support Diagnostics](dev/ACCOUNT_FLOWS_OBSERVABILITY_PRIVACY.md)
 - [Compile-time crate splitting plan](dev/crate-splitting-plan.md)
+- [Main-owned fork releases](dev/main-releases.md)
 - [Feature request: configurable memory-sidecar reasoning effort](feature-requests/memory-sidecar-reasoning-effort.md)
 - [Client-Core vs Presentation Split Plan](plans/CLIENT_CORE_PRESENTATION_SPLIT_PLAN.md)
 - [Code Quality 10/10 Plan](plans/CODE_QUALITY_10_10_PLAN.md)
