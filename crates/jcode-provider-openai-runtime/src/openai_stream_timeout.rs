@@ -6,6 +6,7 @@
 //! dead connection unless the budget scales with the requested effort.
 
 use serde_json::Value;
+use std::time::{Duration, Instant};
 
 /// Build the Responses `reasoning` payload for a requested effort.
 ///
@@ -28,6 +29,55 @@ pub(crate) fn request_reasoning_effort(request: &Value) -> Option<&str> {
 /// Idle budget between HTTPS/SSE events for this request.
 pub(crate) fn effective_https_idle_timeout(request: &Value) -> std::time::Duration {
     jcode_base::provider::stream_idle_timeout_for_effort(request_reasoning_effort(request))
+}
+
+/// Effective native OpenAI meaningful-progress budget for this request.
+/// Disabled recovery preserves the existing transport-specific timeout paths.
+pub(crate) fn effective_openai_stall_timeout_secs(request: &Value) -> Option<u64> {
+    effective_openai_stall_timeout_secs_with_base(
+        request,
+        jcode_base::provider::openai_stall_recovery_enabled(),
+        jcode_base::provider::openai_stall_timeout_secs(),
+    )
+}
+
+/// Resolve a meaningful-progress budget from explicit settings. Kept separate
+/// from the global config accessor so effort and enable/disable boundaries are
+/// deterministic in focused tests.
+pub(crate) fn effective_openai_stall_timeout_secs_with_base(
+    request: &Value,
+    enabled: bool,
+    base_timeout_secs: u64,
+) -> Option<u64> {
+    enabled.then(|| {
+        Duration::from_secs(base_timeout_secs.clamp(
+            jcode_base::provider::OPENAI_STALL_TIMEOUT_SECS_MIN,
+            jcode_base::provider::OPENAI_STALL_TIMEOUT_SECS_MAX,
+        ))
+        .as_secs()
+        .saturating_mul(u64::from(
+            jcode_base::provider::stream_idle_timeout_multiplier_for_effort(
+                request_reasoning_effort(request),
+            ),
+        ))
+    })
+}
+
+/// Bound one transport read by both its existing wire/event timeout and the
+/// remaining meaningful-progress budget. Lifecycle or heartbeat frames do not
+/// change `last_meaningful_progress_at`, so repeated control traffic cannot
+/// postpone the absolute recovery deadline.
+pub(crate) fn effective_stream_wait_timeout(
+    existing_timeout: Duration,
+    last_meaningful_progress_at: Instant,
+    meaningful_timeout_secs: Option<u64>,
+) -> Option<Duration> {
+    let Some(meaningful_timeout_secs) = meaningful_timeout_secs else {
+        return Some(existing_timeout);
+    };
+    let meaningful_timeout = Duration::from_secs(meaningful_timeout_secs);
+    let remaining = meaningful_timeout.checked_sub(last_meaningful_progress_at.elapsed())?;
+    Some(existing_timeout.min(remaining))
 }
 
 /// Effective websocket completion budget in seconds.
@@ -122,6 +172,63 @@ mod tests {
         assert!(effective_https_idle_timeout(&max) > effective_https_idle_timeout(&low));
         assert!(
             effective_ws_completion_timeout_secs(&max) > effective_ws_completion_timeout_secs(&low)
+        );
+    }
+
+    #[test]
+    fn configured_openai_stall_budget_is_enabled_and_effort_scaled() {
+        assert_eq!(
+            effective_openai_stall_timeout_secs_with_base(
+                &serde_json::json!({
+                    "reasoning": {"effort": "low"}
+                }),
+                true,
+                300,
+            ),
+            Some(300)
+        );
+        assert_eq!(
+            effective_openai_stall_timeout_secs_with_base(
+                &serde_json::json!({
+                    "reasoning": {"effort": "max"}
+                }),
+                true,
+                300,
+            ),
+            Some(1200)
+        );
+    }
+
+    #[test]
+    fn disabled_openai_stall_recovery_leaves_existing_transport_budget_unchanged() {
+        assert_eq!(
+            effective_openai_stall_timeout_secs_with_base(
+                &serde_json::json!({
+                    "reasoning": {"effort": "max"}
+                }),
+                false,
+                300,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn meaningful_progress_wait_timeout_preserves_an_absolute_remaining_budget() {
+        let recent = Instant::now() - Duration::from_secs(2);
+        let remaining = effective_stream_wait_timeout(Duration::from_secs(60), recent, Some(5))
+            .expect("progress budget should remain active");
+        assert!(
+            (Duration::from_secs(2)..=Duration::from_secs(4)).contains(&remaining),
+            "repeated control frames must not reset the absolute budget: {remaining:?}"
+        );
+        assert!(
+            effective_stream_wait_timeout(
+                Duration::from_secs(60),
+                Instant::now() - Duration::from_secs(6),
+                Some(5),
+            )
+            .is_none()
         );
     }
 }

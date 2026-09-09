@@ -345,6 +345,71 @@ fn test_websocket_activity_payload_ignores_non_response_events() {
 }
 
 #[test]
+fn meaningful_progress_requires_nonempty_model_output() {
+    assert!(is_meaningful_stream_progress(&StreamEvent::TextDelta(
+        "hello".to_string()
+    )));
+    assert!(is_meaningful_stream_progress(&StreamEvent::ThinkingDelta(
+        "thinking".to_string()
+    )));
+    assert!(is_meaningful_stream_progress(&StreamEvent::ToolInputDelta(
+        "{\"path\":\"file\"}".to_string()
+    )));
+    assert!(is_meaningful_stream_progress(&StreamEvent::MessageEnd {
+        stop_reason: None
+    }));
+
+    assert!(!is_meaningful_stream_progress(&StreamEvent::TextDelta(
+        String::new()
+    )));
+    assert!(!is_meaningful_stream_progress(&StreamEvent::ThinkingDelta(
+        String::new()
+    )));
+    assert!(!is_meaningful_stream_progress(
+        &StreamEvent::ToolInputDelta(String::new())
+    ));
+    assert!(!is_meaningful_stream_progress(&StreamEvent::ThinkingStart));
+    assert!(!is_meaningful_stream_progress(
+        &StreamEvent::ConnectionPhase {
+            phase: jcode_message_types::ConnectionPhase::Streaming,
+        }
+    ));
+    assert!(!is_meaningful_stream_progress(&StreamEvent::TokenUsage {
+        input_tokens: Some(1),
+        output_tokens: Some(1),
+        cache_read_input_tokens: None,
+        cache_creation_input_tokens: None,
+        reported_cost_usd: None,
+    }));
+}
+
+#[test]
+fn meaningful_websocket_payload_ignores_lifecycle_and_heartbeat_frames() {
+    assert!(is_meaningful_websocket_payload(
+        r#"{"type":"response.output_text.delta","delta":"hello"}"#
+    ));
+    assert!(is_meaningful_websocket_payload(
+        r#"{"type":"response.reasoning_summary_text.delta","delta":"plan"}"#
+    ));
+    assert!(is_meaningful_websocket_payload(
+        r#"{"type":"response.function_call_arguments.delta","delta":"{\"x\":"}"#
+    ));
+    assert!(!is_meaningful_websocket_payload(
+        r#"{"type":"response.output_text.delta","delta":""}"#
+    ));
+    assert!(!is_meaningful_websocket_payload(
+        r#"{"type":"response.in_progress","response":{"status":"in_progress"}}"#
+    ));
+    assert!(!is_meaningful_websocket_payload(
+        r#"{"type":"response.created","response":{"id":"resp_1"}}"#
+    ));
+    assert!(!is_meaningful_websocket_payload(
+        r#"{"type":"session.created","session":{}}"#
+    ));
+    assert!(!is_meaningful_websocket_payload("not json"));
+}
+
+#[test]
 fn test_websocket_remaining_timeout_secs_uses_idle_time_budget() {
     let recent = Instant::now() - Duration::from_secs(2);
     let remaining = websocket_remaining_timeout_secs(recent, 8).expect("still within budget");
@@ -518,16 +583,19 @@ async fn persistent_ws_does_not_reuse_response_cancelled_before_completion() {
             .expect("receive continuation request")
             .expect("valid continuation request");
         assert!(matches!(request, WsMessage::Text(_)));
-        ws.send(WsMessage::Text(
-            r#"{"type":"response.created","response":{"id":"resp_cancelled"}}"#.into(),
-        ))
-        .await
-        .expect("send response.created");
-        ws.send(WsMessage::Text(
-            r#"{"type":"response.output_text.delta","delta":"partial"}"#.into(),
-        ))
-        .await
-        .expect("send partial response event");
+        // A cancelled consumer may close the socket as soon as the request is
+        // flushed. The provider must not retain the incomplete response, and
+        // this fixture should not turn that expected close into a test panic.
+        let _ = ws
+            .send(WsMessage::Text(
+                r#"{"type":"response.created","response":{"id":"resp_cancelled"}}"#.into(),
+            ))
+            .await;
+        let _ = ws
+            .send(WsMessage::Text(
+                r#"{"type":"response.output_text.delta","delta":"partial"}"#.into(),
+            ))
+            .await;
     });
 
     let (client_ws, _) = connect_async(format!("ws://{}", addr))
@@ -563,6 +631,94 @@ async fn persistent_ws_does_not_reuse_response_cancelled_before_completion() {
     assert!(
         persistent_ws.lock().await.is_none(),
         "an incomplete response may contain unseen tool calls and must not be reused"
+    );
+    server.await.expect("test websocket server");
+}
+
+#[tokio::test]
+async fn persistent_ws_consumer_drop_during_quiet_stream_clears_state_promptly() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind test websocket listener");
+    let addr = listener.local_addr().expect("listener local addr");
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept websocket client");
+        let mut ws = tokio_tungstenite::accept_async(stream)
+            .await
+            .expect("accept websocket handshake");
+        let request = ws
+            .next()
+            .await
+            .expect("receive continuation request")
+            .expect("valid continuation request");
+        assert!(matches!(request, WsMessage::Text(_)));
+        ws.send(WsMessage::Text(
+            r#"{"type":"response.created","response":{"id":"resp_quiet"}}"#.into(),
+        ))
+        .await
+        .expect("send response.created");
+
+        // Keep the response quiet. The client must observe consumer closure
+        // without waiting for the progress or transport timeout.
+        let _ = tokio::time::timeout(Duration::from_secs(2), ws.next()).await;
+    });
+
+    let (client_ws, _) = connect_async(format!("ws://{}", addr))
+        .await
+        .expect("connect websocket client");
+    let persistent_ws = Arc::new(Mutex::new(Some(PersistentWsState {
+        ws_stream: client_ws,
+        identity: openai_websocket_prewarm::prewarm_identity(&prewarm_test_credentials()),
+        last_response_id: "resp_previous".to_string(),
+        connected_at: Instant::now(),
+        last_activity_at: Instant::now(),
+        last_response_completed_at: Instant::now(),
+        message_count: 1,
+        last_input_item_count: 1,
+    })));
+    let (tx, mut rx) = mpsc::channel(16);
+    let socket = Arc::clone(&persistent_ws);
+    let continuation = tokio::spawn(async move {
+        try_persistent_ws_continuation(
+            &socket,
+            &Arc::new(RwLock::new(prewarm_test_credentials())),
+            &serde_json::json!({"model": "gpt-5.6-sol"}),
+            &[
+                serde_json::json!({"type": "message", "role": "user", "content": "first"}),
+                serde_json::json!({"type": "message", "role": "user", "content": "quiet"}),
+            ],
+            2,
+            &tx,
+        )
+        .await
+    });
+
+    // Wait until the response has reached the streaming phase, then model a
+    // user cancellation by dropping the consumer while the provider is quiet.
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("quiet stream should reach streaming phase")
+            .expect("continuation should still have a consumer");
+        if matches!(
+            event.expect("stream event should be valid"),
+            StreamEvent::ConnectionPhase {
+                phase: jcode_message_types::ConnectionPhase::Streaming
+            }
+        ) {
+            break;
+        }
+    }
+    drop(rx);
+
+    let result = tokio::time::timeout(Duration::from_secs(1), continuation)
+        .await
+        .expect("consumer cancellation must not wait for the stream timeout")
+        .expect("continuation task should finish");
+    assert!(matches!(result, PersistentWsResult::Success));
+    assert!(
+        persistent_ws.lock().await.is_none(),
+        "consumer cancellation during a quiet response must clear reusable state"
     );
     server.await.expect("test websocket server");
 }

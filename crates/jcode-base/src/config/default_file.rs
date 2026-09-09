@@ -492,6 +492,16 @@ cross_provider_failover = "manual"
 # openai-compatible profile ids ("myprofile"). The active model's routes always
 # stay visible. Unset or empty = show everything.
 # model_picker_providers = ["myprofile", "openrouter"]
+# Native OpenAI stream stall recovery is enabled by default. It resets a
+# stalled native request through the existing bounded retry path when no
+# meaningful text, reasoning, or tool-argument output arrives. Pings, metadata,
+# lifecycle events, and empty deltas do not reset this deadline. Disable or tune
+# it with the matching environment variables when needed.
+# openai_stall_recovery = true
+# openai_stall_timeout_secs = 300
+# The persisted TOML value is clamped to 1..=3600 seconds when used. Invalid
+# or out-of-range JCODE_OPENAI_STALL_TIMEOUT_SECS values are ignored. Env
+# overrides: JCODE_OPENAI_STALL_RECOVERY, JCODE_OPENAI_STALL_TIMEOUT_SECS.
 # Max seconds to wait for streaming data before timing out a request with no
 # data received. Raise this for slow reasoning models (e.g. DeepSeek) that think
 # silently for minutes before emitting tokens. Default: 180.

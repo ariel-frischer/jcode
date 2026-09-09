@@ -15,6 +15,26 @@ use std::time::Duration;
 /// would still happily accept.
 pub const MAX_STREAM_IDLE_TIMEOUT_MULTIPLIER: u32 = 4;
 
+pub use jcode_config_types::{
+    OPENAI_STALL_TIMEOUT_SECS_DEFAULT, OPENAI_STALL_TIMEOUT_SECS_MAX, OPENAI_STALL_TIMEOUT_SECS_MIN,
+};
+
+/// Whether native OpenAI streams should recover when model output stops making
+/// meaningful progress. This setting is intentionally OpenAI-specific because
+/// the native Responses transports own the recovery and retry semantics.
+pub fn openai_stall_recovery_enabled() -> bool {
+    crate::config::config().provider.openai_stall_recovery
+}
+
+/// Configured native OpenAI meaningful-progress timeout, clamped to the safe
+/// base range before reasoning-effort scaling is applied.
+pub fn openai_stall_timeout_secs() -> u64 {
+    crate::config::config()
+        .provider
+        .openai_stall_timeout_secs
+        .clamp(OPENAI_STALL_TIMEOUT_SECS_MIN, OPENAI_STALL_TIMEOUT_SECS_MAX)
+}
+
 /// Base streaming idle timeout: max time to wait between streamed chunks/events
 /// before treating the connection as dead.
 ///

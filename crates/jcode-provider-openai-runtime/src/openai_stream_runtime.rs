@@ -16,7 +16,8 @@ use self::openai_rate_limit_format::format_rate_limit_error;
 mod openai_stream_timeout;
 pub(super) use self::openai_stream_timeout::reasoning_payload;
 use self::openai_stream_timeout::{
-    effective_https_idle_timeout, effective_ws_completion_timeout_secs,
+    effective_https_idle_timeout, effective_openai_stall_timeout_secs,
+    effective_stream_wait_timeout, effective_ws_completion_timeout_secs,
 };
 
 pub(super) async fn openai_access_token(
@@ -252,7 +253,11 @@ pub(super) async fn stream_response(
         .await;
 
     // Stream the response
-    let mut stream = OpenAIResponsesStream::new(response.bytes_stream());
+    let meaningful_progress_at = Arc::new(StdMutex::new(Instant::now()));
+    let mut stream = OpenAIResponsesStream::new_with_progress(
+        response.bytes_stream(),
+        Arc::clone(&meaningful_progress_at),
+    );
     let mut saw_message_end = false;
 
     // Idle timeout between streamed events. Without this, a silently dead
@@ -262,23 +267,87 @@ pub(super) async fn stream_response(
     // `[provider] stream_idle_timeout_secs` / `JCODE_STREAM_IDLE_TIMEOUT_SECS`
     // (issue #434).
     use futures::StreamExt;
+    let meaningful_timeout_secs = effective_openai_stall_timeout_secs(&request);
     loop {
-        let result = match tokio::time::timeout(idle_timeout, stream.next()).await {
+        let last_meaningful_progress_at = meaningful_progress_at
+            .lock()
+            .map(|timestamp| *timestamp)
+            .unwrap_or_else(|poisoned| *poisoned.into_inner());
+        let Some(wait_timeout) = effective_stream_wait_timeout(
+            idle_timeout,
+            last_meaningful_progress_at,
+            meaningful_timeout_secs,
+        ) else {
+            log_openai_stream_lifecycle(
+                jcode_base::logging::LogLevel::Warn,
+                "https_stream_stall_timeout",
+                vec![
+                    ("model", request_model.clone()),
+                    (
+                        "meaningful_timeout_secs",
+                        meaningful_timeout_secs.unwrap_or_default().to_string(),
+                    ),
+                    (
+                        "elapsed_ms",
+                        stream_started_at.elapsed().as_millis().to_string(),
+                    ),
+                ],
+            );
+            return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
+                "OpenAI HTTPS stream timed out without meaningful progress for {} seconds",
+                meaningful_timeout_secs.unwrap_or_default()
+            )));
+        };
+        let result = match tokio::select! {
+            biased;
+            _ = tx.closed() => return Ok(()),
+            result = tokio::time::timeout(wait_timeout, stream.next()) => result,
+        } {
             Ok(Some(result)) => result,
             Ok(None) => break, // stream ended normally
             Err(_) => {
+                // `OpenAIResponsesStream` may consume a meaningful raw SSE
+                // frame (notably a buffered tool-argument delta) while still
+                // waiting for a higher-level StreamEvent to return. Refresh
+                // the local deadline before declaring this read timed out.
+                let latest_meaningful_progress_at = meaningful_progress_at
+                    .lock()
+                    .map(|timestamp| *timestamp)
+                    .unwrap_or_else(|poisoned| *poisoned.into_inner());
+                if latest_meaningful_progress_at > last_meaningful_progress_at {
+                    continue;
+                }
+                let meaningful_stall = meaningful_timeout_secs.is_some_and(|secs| {
+                    latest_meaningful_progress_at.elapsed() >= Duration::from_secs(secs)
+                });
                 log_openai_stream_lifecycle(
                     jcode_base::logging::LogLevel::Warn,
-                    "https_stream_idle_timeout",
+                    if meaningful_stall {
+                        "https_stream_stall_timeout"
+                    } else {
+                        "https_stream_idle_timeout"
+                    },
                     vec![
                         ("model", request_model.clone()),
                         ("idle_timeout_secs", idle_timeout.as_secs().to_string()),
+                        (
+                            "meaningful_timeout_secs",
+                            meaningful_timeout_secs
+                                .map(|secs| secs.to_string())
+                                .unwrap_or_else(|| "disabled".to_string()),
+                        ),
                         (
                             "elapsed_ms",
                             stream_started_at.elapsed().as_millis().to_string(),
                         ),
                     ],
                 );
+                if meaningful_stall {
+                    return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
+                        "OpenAI HTTPS stream timed out without meaningful progress for {} seconds",
+                        meaningful_timeout_secs.unwrap_or_default()
+                    )));
+                }
                 return Err(OpenAIStreamFailure::Other(anyhow::anyhow!(
                     "Stream read timeout: no data received for {} seconds",
                     idle_timeout.as_secs()
@@ -287,6 +356,7 @@ pub(super) async fn stream_response(
         };
         match result {
             Ok(event) => {
+                let meaningful_progress = is_meaningful_stream_progress(&event);
                 if matches!(event, StreamEvent::MessageEnd { .. }) {
                     saw_message_end = true;
                 }
@@ -331,6 +401,9 @@ pub(super) async fn stream_response(
                         ],
                     );
                     return Ok(());
+                }
+                if meaningful_progress && let Ok(mut timestamp) = meaningful_progress_at.lock() {
+                    *timestamp = Instant::now();
                 }
             }
             Err(e) => {
@@ -814,6 +887,8 @@ pub(super) async fn try_persistent_ws_continuation(
     let mut saw_api_activity = false;
     let mut logged_first_server_event = false;
     let ws_completion_timeout_secs = effective_ws_completion_timeout_secs(&continuation_request);
+    let meaningful_timeout_secs = effective_openai_stall_timeout_secs(&continuation_request);
+    let mut last_meaningful_progress_at = Instant::now();
 
     loop {
         if stream_started.elapsed() >= Duration::from_secs(ws_completion_timeout_secs) {
@@ -839,19 +914,42 @@ pub(super) async fn try_persistent_ws_continuation(
                 ));
             }
         };
-        let next_item =
-            match tokio::time::timeout(Duration::from_secs(timeout_secs), state.ws_stream.next())
-                .await
-            {
+        let Some(wait_timeout) = effective_stream_wait_timeout(
+            Duration::from_secs(timeout_secs),
+            last_meaningful_progress_at,
+            meaningful_timeout_secs,
+        ) else {
+            return PersistentWsResult::Failed(format!(
+                "timed out waiting for meaningful OpenAI stream progress ({}s) on persistent WS",
+                meaningful_timeout_secs.unwrap_or_default()
+            ));
+        };
+        let next_item = tokio::select! {
+            biased;
+            _ = tx.closed() => {
+                consumer_dropped = true;
+                break;
+            }
+            result = tokio::time::timeout(wait_timeout, state.ws_stream.next()) => match result {
                 Ok(item) => item,
                 Err(_) => {
+                    let meaningful_stall = meaningful_timeout_secs.is_some_and(|secs| {
+                        last_meaningful_progress_at.elapsed() >= Duration::from_secs(secs)
+                    });
+                    if meaningful_stall {
+                        return PersistentWsResult::Failed(format!(
+                            "timed out waiting for meaningful OpenAI stream progress ({}s) on persistent WS",
+                            meaningful_timeout_secs.unwrap_or_default()
+                        ));
+                    }
                     return PersistentWsResult::Failed(format!(
                         "timed out waiting for {} websocket activity on persistent WS ({}s)",
                         websocket_activity_timeout_kind(saw_api_activity),
                         timeout_secs
                     ));
                 }
-            };
+            }
+        };
 
         let Some(result) = next_item else {
             if saw_response_completed {
@@ -884,6 +982,7 @@ pub(super) async fn try_persistent_ws_continuation(
                 } else {
                     is_websocket_first_activity_payload(&text)
                 };
+                let mut made_meaningful_progress = is_meaningful_websocket_payload(&text);
 
                 // Extract response_id from response.created event
                 if new_response_id.is_none()
@@ -922,6 +1021,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     if is_stream_activity_event(&event) {
                         made_api_activity = true;
                     }
+                    if is_meaningful_stream_progress(&event) {
+                        made_meaningful_progress = true;
+                    }
                     if matches!(event, StreamEvent::MessageEnd { .. }) {
                         saw_response_completed = true;
                     }
@@ -951,6 +1053,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     if is_stream_activity_event(&event) {
                         made_api_activity = true;
                     }
+                    if is_meaningful_stream_progress(&event) {
+                        made_meaningful_progress = true;
+                    }
                     if matches!(event, StreamEvent::MessageEnd { .. }) {
                         saw_response_completed = true;
                     }
@@ -967,6 +1072,9 @@ pub(super) async fn try_persistent_ws_continuation(
                     let now = Instant::now();
                     last_api_activity_at = now;
                     state.last_activity_at = now;
+                }
+                if made_meaningful_progress {
+                    last_meaningful_progress_at = Instant::now();
                 }
                 if saw_response_completed {
                     break;
@@ -1212,6 +1320,8 @@ pub(super) async fn stream_response_websocket_persistent(
     let connected_at = Instant::now();
     let mut logged_first_server_event = false;
     let ws_completion_timeout_secs = effective_ws_completion_timeout_secs(&request_event);
+    let meaningful_timeout_secs = effective_openai_stall_timeout_secs(&request_event);
+    let mut last_meaningful_progress_at = Instant::now();
 
     loop {
         if !saw_response_completed
@@ -1249,15 +1359,37 @@ pub(super) async fn stream_response_websocket_persistent(
                 }
             ))
         })?;
-        let next_item = tokio::time::timeout(Duration::from_secs(timeout_secs), ws_stream.next())
-            .await
-            .map_err(|_| {
-                OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
-                    "WebSocket stream timed out waiting for {} websocket activity ({}s)",
-                    websocket_activity_timeout_kind(saw_api_activity),
-                    timeout_secs
-                ))
-            })?;
+        let Some(wait_timeout) = effective_stream_wait_timeout(
+            Duration::from_secs(timeout_secs),
+            last_meaningful_progress_at,
+            meaningful_timeout_secs,
+        ) else {
+            return Err(OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                "WebSocket stream timed out waiting for meaningful OpenAI stream progress ({}s)",
+                meaningful_timeout_secs.unwrap_or_default()
+            )));
+        };
+        let next_item = tokio::select! {
+            biased;
+            _ = tx.closed() => return Ok(()),
+            result = tokio::time::timeout(wait_timeout, ws_stream.next()) => result.map_err(|_| {
+                let meaningful_stall = meaningful_timeout_secs.is_some_and(|secs| {
+                    last_meaningful_progress_at.elapsed() >= Duration::from_secs(secs)
+                });
+                if meaningful_stall {
+                    OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                        "WebSocket stream timed out waiting for meaningful OpenAI stream progress ({}s)",
+                        meaningful_timeout_secs.unwrap_or_default()
+                    ))
+                } else {
+                    OpenAIStreamFailure::FallbackToHttps(anyhow::anyhow!(
+                        "WebSocket stream timed out waiting for {} websocket activity ({}s)",
+                        websocket_activity_timeout_kind(saw_api_activity),
+                        timeout_secs
+                    ))
+                }
+            })?,
+        };
 
         let Some(result) = next_item else {
             if saw_response_completed {
@@ -1317,6 +1449,7 @@ pub(super) async fn stream_response_websocket_persistent(
                     } else {
                         is_websocket_first_activity_payload(&text)
                     };
+                    let mut made_meaningful_progress = is_meaningful_websocket_payload(&text);
                     if let Some(event) = parse_openai_response_event(
                         &text,
                         &mut saw_text_delta,
@@ -1327,6 +1460,9 @@ pub(super) async fn stream_response_websocket_persistent(
                     ) {
                         if is_stream_activity_event(&event) {
                             made_api_activity = true;
+                        }
+                        if is_meaningful_stream_progress(&event) {
+                            made_meaningful_progress = true;
                         }
                         if matches!(event, StreamEvent::MessageEnd { .. }) {
                             saw_response_completed = true;
@@ -1365,6 +1501,9 @@ pub(super) async fn stream_response_websocket_persistent(
                         if is_stream_activity_event(&event) {
                             made_api_activity = true;
                         }
+                        if is_meaningful_stream_progress(&event) {
+                            made_meaningful_progress = true;
+                        }
                         if let StreamEvent::Error { message, .. } = &event {
                             if let Some(model_name) = request_model.as_deref() {
                                 maybe_record_runtime_model_unavailable_from_stream_error(
@@ -1401,6 +1540,9 @@ pub(super) async fn stream_response_websocket_persistent(
                     if made_api_activity {
                         saw_api_activity = true;
                         last_api_activity_at = Instant::now();
+                    }
+                    if made_meaningful_progress {
+                        last_meaningful_progress_at = Instant::now();
                     }
                     if saw_response_completed {
                         break;

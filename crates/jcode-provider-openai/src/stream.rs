@@ -8,8 +8,11 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{Context as TaskContext, Poll};
-use std::time::{SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const WEBSOCKET_FALLBACK_NOTICE: &str = "falling back from websockets to https transport";
 static FALLBACK_TOOL_CALL_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -803,6 +806,7 @@ pub struct OpenAIResponsesStream {
     saw_thinking_delta: bool,
     streaming_tool_calls: HashMap<String, StreamingToolCallState>,
     completed_tool_items: HashSet<String>,
+    meaningful_progress_at: Option<Arc<Mutex<Instant>>>,
 }
 
 impl OpenAIResponsesStream {
@@ -816,6 +820,36 @@ impl OpenAIResponsesStream {
             saw_thinking_delta: false,
             streaming_tool_calls: HashMap::new(),
             completed_tool_items: HashSet::new(),
+            meaningful_progress_at: None,
+        }
+    }
+
+    /// Construct an SSE stream that records raw meaningful Responses API
+    /// payloads before the parser buffers them into a higher-level event.
+    ///
+    /// Function-call argument deltas are intentionally buffered until their
+    /// completion event so consumers cannot execute a partial tool call. The
+    /// runtime still needs to observe those deltas as provider progress, so the
+    /// optional timestamp sink keeps timeout ownership in the runtime without
+    /// adding a wire-level StreamEvent variant or changing parser semantics.
+    pub fn new_with_progress(
+        stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static,
+        meaningful_progress_at: Arc<Mutex<Instant>>,
+    ) -> Self {
+        let mut response_stream = Self::new(stream);
+        response_stream.meaningful_progress_at = Some(meaningful_progress_at);
+        response_stream
+    }
+
+    fn record_raw_meaningful_progress(&self, data: &str) {
+        if !crate::websocket_health::is_meaningful_websocket_payload(data) {
+            return;
+        }
+
+        if let Some(timestamp) = &self.meaningful_progress_at
+            && let Ok(mut timestamp) = timestamp.lock()
+        {
+            *timestamp = Instant::now();
         }
     }
 
@@ -840,6 +874,7 @@ impl OpenAIResponsesStream {
             }
 
             let data = data_lines.join("\n");
+            self.record_raw_meaningful_progress(&data);
             if let Some(event) = parse_openai_response_event(
                 &data,
                 &mut self.saw_text_delta,
@@ -960,6 +995,42 @@ mod tests {
         assert!(streaming_tool_calls.is_empty());
         assert!(completed_tool_items.is_empty());
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn parser_progress_sink_observes_buffered_tool_deltas_not_control_frames() {
+        let progress_at = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(1)));
+        let mut stream = OpenAIResponsesStream::new_with_progress(
+            futures::stream::empty::<Result<Bytes, reqwest::Error>>(),
+            Arc::clone(&progress_at),
+        );
+
+        stream.buffer =
+            "data: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"path\\\":\\\"file\\\"}\"}\n\n"
+                .to_string();
+        let before_tool_delta = *progress_at.lock().expect("progress timestamp");
+        assert!(stream.parse_next_event().is_none());
+        assert!(
+            *progress_at.lock().expect("progress timestamp") > before_tool_delta,
+            "buffered tool argument deltas must count as provider progress"
+        );
+
+        let before_control = *progress_at.lock().expect("progress timestamp");
+        stream.buffer = "data: {\"type\":\"response.in_progress\"}\n\n".to_string();
+        assert!(stream.parse_next_event().is_none());
+        assert_eq!(
+            *progress_at.lock().expect("progress timestamp"),
+            before_control,
+            "lifecycle frames must not reset the meaningful-progress deadline"
+        );
+
+        stream.buffer = ": keepalive\n\n".to_string();
+        assert!(stream.parse_next_event().is_none());
+        assert_eq!(
+            *progress_at.lock().expect("progress timestamp"),
+            before_control,
+            "SSE comments must not reset the meaningful-progress deadline"
+        );
     }
 
     #[test]

@@ -50,6 +50,46 @@ fn lifecycle_observability_defaults_are_local_and_enabled_for_persistence() {
 }
 
 #[test]
+fn openai_stall_recovery_defaults_and_environment_overrides_are_safe() {
+    let _lock = crate::storage::lock_test_env();
+    let previous_recovery = std::env::var_os("JCODE_OPENAI_STALL_RECOVERY");
+    let previous_timeout = std::env::var_os("JCODE_OPENAI_STALL_TIMEOUT_SECS");
+
+    let defaults = Config::default();
+    assert!(defaults.provider.openai_stall_recovery);
+    assert_eq!(defaults.provider.openai_stall_timeout_secs, 300);
+
+    let mut config: Config = toml::from_str(
+        "[provider]\nopenai_stall_recovery = false\nopenai_stall_timeout_secs = 42\n",
+    )
+    .expect("OpenAI stall recovery config should parse");
+    assert!(!config.provider.openai_stall_recovery);
+    assert_eq!(config.provider.openai_stall_timeout_secs, 42);
+
+    crate::env::set_var("JCODE_OPENAI_STALL_RECOVERY", "on");
+    crate::env::set_var("JCODE_OPENAI_STALL_TIMEOUT_SECS", "99");
+    config.apply_env_overrides();
+    assert!(config.provider.openai_stall_recovery);
+    assert_eq!(config.provider.openai_stall_timeout_secs, 99);
+
+    crate::env::set_var("JCODE_OPENAI_STALL_RECOVERY", "invalid");
+    crate::env::set_var("JCODE_OPENAI_STALL_TIMEOUT_SECS", "0");
+    config.apply_env_overrides();
+    assert!(config.provider.openai_stall_recovery);
+    assert_eq!(config.provider.openai_stall_timeout_secs, 99);
+
+    config.provider.openai_stall_timeout_secs = 0;
+    assert!(
+        config
+            .display_string()
+            .contains("- OpenAI stall timeout: 1s base, effort-scaled (configured: 0s)")
+    );
+
+    restore_env_var("JCODE_OPENAI_STALL_RECOVERY", previous_recovery);
+    restore_env_var("JCODE_OPENAI_STALL_TIMEOUT_SECS", previous_timeout);
+}
+
+#[test]
 fn lifecycle_observability_persisted_values_and_master_suppression_parse() {
     let config: Config = toml::from_str(
         "[lifecycle_observability]\nenabled = false\npersist_session_events = true\nemit_structured_logs = true\n",
