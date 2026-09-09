@@ -3114,7 +3114,14 @@ mod stream_activity_tests {
         );
         let mut remote = ReplayRemoteState::default();
 
-        handle_server_event(&mut app, ServerEvent::Pong { id: 0 }, &mut remote);
+        handle_server_event(
+            &mut app,
+            ServerEvent::Pong {
+                id: 0,
+                native_ssh_protocol: None,
+            },
+            &mut remote,
+        );
 
         assert_eq!(app.last_stream_activity, Some(provider_activity));
         assert!(app.status_detail.is_some());
