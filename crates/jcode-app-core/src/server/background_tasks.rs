@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use tokio::sync::{RwLock, broadcast};
 
-async fn emit_external_wake(
+pub(super) async fn emit_external_wake(
     session_id: &str,
     reason: &str,
     notification: &str,
@@ -259,6 +259,30 @@ pub(super) async fn dispatch_swarm_await_completion(
     )
     .await
     {
+        return;
+    }
+
+    if crate::config::config().agents.swarm_completion_wake {
+        if !super::swarm_completion_wake::queue_completion_wake(
+            &event.session_id,
+            &event.notification,
+            sessions,
+            soft_interrupt_queues,
+            LiveTurnSwarmContext::new(
+                swarm_members,
+                swarms_by_id,
+                event_history,
+                event_counter,
+                swarm_event_tx,
+            ),
+        )
+        .await
+        {
+            crate::logging::warn(&format!(
+                "Failed to schedule swarm await completion for session {}",
+                event.session_id
+            ));
+        }
         return;
     }
 

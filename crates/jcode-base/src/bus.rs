@@ -295,6 +295,17 @@ pub struct SwarmAwaitCompleted {
     pub wake: bool,
 }
 
+/// One owned worker's busy-to-terminal transition, not a display status update.
+/// This is an in-process signal. Ownership is revalidated by the server before
+/// any optional model wake, and the existing UI notification remains separate.
+#[derive(Clone, Debug)]
+pub struct SwarmMemberCompleted {
+    pub owner_session_id: String,
+    pub worker_session_id: String,
+    pub swarm_id: String,
+    pub notification: String,
+}
+
 /// Result of a `/productivity` report generation run.
 ///
 /// Carries already-rendered outputs (markdown + PNG bytes) so the TUI layer can
@@ -411,6 +422,7 @@ pub enum BusEvent {
     BackgroundTaskStalled(BackgroundTaskStalled),
     /// A backgrounded `swarm await_members` watcher reached a terminal result.
     SwarmAwaitCompleted(SwarmAwaitCompleted),
+    SwarmMemberCompleted(SwarmMemberCompleted),
     /// Usage report fetched from providers
     UsageReport(Vec<jcode_usage_types::ProviderUsage>),
     /// Progressive usage report update while providers are still loading

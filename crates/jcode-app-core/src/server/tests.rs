@@ -257,6 +257,11 @@ async fn test_agent(provider: Arc<dyn Provider>) -> Arc<Mutex<Agent>> {
     Arc::new(Mutex::new(Agent::new(provider, registry)))
 }
 
+#[path = "tests/swarm_completion_wake.rs"]
+mod swarm_completion_wake;
+#[path = "tests/swarm_completion_wake_cases.rs"]
+mod swarm_completion_wake_cases;
+
 #[allow(clippy::type_complexity)]
 fn empty_swarm_status_state() -> (
     Arc<RwLock<HashMap<String, std::collections::HashSet<String>>>>,

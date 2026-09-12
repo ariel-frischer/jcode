@@ -736,6 +736,10 @@ pub struct AgentsConfig {
     pub swarm_effort: Option<String>,
     /// Default terminal mode for swarm-created agents.
     pub swarm_spawn_mode: SwarmSpawnMode,
+    /// Opt in to server-owned incremental worker completion wakes.
+    /// Unset or false preserves notification-only worker completion delivery.
+    /// Environment override: `JCODE_SWARM_COMPLETION_WAKE`.
+    pub swarm_completion_wake: bool,
     /// Maximum percentage (1-90) of the chat column height the inline swarm
     /// gallery band may occupy. Leave unset to use the built-in default (40%).
     /// Lower values keep more of the transcript visible; set near the minimum
@@ -838,6 +842,7 @@ impl Default for AgentsConfig {
             swarm_model: None,
             swarm_effort: None,
             swarm_spawn_mode: SwarmSpawnMode::default(),
+            swarm_completion_wake: false,
             swarm_gallery_max_pct: None,
             swarm_strip_layout: SwarmStripLayout::default(),
             memory_model: None,
@@ -902,6 +907,20 @@ mod tests {
 
         assert_eq!(config.swarm_model.as_deref(), Some("gpt-5.5"));
         assert!(config.swarm_role_policies.is_empty());
+    }
+
+    #[test]
+    fn swarm_completion_wake_is_an_optional_boolean() {
+        for (input, expected) in [
+            ("", false),
+            ("swarm_completion_wake = false", false),
+            ("swarm_completion_wake = true", true),
+        ] {
+            let config: AgentsConfig = toml::from_str(input).expect("agents config");
+            let serialized = serde_json::to_value(config).expect("serialized agents config");
+            assert_eq!(serialized["swarm_completion_wake"], expected);
+        }
+        assert!(toml::from_str::<AgentsConfig>("swarm_completion_wake = 'yes'").is_err());
     }
 
     #[test]

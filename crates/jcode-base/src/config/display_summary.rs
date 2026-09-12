@@ -109,6 +109,7 @@ impl Config {
 **Agent models:**
 - Swarm / subagent: {}
 - Swarm spawn mode: {}
+- Swarm completion wake: {}
 - Spawn hook: {}
 - Review: {}
 - Judge: {}
@@ -301,6 +302,7 @@ impl Config {
                 .as_deref()
                 .unwrap_or("(inherit current session)"),
             self.agents.swarm_spawn_mode.as_str(),
+            self.agents.swarm_completion_wake,
             self.terminal
                 .spawn_hook
                 .as_deref()

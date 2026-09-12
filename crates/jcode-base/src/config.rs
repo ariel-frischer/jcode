@@ -190,6 +190,7 @@ const CONFIG_ENV_KEYS: &[&str] = &[
     "JCODE_MCP_TOOLS",
     "JCODE_MCP_TOOLS_TOKEN_THRESHOLD",
     "JCODE_RETRY_BACKOFF_CAP_SECS",
+    "JCODE_SWARM_COMPLETION_WAKE",
     "JCODE_SWARM_ENABLED",
     "JCODE_SWARM_EFFORT",
     "JCODE_SWARM_MODEL",
@@ -971,3 +972,7 @@ fn is_default_discovery_endpoint(endpoint: &str) -> bool {
         "https://api.jcode.sh/v1/discovery" | "https://api.solosystems.dev/v1/discovery"
     )
 }
+
+#[cfg(test)]
+#[path = "config/swarm_completion_wake_tests.rs"]
+mod swarm_completion_wake_tests;
