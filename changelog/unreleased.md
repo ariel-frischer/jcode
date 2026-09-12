@@ -1,5 +1,7 @@
 # Unreleased custom-fork changes
 
+- Optional `[agents].swarm_completion_wake` lets attached coordinators continue after each owned worker finishes, even without a completion wait, and prevents enabled swarm-await wakes from getting stranded at the end of a turn. Disabled by default.
+
 - Optional main-TUI workflow progress and health shows owned work while the model is idle, with an explicit Autospec artifact adapter, session-isolated snapshots and bounded failure/reconnect handling. Disabled by default.
 
 - OpenAI sessions can recover once from a stale websocket chain that reports a missing tool result, reusing saved results without rerunning tools or replaying partial output.

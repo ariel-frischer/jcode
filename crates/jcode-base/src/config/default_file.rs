@@ -561,6 +561,12 @@ swarm_spawn_mode = "inline"
 # per-swarm hard cap of 1000. Light mode uses a smaller fixed fan-out.
 # Env override: JCODE_SWARM_MAX_CONCURRENT_AGENTS
 swarm_max_concurrent_agents = 32
+
+# Experimental: wake the owner after each owned worker finishes, without an
+# explicit await_members call. Also close the busy-to-idle await wake gap.
+# Off preserves notification-only individual completions. May use more turns.
+# Env: JCODE_SWARM_COMPLETION_WAKE (invalid/empty preserves configured value).
+swarm_completion_wake = false
 #
 # Max percentage (1-90) of the chat height the inline swarm gallery band may use.
 # Unset = built-in default (40%). Lower values keep more transcript visible; set

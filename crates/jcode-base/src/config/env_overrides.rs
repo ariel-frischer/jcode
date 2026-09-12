@@ -426,6 +426,11 @@ impl Config {
         }
 
         // Agents (spawned helper sessions)
+        if let Ok(v) = std::env::var("JCODE_SWARM_COMPLETION_WAKE")
+            && let Some(parsed) = parse_env_bool(&v)
+        {
+            self.agents.swarm_completion_wake = parsed;
+        }
         if let Ok(v) = std::env::var("JCODE_SWARM_MODEL") {
             let trimmed = v.trim();
             self.agents.swarm_model = if trimmed.is_empty() {

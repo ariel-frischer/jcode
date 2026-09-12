@@ -135,6 +135,52 @@ concurrently would make the shared plan incoherent.
   report, not a historical report archive. Reports already truncated by an older
   server cannot be reconstructed by this action.
 
+### Experimental incremental completion wake
+
+Individual worker reports are display notifications by default. Seeing a worker
+finish does not itself start another owner-model turn. An explicit asynchronous
+`await_members` with `wake=true` wakes the requester when its `mode` condition is
+satisfied. `mode="all"` waits for the whole selected set, while `mode="any"` resolves
+on the first matching member.
+
+To opt in to independent, per-worker continuation on the server owning the session:
+
+```toml
+[agents]
+swarm_completion_wake = true
+```
+
+The default is `false`. Set it back to `false` to disable the experiment.
+`JCODE_SWARM_COMPLETION_WAKE` overrides the persisted value through the canonical
+config resolver. It accepts the standard boolean environment values (`true`/`false`,
+`on`/`off`, `yes`/`no`, `1`/`0`). Empty or invalid environment values leave the
+configured value unchanged. TOML requires a boolean. There is no session/profile
+override. Config diagnostics show the effective **Swarm completion wake** value.
+The environment override must be present in the owning daemon's environment,
+not only a client attaching to an existing daemon. Config-file changes use the
+normal server config refresh. Enabling the option does not replay older reports.
+
+When enabled, an owned worker's busy-to-terminal transition signals the existing
+server wake path without requiring an `await_members` registration or waiting for
+other workers. Repeated terminal status updates do not signal another completion.
+The server revalidates the exact report-back owner and swarm, never inferring
+ownership from a directory, friendly name, or current coordinator.
+
+Delivery uses the existing soft-interrupt queue. A busy owner consumes the result
+at a safe point. A one-shot agent reservation also checks for an unconsumed result
+after the active turn releases its lock, closing the final-drain/idle wake gap.
+Already consumed or canceled queue entries do not start another turn. The same
+gated handoff applies to explicit await wakes. This is event-driven, not a polling
+or generic auto-poke loop. More frequent owner turns can consume additional quota.
+
+`await_members` keeps its existing resolution and `notify`/`wake` semantics.
+`wake=false` suppresses that wait's wake, not independently enabled per-worker
+wakes. Generic `batch` calls still return their aggregate tool result only after
+all calls finish. This option does not interrupt a running tool or change
+`run_plan` scheduling. External wake mode remains externally orchestrated.
+Missing, removed, or detached owners are not automatically resumed or adopted.
+Offline ownership restoration and missed-report replay are separate capabilities.
+
 ## User Interaction
 
 - The user primarily interacts with the coordinator.
