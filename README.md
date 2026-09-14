@@ -52,6 +52,14 @@ The clearest examples of my custom delta include:
   keeping picker loading off the input path. The composer also has an `@`-based
   fuzzy picker rooted at the session workspace, configurable ignore paths,
   responsive discovery, and expansion of selected files into model context.
+- **Responsive cancellation during busy sessions:** fixes server request-reader
+  stalls during resume, message setup, and detached-session cleanup that could
+  leave `Esc` and `Ctrl+C` cancellation requests unread behind a busy agent lock.
+  Cancellation keeps targeting the original running turn across session switches.
+  While processing, the first `Ctrl+C` requests cancellation; a second press
+  within two seconds exits the client without waiting for a server acknowledgement.
+  Exiting the client alone does not prove a detached server turn has stopped. See
+  [interrupt behavior](docs/SOFT_INTERRUPT.md).
 - **Persistent adaptive session bar:** active sessions keep identity, provider
   credit or usage, model, authentication, reasoning, and connection context in
   dedicated top chrome instead of relying on scroll position. The bar uses one
