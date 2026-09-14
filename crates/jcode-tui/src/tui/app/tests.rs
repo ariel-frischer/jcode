@@ -50,6 +50,7 @@ include!("tests/issue_544_paste_enter.rs");
 include!("tests/keybinding_hot_reload.rs");
 include!("tests/terminal_setup_command.rs");
 include!("tests/issue_497_copy_ctrl_c.rs");
+include!("tests/processing_quit.rs");
 include!("tests/issue_699_ctrl_d_delete.rs");
 include!("tests/issue_832_remote_ctrl_k.rs");
 include!("tests/issue_998_model_status_overlay.rs");

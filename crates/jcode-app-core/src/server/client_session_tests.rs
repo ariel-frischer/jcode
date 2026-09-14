@@ -381,6 +381,56 @@ async fn live_target_claim_is_atomic_with_detached_source_cleanup() {
     }
 }
 
+#[tokio::test]
+async fn detached_busy_source_is_preserved_until_its_agent_is_available() {
+    let provider: Arc<dyn Provider> = Arc::new(MockProvider);
+    let registry = Registry::new(provider.clone()).await;
+    let source_id = "session_busy_source_cleanup";
+    let source = Arc::new(Mutex::new(build_test_agent_with_id(
+        provider,
+        registry,
+        source_id,
+        Vec::new(),
+    )));
+    let sessions = Arc::new(RwLock::new(HashMap::from([(
+        source_id.to_string(),
+        Arc::clone(&source),
+    )])));
+    let connections = Arc::new(RwLock::new(HashMap::new()));
+    let busy = source.lock().await;
+
+    let removed = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        remove_detached_source_if_unclaimed(
+            source_id,
+            "departing",
+            &source,
+            &sessions,
+            &connections,
+        ),
+    )
+    .await
+    .expect("busy-source cleanup must not block the connection reader");
+    assert!(
+        !removed,
+        "a running source must remain cancellable and attachable"
+    );
+    assert!(sessions.read().await.contains_key(source_id));
+
+    drop(busy);
+    assert!(
+        remove_detached_source_if_unclaimed(
+            source_id,
+            "departing",
+            &source,
+            &sessions,
+            &connections,
+        )
+        .await
+    );
+    assert!(!sessions.read().await.contains_key(source_id));
+}
+
 /// Issue #481: a subscribe cwd that is merely absolute is not enough. A client
 /// reporting the *home* directory must not silently re-pin (or clobber) a
 /// session that is already bound to a real project directory, because tools then

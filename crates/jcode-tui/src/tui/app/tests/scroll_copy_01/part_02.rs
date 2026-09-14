@@ -368,8 +368,12 @@ fn test_remote_ctrl_c_interrupts_while_processing() {
     rt.block_on(app.handle_remote_key(KeyCode::Char('c'), KeyModifiers::CONTROL, &mut remote))
         .unwrap();
 
-    assert!(app.quit_pending.is_none());
+    assert!(app.quit_pending.is_some());
     assert!(app.is_processing);
+    assert_eq!(
+        app.status_notice(),
+        Some("Interrupting... Press Ctrl+C again to quit".to_string())
+    );
 }
 
 #[test]

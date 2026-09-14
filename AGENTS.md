@@ -91,6 +91,46 @@ task, not a separate chore.
 - **Prune registry entries** after removing directories by hand:
   `git worktree prune`.
 
+## Cargo Build Cache Budget
+
+- **Budget across the whole repository, not per worktree.** Count allocated bytes
+  in the root and all worktree `target/` directories plus every Jcode-owned
+  `CARGO_TARGET_DIR` under `~/.jcode/scratch` or elsewhere. Aim to retain at most
+  **10 GiB of inactive build caches**. **20 GiB aggregate** is the cleanup trigger,
+  not permission for each worktree to retain 20 GiB. Active builds may temporarily
+  exceed it, but record the exception and reclaim eligible caches when they finish.
+- **Retain the newest compatible build cache for fast incremental builds**, plus
+  caches still used by active work. Prefer deleting older redundant build-only
+  targets, not the warm cache the next build will reuse. If this protected set
+  alone exceeds the budget, report the exception instead of deleting it to hit
+  a number. Recency is based on descendant activity, not directory names.
+- **Check before every Cargo-heavy build/test/Clippy run and at task completion.**
+  Above the trigger, reclaim verified inactive, disposable, task-owned caches
+  before allocating another target directory. If protected work prevents cleanup,
+  report the measured usage and owner/blocker and avoid starting additional
+  cache-heavy work until there is a safe capacity plan. Do not wait for disk-full.
+- **Do not mint a new scratch target for every validation retry.** Reuse the
+  task's compatible target directory for sequential checks. Use a fresh target
+  only when isolation or clean-build evidence requires it, record its owner and
+  path, and clean up that task-owned output after evidence is retained and no
+  process uses it. Do not repoint another agent's target or share concurrent builds.
+- **Make cleanup part of every validation/landing handoff.** Record aggregate
+  before/after usage, removed cache paths, and protected exceptions. Keep reports,
+  plans, source changes, and required binaries outside disposable cache trees.
+  The root/orchestrator owns cross-task cleanup, not workers.
+- **Never use the budget as a blind deletion rule.** Check resolved paths,
+  newest descendant timestamps, open files/processes, unfinished work and repo
+  ownership immediately before cleanup. Protect active/shared caches, installed
+  or mapped executables, source snapshots, documents, databases and Dolt spool
+  files. Unknown ownership means retain. Recent shared scratch artifacts retain
+  the cleanup skill's 14-day protection. Only an explicitly task-owned disposable
+  target may be cleaned promptly after its completed validation and quiescence
+  are verified. Historical or other-agent caches require a reviewed candidate
+  manifest and approval under `/jcode-scratch-cleanup`.
+- This is an agent workflow requirement, **not an installed background sweeper**.
+  Use existing verified repo cleanup tools within their actual scope. Never run
+  blanket scratch deletion or remove worktrees just to satisfy the cache budget.
+
 ## Install Notes
 - After landing a merge into `dev`, automatically install the newer build with
   `scripts/install_release.sh --fast` and gracefully reload the shared server.

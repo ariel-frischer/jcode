@@ -697,6 +697,19 @@ impl App {
         false
     }
 
+    /// Handle a quit request while a turn is running without waiting for its
+    /// cancellation acknowledgement. The first press keeps the interrupt
+    /// path intact and arms the existing quit confirmation; the second press
+    /// uses the normal quit machinery directly.
+    pub(super) fn handle_processing_quit_request(&mut self) -> bool {
+        if self.quit_pending.is_some() {
+            self.handle_quit_request()
+        } else {
+            self.quit_pending = Some(Instant::now());
+            false
+        }
+    }
+
     fn collect_missing_tool_outputs_since_last_scan(&mut self) -> Vec<(usize, Vec<String>)> {
         let message_len = self.local_transcript_message_count();
         if self.tool_output_scan_index > message_len {

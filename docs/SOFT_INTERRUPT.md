@@ -4,6 +4,20 @@
 
 Soft interrupt allows users to inject messages into an ongoing AI conversation without cancelling the current generation. Instead of the disruptive cancel-and-restart flow, messages are queued and naturally incorporated at safe points where the model provider connection is idle.
 
+## Cancellation and emergency exit
+
+While a turn is processing, Esc requests cancellation. Ctrl+C requests cancellation
+and arms the existing two-second quit confirmation. Pressing Ctrl+C again within
+that window exits the client without waiting for a server acknowledgement. An
+expired confirmation starts a new confirmation window rather than quitting.
+Closing the client is not proof that a detached server turn has stopped.
+
+The server connection reader must not wait for the generating agent's mutex to
+prepare a message or read the source working directory for session resume.
+Agent-dependent message setup and run-safety cleanup run inside the owned
+processing task. Cancellation retains that task's session control handle even
+if the client switches sessions before the task finishes.
+
 ## Current Behavior (Hard Interrupt)
 
 ```
