@@ -206,6 +206,35 @@ async fn resolve_target_subscribe_working_dir(
     Ok(())
 }
 
+/// Snapshot the current session root without waiting for a generating Agent.
+/// Resume dispatch runs on the connection reader, so an unconditional Agent
+/// lock here would strand all later requests, including Cancel.
+async fn resolve_resume_working_dir(
+    agent: &Arc<Mutex<Agent>>,
+    session_id: &str,
+    members: &Arc<RwLock<HashMap<String, SwarmMember>>>,
+) -> Option<String> {
+    if let Some(working_dir) = agent
+        .try_lock()
+        .ok()
+        .and_then(|agent_guard| agent_guard.working_dir().map(str::to_string))
+    {
+        return Some(working_dir);
+    }
+
+    members
+        .read()
+        .await
+        .get(session_id)
+        .and_then(|member| member.working_dir.as_ref())
+        .map(|path| path.to_string_lossy().into_owned())
+        .or_else(|| {
+            crate::session::Session::load_startup_stub(session_id)
+                .ok()
+                .and_then(|session| session.working_dir)
+        })
+}
+
 fn validated_subscribe_working_dir(
     working_dir: Option<&str>,
     remote_continuation: bool,
@@ -291,6 +320,13 @@ struct ProcessingMessage {
     images: Vec<(String, String)>,
     system_reminder: Option<String>,
     active_skill: Option<String>,
+    run_safety: Option<MessageRunSafetyInputs>,
+}
+
+struct MessageRunSafetyInputs {
+    invocation: jcode_config_types::RunSafetyConfig,
+    environment: jcode_config_types::RunSafetyConfig,
+    persisted: jcode_config_types::RunSafetyConfig,
 }
 
 struct ProcessingState<'a> {
@@ -298,6 +334,7 @@ struct ProcessingState<'a> {
     message_id: &'a mut Option<u64>,
     session_id: &'a mut Option<String>,
     task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    processing_control: &'a mut Option<SessionControlHandle>,
 }
 
 struct SwarmStatusRefs<'a> {
@@ -702,6 +739,7 @@ pub(super) async fn handle_client(
     let mut processing_task: Option<tokio::task::JoinHandle<()>> = None;
     let mut processing_message_id: Option<u64> = None;
     let mut processing_session_id: Option<String> = None;
+    let mut processing_control: Option<SessionControlHandle> = None;
     let mut current_client_instance_id: Option<String> = None;
     let mut continue_on_disconnect = false;
     // Client selfdev status is determined by Subscribe request, not server's env
@@ -999,11 +1037,7 @@ pub(super) async fn handle_client(
                     processing_message_id = None;
                     processing_task = None;
                     client_is_processing = false;
-                    {
-                        let mut agent = agent.lock().await;
-                        agent.run_safety_complete_turn();
-                        agent.replace_run_safety(None);
-                    }
+                    processing_control = None;
                     {
                         let mut connections = client_connections.write().await;
                         if let Some(info) = connections.get_mut(&client_connection_id) {
@@ -1221,6 +1255,7 @@ pub(super) async fn handle_client(
                     message_id: &mut processing_message_id,
                     session_id: &mut processing_session_id,
                     task: &mut processing_task,
+                    processing_control: &mut processing_control,
                 },
                 &session_control,
                 &client_event_tx,
@@ -1378,7 +1413,7 @@ pub(super) async fn handle_client(
                     .await;
                     continue;
                 }
-                let controller = if let Some(invocation) = run_safety {
+                let run_safety = if let Some(invocation) = run_safety {
                     let (persisted, environment) = match crate::config::Config::run_safety_sources()
                     {
                         Ok(sources) => sources,
@@ -1392,23 +1427,14 @@ pub(super) async fn handle_client(
                             continue;
                         }
                     };
-                    let baseline = agent.lock().await.token_usage_totals();
-                    match resolve_message_run_safety(invocation, environment, persisted, baseline) {
-                        Ok(controller) => Some(controller),
-                        Err(error) => {
-                            let _ = client_event_tx.send(ServerEvent::Error {
-                                id,
-                                message: format!("Invalid run safety configuration: {error}"),
-                                retry_after_secs: None,
-                                provider_code: None,
-                            });
-                            continue;
-                        }
-                    }
+                    Some(MessageRunSafetyInputs {
+                        invocation,
+                        environment,
+                        persisted,
+                    })
                 } else {
                     None
                 };
-                agent.lock().await.replace_run_safety(controller);
                 if !client_is_processing {
                     // A live resume cannot replace stdin routing while the old
                     // turn owns the agent. Restore it when this client starts a
@@ -1429,6 +1455,7 @@ pub(super) async fn handle_client(
                         images,
                         system_reminder,
                         active_skill,
+                        run_safety,
                     },
                     &client_session_id,
                     &mut ProcessingState {
@@ -1436,7 +1463,9 @@ pub(super) async fn handle_client(
                         message_id: &mut processing_message_id,
                         session_id: &mut processing_session_id,
                         task: &mut processing_task,
+                        processing_control: &mut processing_control,
                     },
+                    &session_control,
                     &agent,
                     &client_event_tx,
                     &processing_done_tx,
@@ -1459,6 +1488,7 @@ pub(super) async fn handle_client(
                         message_id: &mut processing_message_id,
                         session_id: &mut processing_session_id,
                         task: &mut processing_task,
+                        processing_control: &mut processing_control,
                     },
                     &session_control,
                     &client_event_tx,
@@ -1523,6 +1553,7 @@ pub(super) async fn handle_client(
                             images,
                             system_reminder: None,
                             active_skill: None,
+                            run_safety: None,
                         },
                         &client_session_id,
                         &mut ProcessingState {
@@ -1530,7 +1561,9 @@ pub(super) async fn handle_client(
                             message_id: &mut processing_message_id,
                             session_id: &mut processing_session_id,
                             task: &mut processing_task,
+                            processing_control: &mut processing_control,
                         },
+                        &session_control,
                         &agent,
                         &client_event_tx,
                         &processing_done_tx,
@@ -2121,10 +2154,12 @@ pub(super) async fn handle_client(
                 profile: _profile,
             } => {
                 let pre_resume_session_id = client_session_id.clone();
-                let resume_working_dir = {
-                    let agent_guard = agent.lock().await;
-                    agent_guard.working_dir().map(str::to_string)
-                };
+                let resume_working_dir = resolve_resume_working_dir(
+                    &agent,
+                    &pre_resume_session_id,
+                    &swarm_members,
+                )
+                .await;
                 current_client_instance_id = client_instance_id.clone();
                 if let Some(client_instance_id) = current_client_instance_id.as_deref() {
                     session_control.resume_queued_message_editor_owner(client_instance_id);
@@ -3463,11 +3498,38 @@ async fn append_context_message(
     let _ = client_event_tx.send(event);
 }
 
+async fn prepare_processing_agent(
+    agent: &Arc<Mutex<Agent>>,
+    active_skill: Option<String>,
+    run_safety: Option<MessageRunSafetyInputs>,
+) -> Result<usize> {
+    let mut agent = agent.lock().await;
+    agent.replace_run_safety(None);
+    if !agent.set_remote_active_skill(active_skill.clone()) {
+        let skill_name = active_skill.as_deref().unwrap_or_default();
+        return Err(anyhow::anyhow!(
+            "Skill '{skill_name}' is not installed on the server"
+        ));
+    }
+
+    if let Some(inputs) = run_safety {
+        let controller = resolve_message_run_safety(
+            inputs.invocation,
+            inputs.environment,
+            inputs.persisted,
+            agent.token_usage_totals(),
+        )?;
+        agent.replace_run_safety(Some(controller));
+    }
+    Ok(agent.message_count())
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn start_processing_message(
     message: ProcessingMessage,
     client_session_id: &str,
     state: &mut ProcessingState<'_>,
+    session_control: &SessionControlHandle,
     agent: &Arc<Mutex<Agent>>,
     client_event_tx: &mpsc::UnboundedSender<ServerEvent>,
     processing_done_tx: &mpsc::UnboundedSender<(u64, Result<()>, Option<String>)>,
@@ -3480,6 +3542,7 @@ async fn start_processing_message(
         images,
         system_reminder,
         active_skill,
+        run_safety,
     } = message;
     if server_reload_starting() {
         crate::logging::info(&format!(
@@ -3500,24 +3563,10 @@ async fn start_processing_message(
         return;
     }
 
-    if !agent
-        .lock()
-        .await
-        .set_remote_active_skill(active_skill.clone())
-    {
-        let skill_name = active_skill.as_deref().unwrap_or_default();
-        let _ = client_event_tx.send(ServerEvent::Error {
-            id,
-            message: format!("Skill '{skill_name}' is not installed on the server"),
-            retry_after_secs: None,
-            provider_code: None,
-        });
-        return;
-    }
-
     *state.client_is_processing = true;
     *state.message_id = Some(id);
     *state.session_id = Some(client_session_id.to_string());
+    *state.processing_control = Some(session_control.clone());
 
     if let Some(reminder) = system_reminder.as_deref()
         && let Err(error) = super::reload_recovery::mark_delivered_if_matching_continuation(
@@ -3544,13 +3593,11 @@ async fn start_processing_message(
     )
     .await;
 
-    let start_message_index = {
-        let agent_guard = agent.lock().await;
-        agent_guard.message_count()
-    };
     let source_session_id = client_session_id.to_string();
-    let agent = Arc::clone(agent);
-    let report_agent = Arc::clone(&agent);
+    let setup_agent = Arc::clone(agent);
+    let process_agent = Arc::clone(agent);
+    let cleanup_agent = Arc::clone(agent);
+    let report_agent = Arc::clone(agent);
     let tx = super::state::session_event_fanout_sender_with_fallback(
         client_session_id.to_string(),
         Arc::clone(swarm.members),
@@ -3559,30 +3606,47 @@ async fn start_processing_message(
     let done_tx = processing_done_tx.clone();
     crate::logging::info(&format!("Processing message id={} spawning task", id));
     *state.task = Some(tokio::spawn(async move {
-        let event_tx = tx.clone();
-        let result = match std::panic::AssertUnwindSafe(crate::hooks::with_client_terminal_env(
-            client_terminal_env,
-            process_message_streaming_mpsc(agent, &content, images, system_reminder, event_tx),
-        ))
-        .catch_unwind()
-        .await
-        {
-            Ok(result) => result,
-            Err(panic_payload) => {
-                let msg = if let Some(text) = panic_payload.downcast_ref::<&str>() {
-                    text.to_string()
-                } else if let Some(text) = panic_payload.downcast_ref::<String>() {
-                    text.clone()
-                } else {
-                    "unknown panic".to_string()
-                };
-                crate::logging::error(&format!(
-                    "Processing task PANICKED for message id={}: {}",
-                    id, msg
-                ));
-                Err(anyhow::anyhow!("Processing task panicked: {}", msg))
-            }
-        };
+        let (result, start_message_index) =
+            match prepare_processing_agent(&setup_agent, active_skill, run_safety).await {
+                Ok(start_message_index) => {
+                    let event_tx = tx.clone();
+                    let result =
+                        match std::panic::AssertUnwindSafe(crate::hooks::with_client_terminal_env(
+                            client_terminal_env,
+                            process_message_streaming_mpsc(
+                                process_agent,
+                                &content,
+                                images,
+                                system_reminder,
+                                event_tx,
+                            ),
+                        ))
+                        .catch_unwind()
+                        .await
+                        {
+                            Ok(result) => result,
+                            Err(panic_payload) => {
+                                let msg = if let Some(text) = panic_payload.downcast_ref::<&str>() {
+                                    text.to_string()
+                                } else if let Some(text) = panic_payload.downcast_ref::<String>() {
+                                    text.clone()
+                                } else {
+                                    "unknown panic".to_string()
+                                };
+                                crate::logging::error(&format!(
+                                    "Processing task PANICKED for message id={}: {}",
+                                    id, msg
+                                ));
+                                Err(anyhow::anyhow!("Processing task panicked: {}", msg))
+                            }
+                        };
+                    let mut agent = cleanup_agent.lock().await;
+                    agent.run_safety_complete_turn();
+                    agent.replace_run_safety(None);
+                    (result, start_message_index)
+                }
+                Err(error) => (Err(error), 0),
+            };
         match &result {
             Ok(()) => crate::logging::info(&format!(
                 "Processing task completed OK for message id={}",
@@ -3705,16 +3769,22 @@ async fn cancel_processing_message(
     request_decoded_at: Option<Instant>,
 ) {
     let cancel_start = Instant::now();
+    let cancel_control = state
+        .processing_control
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| session_control.clone());
+    let control_session_id = cancel_control.session_id.clone();
     let session_label = state
         .session_id
         .as_deref()
-        .unwrap_or(session_control.session_id.as_str())
+        .unwrap_or(control_session_id.as_str())
         .to_string();
     crate::logging::info(&format!(
         "SERVER_INTERRUPT_CANCEL_RECEIVED request_id={:?} session={} control_session={} client_processing={} message_id={:?} has_task={} decoded_age_ms={:?}",
         request_id,
         session_label,
-        session_control.session_id,
+        control_session_id,
         *state.client_is_processing,
         *state.message_id,
         state.task.is_some(),
@@ -3732,7 +3802,7 @@ async fn cancel_processing_message(
             *state.task = Some(handle);
             return;
         }
-        let cancel_epoch = session_control.request_cancel();
+        let cancel_epoch = cancel_control.request_cancel();
         crate::logging::info(&format!(
             "SERVER_INTERRUPT_CANCEL_SIGNALLED request_id={:?} session={} message_id={:?} wait_ms=500",
             request_id, session_label, *state.message_id
@@ -3775,9 +3845,10 @@ async fn cancel_processing_message(
         // Only clear the cancel we fired: a newer cancel (repeated Esc, jade
         // relay, another connection) must not be erased before its target
         // observes it (issue #428).
-        session_control.reset_cancel_if_epoch(cancel_epoch);
+        cancel_control.reset_cancel_if_epoch(cancel_epoch);
         *state.task = None;
         *state.client_is_processing = false;
+        *state.processing_control = None;
         if let Some(session_id) = state.session_id.take() {
             update_member_status(
                 &session_id,
@@ -3807,7 +3878,7 @@ async fn cancel_processing_message(
             "SERVER_INTERRUPT_CANCEL_NO_LOCAL_TASK request_id={:?} session={} control_session={} client_processing={} message_id={:?}; signalling session cancel handle anyway",
             request_id,
             session_label,
-            session_control.session_id,
+            control_session_id,
             *state.client_is_processing,
             *state.message_id
         ));
@@ -3818,7 +3889,7 @@ async fn cancel_processing_message(
         // immediately, with no reply and no error. Report the interrupt and
         // stop. Sessions whose turn is owned by another connection still take
         // the signalling path, since the registry sees those turns.
-        if !crate::turn_cancel_registry::has_active_turn(&session_control.session_id) {
+        if !crate::turn_cancel_registry::has_active_turn(&control_session_id) {
             crate::logging::info(&format!(
                 "SERVER_INTERRUPT_CANCEL_IDLE_NOOP request_id={:?} session={}",
                 request_id, session_label
@@ -3830,8 +3901,8 @@ async fn cancel_processing_message(
             }
             return;
         }
-        let cancel_epoch = session_control.request_cancel();
-        let reset_control = session_control.clone();
+        let cancel_epoch = cancel_control.request_cancel();
+        let reset_control = cancel_control.clone();
         tokio::spawn(async move {
             // The running turn is not owned by this connection (post-reload
             // recovery, server-initiated turn, or attach), so we cannot await
@@ -3843,10 +3914,11 @@ async fn cancel_processing_message(
             reset_control.reset_cancel_if_epoch(cancel_epoch);
         });
         *state.client_is_processing = false;
+        *state.processing_control = None;
         let status_session_id = state
             .session_id
             .take()
-            .unwrap_or_else(|| session_control.session_id.clone());
+            .unwrap_or_else(|| control_session_id.clone());
         update_member_status(
             &status_session_id,
             "stopped",

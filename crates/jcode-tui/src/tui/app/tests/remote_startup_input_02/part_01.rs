@@ -1462,7 +1462,11 @@ fn test_ctrl_c_requests_cancel_while_processing() {
     assert!(app.cancel_requested);
     assert!(app.interleave_message.is_none());
     assert!(app.pending_soft_interrupts.is_empty());
-    assert_eq!(app.status_notice(), Some("Interrupting...".to_string()));
+    assert!(app.quit_pending.is_some());
+    assert_eq!(
+        app.status_notice(),
+        Some("Interrupting... Press Ctrl+C again to quit".to_string())
+    );
 }
 
 #[test]

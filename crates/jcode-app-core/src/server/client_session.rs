@@ -1090,11 +1090,6 @@ async fn cleanup_detached_source_session_if_unused(
     }
 
     {
-        let mut agent_guard = source_agent.lock().await;
-        agent_guard.mark_closed();
-    }
-
-    {
         let mut signals = shutdown_signals.write().await;
         signals.remove(old_session_id);
     }
@@ -1152,6 +1147,12 @@ async fn remove_detached_source_if_unclaimed(
         .map(|existing| Arc::ptr_eq(existing, source_agent))
         .unwrap_or(false);
     if owns_source {
+        // A running source must remain registered and cancellable after a
+        // session switch. Never wait for its turn on the connection reader.
+        let Ok(mut source) = source_agent.try_lock() else {
+            return false;
+        };
+        source.mark_closed();
         sessions_guard.remove(old_session_id);
     }
     owns_source

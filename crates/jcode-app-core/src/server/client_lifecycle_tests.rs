@@ -143,6 +143,14 @@ impl InteractiveSessionFixture {
     }
 }
 
+fn test_processing_control(session_id: &str) -> SessionControlHandle {
+    SessionControlHandle::cancel_only(
+        session_id,
+        Arc::new(std::sync::Mutex::new(Vec::new())),
+        InterruptSignal::new(),
+    )
+}
+
 #[derive(Clone)]
 struct CountingProvider {
     requests: Arc<AtomicUsize>,
@@ -664,6 +672,8 @@ async fn refreshed_session_control_handle_does_not_wait_for_busy_agent_lock() {
     assert!(stop_signal.is_set());
 }
 
+include!("client_lifecycle/cancellation_responsiveness_tests.rs");
+
 #[tokio::test]
 async fn busy_session_background_tool_signal_fires_via_registry_fallback() {
     // Regression: pressing Alt+B/Ctrl+B while a turn owns the agent mutex (e.g.
@@ -843,69 +853,6 @@ async fn context_message_rejects_while_busy_without_waiting_for_agent_lock() {
     ));
 }
 
-#[tokio::test]
-async fn cancel_without_local_task_still_signals_session_control() {
-    let soft_interrupt_queue = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let stop_signal = InterruptSignal::new();
-    let control = SessionControlHandle::cancel_only(
-        "session_detached_cancel",
-        soft_interrupt_queue,
-        stop_signal.clone(),
-    );
-    // The point of this path is a turn this connection does not own (attach
-    // after reload, server-initiated turn). Without a registered active turn
-    // the cancel is a deliberate no-op, because arming the signal with nothing
-    // running only kills the *next* message.
-    let _active_turn = crate::turn_cancel_registry::register_active_turn(
-        "session_detached_cancel",
-        InterruptSignal::new(),
-    );
-    let (client_event_tx, mut client_event_rx) = mpsc::unbounded_channel::<ServerEvent>();
-    let swarm_members = Arc::new(RwLock::new(HashMap::new()));
-    let swarms_by_id = Arc::new(RwLock::new(HashMap::new()));
-    let event_history = Arc::new(RwLock::new(std::collections::VecDeque::new()));
-    let event_counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let (swarm_event_tx, _) = broadcast::channel(8);
-    let mut client_is_processing = true;
-    let mut message_id = Some(99);
-    let mut session_id = Some("session_detached_cancel".to_string());
-    let mut task = None;
-
-    cancel_processing_message(
-        &mut ProcessingState {
-            client_is_processing: &mut client_is_processing,
-            message_id: &mut message_id,
-            session_id: &mut session_id,
-            task: &mut task,
-        },
-        &control,
-        &client_event_tx,
-        &SwarmStatusRefs {
-            members: &swarm_members,
-            swarms_by_id: &swarms_by_id,
-            event_history: &event_history,
-            event_counter: &event_counter,
-            event_tx: &swarm_event_tx,
-        },
-        Some(99),
-        None,
-    )
-    .await;
-
-    assert!(stop_signal.is_set());
-    assert!(!client_is_processing);
-    assert!(message_id.is_none());
-    assert!(session_id.is_none());
-    assert!(matches!(
-        client_event_rx.recv().await,
-        Some(ServerEvent::Interrupted)
-    ));
-    assert!(matches!(
-        client_event_rx.recv().await,
-        Some(ServerEvent::Done { id: 99 })
-    ));
-}
-
 /// Regression for issue #428: the detached-turn cancel path schedules a
 /// deferred reset of the shared stop signal. That reset must be epoch-guarded:
 /// if a newer cancel fires during the reset window (rapid repeated Esc), the
@@ -938,12 +885,14 @@ async fn deferred_cancel_reset_does_not_erase_newer_cancel() {
         let mut message_id = Some(request_id);
         let mut session_id = Some("session_detached_cancel_race".to_string());
         let mut task = None;
+        let mut processing_control = None;
         cancel_processing_message(
             &mut ProcessingState {
                 client_is_processing: &mut client_is_processing,
                 message_id: &mut message_id,
                 session_id: &mut session_id,
                 task: &mut task,
+                processing_control: &mut processing_control,
             },
             &control,
             &client_event_tx,
@@ -1110,6 +1059,7 @@ fn cancel_aborts_detached_streaming_turn_with_stale_stop_signal() -> anyhow::Res
         let mut message_id = None;
         let mut cancel_session_id = None;
         let mut task = None;
+        let mut processing_control = None;
 
         cancel_processing_message(
             &mut ProcessingState {
@@ -1117,6 +1067,7 @@ fn cancel_aborts_detached_streaming_turn_with_stale_stop_signal() -> anyhow::Res
                 message_id: &mut message_id,
                 session_id: &mut cancel_session_id,
                 task: &mut task,
+                processing_control: &mut processing_control,
             },
             &control,
             &client_event_tx,
@@ -1192,6 +1143,7 @@ fn idle_cancel_does_not_arm_the_signal_for_the_next_turn() -> anyhow::Result<()>
         let mut message_id = None;
         let mut cancel_session_id = None;
         let mut task = None;
+        let mut processing_control = None;
 
         assert!(
             !crate::turn_cancel_registry::has_active_turn(session_id),
@@ -1204,6 +1156,7 @@ fn idle_cancel_does_not_arm_the_signal_for_the_next_turn() -> anyhow::Result<()>
                 message_id: &mut message_id,
                 session_id: &mut cancel_session_id,
                 task: &mut task,
+                processing_control: &mut processing_control,
             },
             &control,
             &client_event_tx,
@@ -1510,11 +1463,13 @@ fn reload_starting_rejects_new_turn_without_spawning_processing_task() {
         let mut processing_message_id = None;
         let mut processing_session_id = None;
         let mut processing_task = None;
+        let mut processing_control = None;
         let swarm_members = Arc::new(RwLock::new(HashMap::new()));
         let swarms_by_id = Arc::new(RwLock::new(HashMap::new()));
         let event_history = Arc::new(RwLock::new(std::collections::VecDeque::new()));
         let event_counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let (swarm_event_tx, _) = broadcast::channel(8);
+        let control = test_processing_control("session_guard");
 
         start_processing_message(
             ProcessingMessage {
@@ -1523,6 +1478,7 @@ fn reload_starting_rejects_new_turn_without_spawning_processing_task() {
                 images: Vec::new(),
                 system_reminder: None,
                 active_skill: None,
+                run_safety: None,
             },
             "session_guard",
             &mut ProcessingState {
@@ -1530,7 +1486,9 @@ fn reload_starting_rejects_new_turn_without_spawning_processing_task() {
                 message_id: &mut processing_message_id,
                 session_id: &mut processing_session_id,
                 task: &mut processing_task,
+                processing_control: &mut processing_control,
             },
+            &control,
             &agent,
             &client_event_tx,
             &processing_done_tx,
@@ -1616,6 +1574,8 @@ async fn client_initiated_turn_fans_out_stream_and_terminal_events_to_live_attac
     let mut processing_message_id = None;
     let mut processing_session_id = None;
     let mut processing_task = None;
+    let mut processing_control = None;
+    let control = test_processing_control(session_id);
 
     start_processing_message(
         ProcessingMessage {
@@ -1624,6 +1584,7 @@ async fn client_initiated_turn_fans_out_stream_and_terminal_events_to_live_attac
             images: Vec::new(),
             system_reminder: None,
             active_skill: None,
+            run_safety: None,
         },
         session_id,
         &mut ProcessingState {
@@ -1631,7 +1592,9 @@ async fn client_initiated_turn_fans_out_stream_and_terminal_events_to_live_attac
             message_id: &mut processing_message_id,
             session_id: &mut processing_session_id,
             task: &mut processing_task,
+            processing_control: &mut processing_control,
         },
+        &control,
         &agent,
         &origin_tx,
         &processing_done_tx,
@@ -1736,11 +1699,13 @@ fn accepted_reload_recovery_continuation_marks_intent_delivered() -> anyhow::Res
         let mut processing_message_id = None;
         let mut processing_session_id = None;
         let mut processing_task = None;
+        let mut processing_control = None;
         let swarm_members = Arc::new(RwLock::new(HashMap::new()));
         let swarms_by_id = Arc::new(RwLock::new(HashMap::new()));
         let event_history = Arc::new(RwLock::new(std::collections::VecDeque::new()));
         let event_counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let (swarm_event_tx, _) = broadcast::channel(8);
+        let control = test_processing_control(session_id);
 
         start_processing_message(
             ProcessingMessage {
@@ -1749,6 +1714,7 @@ fn accepted_reload_recovery_continuation_marks_intent_delivered() -> anyhow::Res
                 images: Vec::new(),
                 system_reminder: Some(continuation.to_string()),
                 active_skill: None,
+                run_safety: None,
             },
             session_id,
             &mut ProcessingState {
@@ -1756,7 +1722,9 @@ fn accepted_reload_recovery_continuation_marks_intent_delivered() -> anyhow::Res
                 message_id: &mut processing_message_id,
                 session_id: &mut processing_session_id,
                 task: &mut processing_task,
+                processing_control: &mut processing_control,
             },
+            &control,
             &agent,
             &client_event_tx,
             &processing_done_tx,
@@ -1841,6 +1809,8 @@ fn reload_starting_rejects_new_turns_for_multiple_sessions() {
             let mut processing_message_id = None;
             let mut processing_session_id = None;
             let mut processing_task = None;
+            let mut processing_control = None;
+            let control = test_processing_control(session_id);
 
             start_processing_message(
                 ProcessingMessage {
@@ -1849,6 +1819,7 @@ fn reload_starting_rejects_new_turns_for_multiple_sessions() {
                     images: Vec::new(),
                     system_reminder: None,
                     active_skill: None,
+                    run_safety: None,
                 },
                 session_id,
                 &mut ProcessingState {
@@ -1856,7 +1827,9 @@ fn reload_starting_rejects_new_turns_for_multiple_sessions() {
                     message_id: &mut processing_message_id,
                     session_id: &mut processing_session_id,
                     task: &mut processing_task,
+                    processing_control: &mut processing_control,
                 },
+                &control,
                 &agent,
                 &client_event_tx,
                 &processing_done_tx,

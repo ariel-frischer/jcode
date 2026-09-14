@@ -2924,16 +2924,20 @@ pub(super) fn handle_global_control_shortcuts(
         KeyCode::Char('d') if try_ctrl_d_forward_delete(app) => true,
         KeyCode::Char('c') | KeyCode::Char('d') => {
             if app.is_processing {
+                if app.handle_processing_quit_request() {
+                    return true;
+                }
                 app.cancel_requested = true;
                 app.interleave_message = None;
                 app.interleave_images.clear();
                 app.pending_soft_interrupts.clear();
                 app.pending_soft_interrupt_requests.clear();
-                if app.cancel_overnight_for_interrupt() {
-                    app.set_status_notice("Interrupting... Overnight cancelled");
+                let notice = if app.cancel_overnight_for_interrupt() {
+                    "Interrupting... Overnight cancelled"
                 } else {
-                    app.set_status_notice("Interrupting...");
-                }
+                    "Interrupting..."
+                };
+                app.set_status_notice(&format!("{notice} Press Ctrl+C again to quit"));
             } else {
                 app.handle_quit_request();
             }

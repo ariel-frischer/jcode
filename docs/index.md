@@ -62,7 +62,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [Server Architecture](SERVER_ARCHITECTURE.md)
 - [Session creation latency](SESSION_CREATION_LATENCY.md)
 - [Shift+Enter and multi-line input](SHIFT_ENTER.md)
-- [Soft Interrupt: Seamless Message Injection](SOFT_INTERRUPT.md)
+- [Soft Interrupt: Seamless Message Injection](SOFT_INTERRUPT.md): message injection, cancellation responsiveness, and repeated Ctrl+C client exit.
 - [Spawn Hook: External Control of Headed Session Spawns](SPAWN_HOOK.md)
 - [Sponsored discovery sponsor onboarding](SPONSORED_DISCOVERY_SPONSOR_ONBOARDING.md)
 - [Sponsor implementation](SPONSOR_IMPLEMENTATION.md)

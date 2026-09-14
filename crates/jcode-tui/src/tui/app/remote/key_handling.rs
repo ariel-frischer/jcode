@@ -826,8 +826,11 @@ async fn handle_remote_key_internal(
             }
             KeyCode::Char('c') | KeyCode::Char('d') => {
                 if app.is_processing {
+                    if app.handle_processing_quit_request() {
+                        return Ok(());
+                    }
                     remote.cancel_with_reason("keyboard_ctrl_c_or_d").await?;
-                    app.set_status_notice("Interrupting...");
+                    app.set_status_notice("Interrupting... Press Ctrl+C again to quit");
                 } else {
                     app.handle_quit_request();
                 }
