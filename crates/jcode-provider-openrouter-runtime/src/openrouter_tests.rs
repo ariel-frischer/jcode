@@ -3298,3 +3298,41 @@ model_catalog = false
 include!("openrouter_stream_options_tests.rs");
 
 include!("openrouter_tests/identity_and_headers.rs");
+
+#[test]
+fn compat_profile_supports_reasoning_effort_via_model_family() {
+    // conifer-style compat endpoint serving GLM and GPT-5.6 models without
+    // unified reasoning: effort must be available and accepted.
+    let mut provider = make_custom_compatible_provider();
+    // Generic OpenAI-compatible profile (e.g. opencode-go) that serves GLM
+    // models but is not the zai profile or a unified-reasoning endpoint.
+    provider.profile_id = Some("opencode-go".to_string());
+
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        *provider.model.write().await = "glm-5.3-flash".to_string();
+    });
+
+    assert!(
+        provider.supports_any_reasoning_effort(),
+        "glm-5.3-flash on a compat endpoint should support reasoning effort"
+    );
+    assert!(
+        provider.available_efforts().contains(&"max"),
+        "glm ladder should include max"
+    );
+    provider
+        .set_reasoning_effort("max")
+        .expect("glm-5.3-flash should accept max");
+
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        *provider.model.write().await = "gpt-5.6-luna".to_string();
+    });
+    assert!(
+        provider.supports_any_reasoning_effort(),
+        "gpt-5.6-luna on a compat endpoint should support reasoning effort"
+    );
+    provider
+        .set_reasoning_effort("max")
+        .expect("gpt-5.6-luna should accept max");
+    assert_eq!(provider.reasoning_effort().as_deref(), Some("max"));
+}

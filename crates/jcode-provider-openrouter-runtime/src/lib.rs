@@ -915,6 +915,10 @@ impl OpenRouterProvider {
     /// the standard OpenAI `reasoning_effort` request field on any
     /// OpenAI-compatible gateway that proxies them (e.g. OpenCode Zen serving
     /// `gpt-5.3-codex-spark`). Real OpenRouter uses unified reasoning instead.
+    /// GLM-family models do too: provider-core's `inferred_reasoning_efforts`
+    /// advertises the full OpenAI ladder (including `max`) for `glm-*` ids,
+    /// and the zai profile check misses generic compat endpoints (e.g.
+    /// conifer) serving those same models.
     fn model_is_openai_reasoning_family(model: &str) -> bool {
         let model = model.trim().to_ascii_lowercase();
         model.starts_with("gpt-5")
@@ -923,6 +927,8 @@ impl OpenRouterProvider {
             || model.starts_with("o3")
             || model.starts_with("o4")
             || model.starts_with("o5")
+            || model.starts_with("glm-")
+            || model.contains("glm-5")
     }
 
     /// Does this runtime accept the OpenAI-style `reasoning_effort` field for
