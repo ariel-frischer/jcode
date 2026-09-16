@@ -3336,3 +3336,39 @@ fn compat_profile_supports_reasoning_effort_via_model_family() {
         .expect("gpt-5.6-luna should accept max");
     assert_eq!(provider.reasoning_effort().as_deref(), Some("max"));
 }
+
+#[test]
+fn compat_effort_edges_preserve_existing_semantics() {
+    // DeepSeek on a compat endpoint keeps the DeepSeek ladder incl. max.
+    let mut provider = make_custom_compatible_provider();
+    provider.profile_id = Some("opencode-go".to_string());
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        *provider.model.write().await = "deepseek-v4-flash".to_string();
+    });
+    assert!(provider.supports_deepseek_reasoning_effort());
+    provider.set_reasoning_effort("max").expect("deepseek accepts max");
+    assert_eq!(provider.reasoning_effort().as_deref(), Some("max"));
+
+    // Non-reasoning model on the same compat endpoint: still no effort.
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        *provider.model.write().await = "mimo-v2.5-free".to_string();
+    });
+    assert!(!provider.supports_any_reasoning_effort());
+    assert!(provider.set_reasoning_effort("high").is_err());
+
+    // Heuristics disabled: GLM no longer infers effort support.
+    let mut provider = make_custom_compatible_provider();
+    provider.profile_id = Some("opencode-go".to_string());
+    provider.disable_reasoning_heuristics = true;
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        *provider.model.write().await = "glm-5.3-flash".to_string();
+    });
+    assert!(!provider.supports_any_reasoning_effort());
+
+    // Real OpenRouter unified reasoning: no separate max rung; max aliases.
+    let provider = make_provider();
+    assert!(provider.supports_any_reasoning_effort());
+    assert!(!provider.available_efforts().contains(&"max"));
+    provider.set_reasoning_effort("max").expect("openrouter accepts max alias");
+    assert_eq!(provider.reasoning_effort().as_deref(), Some("xhigh"));
+}
