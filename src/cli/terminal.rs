@@ -190,7 +190,12 @@ fn should_record_panic_as_crash(status: &session::SessionStatus) -> bool {
 pub fn install_panic_hook() {
     let default_hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-        default_hook(info);
+        // The standard hook writes to stderr. If the terminal/pipe is already
+        // gone, that write can panic while handling the original panic. Keep
+        // the inherited hook best effort so fatal reporting cannot double-panic.
+        match panic::catch_unwind(panic::AssertUnwindSafe(|| default_hook(info))) {
+            Ok(()) | Err(_) => {}
+        }
 
         if let Some(session_id) = get_current_session() {
             print_session_resume_hint(&session_id);
@@ -252,10 +257,20 @@ pub fn show_crash_resume_hint() {
         ("", "", "")
     };
 
-    for line in crash_resume_hint_lines(&crashed, yellow, bold, reset) {
-        eprintln!("{}", crate::output_style::terminal_text(&line));
+    let lines: Vec<String> = crash_resume_hint_lines(&crashed, yellow, bold, reset)
+        .into_iter()
+        .map(|line| crate::output_style::terminal_text(&line).into_owned())
+        .collect();
+    match write_crash_resume_hint(io::stderr().lock(), &lines) {
+        Ok(()) | Err(_) => {}
     }
-    eprintln!();
+}
+
+fn write_crash_resume_hint(mut writer: impl Write, lines: &[String]) -> io::Result<()> {
+    for line in lines {
+        super::output::write_line(&mut writer, line)?;
+    }
+    super::output::write_line(&mut writer, "")
 }
 
 /// Build the crash-resume hint lines for `crashed`, newest first.
@@ -300,7 +315,8 @@ fn crash_resume_hint_lines(
 
 #[cfg(test)]
 mod crash_resume_hint_tests {
-    use super::crash_resume_hint_lines;
+    use super::{crash_resume_hint_lines, write_crash_resume_hint};
+    use std::io::{self, Write};
 
     fn session(id: &str, name: &str) -> (String, String) {
         (id.to_string(), name.to_string())
@@ -347,6 +363,26 @@ mod crash_resume_hint_tests {
         assert!(joined.contains("jcode --resume ses_koala_123"), "{joined}");
         assert!(joined.contains("List all:"), "{joined}");
     }
+
+    #[test]
+    fn crash_resume_hint_writer_reports_closed_stderr_without_panicking() {
+        struct ClosedWriter;
+
+        impl Write for ClosedWriter {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "stderr closed"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let lines = vec!["crash hint".to_string()];
+        let error = write_crash_resume_hint(ClosedWriter, &lines)
+            .expect_err("closed stderr should be returned to the caller");
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    }
 }
 
 fn init_tui_terminal(inherited_terminal: bool) -> Result<ratatui::DefaultTerminal> {
@@ -356,12 +392,25 @@ fn init_tui_terminal(inherited_terminal: bool) -> Result<ratatui::DefaultTermina
     if inherited_terminal {
         init_tui_terminal_resume()
     } else {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(ratatui::init)).map_err(|payload| {
-            anyhow::anyhow!(
-                "failed to initialize terminal: {}",
-                panic_payload_to_string(payload.as_ref())
-            )
-        })
+        use ratatui::{Terminal, backend::CrosstermBackend};
+
+        crossterm::terminal::enable_raw_mode()
+            .map_err(|error| anyhow::anyhow!("failed to enable raw mode: {error}"))?;
+        if let Err(error) =
+            crossterm::execute!(io::stdout(), crossterm::terminal::EnterAlternateScreen)
+        {
+            jcode_tui_style::restore_terminal_quietly();
+            return Err(anyhow::anyhow!("failed to enter alternate screen: {error}"));
+        }
+
+        let backend = CrosstermBackend::new(io::stdout());
+        match Terminal::new(backend) {
+            Ok(terminal) => Ok(terminal),
+            Err(error) => {
+                jcode_tui_style::restore_terminal_quietly();
+                Err(anyhow::anyhow!("failed to create terminal: {error}"))
+            }
+        }
     }
 }
 
@@ -701,6 +750,7 @@ pub fn spawn_session_signal_watchers(_runtime: &TuiRuntimeGuard) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{self, Write};
     use std::sync::Mutex;
 
     static TEST_SESSION_LOCK: Mutex<()> = Mutex::new(());
