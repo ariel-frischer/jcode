@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use std::io::{self, Write};
 use std::process::Command as ProcessCommand;
 
 use crate::{
@@ -147,10 +148,7 @@ pub async fn run() -> Result<()> {
     let args = parse_and_prepare_args(args)?;
     spawn_background_update_check(&args);
 
-    if let Err(e) = dispatch::run_main(args).await {
-        report_main_error(&e);
-        return Err(e);
-    }
+    dispatch::run_main(args).await?;
 
     Ok(())
 }
@@ -397,7 +395,7 @@ fn spawn_background_update_check(args: &Args) {
                             .args(&args)
                             .arg("--no-update"),
                     );
-                    eprintln!("Failed to exec new binary: {}", err);
+                    output::write_stderr_line(&format!("Failed to exec new binary: {err}"));
                 }
                 update::UpdateCheckResult::Error(e) => {
                     logging::info(&format!("Update check failed: {}", e));
@@ -488,16 +486,46 @@ fn should_auto_install_update(args: &Args) -> bool {
     args.auto_update
 }
 
-fn report_main_error(error: &anyhow::Error) {
-    let error_str = format!("{:?}", error);
-    logging::error(&error_str);
+const MAX_FATAL_DIAGNOSTIC_CHARS: usize = 4096;
+const FATAL_DIAGNOSTIC_TRUNCATION_SUFFIX: &str = "… [diagnostic truncated]";
 
-    if let Some(session_id) = terminal::get_current_session() {
-        output::stderr_blank_line();
-        output::stderr_info("\x1b[33mTo restore this session, run:\x1b[0m");
-        output::stderr_info(format!("  jcode --resume {}", session_id));
-        output::stderr_blank_line();
+pub fn report_main_error(error: &anyhow::Error) {
+    let diagnostic = format_main_error(error);
+    logging::error(&diagnostic);
+
+    let session_id = terminal::get_current_session();
+    let mut stderr = io::stderr().lock();
+    match write_main_error_report(&mut stderr, &diagnostic, session_id.as_deref()) {
+        Ok(()) | Err(_) => {}
     }
+}
+
+fn format_main_error(error: &anyhow::Error) -> String {
+    let rendered = format!("{:#}", error);
+    let redacted = crate::message::redact_secrets(&rendered);
+    if redacted.chars().count() <= MAX_FATAL_DIAGNOSTIC_CHARS {
+        return redacted;
+    }
+
+    let suffix_len = FATAL_DIAGNOSTIC_TRUNCATION_SUFFIX.chars().count();
+    let body_limit = MAX_FATAL_DIAGNOSTIC_CHARS.saturating_sub(suffix_len);
+    let bounded: String = redacted.chars().take(body_limit).collect();
+    format!("{bounded}{FATAL_DIAGNOSTIC_TRUNCATION_SUFFIX}")
+}
+
+fn write_main_error_report(
+    writer: &mut impl Write,
+    diagnostic: &str,
+    session_id: Option<&str>,
+) -> io::Result<()> {
+    output::write_line(writer, &format!("Error: {diagnostic}"))?;
+    if let Some(session_id) = session_id {
+        output::write_line(writer, "")?;
+        output::write_line(writer, "To restore this session, run:")?;
+        output::write_line(writer, &format!("  jcode --resume {session_id}"))?;
+        output::write_line(writer, "")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -508,6 +536,67 @@ mod tests {
 
     fn parse_args(argv: &[&str]) -> Args {
         Args::parse_from(argv)
+    }
+
+    struct FailingWriter(io::ErrorKind);
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(self.0, "diagnostic sink unavailable"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn fatal_report_stops_cleanly_when_stderr_is_closed() {
+        let error = write_main_error_report(
+            &mut FailingWriter(io::ErrorKind::BrokenPipe),
+            "connection failed",
+            Some("session_otter_123"),
+        )
+        .expect_err("closed stderr should be reported to the caller");
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    }
+
+    #[test]
+    fn fatal_report_stops_cleanly_when_stderr_is_full() {
+        let error = write_main_error_report(
+            &mut FailingWriter(io::ErrorKind::StorageFull),
+            "connection failed",
+            None,
+        )
+        .expect_err("full stderr should be reported to the caller");
+        assert_eq!(error.kind(), io::ErrorKind::StorageFull);
+    }
+
+    #[test]
+    fn fatal_diagnostic_is_redacted_and_bounded() {
+        let secret = "OPENAI_API_KEY=sk-secret-value";
+        let error = anyhow::anyhow!("{secret}\n{}", "x".repeat(10_000));
+        let diagnostic = format_main_error(&error);
+
+        assert!(!diagnostic.contains("sk-secret-value"));
+        assert!(diagnostic.contains("[REDACTED_SECRET]"));
+        assert!(diagnostic.chars().count() <= MAX_FATAL_DIAGNOSTIC_CHARS);
+    }
+
+    #[test]
+    fn fatal_diagnostic_handles_nested_multiline_errors_without_dumping_session_body() {
+        let session_body = "private session transcript ".repeat(2_000);
+        let error = anyhow::anyhow!("inner detail\nOPENAI_API_KEY=super-secret\n{session_body}")
+            .context("outer startup context");
+
+        let diagnostic = format_main_error(&error);
+
+        assert!(diagnostic.contains("outer startup context"));
+        assert!(diagnostic.contains("inner detail"));
+        assert!(!diagnostic.contains("super-secret"));
+        assert!(!diagnostic.contains(&session_body));
+        assert!(diagnostic.contains(FATAL_DIAGNOSTIC_TRUNCATION_SUFFIX));
+        assert!(diagnostic.chars().count() <= MAX_FATAL_DIAGNOSTIC_CHARS);
     }
 
     #[test]

@@ -10,7 +10,7 @@ use chrono::Local;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -208,11 +208,11 @@ impl Logger {
         let ctx = context_prefix();
         let line = format!("[{}] [{}] {}{}\n", timestamp, level, ctx, message);
         if let Err(err) = self.file.write_all(line.as_bytes()) {
-            eprintln!("jcode logger write failed: {err}");
+            write_stderr_best_effort(&format!("jcode logger write failed: {err}"));
             return;
         }
         if let Err(err) = self.file.flush() {
-            eprintln!("jcode logger flush failed: {err}");
+            write_stderr_best_effort(&format!("jcode logger flush failed: {err}"));
         }
     }
 }
@@ -603,7 +603,7 @@ fn cleanup_old_logs_in(log_dir: &std::path::Path, now: chrono::DateTime<Local>) 
             if modified < cutoff
                 && let Err(err) = fs::remove_file(entry.path())
             {
-                eprintln!("jcode logger cleanup failed: {err}");
+                write_stderr_best_effort(&format!("jcode logger cleanup failed: {err}"));
             }
         }
     }
@@ -614,6 +614,14 @@ fn truncate(s: &str, max_len: usize) -> String {
         format!("{}...", jcode_core::util::truncate_str(s, max_len))
     } else {
         s.to_string()
+    }
+}
+
+/// Report logger failures without making a broken stderr a second failure.
+fn write_stderr_best_effort(message: &str) {
+    let mut stderr = io::stderr().lock();
+    match writeln!(stderr, "{message}") {
+        Ok(()) | Err(_) => {}
     }
 }
 

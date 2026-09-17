@@ -26,6 +26,7 @@ pub static malloc_conf: Option<&'static [u8; 78]> =
     Some(b"dirty_decay_ms:1000,muzzy_decay_ms:1000,narenas:4,prof:true,prof_active:false\0");
 
 use anyhow::Result;
+use std::process::ExitCode;
 
 #[cfg(all(target_os = "linux", target_env = "gnu", not(feature = "jemalloc")))]
 fn configure_system_allocator() {
@@ -78,7 +79,7 @@ fn parse_alloc_tuning(value: Option<&str>, default: i32) -> i32 {
 fn configure_system_allocator() {}
 
 #[cfg(windows)]
-fn main() -> Result<()> {
+fn main() -> ExitCode {
     // Windows executables default to a much smaller main-thread stack than the
     // Unix environments where most development happens. The CLI/provider setup
     // path can exceed that reserve before Tokio takes over, producing an
@@ -86,20 +87,36 @@ fn main() -> Result<()> {
     // for every auxiliary binary and run the Jcode entry point on a deliberately
     // sized stack instead.
     const WINDOWS_MAIN_STACK_SIZE: usize = 8 * 1024 * 1024;
-    match std::thread::Builder::new()
+    let handle = match std::thread::Builder::new()
         .name("jcode-main".to_string())
         .stack_size(WINDOWS_MAIN_STACK_SIZE)
-        .spawn(run_main)?
-        .join()
+        .spawn(run_main)
     {
-        Ok(result) => result,
+        Ok(handle) => handle,
+        Err(error) => return finish_main(Err(error.into())),
+    };
+    match handle.join() {
+        Ok(result) => finish_main(result),
         Err(panic) => std::panic::resume_unwind(panic),
     }
 }
 
 #[cfg(not(windows))]
-fn main() -> Result<()> {
-    run_main()
+fn main() -> ExitCode {
+    finish_main(run_main())
+}
+
+fn finish_main(result: Result<()>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            // Do not return Result from main: std's Termination implementation
+            // reports it with eprintln!, which can panic again when stderr is
+            // closed or full. The Jcode reporter is deliberately best effort.
+            jcode::cli::startup::report_main_error(&error);
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn run_main() -> Result<()> {
@@ -167,7 +184,17 @@ fn cli_launch_hint_source(args: impl IntoIterator<Item = String>) -> Option<Stri
 mod tests {
     use super::args_are_macos_hotkey_listener;
     use super::cli_launch_hint_source;
+    use super::finish_main;
     use super::parse_alloc_tuning;
+    use std::process::ExitCode;
+
+    #[test]
+    fn fatal_main_result_returns_failure_without_propagating_reporting_error() {
+        assert_eq!(
+            finish_main(Err(anyhow::anyhow!("startup failed"))),
+            ExitCode::FAILURE
+        );
+    }
 
     #[test]
     fn alloc_tuning_uses_default_when_unset() {
