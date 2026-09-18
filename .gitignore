@@ -56,3 +56,6 @@ Thumbs.db
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Jev memory-sidecar benchmark scratch (local experiments, uses personal session data)
+/jev_bench/
