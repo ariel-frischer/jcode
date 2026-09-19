@@ -722,6 +722,11 @@ pub fn save_endpoints_disk_cache(model: &str, endpoints: &[EndpointInfo]) {
 #[derive(Debug, Clone)]
 pub struct ProviderRouting {
     pub order: Option<Vec<String>>,
+    /// Hard provider restriction (`provider.only` in the OpenRouter payload).
+    /// A request may only be served by the listed providers; with
+    /// `allow_fallbacks: false` it fails outright when none of them serve the
+    /// model. Populated from `JCODE_OPENROUTER_PROVIDER`.
+    pub only: Option<Vec<String>>,
     pub allow_fallbacks: bool,
     pub sort: Option<String>,
     pub preferred_min_throughput: Option<u32>,
@@ -734,6 +739,7 @@ impl Default for ProviderRouting {
     fn default() -> Self {
         Self {
             order: None,
+            only: None,
             allow_fallbacks: true,
             sort: None,
             preferred_min_throughput: None,
@@ -747,6 +753,7 @@ impl Default for ProviderRouting {
 impl ProviderRouting {
     pub fn is_empty(&self) -> bool {
         self.order.is_none()
+            && self.only.is_none()
             && self.sort.is_none()
             && self.preferred_min_throughput.is_none()
             && self.preferred_max_latency.is_none()
@@ -756,21 +763,35 @@ impl ProviderRouting {
     }
 }
 
+/// Parse provider routing from environment variables.
+///
+/// `JCODE_OPENROUTER_PROVIDER` is a comma-separated hard pin: every entry is
+/// forwarded verbatim as an OpenRouter `provider.only` slug, so both plain
+/// provider slugs (`deepinfra`) and quantization-qualified endpoint slugs
+/// (`deepinfra/fp4`) are accepted. `JCODE_OPENROUTER_NO_FALLBACK` (any value,
+/// including empty) disables provider fallbacks for the pinned request.
 pub fn parse_provider_routing_from_env() -> ProviderRouting {
     let mut routing = ProviderRouting::default();
 
     if let Ok(providers) = std::env::var("JCODE_OPENROUTER_PROVIDER") {
-        let order: Vec<String> = providers
+        let only: Vec<String> = providers
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        if !order.is_empty() {
-            routing.order = Some(order);
+        if !only.is_empty() {
+            routing.only = Some(only);
+            // A hard pin that still allows fallbacks is not a pin: OpenRouter
+            // would silently route around the requested provider.
+            routing.allow_fallbacks = false;
         }
     }
 
-    if std::env::var("JCODE_OPENROUTER_NO_FALLBACK").is_ok() {
+    if std::env::var("JCODE_OPENROUTER_NO_FALLBACK")
+        .ok()
+        .map(|raw| !matches!(raw.trim(), "0" | "false" | "no" | "off"))
+        .unwrap_or(false)
+    {
         routing.allow_fallbacks = false;
     }
 
@@ -1033,5 +1054,121 @@ mod tests {
                 None => std::env::remove_var("JCODE_OPENROUTER_CACHE_NAMESPACE"),
             }
         }
+    }
+
+    struct PinEnvGuard {
+        saved_provider: Option<String>,
+        saved_no_fallback: Option<String>,
+    }
+
+    /// Serializes tests that mutate process environment variables; the default
+    /// test harness runs tests in parallel within one binary and env mutation
+    /// is process-global.
+    static PIN_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Hold this guard for the duration of any test that mutates the pin env
+    /// vars. One guard per test; `PinEnvGuard::set` may then be called
+    /// repeatedly (it does not re-lock, which would self-deadlock).
+    fn pin_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        PIN_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    impl PinEnvGuard {
+        fn set(provider: Option<&str>, no_fallback: Option<&str>) -> Self {
+            let saved_provider = std::env::var("JCODE_OPENROUTER_PROVIDER").ok();
+            let saved_no_fallback = std::env::var("JCODE_OPENROUTER_NO_FALLBACK").ok();
+            unsafe {
+                match provider {
+                    Some(value) => std::env::set_var("JCODE_OPENROUTER_PROVIDER", value),
+                    None => std::env::remove_var("JCODE_OPENROUTER_PROVIDER"),
+                }
+                match no_fallback {
+                    Some(value) => std::env::set_var("JCODE_OPENROUTER_NO_FALLBACK", value),
+                    None => std::env::remove_var("JCODE_OPENROUTER_NO_FALLBACK"),
+                }
+            }
+            Self {
+                saved_provider,
+                saved_no_fallback,
+            }
+        }
+    }
+
+    impl Drop for PinEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match self.saved_provider.take() {
+                    Some(value) => std::env::set_var("JCODE_OPENROUTER_PROVIDER", value),
+                    None => std::env::remove_var("JCODE_OPENROUTER_PROVIDER"),
+                }
+                match self.saved_no_fallback.take() {
+                    Some(value) => std::env::set_var("JCODE_OPENROUTER_NO_FALLBACK", value),
+                    None => std::env::remove_var("JCODE_OPENROUTER_NO_FALLBACK"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parse_provider_routing_from_env_hard_pins_provider() {
+        let _lock = pin_env_lock();
+        let _guard = PinEnvGuard::set(Some("Groq"), None);
+        let routing = parse_provider_routing_from_env();
+        assert_eq!(routing.only.as_deref(), Some(&["Groq".to_string()][..]));
+        assert!(routing.order.is_none());
+        assert!(
+            !routing.allow_fallbacks,
+            "a pin without fallbacks is not a pin"
+        );
+    }
+
+    #[test]
+    fn parse_provider_routing_from_env_accepts_qualified_slugs_and_lists() {
+        let _lock = pin_env_lock();
+        let _guard = PinEnvGuard::set(Some("deepinfra, deepinfra/fp4 , Fireworks"), None);
+        let routing = parse_provider_routing_from_env();
+        assert_eq!(
+            routing.only.as_deref(),
+            Some(
+                &[
+                    "deepinfra".to_string(),
+                    "deepinfra/fp4".to_string(),
+                    "Fireworks".to_string()
+                ][..]
+            )
+        );
+        assert!(!routing.allow_fallbacks);
+    }
+
+    #[test]
+    fn parse_provider_routing_from_env_blank_provider_is_not_a_pin() {
+        let _lock = pin_env_lock();
+        let _guard = PinEnvGuard::set(Some("   "), None);
+        let routing = parse_provider_routing_from_env();
+        assert!(routing.only.is_none());
+        assert!(
+            routing.allow_fallbacks,
+            "blank env var must not narrow routing"
+        );
+    }
+
+    #[test]
+    fn parse_provider_routing_from_env_no_fallback_false_values_are_ignored() {
+        // One lock for the whole test: shadowed guard bindings all stay alive
+        // until end of scope, and the mutex is not reentrant.
+        let _lock = pin_env_lock();
+        let _guard = PinEnvGuard::set(None, Some("0"));
+        assert!(parse_provider_routing_from_env().allow_fallbacks);
+
+        let _guard = PinEnvGuard::set(None, Some("false"));
+        assert!(parse_provider_routing_from_env().allow_fallbacks);
+
+        let _guard = PinEnvGuard::set(None, Some(""));
+        assert!(!parse_provider_routing_from_env().allow_fallbacks);
+
+        let _guard = PinEnvGuard::set(None, Some("1"));
+        assert!(!parse_provider_routing_from_env().allow_fallbacks);
     }
 }

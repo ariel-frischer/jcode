@@ -2344,6 +2344,75 @@ fn observed_pin_yields_to_explicit_user_routing_order() {
 }
 
 #[test]
+fn env_hard_pin_overrides_observed_session_pin() {
+    // A JCODE_OPENROUTER_PROVIDER env pin (hard `only` restriction) is more
+    // authoritative than the auto-observed session pin: the user asked for a
+    // specific upstream, so OpenRouter must not silently route elsewhere.
+    let model = "anthropic/claude-sonnet-4.6";
+    let base = ProviderRouting {
+        only: Some(vec!["Groq".to_string()]),
+        allow_fallbacks: false,
+        ..Default::default()
+    };
+    let provider = OpenRouterProvider {
+        model: Arc::new(RwLock::new(model.to_string())),
+        provider_routing: Arc::new(RwLock::new(base)),
+        provider_pin: Arc::new(Mutex::new(Some(ProviderPin {
+            model: model.to_string(),
+            provider: "anthropic".to_string(),
+            source: PinSource::Observed,
+            allow_fallbacks: true,
+            last_cache_read: None,
+        }))),
+        ..make_provider()
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let routing = rt.block_on(provider.effective_routing(model));
+
+    assert_eq!(
+        routing.only.as_deref(),
+        Some(["Groq".to_string()].as_slice()),
+        "env hard pin must survive an observed session pin"
+    );
+    assert!(
+        routing.order.is_none(),
+        "env pin is a restriction, not an ordered preference"
+    );
+    assert!(!routing.allow_fallbacks);
+}
+
+#[test]
+fn env_hard_pin_passes_through_without_pin() {
+    let model = "anthropic/claude-sonnet-4.6";
+    let base = ProviderRouting {
+        only: Some(vec!["deepinfra".to_string(), "deepinfra/fp4".to_string()]),
+        allow_fallbacks: false,
+        ..Default::default()
+    };
+    let provider = OpenRouterProvider {
+        model: Arc::new(RwLock::new(model.to_string())),
+        provider_routing: Arc::new(RwLock::new(base)),
+        ..make_provider()
+    };
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let routing = rt.block_on(provider.effective_routing(model));
+
+    assert_eq!(
+        routing.only.as_deref(),
+        Some(["deepinfra".to_string(), "deepinfra/fp4".to_string()].as_slice())
+    );
+    assert!(!routing.allow_fallbacks);
+}
+
+#[test]
 fn test_kimi_coding_header_detection_matches_endpoint_and_model() {
     assert!(should_send_kimi_coding_agent_headers(
         "https://api.kimi.com/coding/v1",
@@ -3346,7 +3415,9 @@ fn compat_effort_edges_preserve_existing_semantics() {
         *provider.model.write().await = "deepseek-v4-flash".to_string();
     });
     assert!(provider.supports_deepseek_reasoning_effort());
-    provider.set_reasoning_effort("max").expect("deepseek accepts max");
+    provider
+        .set_reasoning_effort("max")
+        .expect("deepseek accepts max");
     assert_eq!(provider.reasoning_effort().as_deref(), Some("max"));
 
     // Non-reasoning model on the same compat endpoint: still no effort.
@@ -3369,6 +3440,8 @@ fn compat_effort_edges_preserve_existing_semantics() {
     let provider = make_provider();
     assert!(provider.supports_any_reasoning_effort());
     assert!(!provider.available_efforts().contains(&"max"));
-    provider.set_reasoning_effort("max").expect("openrouter accepts max alias");
+    provider
+        .set_reasoning_effort("max")
+        .expect("openrouter accepts max alias");
     assert_eq!(provider.reasoning_effort().as_deref(), Some("xhigh"));
 }

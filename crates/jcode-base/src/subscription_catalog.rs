@@ -501,8 +501,10 @@ pub fn apply_runtime_env() {
     crate::env::set_var("JCODE_OPENROUTER_PROVIDER_FEATURES", "0");
     crate::env::set_var("JCODE_OPENROUTER_TRANSPORT_STATE", "jcode-subscription");
     crate::env::remove_var("JCODE_OPENROUTER_ALLOW_NO_AUTH");
-    crate::env::remove_var("JCODE_OPENROUTER_PROVIDER");
-    crate::env::remove_var("JCODE_OPENROUTER_NO_FALLBACK");
+    // JCODE_OPENROUTER_PROVIDER / JCODE_OPENROUTER_NO_FALLBACK are user input
+    // from the process environment (issue jcode-huwj). The subscription runtime
+    // ignores them (provider features are off above), so leave them untouched
+    // instead of erasing the user's pin for the rest of the process lifetime.
 }
 
 pub fn clear_runtime_env() {
@@ -514,8 +516,6 @@ pub fn clear_runtime_env() {
     crate::env::remove_var("JCODE_OPENROUTER_PROVIDER_FEATURES");
     crate::env::remove_var("JCODE_OPENROUTER_TRANSPORT_STATE");
     crate::env::remove_var("JCODE_OPENROUTER_ALLOW_NO_AUTH");
-    crate::env::remove_var("JCODE_OPENROUTER_PROVIDER");
-    crate::env::remove_var("JCODE_OPENROUTER_NO_FALLBACK");
 }
 
 #[cfg(test)]

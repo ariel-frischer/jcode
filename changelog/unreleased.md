@@ -1,5 +1,7 @@
 # Unreleased custom-fork changes
 
+- `JCODE_OPENROUTER_PROVIDER` and `JCODE_OPENROUTER_NO_FALLBACK` now actually reach OpenRouter request routing: the provider env var is sent as a hard `provider.only` pin (requests fail with a clear OpenRouter 404 instead of silently routing to another upstream when the pinned provider cannot serve the model), and profile/subscription runtime switches no longer wipe these user-supplied env vars. Named OpenRouter-type profiles honor the same pin.
+
 - Optional `[agents].swarm_completion_wake` lets attached coordinators continue after each owned worker finishes, even without a completion wait, and prevents enabled swarm-await wakes from getting stranded at the end of a turn. Disabled by default.
 
 - Optional main-TUI workflow progress and health shows owned work while the model is idle, with an explicit Autospec artifact adapter, session-isolated snapshots and bounded failure/reconnect handling. Disabled by default.
