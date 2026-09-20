@@ -573,8 +573,11 @@ fn build_system_prompt_full_with_overlay_and_capabilities(
     // legacy global overlay so the replacement is the only global source.
     let suppress_global_overlay =
         profile_overlay.is_some_and(|overlay| overlay.agents_md_path.is_some());
-    let (overlay_content, overlay_chars) =
-        load_prompt_overlay_files_from_dir_with_options(working_dir, suppress_global_overlay);
+    let (overlay_content, overlay_chars) = if suppress_global_overlay {
+        load_prompt_overlay_files_from_dir_with_options(working_dir, true)
+    } else {
+        load_prompt_overlay_files_from_dir(working_dir)
+    };
     if let Some(content) = overlay_content {
         info.prompt_overlay_chars = overlay_chars;
         parts.push(content);
@@ -832,8 +835,11 @@ fn build_system_prompt_split_with_overlay_and_capabilities(
     // legacy global overlay so the replacement is the only global source.
     let suppress_global_overlay =
         profile_overlay.is_some_and(|overlay| overlay.agents_md_path.is_some());
-    let (overlay_content, overlay_chars) =
-        load_prompt_overlay_files_from_dir_with_options(working_dir, suppress_global_overlay);
+    let (overlay_content, overlay_chars) = if suppress_global_overlay {
+        load_prompt_overlay_files_from_dir_with_options(working_dir, true)
+    } else {
+        load_prompt_overlay_files_from_dir(working_dir)
+    };
     if let Some(content) = overlay_content {
         info.prompt_overlay_chars = overlay_chars;
         static_parts.push(content);
@@ -1339,6 +1345,10 @@ pub fn load_agents_md_files_from_dir_with_replacement(
         global_agents_md.as_deref(),
         replacement_path,
     )
+}
+
+fn load_prompt_overlay_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, usize) {
+    load_prompt_overlay_files_from_dir_with_options(working_dir, false)
 }
 
 fn load_prompt_overlay_files_from_dir_with_options(
