@@ -250,6 +250,7 @@ tools = ["read", "write"]
 disabled_tools = ["bash"]
 skills = ["rust", "testing"]
 instructions = "Keep the review focused and actionable."
+agents_md_path = "profile/AGENTS.md"
 "#,
     );
     let profile = fixture
@@ -273,6 +274,7 @@ instructions = "Keep the review focused and actionable."
         profile.instructions.as_deref(),
         Some("Keep the review focused and actionable.")
     );
+    assert_eq!(profile.agents_md_path.as_deref(), Some("profile/AGENTS.md"));
 
     let rendered = toml::to_string_pretty(&fixture.config).expect("profile should serialize");
     let round_tripped = config_from_toml(&rendered);
@@ -296,6 +298,33 @@ instructions = "Keep the review focused and actionable."
     assert_eq!(round_trip_profile.disabled_tools, profile.disabled_tools);
     assert_eq!(round_trip_profile.skills, profile.skills);
     assert_eq!(round_trip_profile.instructions, profile.instructions);
+    assert_eq!(round_trip_profile.agents_md_path, profile.agents_md_path);
+}
+
+#[test]
+fn missing_profile_agents_md_path_warns_without_breaking_resolution() {
+    let temp = tempfile::TempDir::new().expect("create replacement directory");
+    let missing = temp.path().join("missing-AGENTS.md");
+    let config = config_from_toml(&profile_toml(
+        "review",
+        &format!("agents_md_path = {:?}\n", missing.display().to_string()),
+    ));
+
+    let resolved = config
+        .resolve_session_profile(Some("review"))
+        .expect("missing replacement files must not block profile resolution");
+    assert_eq!(
+        resolved.prompt_overlay.agents_md_path.as_deref(),
+        Some(missing.to_str().expect("missing path is UTF-8"))
+    );
+    let inspection = resolved.inspection(&ToolConfig::default());
+    assert_eq!(inspection.effective.prompt_overlay.agents_md_present, false);
+    assert!(
+        inspection
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("missing") && warning.contains("agents_md_path"))
+    );
 }
 
 #[test]

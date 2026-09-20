@@ -13,6 +13,14 @@ use std::path::{Path, PathBuf};
 
 const MAX_HANDOFF_INSTRUCTIONS_FILE_BYTES: u64 = 64 * 1024;
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
 /// Effective fresh-session handoff policy for one session.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedHandoffPolicy {
@@ -41,6 +49,9 @@ pub struct SessionPromptOverlay {
     pub skill_prompts: Vec<String>,
     /// Additional profile instructions, if non-empty.
     pub instructions: Option<String>,
+    /// Resolved profile-scoped replacement for the global instruction sources.
+    /// The file contents are captured by the prompt layer at session startup.
+    pub agents_md_path: Option<String>,
 }
 
 /// Session-local skill policy derived from one profile and an available skill
@@ -204,10 +215,18 @@ pub enum FieldSource {
 /// Safe prompt overlay metadata persisted in a resolved snapshot. Instruction
 /// bodies are intentionally omitted; only presence and length are retained.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
 pub struct SessionPromptOverlaySnapshot {
     pub skill_names: Vec<String>,
     pub instructions_present: bool,
     pub instructions_chars: usize,
+    /// Resolved source path only. Replacement file contents are never persisted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agents_md_path: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub agents_md_present: bool,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub agents_md_chars: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -333,7 +352,10 @@ pub struct ProfileInspectionResult {
 impl SessionPromptOverlay {
     /// Return whether this overlay contributes no prompt context.
     pub fn is_empty(&self) -> bool {
-        self.skill_names.is_empty() && self.skill_prompts.is_empty() && self.instructions.is_none()
+        self.skill_names.is_empty()
+            && self.skill_prompts.is_empty()
+            && self.instructions.is_none()
+            && self.agents_md_path.is_none()
     }
 }
 
@@ -393,6 +415,8 @@ impl ResolvedSessionProfile {
                     .as_deref()
                     .filter(|instructions| !instructions.trim().is_empty())
                     .map(str::to_owned),
+                agents_md_path: resolve_profile_agents_md_path(profile.agents_md_path.as_deref())
+                    .map(|path| path.display().to_string()),
             },
         })
     }
@@ -504,6 +528,18 @@ impl ResolvedSessionProfile {
                 .instructions
                 .as_deref()
                 .map_or(0, str::len),
+            agents_md_path: self.prompt_overlay.agents_md_path.clone(),
+            agents_md_present: self
+                .prompt_overlay
+                .agents_md_path
+                .as_deref()
+                .is_some_and(|path| profile_agents_md_path_metadata(Path::new(path)).is_ok()),
+            agents_md_chars: self
+                .prompt_overlay
+                .agents_md_path
+                .as_deref()
+                .and_then(|path| profile_agents_md_path_metadata(Path::new(path)).ok())
+                .unwrap_or(0),
         };
         let mut snapshot = ResolvedProfileSnapshot {
             profile_name: self.profile_name.clone(),
@@ -546,12 +582,83 @@ impl ResolvedSessionProfile {
                 },
             );
         }
+        let warnings = self
+            .prompt_overlay
+            .agents_md_path
+            .as_deref()
+            .and_then(|path| profile_agents_md_path_warning(Path::new(path)))
+            .into_iter()
+            .collect();
         ProfileInspectionResult {
             profile_name: self.profile_name.clone(),
             effective: self.snapshot(base),
             sources,
-            warnings: Vec::new(),
+            warnings,
         }
+    }
+}
+
+/// Resolve a profile replacement path against the active Jcode home.
+///
+/// Absolute paths are preserved. Relative paths are intentionally not resolved
+/// against the project working directory because profile configuration belongs
+/// to the Jcode home and must remain stable for child/swarm sessions.
+pub fn resolve_profile_agents_md_path(raw: Option<&str>) -> Option<PathBuf> {
+    let raw = raw?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+
+    let path = PathBuf::from(raw);
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        Some(
+            crate::storage::jcode_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(path),
+        )
+    }
+}
+
+fn profile_agents_md_path_metadata(path: &Path) -> std::io::Result<usize> {
+    std::fs::metadata(path)?;
+    Ok(std::fs::read_to_string(path)?.len())
+}
+
+fn profile_agents_md_path_warning(path: &Path) -> Option<String> {
+    match profile_agents_md_path_metadata(path) {
+        Ok(_) => None,
+        Err(error) => {
+            let state = if error.kind() == std::io::ErrorKind::NotFound {
+                "missing"
+            } else {
+                "unreadable"
+            };
+            Some(format!(
+                "Profile agents_md_path '{}' is {state}; global AGENTS.md and global prompt overlay are suppressed without fallback",
+                path.display()
+            ))
+        }
+    }
+}
+
+/// Return non-secret metadata for a resolved profile replacement path.
+pub fn profile_agents_md_metadata(
+    raw: Option<&str>,
+) -> (Option<String>, bool, usize, Option<String>) {
+    let Some(path) = resolve_profile_agents_md_path(raw) else {
+        return (None, false, 0, None);
+    };
+    let path_string = path.display().to_string();
+    match profile_agents_md_path_metadata(&path) {
+        Ok(chars) => (Some(path_string), true, chars, None),
+        Err(_) => (
+            Some(path_string),
+            false,
+            0,
+            profile_agents_md_path_warning(&path),
+        ),
     }
 }
 

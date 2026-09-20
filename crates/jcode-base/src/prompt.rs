@@ -293,6 +293,10 @@ pub struct ContextInfo {
     pub has_global_agents_md: bool,
     /// Global AGENTS.md size (chars)
     pub global_agents_md_chars: usize,
+    /// Whether a profile-scoped AGENTS.md replacement was loaded
+    pub has_profile_agents_md: bool,
+    /// Profile-scoped AGENTS.md replacement size (chars)
+    pub profile_agents_md_chars: usize,
     /// Skills section size (chars)
     pub skills_chars: usize,
     /// Self-dev section size (chars)
@@ -340,6 +344,7 @@ impl ContextInfo {
             + self.session_context_chars
             + self.project_agents_md_chars
             + self.global_agents_md_chars
+            + self.profile_agents_md_chars
             + self.skills_chars
             + self.selfdev_chars
             + self.memory_chars
@@ -367,6 +372,9 @@ impl ContextInfo {
         }
         if self.has_global_agents_md {
             parts.push(("~agents", self.global_agents_md_chars, "📋"));
+        }
+        if self.has_profile_agents_md {
+            parts.push(("profile-agents", self.profile_agents_md_chars, "📋"));
         }
         if self.skills_chars > 0 {
             parts.push(("skills", self.skills_chars, "🔧"));
@@ -557,9 +565,16 @@ fn build_system_prompt_full_with_overlay_and_capabilities(
     info.project_agents_md_chars = md_info.project_agents_md_chars;
     info.has_global_agents_md = md_info.has_global_agents_md;
     info.global_agents_md_chars = md_info.global_agents_md_chars;
+    info.has_profile_agents_md = md_info.has_profile_agents_md;
+    info.profile_agents_md_chars = md_info.profile_agents_md_chars;
 
-    // Add optional prompt overlays from ~/.jcode/ and ./.jcode/
-    let (overlay_content, overlay_chars) = load_prompt_overlay_files_from_dir(working_dir);
+    // Add optional prompt overlays from ~/.jcode/ and ./.jcode/. A profile
+    // replacement keeps the project overlay but deliberately suppresses the
+    // legacy global overlay so the replacement is the only global source.
+    let suppress_global_overlay =
+        profile_overlay.is_some_and(|overlay| overlay.agents_md_path.is_some());
+    let (overlay_content, overlay_chars) =
+        load_prompt_overlay_files_from_dir_with_options(working_dir, suppress_global_overlay);
     if let Some(content) = overlay_content {
         info.prompt_overlay_chars = overlay_chars;
         parts.push(content);
@@ -664,6 +679,34 @@ pub fn build_system_prompt_split_with_overlay_and_policy(
             profile_overlay,
             skill_policy,
             agents_md: None,
+        },
+    )
+}
+
+/// Build a split prompt with a session-local profile overlay and an already
+/// captured AGENTS.md snapshot. The captured snapshot keeps replacement-file
+/// contents stable for provider cache prefixes across a session.
+pub fn build_system_prompt_split_with_overlay_and_policy_and_agents_md(
+    skill_prompt: Option<&str>,
+    available_skills: &[SkillInfo],
+    is_selfdev: bool,
+    memory_prompt: Option<&str>,
+    working_dir: Option<&Path>,
+    profile_overlay: Option<&crate::config::SessionPromptOverlay>,
+    skill_policy: Option<&crate::config::SkillPolicy>,
+    agents_md: (Option<String>, ContextInfo),
+) -> (SplitSystemPrompt, ContextInfo) {
+    build_system_prompt_split_with_overlay_and_capabilities(
+        skill_prompt,
+        available_skills,
+        is_selfdev,
+        memory_prompt,
+        working_dir,
+        PromptBuildOptions {
+            capabilities: PromptCapabilities::current(),
+            profile_overlay,
+            skill_policy,
+            agents_md: Some(agents_md),
         },
     )
 }
@@ -781,9 +824,16 @@ fn build_system_prompt_split_with_overlay_and_capabilities(
     info.project_agents_md_chars = md_info.project_agents_md_chars;
     info.has_global_agents_md = md_info.has_global_agents_md;
     info.global_agents_md_chars = md_info.global_agents_md_chars;
+    info.has_profile_agents_md = md_info.has_profile_agents_md;
+    info.profile_agents_md_chars = md_info.profile_agents_md_chars;
 
-    // Add optional prompt overlays from ~/.jcode/ and ./.jcode/
-    let (overlay_content, overlay_chars) = load_prompt_overlay_files_from_dir(working_dir);
+    // Add optional prompt overlays from ~/.jcode/ and ./.jcode/. A profile
+    // replacement keeps the project overlay but deliberately suppresses the
+    // legacy global overlay so the replacement is the only global source.
+    let suppress_global_overlay =
+        profile_overlay.is_some_and(|overlay| overlay.agents_md_path.is_some());
+    let (overlay_content, overlay_chars) =
+        load_prompt_overlay_files_from_dir_with_options(working_dir, suppress_global_overlay);
     if let Some(content) = overlay_content {
         info.prompt_overlay_chars = overlay_chars;
         static_parts.push(content);
@@ -1193,6 +1243,14 @@ fn load_agents_md_files_from_dirs(
     project_dir: &Path,
     global_agents_md: Option<&Path>,
 ) -> (Option<String>, ContextInfo) {
+    load_agents_md_files_from_dirs_with_replacement(project_dir, global_agents_md, None)
+}
+
+fn load_agents_md_files_from_dirs_with_replacement(
+    project_dir: &Path,
+    global_agents_md: Option<&Path>,
+    replacement_path: Option<&Path>,
+) -> (Option<String>, ContextInfo) {
     let mut contents = vec![];
     let mut info = ContextInfo::default();
 
@@ -1220,23 +1278,35 @@ fn load_agents_md_files_from_dirs(
     // Canonical file identity handles cwd=$HOME as well as symlinked aliases.
     // If either file is absent or cannot be resolved, loading below remains the
     // source of truth and simply skips unreadable files.
-    let global_duplicates_project = global_agents_md.is_some_and(|global_agents_md| {
+    let selected_path = replacement_path.or(global_agents_md);
+    let selected_duplicates_project = selected_path.is_some_and(|selected_path| {
         match (
             std::fs::canonicalize(&project_agents_md),
-            std::fs::canonicalize(global_agents_md),
+            std::fs::canonicalize(selected_path),
         ) {
-            (Ok(project), Ok(global)) => project == global,
+            (Ok(project), Ok(selected)) => project == selected,
             _ => false,
         }
     });
 
-    if !global_duplicates_project
-        && let Some(global_agents_md) = global_agents_md
-        && let Some((content, size)) =
-            load_file(global_agents_md, "Global Instructions (~/AGENTS.md)")
+    if !selected_duplicates_project
+        && let Some(selected_path) = selected_path
+        && let Some((content, size)) = load_file(
+            selected_path,
+            if replacement_path.is_some() {
+                "Profile Instructions (agents_md_path)"
+            } else {
+                "Global Instructions (~/AGENTS.md)"
+            },
+        )
     {
-        info.has_global_agents_md = true;
-        info.global_agents_md_chars = size;
+        if replacement_path.is_some() {
+            info.has_profile_agents_md = true;
+            info.profile_agents_md_chars = size;
+        } else {
+            info.has_global_agents_md = true;
+            info.global_agents_md_chars = size;
+        }
         contents.push(content);
     }
 
@@ -1254,8 +1324,27 @@ pub fn load_agents_md_files_from_dir(working_dir: Option<&Path>) -> (Option<Stri
     load_agents_md_files_from_dirs(project_dir, global_agents_md.as_deref())
 }
 
-/// Load optional prompt overlay markdown from ~/.jcode/ and ./.jcode/
-fn load_prompt_overlay_files_from_dir(working_dir: Option<&Path>) -> (Option<String>, usize) {
+/// Load project instructions plus an optional profile-scoped replacement for
+/// the global AGENTS.md source. When `replacement_path` is set, the legacy
+/// global file is intentionally not consulted, even if the replacement is
+/// missing or unreadable.
+pub fn load_agents_md_files_from_dir_with_replacement(
+    working_dir: Option<&Path>,
+    replacement_path: Option<&Path>,
+) -> (Option<String>, ContextInfo) {
+    let project_dir = working_dir.unwrap_or(Path::new("."));
+    let global_agents_md = crate::storage::user_home_path("AGENTS.md").ok();
+    load_agents_md_files_from_dirs_with_replacement(
+        project_dir,
+        global_agents_md.as_deref(),
+        replacement_path,
+    )
+}
+
+fn load_prompt_overlay_files_from_dir_with_options(
+    working_dir: Option<&Path>,
+    suppress_global: bool,
+) -> (Option<String>, usize) {
     let mut contents = vec![];
     let mut total_chars = 0usize;
 
@@ -1280,7 +1369,9 @@ fn load_prompt_overlay_files_from_dir(working_dir: Option<&Path>) -> (Option<Str
         contents.push(content);
     }
 
-    if let Ok(global_overlay) = crate::storage::jcode_dir().map(|dir| dir.join("prompt-overlay.md"))
+    if !suppress_global
+        && let Ok(global_overlay) =
+            crate::storage::jcode_dir().map(|dir| dir.join("prompt-overlay.md"))
         && let Some((content, size)) = load_file(
             &global_overlay,
             "Global Prompt Overlay (~/.jcode/prompt-overlay.md)",

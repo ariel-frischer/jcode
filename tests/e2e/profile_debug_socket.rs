@@ -76,6 +76,7 @@ fn profile_startup() -> SessionProfileStartup {
         disabled_skills: Vec::new(),
         skill_prompts: Vec::new(),
         instructions: Some("do-not-leak-this-profile-instruction".to_owned()),
+        agents_md_path: None,
     }
 }
 

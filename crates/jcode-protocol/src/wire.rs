@@ -151,6 +151,10 @@ pub struct SessionProfileStartup {
     pub skill_prompts: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
+    /// Resolved profile replacement path. The server captures file contents at
+    /// session construction; no replacement contents are carried on the wire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agents_md_path: Option<String>,
 }
 
 /// Client request to server

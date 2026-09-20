@@ -942,7 +942,8 @@ pub use session_profile::{
     FieldSource, ProfileInspectionResult, ProfileRestoreStatus, ProviderModelReasoningSnapshot,
     ResolvedProfileSnapshot, ResolvedSessionProfile, SessionPromptOverlay,
     SessionPromptOverlaySnapshot, SkillPolicy, ToolPolicySnapshot,
-    active_environment_provider_profile,
+    active_environment_provider_profile, profile_agents_md_metadata,
+    resolve_profile_agents_md_path,
 };
 pub use websearch::validate_trusted_searxng_url;
 

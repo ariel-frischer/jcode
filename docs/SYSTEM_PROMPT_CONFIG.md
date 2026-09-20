@@ -23,6 +23,24 @@ Append instructions without touching the default prompt:
 
 Both are included when present.
 
+### Profile-scoped replacement
+
+A named profile may set `agents_md_path` under `[profiles.<name>]` to replace the two
+global sources above for that profile:
+
+```toml
+[profiles.review]
+agents_md_path = "profiles/review-AGENTS.md"
+```
+
+Relative paths resolve from `~/.jcode` or `JCODE_HOME`; absolute paths are preserved. The
+replacement file is loaded in the AGENTS.md layer, while project-local `AGENTS.md` and
+`.jcode/prompt-overlay.md` remain active. The profile's additive `instructions` remain
+available after these file sources. A missing or unreadable replacement emits a warning and
+does not fall back to the global files, so a profile cannot unexpectedly regain global
+guidance. Only path and presence/size metadata are carried in startup/session snapshots,
+never the file contents.
+
 ## Replacing the base prompt
 
 To fully replace layer 1, create either file:

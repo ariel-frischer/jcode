@@ -662,6 +662,7 @@ async fn profile_aware_agent_constructor_owns_run_selection_and_prompt_overlay()
         skill_names: vec!["review".to_string()],
         skill_prompts: vec!["Review the change carefully.".to_string()],
         instructions: Some("Keep the response concise.".to_string()),
+        agents_md_path: None,
     };
 
     let agent = Agent::new_with_tool_selection_and_prompt_overlay(
@@ -681,6 +682,10 @@ async fn interactive_profile_startup_constructor_keeps_policy_on_one_agent() {
     let _guard = crate::storage::lock_test_env();
     let provider: Arc<dyn Provider> = Arc::new(NativeAutoCompactionProvider);
     let registry = Registry::new(provider.clone()).await;
+    let replacement_dir = tempfile::tempdir().expect("create profile replacement directory");
+    let replacement_path = replacement_dir.path().join("AGENTS.md");
+    std::fs::write(&replacement_path, "PROFILE_REPLACEMENT_MARKER")
+        .expect("write profile replacement");
     let startup = crate::protocol::SessionProfileStartup {
         profile_name: Some("review".to_owned()),
         provider: Some("openai".to_owned()),
@@ -696,11 +701,12 @@ async fn interactive_profile_startup_constructor_keeps_policy_on_one_agent() {
         disabled_skills: Vec::new(),
         instructions: Some("Keep the response concise.".to_owned()),
         skill_prompts: vec!["Review the change carefully.".to_owned()],
+        agents_md_path: Some(replacement_path.display().to_string()),
     };
 
     let agent = Agent::new_with_initial_working_dir_and_profile(
-        provider,
-        registry,
+        provider.clone(),
+        registry.clone(),
         Some("/tmp/profile-startup"),
         Some(&startup),
     )
@@ -736,6 +742,28 @@ async fn interactive_profile_startup_constructor_keeps_policy_on_one_agent() {
         agent.session_prompt_overlay.skill_prompts,
         vec!["Review the change carefully."]
     );
+    assert_eq!(
+        agent.session_prompt_overlay.agents_md_path.as_deref(),
+        Some(
+            replacement_path
+                .to_str()
+                .expect("replacement path is UTF-8")
+        )
+    );
+    let prompt = agent.build_system_prompt_split(None).static_part;
+    assert!(prompt.contains("PROFILE_REPLACEMENT_MARKER"));
+    assert_eq!(
+        agent
+            .session
+            .profile_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.prompt_overlay.agents_md_path.as_deref()),
+        Some(
+            replacement_path
+                .to_str()
+                .expect("replacement path is UTF-8")
+        )
+    );
     let profile_info = agent
         .debug_info()
         .get("profile")
@@ -762,6 +790,30 @@ async fn interactive_profile_startup_constructor_keeps_policy_on_one_agent() {
     );
     let encoded = serde_json::to_string(&profile_info).expect("profile debug projection is JSON");
     assert!(!encoded.contains("Keep the response concise."));
+
+    let child = Agent::new_with_initial_working_dir_and_inherited_profile(
+        provider,
+        registry,
+        Some("/tmp/profile-child"),
+        Some("review".to_owned()),
+        agent.session.profile_snapshot.clone(),
+        Some(crate::config::ProfileRestoreStatus::Matching),
+        Some(agent.session.id.clone()),
+    );
+    assert_eq!(
+        child.session_prompt_overlay.agents_md_path.as_deref(),
+        Some(
+            replacement_path
+                .to_str()
+                .expect("replacement path is UTF-8")
+        )
+    );
+    assert!(
+        child
+            .build_system_prompt_split(None)
+            .static_part
+            .contains("PROFILE_REPLACEMENT_MARKER")
+    );
 }
 
 #[tokio::test]
@@ -773,6 +825,7 @@ async fn agent_prompting_includes_owned_profile_overlay_with_memory_context() {
         skill_names: vec!["review".to_string()],
         skill_prompts: vec!["Profile skill prompt marker".to_string()],
         instructions: Some("Profile instruction marker".to_string()),
+        agents_md_path: None,
     };
 
     let agent = Agent::new_with_tool_selection_and_prompt_overlay(
@@ -872,6 +925,7 @@ async fn profile_sessions_keep_prompt_tools_and_shared_state_isolated() {
             skill_names: vec!["alpha".to_string()],
             skill_prompts: alpha_prompts,
             instructions: Some("Alpha profile instructions".to_string()),
+            agents_md_path: None,
         },
     );
     let alpha_split = alpha.build_system_prompt_split(Some("alpha memory"));
@@ -890,6 +944,7 @@ async fn profile_sessions_keep_prompt_tools_and_shared_state_isolated() {
             skill_names: vec!["beta".to_string()],
             skill_prompts: beta_prompts,
             instructions: Some("Beta profile instructions".to_string()),
+            agents_md_path: None,
         },
     );
     let beta_split = beta.build_system_prompt_split(Some("beta memory"));
@@ -972,6 +1027,7 @@ async fn profile_skill_policy_truth_table_filters_agent_surfaces_atomically() {
         disabled_skills: disabled.iter().map(|name| (*name).to_owned()).collect(),
         skill_prompts: vec!["alpha overlay".to_owned(), "beta overlay".to_owned()],
         instructions: None,
+        agents_md_path: None,
     };
 
     let unfiltered_names = {

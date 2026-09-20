@@ -78,6 +78,7 @@ fn interactive_profile_startup_wire_is_optional_and_session_scoped() -> Result<(
             disabled_skills: Vec::new(),
             skill_prompts: Vec::new(),
             instructions: None,
+            agents_md_path: None,
         }),
     };
     let encoded = serde_json::to_string(&request)?;

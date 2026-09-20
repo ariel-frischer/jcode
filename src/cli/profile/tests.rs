@@ -25,6 +25,7 @@ fn complete_profile_config() -> Config {
             skills_mode: None,
             disabled_skills: Vec::new(),
             instructions: Some("Keep the review focused and actionable.".to_owned()),
+            agents_md_path: None,
             handoff: None,
             file_mentions_ignore: Vec::new(),
         },
@@ -61,6 +62,7 @@ fn profile_with_values() -> SessionProfileConfig {
         skills_mode: None,
         disabled_skills: Vec::new(),
         instructions: None,
+        agents_md_path: None,
         handoff: None,
         file_mentions_ignore: Vec::new(),
     }
@@ -672,6 +674,9 @@ fn inspection_list_is_stable_and_marks_only_the_requested_profile() {
 
 #[test]
 fn profile_show_redacts_instruction_bodies_and_reports_policy_fields() {
+    let replacement = tempfile::NamedTempFile::new().expect("create profile replacement");
+    std::fs::write(replacement.path(), "replacement body must not be reported")
+        .expect("write profile replacement");
     let mut config = Config::default();
     config.profiles.insert(
         "safe".to_owned(),
@@ -682,6 +687,7 @@ fn profile_show_redacts_instruction_bodies_and_reports_policy_fields() {
             skills: vec!["review".to_owned()],
             disabled_skills: vec!["secret".to_owned()],
             instructions: Some("never print fixture-secret-body".to_owned()),
+            agents_md_path: Some(replacement.path().display().to_string()),
             ..SessionProfileConfig::default()
         },
     );
@@ -691,10 +697,25 @@ fn profile_show_redacts_instruction_bodies_and_reports_policy_fields() {
     assert_eq!(report.skills_mode.as_deref(), Some("allowlist"));
     assert!(report.instructions_present);
     assert_eq!(
+        report.agents_md_path.as_deref(),
+        Some(
+            replacement
+                .path()
+                .to_str()
+                .expect("replacement path is UTF-8")
+        )
+    );
+    assert!(report.agents_md_present);
+    assert_eq!(
+        report.agents_md_chars,
+        "replacement body must not be reported".len()
+    );
+    assert_eq!(
         report.instructions_chars,
         "never print fixture-secret-body".len()
     );
     assert!(!encoded.contains("fixture-secret-body"));
+    assert!(!encoded.contains("replacement body must not be reported"));
     assert!(encoded.contains("fixture-model"));
 }
 

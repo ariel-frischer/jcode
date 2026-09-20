@@ -472,6 +472,11 @@ pub struct SessionProfileConfig {
     /// Additional instructions for the session prompt.
     #[serde(skip_serializing_if = "option_string_is_empty")]
     pub instructions: Option<String>,
+    /// Optional profile-scoped replacement for global `~/AGENTS.md` and
+    /// `~/.jcode/prompt-overlay.md`. Relative paths are resolved from
+    /// `JCODE_HOME` (or the default Jcode directory).
+    #[serde(skip_serializing_if = "option_string_is_empty")]
+    pub agents_md_path: Option<String>,
     /// Optional fresh-session handoff policy overrides for this profile.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub handoff: Option<HandoffProfileConfig>,

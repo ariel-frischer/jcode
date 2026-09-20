@@ -12,7 +12,7 @@ use crate::cli::provider_init::ProviderChoice;
 use crate::config::{
     Config, FieldSource, ProfileInspectionResult, ResolvedSessionProfile, SessionProfileConfig,
     SessionPromptOverlay, SkillsMode, ToolConfig, ToolSelection,
-    active_environment_provider_profile,
+    active_environment_provider_profile, profile_agents_md_metadata,
 };
 use crate::protocol::SessionProfileStartup;
 use crate::skill::SkillRegistry;
@@ -49,6 +49,9 @@ pub(crate) struct ProfileShowReport {
     pub(crate) disabled_skills: Vec<String>,
     pub(crate) instructions_present: bool,
     pub(crate) instructions_chars: usize,
+    pub(crate) agents_md_path: Option<String>,
+    pub(crate) agents_md_present: bool,
+    pub(crate) agents_md_chars: usize,
 }
 
 pub(crate) fn profile_list(config: &Config, current: Option<&str>) -> ProfileListReport {
@@ -80,6 +83,8 @@ pub(crate) fn profile_show(config: &Config, name: &str) -> anyhow::Result<Profil
 
 impl ProfileShowReport {
     fn from_config(name: &str, profile: &SessionProfileConfig) -> Self {
+        let (agents_md_path, agents_md_present, agents_md_chars, _) =
+            profile_agents_md_metadata(profile.agents_md_path.as_deref());
         Self {
             name: name.to_owned(),
             provider: profile.provider.clone(),
@@ -100,6 +105,9 @@ impl ProfileShowReport {
                 .as_deref()
                 .is_some_and(|value| !value.trim().is_empty()),
             instructions_chars: profile.instructions.as_deref().map_or(0, str::len),
+            agents_md_path,
+            agents_md_present,
+            agents_md_chars,
         }
     }
 }
@@ -231,7 +239,16 @@ fn inspection_sources(
                 .as_deref()
                 .is_some_and(|value| !value.trim().is_empty())
                 || !profile.skills.is_empty()
+                || profile.agents_md_path.is_some()
         }) {
+            FieldSource::Profile
+        } else {
+            FieldSource::BuiltInDefault
+        },
+    );
+    sources.insert(
+        "agents_md_path".to_owned(),
+        if profile.is_some_and(|profile| profile.agents_md_path.is_some()) {
             FieldSource::Profile
         } else {
             FieldSource::BuiltInDefault
@@ -333,6 +350,7 @@ impl ProfileRunOptions {
             disabled_skills: self.profile_disabled_skills.clone(),
             skill_prompts: self.prompt_overlay.skill_prompts.clone(),
             instructions: self.prompt_overlay.instructions.clone(),
+            agents_md_path: self.prompt_overlay.agents_md_path.clone(),
         }
     }
 

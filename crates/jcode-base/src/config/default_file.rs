@@ -424,6 +424,8 @@ mcp_tools_token_threshold = 8000
 #   skills            selected installed skill names (the allowlist input)
 #   disabled_skills   names always removed after mode/allowlist resolution
 #   instructions      additive guidance; empty text contributes no section
+#   agents_md_path    replace global AGENTS.md and global prompt overlay for this profile;
+#                     relative paths resolve from JCODE_HOME or ~/.jcode
 #
 # Complete, secret-free example (add names of skills installed for this project):
 # [profiles.review]
@@ -437,6 +439,7 @@ mcp_tools_token_threshold = 8000
 # skills = ["rust", "testing"]
 # disabled_skills = ["unsafe"]
 # instructions = "Prioritize regressions, compatibility, and focused tests."
+# agents_md_path = "profiles/review-AGENTS.md"
 # provider_profile may also be set when an existing [providers.<name>] entry
 # should be selected; it is omitted above so the example works without one.
 
