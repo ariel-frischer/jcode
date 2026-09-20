@@ -407,8 +407,15 @@ fn auth_profile_env_application_flushes_stale_openrouter_catalog_state() {
     assert!(std::env::var_os("JCODE_OPENROUTER_AUTH_HEADER").is_none());
     assert!(std::env::var_os("JCODE_OPENROUTER_AUTH_HEADER_NAME").is_none());
     assert!(std::env::var_os("JCODE_OPENROUTER_DYNAMIC_BEARER_PROVIDER").is_none());
-    assert!(std::env::var_os("JCODE_OPENROUTER_PROVIDER").is_none());
-    assert!(std::env::var_os("JCODE_OPENROUTER_NO_FALLBACK").is_none());
+    // User-supplied pin env vars survive profile switches (issue jcode-huwj).
+    assert_eq!(
+        std::env::var("JCODE_OPENROUTER_PROVIDER").as_deref(),
+        Ok("openrouter")
+    );
+    assert_eq!(
+        std::env::var("JCODE_OPENROUTER_NO_FALLBACK").as_deref(),
+        Ok("1")
+    );
     assert!(std::env::var_os("JCODE_NAMED_PROVIDER_PROFILE").is_none());
     assert!(std::env::var_os("JCODE_PROVIDER_PROFILE_ACTIVE").is_none());
     assert!(std::env::var_os("JCODE_PROVIDER_PROFILE_NAME").is_none());

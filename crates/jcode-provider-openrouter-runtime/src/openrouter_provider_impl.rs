@@ -213,6 +213,9 @@ impl Provider for OpenRouterProvider {
             let routing = self.effective_routing(&model).await;
             if !routing.is_empty() {
                 let mut obj = serde_json::json!({});
+                if let Some(ref only) = routing.only {
+                    obj["only"] = serde_json::json!(only);
+                }
                 if let Some(ref order) = routing.order {
                     obj["order"] = serde_json::json!(order);
                 }

@@ -732,6 +732,11 @@ fn apply_openai_compatible_profile_env_impl(
         return;
     }
 
+    // JCODE_OPENROUTER_PROVIDER and JCODE_OPENROUTER_NO_FALLBACK are
+    // deliberately NOT reset here. They are user-supplied input from the
+    // process environment (issue jcode-huwj), not runtime-mode state, and
+    // wiping them made `jcode run -p openrouter` silently drop a configured
+    // provider pin before the OpenRouter runtime read it.
     let vars = [
         "JCODE_OPENROUTER_API_BASE",
         "JCODE_OPENROUTER_API_KEY_NAME",
@@ -746,8 +751,6 @@ fn apply_openai_compatible_profile_env_impl(
         "JCODE_OPENROUTER_AUTH_HEADER",
         "JCODE_OPENROUTER_AUTH_HEADER_NAME",
         "JCODE_OPENROUTER_DYNAMIC_BEARER_PROVIDER",
-        "JCODE_OPENROUTER_PROVIDER",
-        "JCODE_OPENROUTER_NO_FALLBACK",
         "JCODE_NAMED_PROVIDER_PROFILE",
         "JCODE_PROVIDER_PROFILE_ACTIVE",
         "JCODE_PROVIDER_PROFILE_NAME",

@@ -15,6 +15,12 @@
 //! - Provider pinning: Pins to a provider per-session for cache locality; refreshes pin on cache hits
 //! - Cache support: Automatically injects cache breakpoints when provider supports caching
 //! - Manual pinning: Set JCODE_OPENROUTER_PROVIDER or use model@Provider syntax
+//!   - JCODE_OPENROUTER_PROVIDER is a comma-separated hard pin forwarded as
+//!     `provider.only` in the OpenRouter payload (e.g. `deepinfra` or
+//!     `deepinfra,deepinfra/fp4` for a quantization-qualified endpoint). With
+//!     it set, requests fail instead of silently routing to another provider
+//!     when the pinned upstream cannot serve the model.
+//!   - JCODE_OPENROUTER_NO_FALLBACK=1 disables provider fallbacks on its own.
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -1406,7 +1412,20 @@ impl OpenRouterProvider {
             conversation_id: new_conversation_id(),
             models_cache: Arc::new(RwLock::new(ModelsCache::default())),
             model_catalog_refresh: Arc::new(Mutex::new(ModelCatalogRefreshState::default())),
-            provider_routing: Arc::new(RwLock::new(ProviderRouting::default())),
+            provider_routing: Arc::new(RwLock::new(
+                // Named OpenRouter-type profiles go through the same aggregator
+                // and honor the same env-configured hard pin as the default
+                // runtime. Plain OpenAI-compatible profiles must not receive
+                // OpenRouter routing fields, so keep their routing empty.
+                if matches!(
+                    profile.provider_type,
+                    jcode_base::config::NamedProviderType::OpenRouter
+                ) {
+                    Self::parse_provider_routing()
+                } else {
+                    ProviderRouting::default()
+                },
+            )),
             provider_pin: Arc::new(Mutex::new(None)),
             endpoints_cache: Arc::new(RwLock::new(HashMap::new())),
             endpoint_refresh: Arc::new(Mutex::new(EndpointRefreshTracker::default())),
@@ -2097,14 +2116,17 @@ impl OpenRouterProvider {
             // disable fallbacks to keep prompt-prefix caching warm.
             let use_pin = match pin.source {
                 PinSource::Explicit => true,
-                // Honor an explicit user-configured order only when the user
-                // actively narrowed routing themselves; otherwise the observed
-                // session provider wins so the cache stays warm.
-                PinSource::Observed => base.order.is_none(),
+                // Honor an explicit user-configured order or hard pin only when
+                // the user actively narrowed routing themselves; otherwise the
+                // observed session provider wins so the cache stays warm.
+                PinSource::Observed => base.order.is_none() && base.only.is_none(),
             };
 
             if use_pin {
                 let mut routing = base.clone();
+                // A per-model `model@Provider` pin is more specific than the
+                // process-wide env pin, so it replaces `only` for this model.
+                routing.only = None;
                 routing.order = Some(vec![pin.provider.clone()]);
                 // Pin hard: an explicit pin honors its own fallback preference,
                 // an observed (session) pin always disables fallbacks so every
@@ -2117,7 +2139,7 @@ impl OpenRouterProvider {
             }
         }
 
-        if base.order.is_some() {
+        if base.order.is_some() || base.only.is_some() {
             return base;
         }
 
@@ -2197,11 +2219,17 @@ impl OpenRouterProvider {
         }
 
         // Check explicit routing
-        if let Ok(routing) = self.provider_routing.try_read()
-            && let Some(ref order) = routing.order
-            && let Some(first) = order.first()
-        {
-            return Some(first.clone());
+        if let Ok(routing) = self.provider_routing.try_read() {
+            if let Some(ref order) = routing.order
+                && let Some(first) = order.first()
+            {
+                return Some(first.clone());
+            }
+            if let Some(ref only) = routing.only
+                && let Some(first) = only.first()
+            {
+                return Some(first.clone());
+            }
         }
 
         // Fall back to ranked endpoint data
