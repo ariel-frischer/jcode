@@ -1,5 +1,6 @@
 use super::*;
 use crate::cli::provider_init::ProviderChoice;
+use clap::CommandFactory;
 
 #[test]
 fn credential_import_cli_requires_stdin_and_preserves_explicit_provider() {
@@ -192,6 +193,137 @@ fn test_provider_choice_aliases_parse() {
 
     let args = Args::try_parse_from(["jcode", "--provider", "cgc", "run", "smoke"]).unwrap();
     assert_eq!(args.provider, ProviderChoice::Comtegra);
+}
+
+#[test]
+fn short_profile_alias_matches_long_form_before_and_after_subcommands() {
+    for (short_args, long_args) in [
+        (
+            ["jcode", "-P", "review", "run", "hello"],
+            ["jcode", "--profile", "review", "run", "hello"],
+        ),
+        (
+            ["jcode", "run", "-P", "review", "hello"],
+            ["jcode", "run", "--profile", "review", "hello"],
+        ),
+    ] {
+        let short = Args::try_parse_from(short_args).expect("short profile alias should parse");
+        let long = Args::try_parse_from(long_args).expect("long profile option should parse");
+
+        assert_eq!(short.profile, long.profile);
+        assert_eq!(short.profile.as_deref(), Some("review"));
+        assert!(matches!(short.command, Some(Command::Run { message, .. }) if message == "hello"));
+        assert!(matches!(long.command, Some(Command::Run { message, .. }) if message == "hello"));
+    }
+}
+
+#[test]
+fn legacy_provider_short_option_remains_distinct_from_profile_alias() {
+    let short = Args::try_parse_from(["jcode", "-p", "openai", "run", "hello"])
+        .expect("legacy -p provider option should parse");
+    let long = Args::try_parse_from(["jcode", "--provider", "openai", "run", "hello"])
+        .expect("canonical --provider option should parse");
+
+    assert_eq!(short.provider, long.provider);
+    assert_eq!(short.provider.as_arg_value(), "openai");
+    assert!(short.profile.is_none());
+}
+
+#[test]
+fn short_global_flags_parse_before_and_after_run() {
+    let before = Args::try_parse_from([
+        "jcode",
+        "-q",
+        "--trace",
+        "-r",
+        "session-123",
+        "run",
+        "hello",
+    ])
+    .expect("short global flags should parse before run");
+    let after = Args::try_parse_from([
+        "jcode",
+        "run",
+        "-q",
+        "--trace",
+        "-r",
+        "session-123",
+        "hello",
+    ])
+    .expect("short global flags should parse after run");
+    let long = Args::try_parse_from([
+        "jcode",
+        "--quiet",
+        "--trace",
+        "--resume",
+        "session-123",
+        "run",
+        "hello",
+    ])
+    .expect("canonical global flags should remain valid");
+
+    for args in [before, after, long] {
+        assert!(args.quiet);
+        assert!(args.trace);
+        assert_eq!(args.resume.as_deref(), Some("session-123"));
+        assert!(matches!(args.command, Some(Command::Run { message, .. }) if message == "hello"));
+    }
+}
+
+#[test]
+fn visible_command_aliases_map_to_canonical_variants() {
+    let run = Args::try_parse_from(["jcode", "r", "hello"]).unwrap();
+    assert!(matches!(run.command, Some(Command::Run { message, .. }) if message == "hello"));
+
+    let connect = Args::try_parse_from(["jcode", "c"]).unwrap();
+    assert!(matches!(connect.command, Some(Command::Connect)));
+
+    let update = Args::try_parse_from(["jcode", "up"]).unwrap();
+    assert!(matches!(update.command, Some(Command::Update)));
+
+    let version = Args::try_parse_from(["jcode", "v"]).unwrap();
+    assert!(matches!(
+        version.command,
+        Some(Command::Version { json: false })
+    ));
+
+    assert!(Args::try_parse_from(["jcode", "run", "hello"]).is_ok());
+    for canonical in ["connect", "update", "version"] {
+        assert!(Args::try_parse_from(["jcode", canonical]).is_ok());
+    }
+}
+
+#[test]
+fn visible_command_aliases_are_discoverable_in_generated_help() {
+    let command = Args::command();
+    let help = command.clone().render_long_help().to_string();
+
+    for (name, alias) in [
+        ("run", "r"),
+        ("connect", "c"),
+        ("update", "up"),
+        ("version", "v"),
+    ] {
+        let subcommand = command
+            .get_subcommands()
+            .find(|candidate| candidate.get_name() == name)
+            .unwrap_or_else(|| panic!("missing top-level command {name}"));
+        assert!(
+            subcommand
+                .get_visible_aliases()
+                .any(|candidate| candidate == alias),
+            "{name} should expose visible alias {alias}"
+        );
+        assert!(
+            help.contains(&format!("[aliases: {alias}]")),
+            "generated help should show visible alias {alias} for {name}:\n{help}"
+        );
+    }
+}
+
+#[test]
+fn cli_argument_schema_has_no_alias_or_short_option_conflicts() {
+    Args::command().debug_assert();
 }
 
 #[test]

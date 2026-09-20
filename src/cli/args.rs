@@ -98,11 +98,11 @@ pub(crate) struct Args {
     pub(crate) trace: bool,
 
     /// Suppress non-error CLI/status output for scripting and wrappers
-    #[arg(long, global = true)]
+    #[arg(short = 'q', long, global = true)]
     pub(crate) quiet: bool,
 
     /// Resume a session by ID, or list sessions if no ID provided
-    #[arg(long, global = true, num_args = 0..=1, default_missing_value = "")]
+    #[arg(short = 'r', long, global = true, num_args = 0..=1, default_missing_value = "")]
     pub(crate) resume: Option<String>,
 
     /// Internal: launched as a freshly spawned window, so skip heavy local resume bootstrap.
@@ -141,7 +141,7 @@ pub(crate) struct Args {
     pub(crate) model: Option<String>,
 
     /// Named session profile from [profiles.<name>] in config.toml.
-    #[arg(long, global = true, value_name = "NAME")]
+    #[arg(short = 'P', long, global = true, value_name = "NAME")]
     pub(crate) profile: Option<String>,
 
     /// Explicit provider reasoning effort override for this invocation.
@@ -215,9 +215,11 @@ pub(crate) enum Command {
     },
 
     /// Connect to a running server
+    #[command(visible_alias = "c")]
     Connect,
 
     /// Run a single message and exit
+    #[command(visible_alias = "r")]
     Run {
         /// Emit a machine-readable JSON result instead of streaming text
         #[arg(long, conflicts_with = "ndjson")]
@@ -316,9 +318,11 @@ pub(crate) enum Command {
     Repl,
 
     /// Update jcode to the latest version
+    #[command(visible_alias = "up")]
     Update,
 
     /// Show build/version information in human or JSON form
+    #[command(visible_alias = "v")]
     Version {
         /// Emit JSON instead of plain text
         #[arg(long)]
