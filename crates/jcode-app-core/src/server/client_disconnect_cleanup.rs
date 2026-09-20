@@ -200,7 +200,9 @@ pub(super) async fn cleanup_client_connection(
     }
 
     {
-        if let Some(agent_arc) = super::remove_session_entry(sessions, client_session_id).await {
+        let agent = super::remove_session_entry(sessions, client_session_id).await;
+        drop(connections);
+        if let Some(agent_arc) = agent {
             let lock_result =
                 tokio::time::timeout(std::time::Duration::from_secs(2), agent_arc.lock()).await;
 
@@ -344,7 +346,6 @@ pub(super) async fn cleanup_client_connection(
     remove_background_tool_signal(client_session_id);
     remove_session_interrupt_queue(soft_interrupt_queues, client_session_id).await;
 
-    drop(connections);
     event_handle.abort();
     Ok(())
 }
