@@ -3,6 +3,7 @@
 One entry per tracked Markdown document under `docs/`. Descriptive and proposed documents retain their own status statements.
 
 - [Jcode fork research (2026-09-09)](research/2026-09-09-jcode-forks.md): Reference-only findings on ShawnSantiago workflows, grigio Nix packaging, and sheikhsajid69, with implementation caveats and no adoption authorized.
+- [Context compaction and Jev hybrid research (2026-09-20)](research/2026-09-20-context-compaction-and-jev.md): Current Jcode behavior, cost and accuracy evidence, and an explicitly unapproved preserve-only Jev hybrid backlog idea.
 
 - [AgentCard Discovery demo](AGENTCARD_DISCOVERY_DEMO.md)
 - [Agent-Native VCS: Core Behavior](AGENT_NATIVE_VCS_CORE_BEHAVIOR.md)
