@@ -1917,6 +1917,16 @@ pub(crate) fn run_profile_command(
                     },
                     report.instructions_chars
                 );
+                print_profile_field("agents_md_path", report.agents_md_path.as_deref());
+                println!(
+                    "agents_md: {} ({} chars)",
+                    if report.agents_md_present {
+                        "present"
+                    } else {
+                        "absent"
+                    },
+                    report.agents_md_chars
+                );
             }
         }
         super::args::ProfileCommand::Current { json } => {
@@ -1990,6 +2000,16 @@ fn print_profile_inspection(
             "absent"
         },
         prompt.instructions_chars
+    );
+    print_profile_field("agents_md_path", prompt.agents_md_path.as_deref());
+    println!(
+        "agents_md: {} ({} chars)",
+        if prompt.agents_md_present {
+            "present"
+        } else {
+            "absent"
+        },
+        prompt.agents_md_chars
     );
     if !report.sources.is_empty() {
         println!("Sources:");
