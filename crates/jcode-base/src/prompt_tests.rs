@@ -266,6 +266,66 @@ fn agents_md_missing_global_file_keeps_project_instructions() {
     assert!(!content.contains("# Global Instructions (~/AGENTS.md)"));
 }
 
+#[test]
+fn profile_agents_md_replaces_global_agents_and_overlay_but_keeps_project_sources() {
+    let _guard = crate::storage::lock_test_env();
+    let previous_home = std::env::var_os("JCODE_HOME");
+    let home = tempfile::TempDir::new().expect("create isolated prompt home");
+    crate::env::set_var("JCODE_HOME", home.path());
+    std::fs::write(
+        home.path().join("prompt-overlay.md"),
+        "GLOBAL_PROMPT_OVERLAY_MARKER",
+    )
+    .expect("write global prompt overlay");
+
+    let project = tempfile::TempDir::new().expect("create project");
+    std::fs::write(project.path().join("AGENTS.md"), "PROJECT_AGENTS_MARKER")
+        .expect("write project instructions");
+    std::fs::create_dir_all(project.path().join(".jcode")).expect("create project jcode dir");
+    std::fs::write(
+        project.path().join(".jcode/prompt-overlay.md"),
+        "PROJECT_PROMPT_OVERLAY_MARKER",
+    )
+    .expect("write project prompt overlay");
+
+    let replacement = tempfile::NamedTempFile::new().expect("create replacement file");
+    std::fs::write(replacement.path(), "PROFILE_REPLACEMENT_MARKER")
+        .expect("write replacement instructions");
+    let agents_snapshot = load_agents_md_files_from_dir_with_replacement(
+        Some(project.path()),
+        Some(replacement.path()),
+    );
+    let overlay = SessionPromptOverlay {
+        agents_md_path: Some(replacement.path().display().to_string()),
+        ..Default::default()
+    };
+
+    let (split, info) = build_system_prompt_split_with_overlay_and_policy_and_agents_md(
+        None,
+        &[],
+        false,
+        None,
+        Some(project.path()),
+        Some(&overlay),
+        None,
+        agents_snapshot,
+    );
+
+    assert!(split.static_part.contains("PROJECT_AGENTS_MARKER"));
+    assert!(split.static_part.contains("PROFILE_REPLACEMENT_MARKER"));
+    assert!(split.static_part.contains("PROJECT_PROMPT_OVERLAY_MARKER"));
+    assert!(!split.static_part.contains("GLOBAL_PROMPT_OVERLAY_MARKER"));
+    assert!(info.has_project_agents_md);
+    assert!(info.has_profile_agents_md);
+    assert!(!info.has_global_agents_md);
+
+    if let Some(previous_home) = previous_home {
+        crate::env::set_var("JCODE_HOME", previous_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn agents_md_symlink_alias_is_deduplicated_by_canonical_file_path() {
@@ -357,6 +417,7 @@ fn profile_prompt_overlay_is_static_ordered_and_exactly_once() {
             "# Skill: review\n\nPROFILE_REVIEW_SKILL_MARKER".to_string(),
         ],
         instructions: Some("PROFILE_INSTRUCTIONS_MARKER".to_string()),
+        agents_md_path: None,
     };
     let available_skills = [SkillInfo {
         name: "available".to_string(),
@@ -443,6 +504,7 @@ fn skill_policy_filters_available_and_profile_skill_context() {
             "BLOCKED_PROFILE_SKILL_BODY".to_owned(),
         ],
         instructions: Some("PROFILE_INSTRUCTIONS_REMAIN".to_owned()),
+        agents_md_path: None,
     };
     let available = [
         SkillInfo {
@@ -487,6 +549,7 @@ fn none_skill_policy_removes_skill_context_but_no_profile_bytes_are_unchanged() 
         skill_names: vec!["blocked".to_owned()],
         skill_prompts: vec!["BLOCKED_PROFILE_SKILL_BODY".to_owned()],
         instructions: None,
+        agents_md_path: None,
     };
     let none = SkillPolicy {
         mode: Some(SkillsMode::None),

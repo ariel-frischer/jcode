@@ -327,6 +327,7 @@ impl BridgeState {
             disabled_skills: resolved.skill_policy.disabled_skills,
             skill_prompts: resolved.prompt_overlay.skill_prompts,
             instructions: resolved.prompt_overlay.instructions,
+            agents_md_path: resolved.prompt_overlay.agents_md_path,
         })
     }
 

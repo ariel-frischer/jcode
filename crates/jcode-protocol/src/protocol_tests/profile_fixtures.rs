@@ -28,6 +28,7 @@ fn typed_profile_startup_roundtrips_without_changing_legacy_shape() {
         client_has_local_history: false,
         allow_session_takeover: false,
         crash_on_disconnect: false,
+        continue_on_disconnect: false,
         terminal_env: Vec::new(),
         profile: Some(SessionProfileStartup {
             profile_name: Some("review".to_owned()),
@@ -42,6 +43,7 @@ fn typed_profile_startup_roundtrips_without_changing_legacy_shape() {
             disabled_skills: Vec::new(),
             skill_prompts: Vec::new(),
             instructions: None,
+            agents_md_path: None,
         }),
     };
     let encoded = serde_json::to_string(&request).expect("profile request should serialize");
@@ -80,6 +82,7 @@ fn resume_session_profile_metadata_is_optional_and_roundtrips() {
             disabled_skills: vec!["unsafe".to_owned()],
             skill_prompts: Vec::new(),
             instructions: None,
+            agents_md_path: None,
         }),
     };
     let encoded = serde_json::to_string(&request).expect("profile resume should serialize");

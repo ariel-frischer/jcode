@@ -46,6 +46,7 @@ fn selected_run_profile_resolves_to_immutable_dispatch_options() {
             skills_mode: None,
             disabled_skills: Vec::new(),
             instructions: None,
+            agents_md_path: None,
             handoff: None,
             file_mentions_ignore: Vec::new(),
         },

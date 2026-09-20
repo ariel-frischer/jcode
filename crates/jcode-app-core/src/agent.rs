@@ -395,7 +395,15 @@ impl Agent {
             .working_dir
             .as_deref()
             .map(std::path::Path::new);
-        self.agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir(working_dir);
+        let replacement_path = self
+            .session_prompt_overlay
+            .agents_md_path
+            .as_deref()
+            .map(std::path::Path::new);
+        self.agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir_with_replacement(
+            working_dir,
+            replacement_path,
+        );
     }
 
     fn should_track_client_cache(&self) -> bool {
@@ -463,7 +471,19 @@ impl Agent {
         let initial_provider_model = provider.model();
         let tool_config = &crate::config::config().tools;
         let working_dir = session.working_dir.as_deref().map(std::path::Path::new);
-        let agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir(working_dir);
+        if let Some(path) = session_prompt_overlay.agents_md_path.as_deref()
+            && let (_, _, _, Some(warning)) = crate::config::profile_agents_md_metadata(Some(path))
+        {
+            crate::logging::warn(&warning);
+        }
+        let replacement_path = session_prompt_overlay
+            .agents_md_path
+            .as_deref()
+            .map(std::path::Path::new);
+        let agents_md_snapshot = crate::prompt::load_agents_md_files_from_dir_with_replacement(
+            working_dir,
+            replacement_path,
+        );
         let tool_policy_registration = crate::tool::register_session_tool_policy(
             &session.id,
             allowed_tools.clone(),
@@ -877,6 +897,7 @@ impl Agent {
             skill_names: profile.skill_names.clone(),
             skill_prompts: profile.skill_prompts.clone(),
             instructions: profile.instructions.clone(),
+            agents_md_path: profile.agents_md_path.clone(),
         };
 
         let mut agent = Self::new_with_ownership_and_policy(
@@ -924,6 +945,21 @@ impl Agent {
                 skill_names: profile.skill_names.clone(),
                 instructions_present: profile.instructions.is_some(),
                 instructions_chars: profile.instructions.as_deref().map_or(0, str::len),
+                agents_md_path: profile.agents_md_path.clone(),
+                agents_md_present: profile
+                    .agents_md_path
+                    .as_deref()
+                    .and_then(|path| {
+                        crate::config::profile_agents_md_metadata(Some(path))
+                            .1
+                            .then_some(())
+                    })
+                    .is_some(),
+                agents_md_chars: profile
+                    .agents_md_path
+                    .as_deref()
+                    .map(|path| crate::config::profile_agents_md_metadata(Some(path)).2)
+                    .unwrap_or(0),
             },
             fingerprint: String::new(),
         }
@@ -977,6 +1013,7 @@ impl Agent {
             skill_names: snapshot.prompt_overlay.skill_names.clone(),
             skill_prompts: Vec::new(),
             instructions: None,
+            agents_md_path: snapshot.prompt_overlay.agents_md_path.clone(),
         };
         let mut agent = Self::new_with_ownership_and_policy(
             provider,
@@ -1157,12 +1194,22 @@ impl Agent {
         } else {
             crate::config::config().tools.selection()
         };
-        let mut agent = Self::build_base(
+        let inherited_prompt_overlay = inherited_snapshot
+            .as_ref()
+            .map(|snapshot| crate::config::SessionPromptOverlay {
+                skill_names: snapshot.prompt_overlay.skill_names.clone(),
+                skill_prompts: Vec::new(),
+                instructions: None,
+                agents_md_path: snapshot.prompt_overlay.agents_md_path.clone(),
+            })
+            .unwrap_or_default();
+        let mut agent = Self::build_base_with_prompt_overlay(
             provider,
             registry,
             session,
             tool_selection.allowed_tools,
             tool_selection.disabled_tools,
+            inherited_prompt_overlay,
         );
         if let Some(snapshot) = inherited_snapshot {
             agent.session_profile_name = agent.session.profile_name.clone();

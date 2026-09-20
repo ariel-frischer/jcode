@@ -1069,6 +1069,9 @@ fn profiled_session_round_trips_selected_name_and_secret_free_snapshot() -> Resu
             skill_names: vec!["rust".to_owned()],
             instructions_present: true,
             instructions_chars: 42,
+            agents_md_path: None,
+            agents_md_present: false,
+            agents_md_chars: 0,
         },
         fingerprint: "sha256:test-profile".to_owned(),
     };

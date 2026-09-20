@@ -932,6 +932,22 @@ skill policy unless an explicit child override is supplied. Session metadata sto
 selected name and a credential-free resolved snapshot. Restore uses that snapshot and
 warns when the named profile is missing or changed; it never silently falls back.
 
+Profiles can also set `agents_md_path` to replace the global instruction sources for that
+profile:
+
+```toml
+[profiles.review]
+agents_md_path = "profiles/review-AGENTS.md"
+```
+
+Relative paths resolve from `~/.jcode` (or `JCODE_HOME`), while absolute paths are preserved.
+The configured file replaces global `~/AGENTS.md` and `~/.jcode/prompt-overlay.md`, but
+project-local `./AGENTS.md` and `./.jcode/prompt-overlay.md` remain active. Profile
+`instructions` stay additive. The file is captured when each session starts, and its path
+is inherited by child and swarm sessions. `profile show` and `profile resolve` report only
+the path and presence/size metadata. A missing or unreadable replacement warns without
+falling back to the global files.
+
 The TUI `@` file picker is enabled by default and discovers suggestions in bounded background
 batches so typing remains responsive. Sending an existing `@path` includes the full UTF-8 file
 contents in the model-facing message while keeping the compact `@path` in the visible transcript.
