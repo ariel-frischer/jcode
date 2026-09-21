@@ -290,3 +290,27 @@ async fn interrupted_session_does_not_wait_for_reconnect_grace() {
         SessionStatus::Crashed { .. }
     ));
 }
+
+#[tokio::test]
+async fn disconnect_cleanup_releases_connection_registry_before_agent_cleanup() {
+    let _lock = crate::storage::lock_test_env();
+    let _home = Home::new();
+    let fixture = Fixture::new(true).await;
+    let agent_guard = fixture.agent.lock().await;
+
+    let ((), ()) = tokio::join!(fixture.cleanup(false, Duration::ZERO), async {
+        timeout(Duration::from_secs(1), async {
+            while fixture.sessions.read().await.contains_key(&fixture.id) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("cleanup reaches agent cleanup");
+
+        let registry_guard = timeout(Duration::from_millis(100), fixture.connections.write())
+            .await
+            .expect("agent cleanup must not block the connection registry");
+        drop(registry_guard);
+        drop(agent_guard);
+    });
+}
