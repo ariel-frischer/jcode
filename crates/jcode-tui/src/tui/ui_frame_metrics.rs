@@ -86,7 +86,6 @@ pub(crate) struct FramePerfStats {
     pub chat_scrollbar_visible: bool,
     pub use_packed_layout: bool,
     pub has_side_panel_content: bool,
-    pub has_pinned_content: bool,
     pub has_file_diff_edits: bool,
 }
 
@@ -673,7 +672,6 @@ pub(super) struct ChatLayoutMetrics {
     pub chat_scrollbar_visible: bool,
     pub use_packed_layout: bool,
     pub has_side_panel_content: bool,
-    pub has_pinned_content: bool,
     pub has_file_diff_edits: bool,
 }
 
@@ -686,7 +684,6 @@ pub(super) fn note_chat_layout(metrics: ChatLayoutMetrics) {
         chat_scrollbar_visible,
         use_packed_layout,
         has_side_panel_content,
-        has_pinned_content,
         has_file_diff_edits,
     } = metrics;
     with_frame_perf_stats_mut(|stats| {
@@ -699,7 +696,6 @@ pub(super) fn note_chat_layout(metrics: ChatLayoutMetrics) {
         stats.chat_scrollbar_visible = chat_scrollbar_visible;
         stats.use_packed_layout = use_packed_layout;
         stats.has_side_panel_content = has_side_panel_content;
-        stats.has_pinned_content = has_pinned_content;
         stats.has_file_diff_edits = has_file_diff_edits;
     });
 }

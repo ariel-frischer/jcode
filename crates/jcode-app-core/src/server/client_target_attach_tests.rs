@@ -48,6 +48,7 @@ impl Drop for Home {
 
 fn subscribe(target: &str) -> Request {
     Request::Subscribe {
+        supports_pdf_panels: false,
         id: 71,
         profile: None,
         workflow_progress: false,

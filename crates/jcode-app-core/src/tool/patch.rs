@@ -74,7 +74,7 @@ impl Tool for PatchTool {
 
         for patch in patches {
             let resolved_path = ctx.resolve_path(Path::new(&patch.path));
-            let result = apply_patch_with_diff(&patch, &resolved_path).await;
+            let result = apply_patch_with_diff(&patch, &resolved_path, &ctx).await;
             match result {
                 Ok((msg, diff)) => {
                     if diff.is_empty() {
@@ -211,13 +211,19 @@ fn parse_hunk(lines: &[&str], i: &mut usize) -> Option<Hunk> {
 }
 
 /// Apply a patch and return (status_message, diff_output)
-async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String, String)> {
+async fn apply_patch_with_diff(
+    patch: &FilePatch,
+    path: &Path,
+    ctx: &ToolContext,
+) -> Result<(String, String)> {
     // Handle deletion
     if patch.is_delete {
         if path.exists() {
-            let old_content = tokio::fs::read_to_string(path).await.unwrap_or_default();
+            let old = tokio::fs::read_to_string(path).await.ok();
+            let old_content = old.as_deref().unwrap_or("");
             tokio::fs::remove_file(path).await?;
             super::read::invalidate_read_index(path);
+            super::edit_stats::record(ctx, old_content, "", old.is_none()).await;
             let diff = generate_diff(&old_content, "", 1);
             return Ok(("deleted".to_string(), diff));
         } else {
@@ -246,6 +252,7 @@ async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String
 
         tokio::fs::write(path, &content).await?;
         super::read::invalidate_read_index(path);
+        super::edit_stats::record(ctx, "", &content, false).await;
         let diff = generate_diff("", &content, 1);
         return Ok(("created".to_string(), diff));
     }
@@ -273,6 +280,7 @@ async fn apply_patch_with_diff(patch: &FilePatch, path: &Path) -> Result<(String
     let new_content = lines.join("\n") + "\n";
     tokio::fs::write(path, &new_content).await?;
     super::read::invalidate_read_index(path);
+    super::edit_stats::record(ctx, &old_content, &new_content, false).await;
 
     let diff = generate_diff(&old_content, &new_content, first_line);
     Ok((format!("modified ({} hunks)", patch.hunks.len()), diff))

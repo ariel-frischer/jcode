@@ -345,6 +345,7 @@ mod tests {
             "/compact",
             "/plan investigate",
             "/commit",
+            "/merge",
             "/rename title",
             "/fast on",
             "/help",

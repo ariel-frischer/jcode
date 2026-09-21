@@ -82,6 +82,12 @@ pub(crate) async fn handle_persistent_ws_result(
             }
             return ContinuationDisposition::Finished;
         }
+        // The terminal error was already forwarded while draining the
+        // persistent stream. The continuation helper also cleared its state,
+        // so do not replay the request or emit another terminal event.
+        PersistentWsResult::TerminalError => {
+            return ContinuationDisposition::Finished;
+        }
         PersistentWsResult::Success => {
             log_openai_stream_lifecycle(
                 jcode_base::logging::LogLevel::Info,

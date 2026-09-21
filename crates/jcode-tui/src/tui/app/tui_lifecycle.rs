@@ -409,6 +409,8 @@ impl App {
             inline_file_preview_state: Default::default(),
             display_user_message_count: 0,
             display_edit_tool_message_count: 0,
+            display_edit_line_counts: (0, 0),
+            terminal_title: RefCell::new(terminal_title::TerminalTitleState::default()),
             compacted_history_lazy: CompactedHistoryLazyState::default(),
             pending_history_anchor: None,
             input: String::new(),
@@ -745,6 +747,7 @@ impl App {
             ambient_system_prompt: None,
             pending_login: None,
             remote_login: None,
+            remote_login_onboarding: Default::default(),
             pending_account_input: None,
             pending_ssh_remote_name: None,
             force_full_redraw: false,
@@ -874,6 +877,8 @@ impl App {
             inline_file_preview_state: Default::default(),
             display_user_message_count: 0,
             display_edit_tool_message_count: 0,
+            display_edit_line_counts: (0, 0),
+            terminal_title: RefCell::new(terminal_title::TerminalTitleState::default()),
             compacted_history_lazy: CompactedHistoryLazyState::default(),
             pending_history_anchor: None,
             input: String::new(),
@@ -1210,6 +1215,7 @@ impl App {
             ambient_system_prompt: None,
             pending_login: None,
             remote_login: None,
+            remote_login_onboarding: Default::default(),
             pending_account_input: None,
             pending_ssh_remote_name: None,
             force_full_redraw: false,
@@ -1386,6 +1392,11 @@ impl App {
             app.set_status_notice(format!("SSH: {host} (remote server)"));
             return app;
         }
+
+        // Minimal local clients start with empty skill registries. Load global
+        // metadata once so autocomplete works before the first History event.
+        // SSH clients above must use only the remote server's skill metadata.
+        app.refresh_skills_snapshot();
 
         let reload_fast_start = std::env::var("JCODE_RELOAD_FAST_START")
             .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))

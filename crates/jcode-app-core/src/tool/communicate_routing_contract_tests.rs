@@ -51,6 +51,7 @@ fn oversized_route_catalog_is_bounded() {
             available: true,
             detail: "OAuth".into(),
             cheapness: None,
+            usage: None,
         })
         .collect::<Vec<_>>();
     let output = format_swarm_model_list(Some("gpt-6-astra"), None, &routes);
@@ -85,6 +86,7 @@ fn catalog_prioritizes_current_model_and_bounds_unicode_fields() {
             available: true,
             detail: "🦀".repeat(10_000),
             cheapness: None,
+            usage: None,
         })
         .collect::<Vec<_>>();
     routes.push(jcode_provider_core::ModelRoute {
@@ -94,6 +96,7 @@ fn catalog_prioritizes_current_model_and_bounds_unicode_fields() {
         available: true,
         detail: "OAuth".into(),
         cheapness: None,
+        usage: None,
     });
     let output = format_swarm_model_list(
         Some("gpt-6-astra"),
@@ -114,6 +117,7 @@ fn catalog_deduplicates_routes_without_hiding_auth_choices() {
         available: true,
         detail: "OAuth".into(),
         cheapness: None,
+        usage: None,
     };
     let mut api = route.clone();
     api.api_method = "openai-api-key".into();

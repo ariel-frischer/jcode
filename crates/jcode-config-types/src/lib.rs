@@ -107,8 +107,6 @@ pub enum DiffDisplayMode {
         alias = "full"
     )]
     FullInline,
-    /// Show diffs in a dedicated pinned pane.
-    Pinned,
     /// Show full file with diff highlights in side panel, synced to scroll position.
     File,
 }
@@ -122,24 +120,19 @@ impl DiffDisplayMode {
         matches!(self, Self::FullInline)
     }
 
-    pub fn is_pinned(&self) -> bool {
-        matches!(self, Self::Pinned)
-    }
-
     pub fn is_file(&self) -> bool {
         matches!(self, Self::File)
     }
 
     pub fn has_side_pane(&self) -> bool {
-        matches!(self, Self::Pinned | Self::File)
+        matches!(self, Self::File)
     }
 
     pub fn cycle(self) -> Self {
         match self {
             Self::Off => Self::Inline,
             Self::Inline => Self::FullInline,
-            Self::FullInline => Self::Pinned,
-            Self::Pinned => Self::File,
+            Self::FullInline => Self::File,
             Self::File => Self::Off,
         }
     }
@@ -149,8 +142,44 @@ impl DiffDisplayMode {
             Self::Off => "OFF",
             Self::Inline => "Inline",
             Self::FullInline => "Inline Full",
-            Self::Pinned => "Pinned",
             Self::File => "File",
+        }
+    }
+}
+
+#[cfg(test)]
+mod diff_display_mode_tests {
+    use super::DiffDisplayMode;
+
+    #[test]
+    fn diff_mode_cycle_keeps_inline_and_file_modes() {
+        use DiffDisplayMode::*;
+        let mut mode = Off;
+        for expected in [Inline, FullInline, File, Off, Inline] {
+            mode = mode.cycle();
+            assert_eq!(mode, expected);
+        }
+        for mode in [Off, Inline, FullInline, File] {
+            assert_eq!(mode.has_side_pane(), mode == File);
+            assert_eq!(mode.is_inline(), matches!(mode, Inline | FullInline));
+            assert_eq!(mode.is_full_inline(), mode == FullInline);
+            assert_eq!(mode.is_file(), mode == File);
+        }
+    }
+
+    #[test]
+    fn diff_mode_remaining_values_round_trip() {
+        for mode in [
+            DiffDisplayMode::Off,
+            DiffDisplayMode::Inline,
+            DiffDisplayMode::FullInline,
+            DiffDisplayMode::File,
+        ] {
+            let encoded = serde_json::to_string(&mode).unwrap();
+            assert_eq!(
+                serde_json::from_str::<DiffDisplayMode>(&encoded).unwrap(),
+                mode
+            );
         }
     }
 }
@@ -407,6 +436,16 @@ pub struct CompactionConfig {
 
     /// [semantic] Number of recent turns to look at for building the "current goal" embedding
     pub goal_window_turns: usize,
+
+    /// Hard cap on the token budget compaction measures against, regardless of
+    /// the model's advertised context window. 0 = no cap (use the model window).
+    ///
+    /// Every turn re-sends the whole transcript, so on a 1M-window model the
+    /// default 80%-of-window trigger lets a session reach ~800k tokens per
+    /// request before anything folds. Set this to e.g. 200000 to compact earlier
+    /// on large-window providers. This bounds the compaction trigger budget,
+    /// not the final request size when recent messages cannot be compacted.
+    pub max_context_tokens: usize,
 }
 
 impl Default for CompactionConfig {
@@ -422,6 +461,7 @@ impl Default for CompactionConfig {
             topic_shift_threshold: 0.45,
             relevance_keep_threshold: 0.65,
             goal_window_turns: 5,
+            max_context_tokens: 0,
         }
     }
 }
@@ -739,6 +779,11 @@ pub struct AgentsConfig {
     /// call does not pass an explicit `effort`. Leave unset to let workers
     /// inherit the provider-wide reasoning effort.
     pub swarm_effort: Option<String>,
+    /// Root reasoning effort in light swarm mode. Unset or invalid means `max`.
+    /// This does not change worker effort (`swarm_effort`).
+    pub swarm_root_effort: Option<String>,
+    /// Root reasoning effort in deep swarm mode. Unset or invalid means `max`.
+    pub swarm_deep_root_effort: Option<String>,
     /// Default terminal mode for swarm-created agents.
     pub swarm_spawn_mode: SwarmSpawnMode,
     /// Opt in to server-owned incremental worker completion wakes.
@@ -756,38 +801,33 @@ pub struct AgentsConfig {
     /// as chips on a single row.
     #[serde(default)]
     pub swarm_strip_layout: SwarmStripLayout,
-    /// Optional default model override for the memory sidecar.
+    /// Jev Decisions provider for recall: auto, openrouter, typesafe, aimlapi,
+    /// or jcode. Auto uses a provider-specific BYOK credential before Jcode.
+    #[serde(default = "default_memory_jev_provider")]
+    pub memory_jev_provider: String,
+    /// Minimum Jev relevance probability. Invalid values fail closed.
+    #[serde(default = "default_memory_jev_threshold")]
+    pub memory_jev_threshold: f32,
+    /// Optional model override for memory extraction only, never recall.
     pub memory_model: Option<String>,
-    /// OpenAI memory-sidecar effort, independent from the main session.
-    /// Environment override: `JCODE_MEMORY_REASONING_EFFORT`.
+    /// OpenAI memory-sidecar effort for optional extraction, independent from
+    /// the main session. Environment override: `JCODE_MEMORY_REASONING_EFFORT`.
     pub memory_reasoning_effort: Option<String>,
-    /// Whether memory should use the sidecar for relevance/extraction.
-    ///
-    /// Defaults to `true` for the high-precision LLM judge path. Set to `false`
-    /// only to opt into lower-precision no-LLM retrieval. With sidecar mode on,
-    /// an unreachable LLM makes memory dormant rather than silently degrading.
+    /// Whether optional automatic memory extraction may use a text-generating
+    /// sidecar. Recall always uses Jev and is independent of this setting.
     #[serde(default = "default_memory_sidecar_enabled")]
     pub memory_sidecar_enabled: bool,
-    /// Minimum turns between Mode-2 LLM reranks. Skipped turns use hybrid order;
-    /// first turns and topic changes force a rerank. 0 or 1 disables gating.
+    /// Legacy rerank setting retained for config compatibility. Jev recall
+    /// ignores it.
     #[serde(default = "default_memory_rerank_cadence")]
     pub memory_rerank_cadence: usize,
-    /// Number of independent LLM rerank "judges" to run per fired rerank. Their
-    /// votes are combined and only memories meeting `memory_rerank_min_agree`
-    /// agreement are injected. 1 = single judge (cheapest). 2 = two judges must
-    /// agree, which lifts injection precision to ~1.0 with ~100% clean-rate on
-    /// no-memory turns (offline adjudication), at 2 LLM calls per fired turn.
+    /// Legacy setting, retained for config compatibility. Jev recall ignores it.
     #[serde(default = "default_memory_rerank_votes")]
     pub memory_rerank_votes: usize,
-    /// Minimum judge agreement (of `memory_rerank_votes`) required to inject a
-    /// memory. Clamped to 1..=votes. Higher = stricter precision, lower recall.
+    /// Legacy setting, retained for config compatibility. Jev recall ignores it.
     #[serde(default = "default_memory_rerank_min_agree")]
     pub memory_rerank_min_agree: usize,
-    /// Which embedding backend memory dense-retrieval uses: `"local"` (bundled
-    /// all-MiniLM-L6-v2 ONNX, default, no network) or `"openai"` (remote
-    /// OpenAI/openai-compatible `/v1/embeddings`, opt-in, requires an
-    /// `OPENAI_API_KEY`). A keyless `"openai"` setting silently degrades to
-    /// local. Env override: `JCODE_MEMORY_EMBEDDING_BACKEND`.
+    /// Legacy benchmark/debug embedding backend. Jev recall never uses it.
     #[serde(default = "default_memory_embedding_backend")]
     pub memory_embedding_backend: String,
     /// OpenAI embedding model name when `memory_embedding_backend = "openai"`.
@@ -825,6 +865,14 @@ fn default_memory_embedding_backend() -> String {
     "local".to_string()
 }
 
+fn default_memory_jev_provider() -> String {
+    "auto".to_string()
+}
+
+fn default_memory_jev_threshold() -> f32 {
+    0.8
+}
+
 fn default_memory_sidecar_enabled() -> bool {
     true
 }
@@ -846,10 +894,14 @@ impl Default for AgentsConfig {
         Self {
             swarm_model: None,
             swarm_effort: None,
+            swarm_root_effort: None,
+            swarm_deep_root_effort: None,
             swarm_spawn_mode: SwarmSpawnMode::default(),
             swarm_completion_wake: false,
             swarm_gallery_max_pct: None,
             swarm_strip_layout: SwarmStripLayout::default(),
+            memory_jev_provider: default_memory_jev_provider(),
+            memory_jev_threshold: default_memory_jev_threshold(),
             memory_model: None,
             memory_reasoning_effort: None,
             memory_sidecar_enabled: default_memory_sidecar_enabled(),
@@ -863,6 +915,24 @@ impl Default for AgentsConfig {
             swarm_max_concurrent_agents: default_swarm_max_concurrent_agents(),
             swarm_role_policies: BTreeMap::new(),
         }
+    }
+}
+
+impl AgentsConfig {
+    /// Resolve a swarm mode's root effort without allowing orchestration
+    /// sentinels to recurse into another mode. Unknown values preserve the
+    /// historical maximum-effort behavior without invalidating other settings.
+    pub fn root_effort_for_swarm(&self, deep: bool) -> &'static str {
+        let configured = if deep {
+            self.swarm_deep_root_effort.as_deref()
+        } else {
+            self.swarm_root_effort.as_deref()
+        };
+        let value = configured.unwrap_or("max").trim();
+        ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+            .into_iter()
+            .find(|level| level.eq_ignore_ascii_case(value))
+            .unwrap_or("max")
     }
 }
 
@@ -1448,6 +1518,8 @@ pub struct ProviderConfig {
     pub openai_reasoning_effort: Option<String>,
     /// Reasoning effort for Anthropic Messages API output_config (none|low|medium|high|xhigh; max aliases to strongest supported)
     pub anthropic_reasoning_effort: Option<String>,
+    /// Request one-hour Anthropic prompt caching instead of five minutes.
+    pub anthropic_cache_ttl_1h: bool,
     /// OpenAI transport mode (auto|websocket|https)
     pub openai_transport: Option<String>,
     /// Enable native OpenAI recovery when model output stops making meaningful progress.
@@ -1473,6 +1545,16 @@ pub struct ProviderConfig {
     /// Copilot premium request mode: "normal", "one", or "zero"
     /// "zero" means all requests are free (no premium requests consumed)
     pub copilot_premium: Option<String>,
+    /// Pin the `gemini` provider to Code Assist OAuth even when a Gemini
+    /// Developer API key (`gemini.env` / `GEMINI_API_KEY`) is present. Without
+    /// this an API key silently wins and every turn bills per token on the
+    /// key's project. `JCODE_GEMINI_FORCE_OAUTH` overrides this value.
+    pub gemini_force_oauth: bool,
+    /// Google Cloud project for Gemini Code Assist OAuth. Workspace accounts
+    /// require one; without it every turn fails with "requires setting
+    /// GOOGLE_CLOUD_PROJECT". `GOOGLE_CLOUD_PROJECT` (or its legacy `_ID`
+    /// alias) overrides this value. Config values are never exported to env.
+    pub gemini_project: Option<String>,
     /// When set (non-empty), /model only lists routes from these providers.
     /// Entries match provider labels ("openai", "anthropic", "copilot",
     /// "openrouter", ...), api methods ("claude-oauth",
@@ -1501,6 +1583,7 @@ impl Default for ProviderConfig {
             default_provider: None,
             openai_reasoning_effort: Some("low".to_string()),
             anthropic_reasoning_effort: None,
+            anthropic_cache_ttl_1h: true,
             openai_transport: None,
             openai_stall_recovery: true,
             openai_stall_timeout_secs: OPENAI_STALL_TIMEOUT_SECS_DEFAULT,
@@ -1511,6 +1594,8 @@ impl Default for ProviderConfig {
             cross_provider_failover: CrossProviderFailoverMode::Manual,
             same_provider_account_failover: true,
             copilot_premium: None,
+            gemini_force_oauth: false,
+            gemini_project: None,
             model_picker_providers: None,
             stream_idle_timeout_secs: 180,
             max_retries: 8,

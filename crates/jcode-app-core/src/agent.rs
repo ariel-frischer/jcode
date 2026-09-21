@@ -5,6 +5,8 @@ mod environment;
 mod inline_tail;
 mod interrupts;
 mod messages;
+#[cfg(test)]
+mod model_usage_tests;
 mod prompting;
 mod provider;
 mod response_recovery;
@@ -53,7 +55,7 @@ pub use jcode_agent_runtime::{
     SoftInterruptQueue, SoftInterruptSource, StreamError,
 };
 
-const JCODE_NATIVE_TOOLS: &[&str] = &["selfdev", "communicate"];
+const JCODE_NATIVE_TOOLS: &[&str] = &["selfdev", "desktop_selfdev", "communicate"];
 pub(crate) const FRESH_SESSION_HANDOFF_GUIDANCE: &str = "# Fresh-session handoff policy\n\nA fresh-session handoff resets active context between milestones. It is advisory: use session_transition only after saving durable state. The handoff prompt is the next session's source of truth, so make it a compact, factual, self-contained briefing rather than a vague request. Use this structure:\n\n- Goal: the outcome still being pursued and the current milestone.\n- Constraints and preferences: user requirements, repository rules, safety boundaries, and non-goals.\n- Progress: what was completed, what was verified, and what remains.\n- Key decisions: approaches chosen and important alternatives rejected.\n- Critical context: relevant architecture, APIs, errors, environment assumptions, and context/compaction state that the next session cannot infer safely.\n- Unresolved risks and questions: uncertainties, blockers, and likely failure modes.\n- Next steps: the exact next few actions in dependency order.\n- Relevant files: paths and why each matters.\n- Durable tracking: Bead ID, milestone, or other external state to inspect.\n\nMention the parent session only when useful for lineage; Jcode already records parent-session tracking. Do not claim tests or edits that were not actually performed. Keep the prompt actionable and bounded. Copied todos provide the checklist, but reconcile them with the progress and next steps rather than duplicating stale items.";
 static RECOVERED_TEXT_WRAPPED_TOOL_CALLS: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
@@ -1702,9 +1704,21 @@ impl Agent {
         &self.session.id
     }
 
+    /// Desktop self-development is selected by the session checkout, including
+    /// restored sessions. It must not set the CLI canary/reload flags.
+    pub fn is_desktop_selfdev(&self) -> bool {
+        self.session
+            .working_dir
+            .as_deref()
+            .map(std::path::Path::new)
+            .and_then(jcode_selfdev_types::desktop_repo_root)
+            .is_some()
+    }
+
     pub(crate) fn set_working_dir_for_pending_context(&mut self, working_dir: Option<String>) {
         if working_dir.is_some() {
             self.session.working_dir = working_dir;
+            self.unlock_tools();
             self.session.refresh_initial_session_context_message();
         }
     }

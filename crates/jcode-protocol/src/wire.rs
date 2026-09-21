@@ -266,6 +266,9 @@ pub enum Request {
         /// Opt this connection into typed, coalesced workflow snapshots.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         workflow_progress: bool,
+        /// Opt in to PDF panel payloads. Older clients only accept Markdown.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        supports_pdf_panels: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         working_dir: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -315,7 +318,13 @@ pub enum Request {
 
     /// Get only provider/model metadata and available models.
     #[serde(rename = "get_model_catalog")]
-    GetModelCatalog { id: u64 },
+    GetModelCatalog {
+        id: u64,
+        /// Older clients cannot decode new event variants. Only clients that
+        /// explicitly opt in receive incremental model_usage_updated events.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        subscribe_usage_updates: bool,
+    },
 
     /// Get a bounded view of compacted historical messages for lazy transcript expansion.
     #[serde(rename = "get_compacted_history")]
@@ -952,6 +961,10 @@ pub enum ServerEvent {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
 
+    /// Assistant text message boundary within a provider response.
+    #[serde(rename = "text_done")]
+    TextDone,
+
     /// Streaming reasoning/thinking delta (raw, unformatted model text).
     ///
     /// Unlike [`ServerEvent::TextDelta`], this carries the model's reasoning as
@@ -1499,6 +1512,12 @@ pub enum ServerEvent {
         mode: jcode_config_types::CompactionMode,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
+    },
+
+    /// Usage delta for a route, independent of catalog availability or Agent locks.
+    #[serde(rename = "model_usage_updated")]
+    ModelUsageUpdated {
+        route: jcode_provider_core::ModelRoute,
     },
 
     /// Available models updated (pushed after auth changes)

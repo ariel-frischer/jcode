@@ -83,6 +83,7 @@ impl Client {
 
         let request = Request::Subscribe {
             workflow_progress: false,
+            supports_pdf_panels: false,
             id,
             working_dir: Some(working_dir),
             selfdev,

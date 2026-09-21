@@ -34,8 +34,8 @@ mod workspace;
 #[cfg(test)]
 pub(super) use key_handling::reload_stale_remote_server_before_update;
 use queue_recovery::{
-    recover_local_interleave_to_queue, recover_stranded_soft_interrupts,
-    recover_undelivered_queued_continuation,
+    recover_local_interleave_to_queue, recover_rejected_queued_continuation,
+    recover_stranded_soft_interrupts, recover_undelivered_queued_continuation,
 };
 #[cfg(test)]
 pub(super) fn recover_local_interleave_to_queue_for_test(app: &mut App, reason: &str) -> bool {
@@ -101,6 +101,7 @@ pub(super) enum RemoteEventOutcome {
 }
 
 pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) -> bool {
+    app.refresh_terminal_title_metrics();
     crate::tui::ui::set_frame_input_attribution(crate::tui::ui::FrameInputAttribution {
         event: Some("tick".to_string()),
         scroll_delta: None,
@@ -111,6 +112,7 @@ pub(super) async fn handle_tick(app: &mut App, remote: &mut RemoteConnection) ->
     });
     let mut needs_redraw = crate::tui::periodic_redraw_required(app);
     needs_redraw |= app.poll_ssh_login(remote).await;
+    needs_redraw |= app.poll_ssh_login_onboarding();
     needs_redraw |= app.flush_pending_resize_redraw();
     app.maybe_capture_runtime_memory_heartbeat();
     app.maybe_release_idle_heap();
@@ -440,7 +442,7 @@ async fn apply_terminal_event(
     };
     match event {
         Some(Ok(Event::FocusGained)) => {
-            crate::tui::reapply_configured_terminal_modes();
+            crate::tui::reapply_configured_terminal_modes_after_focus();
             input_attribution.event = Some("focus_gained".to_string());
             needs_redraw |= app.set_client_focused(true);
             app.note_client_focus(true);
@@ -840,7 +842,7 @@ fn handle_terminal_event_while_disconnected(
 
     match event {
         Some(Ok(Event::FocusGained)) => {
-            crate::tui::reapply_configured_terminal_modes();
+            crate::tui::reapply_configured_terminal_modes_after_focus();
             needs_redraw |= app.set_client_focused(true);
             app.note_client_focus(true);
         }
@@ -1279,23 +1281,6 @@ async fn dispatch_pending_server_reload(app: &mut App, remote: &mut RemoteConnec
 /// the starvation watchdog treats it as stranded.
 const QUEUED_FOLLOWUP_STARVATION_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Recover the "👉 Auto-poking: N incomplete todos" + spinner-forever state
-/// where no request is actually in flight.
-///
-/// `schedule_auto_poke_followup_if_needed` pushes the continuation onto
-/// `queued_messages` and sets `pending_queued_dispatch`. The event loop clears
-/// that flag and calls `process_remote_followups`, which returns early WITHOUT
-/// sending whenever one of its gates is closed (history not loaded, an earlier
-/// pending prompt/split/transfer branch returning first, or `is_processing`
-/// still true from a turn whose terminal event was dropped). The flag is
-/// already consumed by then, and nothing re-arms it: the follow-up sits in
-/// `queued_messages`, `App::is_processing()` keeps reporting true because the
-/// queue is non-empty, and the spinner spins while the model is idle.
-///
-/// `detect_and_cancel_stall` does not cover this: it only runs while
-/// `app.is_processing`, which is false in this variant. So track how long a
-/// queued follow-up has been idle-but-undispatched and re-arm the dispatch past
-/// the timeout, logging it so a recurrence is diagnosable from logs alone.
 fn detect_starved_queued_followup(app: &mut App) -> bool {
     let starved_candidate =
         !app.is_processing && !app.pending_queued_dispatch && app.has_queued_followups();

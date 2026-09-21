@@ -38,11 +38,32 @@
   local branch and then check that branch out in the root checkout. Fetch exact PR
   heads into a remote-tracking ref such as `refs/remotes/github/pr/<n>` when
   checkout is unnecessary.
-- **Stay on your own branch** - Do not take, cherry-pick, merge, or copy code from other
-  people's or other agents' branches unless the source branch belongs to a repository
-  maintainer and the user explicitly asks you to integrate it. Only work from your branch
-  and its base (e.g. `main`) otherwise. Never integrate branches owned by non-maintainers
-  or other agents yourself; tell the user and let them decide how to proceed.
+- **Stay on your own branch.** Do not take, cherry-pick, merge, or copy code from
+  other people's or other agents' branches unless the source branch belongs to a
+  repository maintainer and the user explicitly asks you to integrate it. Only
+  work from your branch and its base otherwise. Never integrate branches owned
+  by non-maintainers or other agents yourself; tell the user and let them decide
+  how to proceed. This restriction does not prevent read-only review of any
+  contribution on its merits. Preserve unrelated work and use the documented
+  worktree/integration workflow.
+
+## Repository Scope
+
+- Jcode Desktop is in a separate repository.
+
+- **Use the user's Git identity** - Create commits with the configured
+  `user.name` and `user.email`. Do not override them with `Jcode`, `Jcode agent`,
+  or a fabricated agent email. Preserve existing contributor attribution when
+  integrating work. If no identity is configured, ask rather than inventing one.
+- **Welcome pull requests from everyone** - Review contributions on their merits,
+  regardless of whether the author is a maintainer, an existing contributor, a
+  first-time contributor, or an agent. Good PRs can be merged directly after review
+  and validation. Do not require a maintainer-authored rewrite merely because of
+  who submitted the change. See `CONTRIBUTING.md` for the contribution policy.
+- **Keep work scoped** - Work on your own branch and preserve unrelated work. When
+  the user asks you to review or integrate a PR or branch, you may inspect, test,
+  and integrate that contribution regardless of author status. Do not pull in
+  unrelated branches or merge a PR without user authorization.
 
 ## Worktree Hygiene
 

@@ -459,6 +459,7 @@ fn prepare_model_picker_entries(
             available: true,
             detail: "catalog still loading".to_string(),
             cheapness: None,
+            usage: None,
         }]
     } else {
         routes
@@ -1168,6 +1169,7 @@ impl App {
                 api_method: crate::subscription_catalog::JCODE_ROUTE_API_METHOD.to_string(),
                 available: true,
                 detail: crate::subscription_catalog::routing_policy_detail(model),
+                usage: None,
                 cheapness: None,
             });
         }
@@ -3711,7 +3713,10 @@ impl App {
                 if crate::tui::is_ssh_remote()
                     && !matches!(
                         entry.action,
-                        PickerAction::Model | PickerAction::Usage { .. }
+                        PickerAction::Model
+                            | PickerAction::Usage { .. }
+                            | PickerAction::RemoteLogin { .. }
+                            | PickerAction::RemoteImportDecision { .. }
                     )
                 {
                     self.inline_interactive_state = None;
@@ -3754,6 +3759,13 @@ impl App {
                     PickerAction::Login(provider) => {
                         self.inline_interactive_state = None;
                         self.start_login_provider(provider);
+                    }
+                    PickerAction::RemoteLogin { provider, import } => {
+                        self.inline_interactive_state = None;
+                        self.select_ssh_login_action(provider, import);
+                    }
+                    PickerAction::RemoteImportDecision { accept } => {
+                        self.select_ssh_import_decision(accept);
                     }
                     PickerAction::Logout(provider) => {
                         self.inline_interactive_state = None;
@@ -4754,6 +4766,7 @@ mod tests {
             api_method: api_method.to_string(),
             available: true,
             detail: String::new(),
+            usage: None,
             cheapness: None,
         }
     }

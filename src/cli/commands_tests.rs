@@ -89,6 +89,56 @@ fn memory_cli_project_import_fails_without_durable_project_store() {
     assert!(error.to_string().contains("without a project directory"));
 }
 
+#[test]
+fn memory_cli_semantic_requires_jev_but_keyword_search_remains_local() {
+    let _guard = crate::storage::lock_test_env();
+    let keys = [
+        "JCODE_HOME",
+        "JCODE_API_KEY",
+        "OPENROUTER_API_KEY",
+        "TYPESAFE_API_KEY",
+        "AIMLAPI_API_KEY",
+        "JCODE_MEMORY_JEV_PROVIDER",
+    ];
+    let _saved = SavedEnv::capture(&keys);
+    let temp = tempfile::tempdir().expect("temp dir");
+    crate::env::set_var("JCODE_HOME", temp.path().join("home"));
+    for key in &keys[1..] {
+        crate::env::remove_var(key);
+    }
+    let project = temp.path().join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let manager = crate::memory::MemoryManager::new().with_project_dir(&project);
+    manager
+        .remember_project(crate::memory::MemoryEntry::new(
+            crate::memory::MemoryCategory::Fact,
+            "cli-jev-probe without embedding",
+        ))
+        .unwrap();
+    assert!(
+        manager
+            .list_all()
+            .unwrap()
+            .iter()
+            .all(|entry| entry.embedding.is_none())
+    );
+
+    let command = |semantic| MemorySubcommand::Search {
+        query: "cli-jev-probe".into(),
+        semantic,
+    };
+    run_memory_command_for_dir(command(false), Some(project.clone()))
+        .expect("local keyword search must remain available without credentials");
+    let error = run_memory_command_for_dir(command(true), Some(project))
+        .expect_err("--semantic must report missing Jev access, not silently use embeddings");
+    assert!(error.to_string().contains("Jev memory search failed"));
+    assert!(!format!("{error:#}").contains("cli-jev-probe"));
+
+    // Scope still comes from the explicit directory, never the process cwd.
+    run_memory_command_for_dir(command(true), Some(temp.path().join("empty-project")))
+        .expect("an empty project must not leak another project's candidates");
+}
+
 struct SavedEnv {
     vars: Vec<(String, Option<String>)>,
 }
@@ -311,6 +361,7 @@ fn collect_cli_model_names_prefers_available_routes_and_dedupes() {
             available: true,
             detail: String::new(),
             cheapness: None,
+            usage: None,
         },
         ModelRoute {
             model: "gpt-5.4".to_string(),
@@ -319,6 +370,7 @@ fn collect_cli_model_names_prefers_available_routes_and_dedupes() {
             available: true,
             detail: String::new(),
             cheapness: None,
+            usage: None,
         },
         ModelRoute {
             model: "openrouter models".to_string(),
@@ -327,6 +379,7 @@ fn collect_cli_model_names_prefers_available_routes_and_dedupes() {
             available: false,
             detail: "OPENROUTER_API_KEY not set".to_string(),
             cheapness: None,
+            usage: None,
         },
     ];
 
@@ -346,6 +399,7 @@ fn test_route(model: &str, provider: &str, api_method: &str) -> ModelRoute {
         available: true,
         detail: String::new(),
         cheapness: None,
+        usage: None,
     }
 }
 
@@ -411,7 +465,9 @@ fn run_auto_poke_followup_targets_below_threshold_todos() {
         }) => {
             assert_eq!(total_todos, 2);
             assert!(message.starts_with(crate::todo::TODO_COMPLETION_CONTINUATION_MESSAGE));
-            assert!(message.contains("more validation"));
+            assert!(message.contains("Validate further:"));
+            assert!(message.contains("\"todo a\""));
+            assert!(message.contains("\"todo b\""));
             assert!(!message.to_ascii_lowercase().contains("threshold"));
         }
         _ => panic!("expected confidence-summary follow-up"),
@@ -803,13 +859,8 @@ fn run_auto_poke_followup_rechecks_completion_confidence_until_it_passes() {
         Some(ConfidenceState::Plausible),
         Some(ConfidenceState::Verified),
     )];
-    assert!(matches!(
-        build_run_auto_poke_follow_up_from_todos(&validated, false, None),
-        Some(RunAutoPokeFollowUp::ConfidenceSummary {
-            confidence_spike_challenge: true,
-            ..
-        })
-    ));
+    // A normal validation gain is not a reason to spend another model turn.
+    assert!(build_run_auto_poke_follow_up_from_todos(&validated, false, None).is_none());
     assert!(build_run_auto_poke_follow_up_from_todos(&validated, true, None).is_none());
 }
 
@@ -1400,6 +1451,7 @@ fn collect_cli_model_names_falls_back_when_no_routes_are_available() {
         available: false,
         detail: "no credentials".to_string(),
         cheapness: None,
+        usage: None,
     }];
 
     let models = collect_cli_model_names(&routes, vec!["gpt-5.4".to_string()]);

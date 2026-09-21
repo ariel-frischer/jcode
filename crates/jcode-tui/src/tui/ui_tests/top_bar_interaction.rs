@@ -38,6 +38,7 @@ fn active_chrome_state() -> TestState {
         chat_overscroll_active: true,
         side_panel: crate::side_panel::SidePanelSnapshot {
             focused_page_id: Some("plan".to_string()),
+            focus_revision: 0,
             pages: vec![crate::side_panel::SidePanelPage {
                 id: "plan".to_string(),
                 title: "Plan".to_string(),
@@ -45,6 +46,7 @@ fn active_chrome_state() -> TestState {
                 format: crate::side_panel::SidePanelPageFormat::Markdown,
                 source: crate::side_panel::SidePanelPageSource::Managed,
                 content: "# Plan\n\nThe side pane remains separate from the top bar.".to_string(),
+                pdf_data: None,
                 updated_at_ms: 1,
             }],
         },

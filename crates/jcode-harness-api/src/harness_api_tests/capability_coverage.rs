@@ -51,6 +51,8 @@ const LEDGER: &[(&str, Disposition)] = &[
         "Handoff",
         Gap("a client cannot create a policy-governed fresh continuation session"),
     ),
+    // Create/attach session bootstrap requests state through the API bridge.
+    ("GetState", Covered),
     ("InputShell", ClientInternal),
     ("Message", Covered),
     ("NotifyAuthChanged", Covered),

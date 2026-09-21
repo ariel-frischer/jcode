@@ -19,3 +19,4 @@ include!("protocol_tests/misc_events.rs");
 include!("protocol_tests/lifecycle.rs");
 include!("protocol_tests/randomized.rs");
 include!("protocol_tests/profile_fixtures.rs");
+include!("protocol_tests/model_usage.rs");

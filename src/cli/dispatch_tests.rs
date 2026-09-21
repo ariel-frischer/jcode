@@ -1,5 +1,5 @@
 use super::*;
-use crate::config::{Config, SessionProfileConfig, ToolConfig};
+use crate::config::{Config, NamedProviderConfig, SessionProfileConfig, ToolConfig};
 use crate::transport::Listener;
 use clap::Parser;
 use std::path::Path;
@@ -32,6 +32,13 @@ fn structured_profile_bootstrap_allows_a_new_server() {
 #[test]
 fn selected_run_profile_resolves_to_immutable_dispatch_options() {
     let mut config = Config::default();
+    config.providers.insert(
+        "team-gateway".to_owned(),
+        NamedProviderConfig {
+            base_url: "https://profile.example.test".to_owned(),
+            ..Default::default()
+        },
+    );
     config.profiles.insert(
         "review".to_owned(),
         SessionProfileConfig {

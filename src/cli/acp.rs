@@ -765,6 +765,7 @@ impl AcpRuntime {
         session
             .send(&Request::Subscribe {
                 workflow_progress: false,
+                supports_pdf_panels: false,
                 crash_on_disconnect: false,
                 continue_on_disconnect: false,
                 id: subscribe_id,
@@ -820,6 +821,7 @@ impl AcpRuntime {
         session
             .send(&Request::Subscribe {
                 workflow_progress: false,
+                supports_pdf_panels: false,
                 crash_on_disconnect: false,
                 continue_on_disconnect: false,
                 id: resume_id,
@@ -1278,7 +1280,12 @@ async fn request_history(session: &DaemonSession) -> Result<ServerEvent> {
 
 async fn request_model_catalog(session: &DaemonSession) -> Result<ServerEvent> {
     let id = session.next_id();
-    session.send(&Request::GetModelCatalog { id }).await?;
+    session
+        .send(&Request::GetModelCatalog {
+            id,
+            subscribe_usage_updates: false,
+        })
+        .await?;
     loop {
         match session.read_event().await? {
             ServerEvent::Ack { .. } => {}

@@ -62,6 +62,7 @@ fn run_session<R: BufRead, W: Write>(mut client: HarnessClient<R, W>, message: &
             session_id: session_id.clone(),
             content: message.to_string(),
             images: vec![],
+            system_reminder: None,
             no_reply: false,
             max_turns: None,
             token_budget: None,
@@ -122,6 +123,10 @@ fn run_demo() {
                     id,
                     ApiEvent::Attached {
                         session: jcode_harness_api::SessionInfo {
+                            edit_stats: None,
+                            parent_session_id: None,
+                            agent_label: None,
+                            swarm_status: None,
                             session_id: "demo-1".into(),
                             working_dir: None,
                             title: Some("demo".into()),
@@ -138,6 +143,7 @@ fn run_demo() {
                 "send_message" => {
                     for word in ["Hello ", "from ", "the ", "demo ", "server.\n"] {
                         reply(&ServerFrame::event(ApiEvent::TextDelta {
+                            message_id: None,
                             session_id: "demo-1".into(),
                             text: word.into(),
                         }));

@@ -21,7 +21,7 @@ pub enum HtmlFileOpenMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DisplayConfig {
-    /// How to display file diffs (off/inline/full-inline/pinned/file, default: inline)
+    /// How to display file diffs (off/inline/full-inline/file, default: inline)
     #[serde(deserialize_with = "crate::serde_lenient::lenient_enum")]
     pub diff_mode: DiffDisplayMode,
     /// How clickable local HTML files are opened (external/inline, default: external).
@@ -77,8 +77,6 @@ pub struct DisplayConfig {
     pub prompt_entry_animation: bool,
     /// Disable specific animation variants by name (e.g. ["donut", "orbit_rings"])
     pub disabled_animations: Vec<String>,
-    /// Wrap long lines in the pinned diff pane (default: true)
-    pub diff_line_wrap: bool,
     /// Performance tier override: auto/full/reduced/minimal (default: auto)
     pub performance: String,
     /// FPS for animations (startup, idle donut): 1-120 (default: 60)
@@ -167,7 +165,6 @@ impl Default for DisplayConfig {
             idle_animation: false,
             prompt_entry_animation: true,
             disabled_animations: Vec::new(),
-            diff_line_wrap: true,
             performance: String::new(),
             animation_fps: 60,
             redraw_fps: 60,

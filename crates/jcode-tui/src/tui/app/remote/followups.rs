@@ -40,6 +40,7 @@ pub(in crate::tui::app) async fn process_remote_followups(
         app.submit_input_on_startup = false;
         app.startup_submit_deferred_reason = None;
         let prepared = input::take_prepared_input(app);
+        app.pending_startup_prompt_echo = Some(prepared.raw_input.clone());
         app.last_submitted_input = Some(prepared.raw_input);
         crate::logging::info(&format!(
             "Startup auto-submit sent behind ordered Subscribe: input_chars={} pending_images={}",

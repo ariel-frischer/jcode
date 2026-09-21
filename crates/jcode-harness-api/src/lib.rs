@@ -16,19 +16,32 @@
 use serde::{Deserialize, Serialize};
 
 mod client;
+mod edit_stats;
 mod events;
 mod queued_message_editor;
+pub use edit_stats::{
+    SessionEditStats, enrich_sessions_from_edit_stats, enrich_sessions_from_local_edit_stats,
+    record_session_edit,
+};
 mod requests;
 mod sockets;
+mod swarm_metadata;
 
 pub use client::{
     FrameError, HarnessClient, MAX_UNSUPPORTED_EVENT_DIAGNOSTIC_BYTES,
     UNSUPPORTED_TYPED_EVENT_CODE, read_frame, unsupported_event_diagnostic, write_frame,
 };
 pub use events::*;
+pub use jcode_side_panel_types::{
+    SidePanelPage, SidePanelPageFormat, SidePanelPageSource, SidePanelSnapshot,
+};
+pub use jcode_usage_types::{ModelUsage, compare_model_usage};
 pub use queued_message_editor::*;
 pub use requests::*;
 pub use sockets::{api_socket_path, legacy_socket_path, runtime_dir};
+pub use swarm_metadata::{
+    enrich_sessions_from_local_swarm_state, enrich_sessions_from_swarm_state,
+};
 
 #[cfg(test)]
 #[path = "harness_api_tests/schema_snapshot.rs"]
@@ -45,7 +58,7 @@ mod queued_message_editor_tests;
 /// Protocol major version. Breaking changes only.
 pub const API_VERSION_MAJOR: u32 = 1;
 /// Protocol minor version. Additive changes.
-pub const API_VERSION_MINOR: u32 = 1;
+pub const API_VERSION_MINOR: u32 = 6;
 
 /// Envelope wrapping every client-to-server frame.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
