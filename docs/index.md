@@ -17,6 +17,7 @@ One entry per tracked Markdown document under `docs/`. Descriptive and proposed 
 - [Compile-Time Isolation Refactor](COMPILE_TIME_ISOLATION_REFACTOR.md)
 - [Crate Ownership and Modularization Boundaries](CRATE_OWNERSHIP_BOUNDARIES.md)
 - [Current session recovery snapshot](CURRENT_SESSION_RECOVERY.md)
+- [Memory runtime routing note](internal/MEMORY_RUNTIME_ROUTING.md): Verified local split between Jev recall and single-call Luna extraction, including legacy two-vote settings and current provider resolution.
 - [Jcode terminal crash and scratch cleanup incident (2026-09-17)](audits/JCODE_TERMINAL_CRASH_INCIDENT_2026-09-17.md): Forensic record of the Jcode double-panic, Kitty replacement, resource cleanup, and deferred fix.
 - [DAP debugger operations](DAP.md)
 - [DeepSeek Harness and Jcode: comparison and adoption read](DEEPSEEK_HARNESS_COMPARISON.md)
