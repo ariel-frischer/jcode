@@ -17,6 +17,19 @@ pub const OPENAI_SELECTABLE_EFFORTS: &[&str] = &[
     "swarm-deep",
 ];
 
+/// GPT-6 Sol and Luna support every current reasoning level except the legacy
+/// `minimal` value, followed by Jcode's swarm modes.
+pub const GPT_6_SOL_LUNA_SELECTABLE_EFFORTS: &[&str] = &[
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "swarm",
+    "swarm-deep",
+];
+
 /// OpenRouter's unified reasoning effort levels.
 ///
 /// OpenRouter currently treats `max` as an alias for `xhigh`, so it is not a
@@ -69,6 +82,10 @@ pub fn inferred_reasoning_efforts(
 
     if provider.contains("openrouter") {
         return OPENROUTER_SELECTABLE_EFFORTS.to_vec();
+    }
+
+    if matches!(model.as_str(), "gpt-6-sol" | "gpt-6-luna") {
+        return GPT_6_SOL_LUNA_SELECTABLE_EFFORTS.to_vec();
     }
 
     if provider.contains("deepseek") || model.contains("deepseek") {
@@ -139,6 +156,19 @@ mod tests {
             OPENAI_SELECTABLE_EFFORTS,
             "direct OpenAI-compatible runtimes use the OpenAI reasoning_effort vocabulary"
         );
+    }
+
+    #[test]
+    fn gpt_6_sol_and_luna_use_their_documented_effort_ladder() {
+        for model in ["gpt-6-sol", "gpt-6-luna"] {
+            assert_eq!(
+                inferred_reasoning_efforts(Some("openai"), Some(model)),
+                GPT_6_SOL_LUNA_SELECTABLE_EFFORTS
+            );
+        }
+        assert!(GPT_6_SOL_LUNA_SELECTABLE_EFFORTS.contains(&"none"));
+        assert!(GPT_6_SOL_LUNA_SELECTABLE_EFFORTS.contains(&"max"));
+        assert!(!GPT_6_SOL_LUNA_SELECTABLE_EFFORTS.contains(&"minimal"));
     }
 
     #[test]

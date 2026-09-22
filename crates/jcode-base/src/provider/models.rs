@@ -1071,6 +1071,8 @@ pub fn model_availability_for_account(model: &str) -> AccountModelAvailability {
 /// If the desired model isn't available, we try these in order.
 const OPENAI_MODEL_PREFERENCE: &[&str] = &[
     "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-pro",
     "gpt-5.6",
@@ -1084,6 +1086,25 @@ const OPENAI_MODEL_PREFERENCE: &[&str] = &[
     "gpt-5.1-codex-max",
     "gpt-5.1-codex",
 ];
+
+#[cfg(test)]
+mod openai_model_preference_tests {
+    use super::OPENAI_MODEL_PREFERENCE;
+
+    #[test]
+    fn gpt_6_models_precede_their_gpt_5_6_predecessors() {
+        let position = |model| {
+            OPENAI_MODEL_PREFERENCE
+                .iter()
+                .position(|candidate| *candidate == model)
+                .expect("model in preference list")
+        };
+
+        assert_eq!(OPENAI_MODEL_PREFERENCE.first(), Some(&"gpt-6-astra"));
+        assert!(position("gpt-6-sol") < position("gpt-5.6-sol"));
+        assert!(position("gpt-6-luna") < position("gpt-5.6-luna"));
+    }
+}
 
 /// Get the best available OpenAI model, falling back through the preference list.
 /// Returns None if the dynamic model list hasn't been fetched yet.
