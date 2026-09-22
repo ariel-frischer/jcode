@@ -62,6 +62,38 @@ fn test_openai_switching_models_include_dynamic_catalog_entries() {
 }
 
 #[test]
+fn test_openai_switching_models_include_curated_gpt6_when_catalog_omits_them() {
+    let _guard = jcode_base::storage::lock_test_env();
+    jcode_base::auth::codex::set_active_account_override(Some(
+        "switching-gpt6-omitted-test".to_string(),
+    ));
+    jcode_base::provider::populate_account_models(vec!["gpt-5.4".to_string()]);
+
+    let provider = OpenAIProvider::new(CodexCredentials {
+        access_token: "test".to_string(),
+        refresh_token: String::new(),
+        id_token: None,
+        account_id: None,
+        expires_at: None,
+    });
+
+    let models = provider.available_models_for_switching();
+    for model in ["gpt-6-sol", "gpt-6-luna"] {
+        assert!(models.contains(&model.to_string()), "missing {model}");
+        let availability = jcode_base::provider::model_availability_for_account(model);
+        assert_eq!(
+            availability.state,
+            jcode_base::provider::AccountModelAvailabilityState::Unavailable,
+            "picker visibility must preserve account availability evidence for {model}"
+        );
+        assert_eq!(availability.source, "account-snapshot");
+        assert_eq!(availability.reason.as_deref(), Some("not available for your account"));
+    }
+
+    jcode_base::auth::codex::set_active_account_override(None);
+}
+
+#[test]
 fn test_chatgpt_web_model_bypasses_live_api_catalog() {
     let _guard = jcode_base::storage::lock_test_env();
     jcode_base::auth::codex::set_active_account_override(Some("web-model-test".to_string()));

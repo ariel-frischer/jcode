@@ -342,6 +342,31 @@ async fn openai_available_efforts_follow_active_model_catalog_metadata() {
     assert!(provider.set_reasoning_effort("typo").is_err());
 }
 
+#[tokio::test]
+async fn gpt_6_sol_luna_runtime_efforts_without_catalog() {
+    let provider = OpenAIProvider::new_browser_only();
+    provider.model_reasoning_efforts.write().unwrap().clear();
+    for model in ["gpt-6-sol", "gpt-6-luna"] {
+        *provider.model.write().await = model.to_string();
+        assert_eq!(
+            provider.available_efforts(),
+            vec![
+                "none",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "swarm",
+                "swarm-deep"
+            ]
+        );
+        assert!(provider.set_reasoning_effort("minimal").is_err());
+        provider.set_reasoning_effort("high").unwrap();
+        provider.set_reasoning_effort("max").unwrap();
+    }
+}
+
 #[test]
 fn catalog_credential_identity_survives_token_refresh_but_changes_accounts() {
     let credentials = |access: &str, refresh: &str, account: Option<&str>| CodexCredentials {

@@ -679,6 +679,9 @@ async fn persistent_ws_consumer_drop_during_quiet_stream_clears_state_promptly()
         last_response_completed_at: Instant::now(),
         message_count: 1,
         last_input_item_count: 1,
+        last_input_item_hashes: persistent_ws_input_item_hashes(&[
+            serde_json::json!({"type":"message","role":"user","content":"first"}),
+        ]),
     })));
     let (tx, mut rx) = mpsc::channel(16);
     let socket = Arc::clone(&persistent_ws);
