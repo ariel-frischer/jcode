@@ -800,6 +800,14 @@ impl Provider for OpenAIProvider {
         if !models.iter().any(|model| model == CHATGPT_WEB_MODEL) {
             models.insert(0, CHATGPT_WEB_MODEL.to_string());
         }
+        // GPT-6 Sol and Luna may be omitted by a lagging account catalog. Keep
+        // them visible in the picker; model_availability_for_account still
+        // supplies the account-snapshot evidence used to mark them unavailable.
+        for model in ["gpt-6-sol", "gpt-6-luna"] {
+            if !models.iter().any(|existing| existing == model) {
+                models.push(model.to_string());
+            }
+        }
         // Platform-API-only GPT Pro models are absent from the Codex OAuth
         // catalog by design; surface them whenever an OPENAI_API_KEY exists.
         if jcode_base::provider::openai_platform_api_key_configured() {
@@ -977,7 +985,7 @@ impl Provider for OpenAIProvider {
             efforts.extend(["swarm", "swarm-deep"]);
             return efforts;
         }
-        jcode_provider_core::OPENAI_SELECTABLE_EFFORTS.to_vec()
+        jcode_provider_core::inferred_reasoning_efforts(Some("openai"), Some(&model))
     }
 
     fn service_tier(&self) -> Option<String> {

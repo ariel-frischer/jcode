@@ -125,6 +125,7 @@ async fn missing_output_scenario_with_codes(
         // Reproduce prefix mutation: the saved result is now BEFORE the old
         // count boundary, so count-only continuation sends just two messages.
         last_input_item_count: input.len() - 2,
+        last_input_item_hashes: persistent_ws_input_item_hashes(&input[..input.len() - 2]),
     });
     let events = tokio::time::timeout(Duration::from_secs(5), async {
         provider
