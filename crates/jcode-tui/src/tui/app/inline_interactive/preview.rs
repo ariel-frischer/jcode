@@ -149,15 +149,14 @@ impl App {
         if should_open {
             let saved_input = self.input.clone();
             let saved_cursor = self.cursor_pos;
-            let append_model_filter_space = matches!(
-                request,
-                InlinePickerPreviewRequest::Model { ref filter }
-                | InlinePickerPreviewRequest::SubagentModel { ref filter }
-                    if filter.is_empty()
-            ) && matches!(
-                saved_input.trim_start(),
-                "/model" | "/models" | "/subagent-model"
-            ) && saved_cursor == saved_input.len();
+            let append_model_filter_space =
+                matches!(
+                    request,
+                    InlinePickerPreviewRequest::Model { ref filter }
+                    | InlinePickerPreviewRequest::SubagentModel { ref filter }
+                        if filter.is_empty()
+                ) && matches!(saved_input.trim_start(), "/models" | "/subagent-model")
+                    && saved_cursor == saved_input.len();
             request.open(self);
             let mut preview_opened = false;
             if let Some(ref mut picker) = self.inline_interactive_state {

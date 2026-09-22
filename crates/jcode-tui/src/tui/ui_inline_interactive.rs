@@ -367,7 +367,10 @@ pub(super) fn model_suggestion_lines(
         let message = if picker.filter.is_empty() {
             "No matching models".to_string()
         } else {
-            format!("No matching models for {}", picker.filter)
+            format!(
+                "No matching models for {} · try /refresh-model-list",
+                picker.filter
+            )
         };
         return vec![Line::from(Span::styled(message, dim))];
     }
@@ -696,8 +699,13 @@ pub(super) fn draw_inline_interactive(frame: &mut Frame, app: &dyn TuiState, are
     }
 
     if picker.filtered.is_empty() {
+        let message = if picker.kind == crate::tui::PickerKind::Model && !picker.filter.is_empty() {
+            "   no matches · try /refresh-model-list"
+        } else {
+            "   no matches"
+        };
         lines.push(Line::from(Span::styled(
-            "   no matches",
+            message,
             Style::default().fg(dim_color()).italic(),
         )));
         frame.render_widget(Paragraph::new(lines), inner);

@@ -1463,8 +1463,12 @@ impl PickerKind {
                 let detail = route.map(|option| option.detail.as_str()).unwrap_or("");
                 // Include the pretty name so a query like "opus 4.8" matches
                 // the row even though the underlying id is `claude-opus-4-8`.
+                let model_id = entry
+                    .name
+                    .split_once(" (")
+                    .map_or(entry.name.as_str(), |(id, _)| id);
                 let pretty =
-                    crate::tui::app::helpers::model_names::pretty_known_model_family(&entry.name)
+                    crate::tui::app::helpers::model_names::pretty_known_model_family(model_id)
                         .unwrap_or_default();
                 format!(
                     "{} {} {} {} {}",

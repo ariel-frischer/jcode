@@ -176,6 +176,9 @@ fn model_suggestions_show_empty_filter_and_route_notices() {
         .clear();
     let text = render_model_suggestions(&state, 100, 20, 12).join("\n");
     assert!(text.contains("No matching models"), "{text}");
+    state.inline_interactive_state.as_mut().unwrap().filter = "opus 5.5".to_string();
+    let text = render_model_suggestions(&state, 100, 20, 12).join("\n");
+    assert!(text.contains("/refresh-model-list"), "{text}");
 }
 
 #[test]

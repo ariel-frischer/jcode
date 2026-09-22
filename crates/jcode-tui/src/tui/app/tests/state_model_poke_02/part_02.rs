@@ -236,6 +236,89 @@ fn test_model_picker_preview_stays_open_and_updates_filter() {
 }
 
 #[test]
+fn test_typed_models_alias_does_not_become_model_filter_s() {
+    let mut app = create_test_app();
+    configure_test_remote_models(&mut app);
+
+    for c in "/models".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("model picker preview should be open");
+    assert_eq!(app.input().trim_end(), "/models");
+    assert!(picker.filter.is_empty(), "the alias must not search for 's'");
+    assert_eq!(picker.filtered.len(), picker.entries.len());
+}
+
+#[test]
+fn test_model_preview_next_character_starts_filter_after_ambiguous_prefix() {
+    let mut app = create_test_app();
+    configure_test_remote_models(&mut app);
+
+    for c in "/modelg".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("model picker preview should stay open");
+    assert_eq!(app.input(), "/model g");
+    assert_eq!(picker.filter, "g");
+}
+
+#[test]
+fn test_model_picker_multiword_version_search_excludes_unrelated_favorites() {
+    let mut app = create_test_app();
+    app.is_remote = true;
+    app.remote_provider_name = Some("OpenAI".to_string());
+    app.remote_provider_model = Some("gpt-5.6-sol".to_string());
+    app.remote_available_entries = ["gpt-5.6-sol", "claude-opus-5", "claude-opus-5-5"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    app.remote_model_options = app
+        .remote_available_entries
+        .iter()
+        .map(|model| crate::provider::ModelRoute {
+            model: model.clone(),
+            provider: if model.starts_with("gpt") { "OpenAI" } else { "Anthropic" }.to_string(),
+            api_method: if model.starts_with("gpt") { "openai-oauth" } else { "claude-oauth" }
+                .to_string(),
+            available: true,
+            // Route metadata must not turn an unrelated current/favorite model
+            // into a match for a versioned model-name query.
+            detail: if model.starts_with("gpt") { "supports opus 5.5" } else { "" }.to_string(),
+            usage: None,
+            cheapness: None,
+        })
+        .collect();
+
+    for c in "/model opus 5.5".chars() {
+        app.handle_key(KeyCode::Char(c), KeyModifiers::empty())
+            .unwrap();
+    }
+
+    let picker = app
+        .inline_interactive_state
+        .as_ref()
+        .expect("model picker preview should be open");
+    assert_eq!(picker.filter, "opus 5.5");
+    let names: Vec<&str> = picker
+        .filtered
+        .iter()
+        .map(|&index| picker.entries[index].name.as_str())
+        .collect();
+    assert!(names.first().is_some_and(|name| name.starts_with("claude-opus-5-5")), "{names:?}");
+    assert!(names.iter().all(|name| name.starts_with("claude-opus-5-5")), "{names:?}");
+}
+
+#[test]
 fn test_model_picker_cold_preview_immediately_filters_sol_medium() {
     ensure_test_jcode_home_if_unset();
     clear_persisted_test_ui_state();
