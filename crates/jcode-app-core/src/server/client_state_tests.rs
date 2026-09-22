@@ -15,7 +15,10 @@ use std::time::Instant;
 use tokio::io::AsyncReadExt;
 use tokio::sync::{Mutex, RwLock, mpsc};
 
-struct MockProvider(Option<&'static str>);
+struct MockProvider {
+    tier: Option<&'static str>,
+    effort: &'static str,
+}
 
 #[async_trait]
 impl Provider for MockProvider {
@@ -43,7 +46,10 @@ impl Provider for MockProvider {
     }
 
     fn fork(&self) -> Arc<dyn Provider> {
-        Arc::new(Self(self.0))
+        Arc::new(Self {
+            tier: self.tier,
+            effort: self.effort,
+        })
     }
 
     fn model(&self) -> String {
@@ -51,11 +57,15 @@ impl Provider for MockProvider {
     }
 
     fn service_tier(&self) -> Option<String> {
-        self.0.map(str::to_string)
+        self.tier.map(str::to_string)
     }
 
     fn reasoning_effort(&self) -> Option<String> {
-        Some("high".to_string())
+        (!self.effort.is_empty()).then(|| self.effort.to_string())
+    }
+
+    fn set_reasoning_effort(&self, _effort: &str) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -135,7 +145,10 @@ async fn handle_get_history_busy_fresh_session_returns_empty_without_waiting() {
 
     let session_id = "session_fresh_busy_history";
     let session = crate::session::Session::create_with_id(session_id.into(), None, None);
-    let provider: Arc<dyn Provider> = Arc::new(MockProvider(Some("priority")));
+    let provider: Arc<dyn Provider> = Arc::new(MockProvider {
+        tier: Some("priority"),
+        effort: "high",
+    });
     let agent = Arc::new(Mutex::new(Agent::new_with_session(
         provider.clone(),
         Registry::empty(),
@@ -318,7 +331,10 @@ async fn assert_history_service_tier_and_pdf_capability(
         crate::side_panel::load_file(session_id, "report", Some("Report"), &pdf_path, true)
             .unwrap();
 
-    let provider: Arc<dyn Provider> = Arc::new(MockProvider(tier));
+    let provider: Arc<dyn Provider> = Arc::new(MockProvider {
+        tier,
+        effort: "high",
+    });
     let registry = Registry::empty();
     let mut live_session = session.clone();
     live_session.title = Some("live agent".to_string());
@@ -516,6 +532,106 @@ async fn handle_get_model_catalog_preserves_live_service_tier() {
     }
 }
 
+#[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "test intentionally keeps the target agent busy to exercise the catalog fallback"
+)]
+async fn handle_get_model_catalog_busy_uses_target_session_effort() {
+    let _guard = crate::storage::lock_test_env();
+    let temp_home = tempfile::TempDir::new().expect("create temp home");
+    let prev_home = std::env::var_os("JCODE_HOME");
+    crate::env::set_var("JCODE_HOME", temp_home.path());
+
+    let effort_cases = [
+        // Explicit Luna and other-agent efforts are never blanket-upgraded.
+        (Some("max"), Some("max"), "medium", "max"),
+        (Some("low"), Some("low"), "medium", "low"),
+        (Some("medium"), Some("medium"), "low", "medium"),
+        (Some("xhigh"), Some("xhigh"), "medium", "xhigh"),
+        // Live snapshot wins over stale disk, disk wins over template, legacy falls back.
+        (Some("max"), Some("medium"), "low", "max"),
+        (None, Some("max"), "medium", "max"),
+        (None, None, "medium", "medium"),
+    ];
+    for (case_index, (live, persisted, template_effort, expected)) in
+        effort_cases.into_iter().enumerate()
+    {
+        let session_id = format!("session_busy_model_catalog_effort_{case_index}");
+        let mut session = crate::session::Session::create_with_id(
+            session_id.clone(),
+            None,
+            Some("busy model catalog effort".to_string()),
+        );
+        session.model = Some("persisted-model".to_string());
+        session.reasoning_effort = persisted.map(str::to_string);
+        session.save().expect("save session");
+
+        let target_provider: Arc<dyn Provider> = Arc::new(MockProvider {
+            tier: None,
+            effort: live.unwrap_or(""),
+        });
+        let agent = Arc::new(Mutex::new(Agent::new_with_session(
+            target_provider,
+            Registry::empty(),
+            session,
+            None,
+        )));
+        let template_provider: Arc<dyn Provider> = Arc::new(MockProvider {
+            tier: None,
+            effort: template_effort,
+        });
+        crate::session_effort::record_session_effort(&session_id, live);
+        let busy_guard = agent.lock().await;
+
+        let (stream_a, mut stream_b) = crate::transport::stream_pair().expect("stream pair");
+        let (_reader_a, writer_a) = stream_a.into_split();
+        let writer = Arc::new(Mutex::new(writer_a));
+
+        tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            handle_get_model_catalog(
+                44 + case_index as u64,
+                &session_id,
+                &agent,
+                &template_provider,
+                &writer,
+            ),
+        )
+        .await
+        .expect("model catalog must not wait for busy agent mutex")
+        .expect("model catalog fallback should write history event");
+
+        drop(busy_guard);
+        drop(writer);
+
+        let mut bytes = Vec::new();
+        stream_b
+            .read_to_end(&mut bytes)
+            .await
+            .expect("read model catalog event bytes");
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut line = String::new();
+        cursor.read_line(&mut line).expect("read first line");
+        let event: crate::protocol::ServerEvent =
+            serde_json::from_str(line.trim()).expect("decode model catalog event");
+
+        match event {
+            crate::protocol::ServerEvent::History {
+                reasoning_effort, ..
+            } => assert_eq!(reasoning_effort.as_deref(), Some(expected)),
+            other => panic!("expected history event, got {other:?}"),
+        }
+
+        crate::session_effort::forget_session_effort(&session_id);
+    }
+    if let Some(prev_home) = prev_home {
+        crate::env::set_var("JCODE_HOME", prev_home);
+    } else {
+        crate::env::remove_var("JCODE_HOME");
+    }
+}
+
 #[expect(
     clippy::await_holding_lock,
     reason = "test intentionally keeps the agent busy lock held to exercise model-catalog fallback"
@@ -535,7 +651,10 @@ async fn assert_model_catalog_service_tier(tier: Option<&'static str>, busy: boo
     session.model = Some("persisted-model".to_string());
     session.save().expect("save session");
 
-    let provider: Arc<dyn Provider> = Arc::new(MockProvider(tier));
+    let provider: Arc<dyn Provider> = Arc::new(MockProvider {
+        tier,
+        effort: "high",
+    });
     let agent = Arc::new(Mutex::new(Agent::new_with_session(
         provider.clone(),
         Registry::empty(),
