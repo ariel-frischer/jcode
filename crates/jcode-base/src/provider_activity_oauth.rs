@@ -138,11 +138,14 @@ fn priced_usage(
             // Published >272K-input surcharges cover the full request, including
             // cached input. GPT-5.5 documents this for standard/batch/flex only.
             // https://developers.openai.com/api/docs/models/gpt-6-astra
+            // https://developers.openai.com/api/docs/models/gpt-6-sol
+            // https://developers.openai.com/api/docs/models/gpt-6-luna
             // https://developers.openai.com/api/docs/models/gpt-5.5 (2026-09-07)
             let base_model = model.strip_suffix("[1m]").unwrap_or(model);
-            let has_context_surcharge = base_model == "gpt-6-astra"
-                || (base_model == "gpt-5.5"
-                    && !tier.is_some_and(|tier| tier.trim().eq_ignore_ascii_case("priority")));
+            let has_context_surcharge =
+                matches!(base_model, "gpt-6-astra" | "gpt-6-sol" | "gpt-6-luna")
+                    || (base_model == "gpt-5.5"
+                        && !tier.is_some_and(|tier| tier.trim().eq_ignore_ascii_case("priority")));
             let long_context = has_context_surcharge && input.unwrap() > 272_000;
             let input_multiplier = if long_context { 2.0 } else { 1.0 };
             let output_multiplier = if long_context { 1.5 } else { 1.0 };
@@ -293,6 +296,26 @@ mod tests {
                 Some(100_000),
             );
             assert!((usage.known_usd - 3.71502 * multiplier).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn sol_and_luna_costs_apply_the_published_long_context_surcharge() {
+        for (model, at_limit_cost, above_cost) in [
+            ("gpt-6-sol", 0.374, 0.743004),
+            ("gpt-6-luna", 0.0187, 0.0371502),
+        ] {
+            let at_limit = priced_usage(model, None, Some(272_000), Some(1_000), Some(100_000));
+            assert!((at_limit.known_usd - at_limit_cost).abs() < 1e-9);
+
+            let above = priced_usage(model, None, Some(272_001), Some(1_000), Some(100_000));
+            assert!((above.known_usd - above_cost).abs() < 1e-9);
+
+            for (tier, multiplier) in [("flex", 0.5), ("priority", 2.0)] {
+                let usage =
+                    priced_usage(model, Some(tier), Some(272_001), Some(1_000), Some(100_000));
+                assert!((usage.known_usd - above_cost * multiplier).abs() < 1e-9);
+            }
         }
     }
 

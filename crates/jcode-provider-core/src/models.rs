@@ -58,10 +58,11 @@ pub fn is_openai_api_only_pro_model(model: &str) -> bool {
 }
 
 pub const ALL_OPENAI_MODELS: &[&str] = &[
-    // GPT-6 Astra: newest OpenAI flagship (live on api.openai.com and
-    // OpenRouter as of 2026-09). Listed explicitly because the frontier
-    // auto-promoter only accepts bare numeric ids and would skip the suffix.
+    // GPT-6 family. Listed explicitly because the frontier auto-promoter only
+    // accepts bare numeric ids and would skip the suffixes.
     DEFAULT_OPENAI_MODEL,
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-pro",
     // ChatGPT web-only route. The `[web]` suffix is intentionally part of the
@@ -96,13 +97,15 @@ pub const ALL_OPENAI_MODELS: &[&str] = &[
 ];
 
 #[cfg(test)]
-mod gpt_5_6_catalog_tests {
+mod openai_frontier_catalog_tests {
     use super::*;
 
     #[test]
-    fn openai_catalog_exposes_the_complete_gpt_5_6_family() {
+    fn openai_catalog_exposes_current_gpt_6_and_gpt_5_6_families() {
         for model in [
             "gpt-6-astra",
+            "gpt-6-sol",
+            "gpt-6-luna",
             "gpt-5.6-sol",
             "gpt-5.6-pro",
             "gpt-5.6-pro[web]",
@@ -116,6 +119,24 @@ mod gpt_5_6_catalog_tests {
         assert!(!is_openai_api_only_pro_model("gpt-5.6-sol"));
         assert_eq!(DEFAULT_OPENAI_MODEL, "gpt-6-astra");
         assert_eq!(ALL_OPENAI_MODELS[0], "gpt-6-astra");
+        assert_eq!(provider_for_model("gpt-6-sol"), Some("openai"));
+        assert_eq!(provider_for_model("gpt-6-luna"), Some("openai"));
+        assert!(
+            ALL_OPENAI_MODELS
+                .iter()
+                .position(|model| *model == "gpt-6-sol")
+                < ALL_OPENAI_MODELS
+                    .iter()
+                    .position(|model| *model == "gpt-5.6-sol")
+        );
+        assert!(
+            ALL_OPENAI_MODELS
+                .iter()
+                .position(|model| *model == "gpt-6-luna")
+                < ALL_OPENAI_MODELS
+                    .iter()
+                    .position(|model| *model == "gpt-5.6-luna")
+        );
     }
 }
 
@@ -247,11 +268,14 @@ pub fn context_limit_for_model_with_provider_and_cache(
         return Some(copilot_context_limit_for_model(model));
     }
 
-    // OpenAI OAuth's Codex catalog currently reports the legacy generic GPT-5
-    // 272K value for Sol. Its published, verified total context is 1.05M, so
-    // keep the native OpenAI route authoritative over that stale cache entry.
-    // Other providers still reach the dynamic cache below.
-    if matches!(provider, Some("openai")) && model.starts_with("gpt-5.6-sol") {
+    // OpenAI OAuth's Codex catalog can lag published model metadata. Keep
+    // verified native OpenAI context limits authoritative over stale cache
+    // entries while allowing other providers to use their dynamic catalogs.
+    if matches!(provider, Some("openai"))
+        && (model.starts_with("gpt-5.6-sol")
+            || model.starts_with("gpt-6-sol")
+            || model.starts_with("gpt-6-luna"))
+    {
         return Some(1_050_000);
     }
 
@@ -293,7 +317,12 @@ pub fn context_limit_for_model_with_provider_and_cache(
         return Some(128_000);
     }
 
-    // GPT-5.4-family and GPT-6-family models should default to the long-context
+    // GPT-6 Sol and Luna publish a 1.05M-token total context window.
+    if model.starts_with("gpt-6-sol") || model.starts_with("gpt-6-luna") {
+        return Some(1_050_000);
+    }
+
+    // GPT-5.4-family and other GPT-6-family models default to the long-context
     // window. The live Codex OAuth catalog can still override this via the
     // dynamic cache above.
     if model.starts_with("gpt-5.4") || model.starts_with("gpt-6") {
@@ -872,6 +901,36 @@ mod tests {
 
         // Older GPT-5 Codex families retain their backend-advertised fallback.
         assert_eq!(context_limit_for_model("gpt-5.5"), Some(272_000));
+    }
+
+    #[test]
+    fn gpt_6_sol_and_luna_use_their_published_context_windows() {
+        for model in ["gpt-6-sol", "gpt-6-luna"] {
+            assert_eq!(context_limit_for_model(model), Some(1_050_000));
+            assert_eq!(
+                context_limit_for_model_with_provider(
+                    &format!("openai/{model}"),
+                    Some("openrouter")
+                ),
+                Some(1_050_000)
+            );
+
+            assert_eq!(
+                context_limit_for_model_with_provider_and_cache(model, Some("openai"), |_| {
+                    Some(1_000_000)
+                }),
+                Some(1_050_000)
+            );
+
+            assert_eq!(
+                context_limit_for_model_with_provider_and_cache(
+                    &format!("openai/{model}"),
+                    Some("openrouter"),
+                    |_| Some(1_048_576)
+                ),
+                Some(1_048_576)
+            );
+        }
     }
 
     #[test]
