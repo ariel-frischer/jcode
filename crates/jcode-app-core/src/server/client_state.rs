@@ -256,6 +256,12 @@ pub(super) async fn handle_get_model_catalog(
                     .or_else(|_| Session::load_startup_stub(session_id))
                     .ok();
                 let persisted_model = persisted.as_ref().and_then(|session| session.model.clone());
+                let session_reasoning_effort = crate::session_effort::session_effort(session_id)
+                    .or_else(|| {
+                        persisted
+                            .as_ref()
+                            .and_then(|session| session.reasoning_effort.clone())
+                    });
                 let mut model_routes = provider.model_routes();
                 crate::model_usage::enrich_routes(&mut model_routes);
                 (
@@ -270,7 +276,11 @@ pub(super) async fn handle_get_model_catalog(
                     model_routes,
                     provider.active_resolved_credential(),
                     provider.service_tier(),
-                    provider.reasoning_effort(),
+                    // The connection's provider is only a template when the
+                    // target agent is busy. Prefer the target session's
+                    // lock-free live snapshot, then its persisted metadata,
+                    // and use the template only for legacy/unset sessions.
+                    session_reasoning_effort.or_else(|| provider.reasoning_effort()),
                     "fallback",
                 )
             }
