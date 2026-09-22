@@ -238,7 +238,8 @@ fn test_comm_status_response_roundtrip() -> Result<()> {
                 current_tool_name: Some("bash".to_string()),
             }),
             provider_name: None,
-            provider_model: None,
+            provider_model: Some("gpt-6-sol".into()),
+            provider_effort: Some("high".into()),
         },
     };
 
@@ -251,11 +252,25 @@ fn test_comm_status_response_roundtrip() -> Result<()> {
     assert_eq!(id, 57);
     assert_eq!(snapshot.session_id, "sess-peer");
     assert_eq!(snapshot.friendly_name.as_deref(), Some("bear"));
+    assert_eq!(snapshot.provider_effort.as_deref(), Some("high"));
     assert_eq!(
         snapshot
             .activity
             .and_then(|activity| activity.current_tool_name),
         Some("bash".to_string())
     );
+    Ok(())
+}
+
+#[test]
+fn legacy_status_snapshot_without_effort_remains_readable() -> Result<()> {
+    let legacy = r#"{"session_id":"legacy-worker","provider_model":"legacy-model"}"#;
+    let snapshot: AgentStatusSnapshot = serde_json::from_str(legacy)?;
+    assert!(snapshot.provider_effort.is_none());
+    assert!(crate::comm_format::format_comm_status_snapshot(&snapshot).contains("Provider: unknown / legacy-model"));
+
+    let effort_only = r#"{"session_id":"effort-only","provider_effort":"high"}"#;
+    let snapshot: AgentStatusSnapshot = serde_json::from_str(effort_only)?;
+    assert!(crate::comm_format::format_comm_status_snapshot(&snapshot).contains("Effort: high"));
     Ok(())
 }

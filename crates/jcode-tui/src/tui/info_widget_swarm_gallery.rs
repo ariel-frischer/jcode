@@ -398,6 +398,15 @@ fn render_swarm_tree_row(
                 }),
         ),
     ];
+    let gallery_member = members_to_gallery(std::slice::from_ref(member))
+        .into_iter()
+        .next();
+    if let Some(runtime) = gallery_member.as_ref().and_then(runtime_metadata) {
+        spans.push(Span::styled(
+            format!(" · {runtime}"),
+            Style::default().fg(Color::Rgb(135, 135, 148)),
+        ));
+    }
     if let Some(task) = member
         .task_label
         .as_deref()
@@ -407,15 +416,6 @@ fn render_swarm_tree_row(
         spans.push(Span::styled(
             format!(" · {task}"),
             Style::default().fg(Color::Rgb(145, 145, 158)),
-        ));
-    }
-    let gallery_member = members_to_gallery(std::slice::from_ref(member))
-        .into_iter()
-        .next();
-    if let Some(runtime) = gallery_member.as_ref().and_then(runtime_metadata) {
-        spans.push(Span::styled(
-            format!(" · {runtime}"),
-            Style::default().fg(Color::Rgb(135, 135, 148)),
         ));
     }
     if let Some((done, total)) = member.todo_progress {
@@ -826,5 +826,21 @@ mod tests {
             text.contains("gpt-5.6-luna · OpenAI OAuth · xhigh"),
             "full-page row metadata missing: {text}"
         );
+    }
+
+    #[test]
+    fn narrow_tree_keeps_route_visible_before_long_task_label() {
+        let mut worker = member("reviewer", "running", None, None);
+        worker.task_label =
+            Some("a very long task description that would hide route metadata".into());
+        worker.runtime.model = Some("openai:gpt-6-sol".into());
+        worker.runtime.effort = Some("high".into());
+        let lines = render_swarm_page_lines(&[worker], 0, 0, 54, 4);
+        let text = lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+        assert!(text.contains("gpt-6-sol · high"), "narrow row: {text}");
     }
 }

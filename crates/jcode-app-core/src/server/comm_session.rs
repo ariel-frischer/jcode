@@ -532,6 +532,9 @@ async fn register_visible_spawned_member(
     working_dir: Option<&str>,
     has_startup_message: bool,
     report_back_to_session_id: Option<&str>,
+    model: Option<&str>,
+    provider: Option<&str>,
+    effort: Option<&str>,
     swarm_members: &Arc<RwLock<HashMap<String, SwarmMember>>>,
     swarms_by_id: &Arc<RwLock<HashMap<String, HashSet<String>>>>,
     event_history: &Arc<RwLock<std::collections::VecDeque<SwarmEvent>>>,
@@ -573,7 +576,12 @@ async fn register_visible_spawned_member(
                 output_tail: None,
                 todo_progress: None,
                 todo_items: Vec::new(),
-                runtime: crate::protocol::SwarmMemberRuntime::default(),
+                runtime: crate::protocol::SwarmMemberRuntime {
+                    model: model.map(str::to_string),
+                    provider: provider.map(str::to_string),
+                    effort: effort.map(str::to_string),
+                    ..Default::default()
+                },
             },
         );
     }
@@ -799,6 +807,9 @@ pub(super) async fn spawn_swarm_agent(
             resolved_working_dir.as_deref(),
             startup_message.is_some(),
             Some(req_session_id),
+            spawn_model.as_deref(),
+            spawn_provider_key.as_deref(),
+            spawn_effort.as_deref(),
             swarm_members,
             swarms_by_id,
             event_history,

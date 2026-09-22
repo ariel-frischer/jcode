@@ -427,7 +427,12 @@ async fn comm_list_includes_member_status_and_detail() {
                 output_tail: None,
                 todo_progress: None,
                 todo_items: Vec::new(),
-                runtime: crate::protocol::SwarmMemberRuntime::default(),
+                runtime: crate::protocol::SwarmMemberRuntime {
+                    model: Some("effective-worker-model".into()),
+                    provider: Some("mock".into()),
+                    effort: Some("high".into()),
+                    ..Default::default()
+                },
                 task_label: None,
             },
         ),
@@ -443,9 +448,11 @@ async fn comm_list_includes_member_status_and_detail() {
     ])));
     let client_connections = Arc::new(RwLock::new(HashMap::new()));
 
+    // A worker holds its Agent mutex throughout an active turn.
+    let _busy_peer = peer.lock().await;
     handle_comm_list(
         1,
-        requester_id,
+        requester_id.clone(),
         &client_event_tx,
         &swarm_members,
         &swarms_by_id,
@@ -464,6 +471,33 @@ async fn comm_list_includes_member_status_and_detail() {
                 .expect("peer entry present");
             assert_eq!(peer.status.as_deref(), Some("running"));
             assert_eq!(peer.detail.as_deref(), Some("working on tests"));
+            assert_eq!(
+                peer.provider_model.as_deref(),
+                Some("effective-worker-model")
+            );
+            assert_eq!(peer.provider_effort.as_deref(), Some("high"));
+        }
+        other => panic!("unexpected response: {other:?}"),
+    }
+
+    super::super::comm_sync::handle_comm_status(
+        2,
+        requester_id,
+        peer_id,
+        &sessions,
+        &swarm_members,
+        &client_connections,
+        &file_touch,
+        &client_event_tx,
+    )
+    .await;
+    match client_event_rx.recv().await.expect("comm status response") {
+        ServerEvent::CommStatusResponse { snapshot, .. } => {
+            assert_eq!(
+                snapshot.provider_model.as_deref(),
+                Some("effective-worker-model")
+            );
+            assert_eq!(snapshot.provider_effort.as_deref(), Some("high"));
         }
         other => panic!("unexpected response: {other:?}"),
     }

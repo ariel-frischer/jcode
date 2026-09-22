@@ -1,5 +1,7 @@
 # Unreleased custom-fork changes
 
+- Swarm agents now retain their effective model and reasoning effort across busy turns in all TUI swarm layouts and the `swarm list`/`status` output, including attached sessions and visible startup.
+
 - GPT-6 Sol and GPT-6 Luna are now first-class native OpenAI models with curated picker/fallback ordering, published 1.05M-token context limits, model-specific reasoning efforts, exact Standard/Flex/Fast API pricing, and long-context cost accounting.
 
 - `JCODE_OPENROUTER_PROVIDER` and `JCODE_OPENROUTER_NO_FALLBACK` now actually reach OpenRouter request routing: the provider env var is sent as a hard `provider.only` pin (requests fail with a clear OpenRouter 404 instead of silently routing to another upstream when the pinned provider cannot serve the model), and profile/subscription runtime switches no longer wipe these user-supplied env vars. Named OpenRouter-type profiles honor the same pin.
