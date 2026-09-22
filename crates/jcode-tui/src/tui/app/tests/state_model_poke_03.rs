@@ -91,7 +91,7 @@ fn test_remote_model_picker_during_startup_waits_for_session_catalog() {
         .expect("loading model picker should be open");
     assert_eq!(picker.entries.len(), 1);
     assert_eq!(picker.entries[0].name, "gpt-5.6-sol");
-    assert_eq!(picker.entries[0].options[0].detail, "updating model list…");
+    assert_eq!(picker.entries[0].options[0].detail, "catalog still loading");
 }
 
 #[test]
