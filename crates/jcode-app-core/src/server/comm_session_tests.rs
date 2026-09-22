@@ -208,6 +208,9 @@ async fn register_visible_spawned_member_marks_startup_as_running() {
         Some("/tmp/worktree"),
         true,
         Some("owner"),
+        Some("gpt-6-sol"),
+        Some("openai"),
+        Some("high"),
         &swarm_members,
         &swarms_by_id,
         &event_history,
@@ -221,6 +224,8 @@ async fn register_visible_spawned_member_marks_startup_as_running() {
     assert_eq!(member.status, "running");
     assert_eq!(member.detail.as_deref(), Some("startup queued"));
     assert_eq!(member.swarm_id.as_deref(), Some("swarm-1"));
+    assert_eq!(member.runtime.model.as_deref(), Some("gpt-6-sol"));
+    assert_eq!(member.runtime.effort.as_deref(), Some("high"));
     assert_eq!(
         member.working_dir.as_deref(),
         Some(std::path::Path::new("/tmp/worktree"))

@@ -90,6 +90,7 @@ pub(super) struct MemberRuntimeExtras {
 pub(super) async fn member_runtime_extras(
     session_id: &str,
     member_is_running: bool,
+    runtime: &crate::protocol::SwarmMemberRuntime,
     sessions: &SessionAgents,
     client_connections: &Arc<RwLock<HashMap<String, ClientConnectionInfo>>>,
 ) -> MemberRuntimeExtras {
@@ -101,9 +102,8 @@ pub(super) async fn member_runtime_extras(
     let (provider_name, provider_model, provider_effort) = {
         let agent_sessions = sessions.read().await;
         if let Some(agent) = agent_sessions.get(session_id) {
-            // Never block on a busy agent: token churn and turns come from the
-            // lock-free metrics registry, so a missing provider name here just
-            // means the agent is mid-turn.
+            // Never block on a busy agent. Swarm runtime state and the effort
+            // registry retain the current route while its turn holds the lock.
             if let Ok(agent) = agent.try_lock() {
                 (
                     Some(agent.provider_name()),
@@ -111,10 +111,19 @@ pub(super) async fn member_runtime_extras(
                     agent.provider_reasoning_effort(),
                 )
             } else {
-                (None, None, None)
+                (
+                    runtime.provider.clone(),
+                    runtime.model.clone(),
+                    crate::session_effort::session_effort(session_id)
+                        .or_else(|| runtime.effort.clone()),
+                )
             }
         } else {
-            (None, None, None)
+            (
+                runtime.provider.clone(),
+                runtime.model.clone(),
+                runtime.effort.clone(),
+            )
         }
     };
 
@@ -297,16 +306,29 @@ pub(super) async fn handle_comm_status(
             live_activity_snapshot(&connections, &target_session, member.status == "running")
         };
 
-        let (provider_name, provider_model) = {
+        let (provider_name, provider_model, provider_effort) = {
             let agent_sessions = sessions.read().await;
             if let Some(agent) = agent_sessions.get(&target_session) {
                 if let Ok(agent) = agent.try_lock() {
-                    (Some(agent.provider_name()), Some(agent.provider_model()))
+                    (
+                        Some(agent.provider_name()),
+                        Some(agent.provider_model()),
+                        agent.provider_reasoning_effort(),
+                    )
                 } else {
-                    (None, None)
+                    (
+                        member.runtime.provider.clone(),
+                        member.runtime.model.clone(),
+                        crate::session_effort::session_effort(&target_session)
+                            .or_else(|| member.runtime.effort.clone()),
+                    )
                 }
             } else {
-                (None, None)
+                (
+                    member.runtime.provider.clone(),
+                    member.runtime.model.clone(),
+                    member.runtime.effort.clone(),
+                )
             }
         };
 
@@ -326,6 +348,7 @@ pub(super) async fn handle_comm_status(
             activity,
             provider_name,
             provider_model,
+            provider_effort,
         }
     };
 

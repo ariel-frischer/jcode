@@ -331,19 +331,25 @@ async fn ensure_client_swarm_member(
     event_counter: &Arc<std::sync::atomic::AtomicU64>,
     swarm_event_tx: &broadcast::Sender<SwarmEvent>,
 ) -> bool {
-    let (working_dir, derived_swarm_id, fallback_name) = {
+    let (working_dir, derived_swarm_id, fallback_name, runtime) = {
         // A target-aware subscribe can attach to an agent that is in the middle
         // of a turn. Never wait for that turn's agent lock just to populate
         // connection metadata: doing so prevents the subscribe request from
         // completing, so subsequent state requests sit unread until the desktop
         // client times out. The persisted startup stub has the same immutable
         // identity metadata and is safe to read while the live agent is busy.
-        let (working_dir, fallback_name) = match agent.try_lock() {
+        let (working_dir, fallback_name, runtime) = match agent.try_lock() {
             Ok(agent_guard) => (
                 agent_guard.working_dir().map(PathBuf::from),
                 agent_guard
                     .session_short_name()
                     .map(|value| value.to_string()),
+                crate::protocol::SwarmMemberRuntime {
+                    model: Some(agent_guard.provider_model()),
+                    provider: Some(agent_guard.provider_name()),
+                    effort: agent_guard.provider_reasoning_effort(),
+                    ..Default::default()
+                },
             ),
             Err(_) => {
                 crate::logging::info(&format!(
@@ -351,8 +357,19 @@ async fn ensure_client_swarm_member(
                     client_session_id
                 ));
                 crate::session::Session::load_startup_stub(client_session_id)
-                    .map(|session| (session.working_dir.map(PathBuf::from), session.short_name))
-                    .unwrap_or((None, None))
+                    .map(|session| {
+                        (
+                            session.working_dir.map(PathBuf::from),
+                            session.short_name,
+                            crate::protocol::SwarmMemberRuntime {
+                                model: session.model,
+                                effort: crate::session_effort::session_effort(client_session_id)
+                                    .or(session.reasoning_effort),
+                                ..Default::default()
+                            },
+                        )
+                    })
+                    .unwrap_or((None, None, Default::default()))
             }
         };
         let derived_swarm_id = if swarm_enabled {
@@ -360,7 +377,7 @@ async fn ensure_client_swarm_member(
         } else {
             None
         };
-        (working_dir, derived_swarm_id, fallback_name)
+        (working_dir, derived_swarm_id, fallback_name, runtime)
     };
 
     // Prefer the currently restored agent/session identity over the temporary
@@ -378,6 +395,15 @@ async fn ensure_client_swarm_member(
                 .insert(client_connection_id.to_string(), client_event_tx.clone());
             member.swarm_enabled = swarm_enabled;
             member.is_headless = false;
+            if runtime.model.is_some() {
+                member.runtime.model = runtime.model.clone();
+            }
+            if runtime.provider.is_some() {
+                member.runtime.provider = runtime.provider.clone();
+            }
+            if runtime.effort.is_some() {
+                member.runtime.effort = runtime.effort.clone();
+            }
             if member_name.is_some() {
                 member.friendly_name = member_name.clone();
             }
@@ -408,7 +434,7 @@ async fn ensure_client_swarm_member(
                     output_tail: None,
                     todo_progress: None,
                     todo_items: Vec::new(),
-                    runtime: crate::protocol::SwarmMemberRuntime::default(),
+                    runtime,
                 },
             );
             inserted = true;

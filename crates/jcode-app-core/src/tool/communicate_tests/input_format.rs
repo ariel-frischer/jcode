@@ -412,8 +412,9 @@ fn format_status_snapshot_includes_activity_and_metadata() {
             is_processing: true,
             current_tool_name: Some("bash".to_string()),
         }),
-        provider_name: None,
-        provider_model: None,
+        provider_name: Some("OpenAI".into()),
+        provider_model: Some("gpt-6-sol".into()),
+        provider_effort: Some("high".into()),
     });
 
     assert!(
@@ -428,6 +429,7 @@ fn format_status_snapshot_includes_activity_and_metadata() {
     );
     assert!(output.output.contains("Activity: busy (bash)"));
     assert!(output.output.contains("Swarm: swarm-test"));
+    assert!(output.output.contains("Provider: OpenAI / gpt-6-sol (high)"));
     assert!(
         output.output.contains(
             "Meta: headless · attachments=0 · active=3s ago · status_age=7s · joined=42s"

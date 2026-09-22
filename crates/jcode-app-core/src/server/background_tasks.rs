@@ -462,10 +462,13 @@ pub(super) async fn dispatch_swarm_runtime_status(
         let Some(member) = members.get_mut(&event.session_id) else {
             return;
         };
-        if member.runtime.model.as_ref() == Some(model) {
+        let effort = crate::session_effort::session_effort(&event.session_id)
+            .or_else(|| member.runtime.effort.clone());
+        if member.runtime.model.as_ref() == Some(model) && member.runtime.effort == effort {
             return;
         }
         member.runtime.model = Some(model.clone());
+        member.runtime.effort = effort;
         member.swarm_id.clone()
     };
     if let Some(swarm_id) = swarm_id {
