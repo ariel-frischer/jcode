@@ -4046,10 +4046,17 @@ impl App {
             picker.filtered = (0..picker.entries.len()).collect();
         } else {
             let query = picker.filter.trim();
+            let model_query = picker.kind == PickerKind::Model;
+            let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+            let version_query = model_query
+                && words.iter().any(|word| {
+                    word.chars().any(|c| c.is_ascii_digit())
+                        && (word.contains('.') || word.contains('-'))
+                });
             // Prepare the query once per keystroke instead of re-parsing and
             // re-lowercasing it for every entry.
             let prepared = jcode_fuzzy::PreparedTokenQuery::new(&picker.filter);
-            let mut scored: Vec<(usize, bool, i32)> = picker
+            let mut scored: Vec<(usize, bool, bool, i32)> = picker
                 .entries
                 .iter()
                 .enumerate()
@@ -4058,17 +4065,45 @@ impl App {
                     prepared.score(&filter_text).map(|s| {
                         let usage_bonus = m.usage_score.min(i32::MAX as u32) as i32;
                         let bonus = usage_bonus + if m.recommended { 5 } else { 0 };
+                        // Route details often mention other model families and
+                        // fuzzy version matching tolerates an adjacent digit.
+                        // Prefer literal model/provider hits when they exist.
+                        let literal_model_match = model_query && {
+                            let model_id = m
+                                .name
+                                .split_once(" (")
+                                .map_or(m.name.as_str(), |(id, _)| id);
+                            let pretty =
+                                crate::tui::app::helpers::model_names::pretty_known_model_family(
+                                    model_id,
+                                )
+                                .unwrap_or_default();
+                            let route = m.active_option();
+                            let searchable = format!(
+                                "{} {} {} {}",
+                                m.name,
+                                pretty,
+                                route.map(|option| option.provider.as_str()).unwrap_or(""),
+                                route.map(|option| option.api_method.as_str()).unwrap_or(""),
+                            )
+                            .to_lowercase();
+                            words.iter().all(|word| searchable.contains(word))
+                        };
                         (
                             i,
                             m.name.eq_ignore_ascii_case(query),
+                            literal_model_match,
                             s.saturating_add(bonus),
                         )
                     })
                 })
                 .collect();
+            if model_query && (version_query || scored.iter().any(|row| row.2)) {
+                scored.retain(|row| row.2);
+            }
             scored.sort_by(|a, b| {
                 b.1.cmp(&a.1)
-                    .then(b.2.cmp(&a.2))
+                    .then(b.3.cmp(&a.3))
                     .then(
                         picker.entries[a.0]
                             .recommendation_rank
@@ -4076,7 +4111,7 @@ impl App {
                     )
                     .then(picker.entries[a.0].name.cmp(&picker.entries[b.0].name))
             });
-            picker.filtered = scored.into_iter().map(|(i, _, _)| i).collect();
+            picker.filtered = scored.into_iter().map(|(i, _, _, _)| i).collect();
         }
         if picker.filtered.is_empty() {
             picker.selected = 0;

@@ -37,8 +37,8 @@ fn test_model_picker_preview_arrow_keys_navigate() {
     assert!(picker.preview, "should remain in preview mode");
     assert_eq!(picker.selected, initial_selected);
 
-    // Opening the preview should place the cursor in the model filter argument.
-    assert_eq!(app.input(), "/model ");
+    // Keep the ambiguous prefix intact so the next 's' can complete /models.
+    assert_eq!(app.input(), "/model");
 }
 
 #[test]
