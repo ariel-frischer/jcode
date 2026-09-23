@@ -1,5 +1,7 @@
 # Unreleased custom-fork changes
 
+- Agent-initiated handoffs now switch before turn-end auto-pokes can start another parent turn, and the server clears a completed parent turn before accepting the child's startup prompt.
+
 - Swarm agents now retain their effective model and reasoning effort across busy turns in all TUI swarm layouts and the `swarm list`/`status` output, including attached sessions and visible startup.
 
 - GPT-6 Sol and GPT-6 Luna are now first-class native OpenAI models with curated picker/fallback ordering, published 1.05M-token context limits, model-specific reasoning efforts, exact Standard/Flex/Fast API pricing, and long-context cost accounting.

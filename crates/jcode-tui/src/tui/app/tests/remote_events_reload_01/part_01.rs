@@ -1758,6 +1758,90 @@ fn test_remote_done_auto_pokes_again_when_todos_remain() {
 }
 
 #[test]
+fn test_agent_handoff_done_does_not_poke_source_session() {
+    with_temp_jcode_home(|| {
+        let mut app = create_test_app();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        let destination = "session_handoff_no_source_poke";
+        crate::todo::save_todos(
+            &app.session.id,
+            &[crate::todo::TodoItem {
+                group: None,
+                id: "todo-1".to_string(),
+                content: "Continue working".to_string(),
+                status: "pending".to_string(),
+                priority: "high".to_string(),
+                blocked_by: Vec::new(),
+                assigned_to: None,
+                confidence: None,
+                completion_confidence: None,
+                confidence_history: Vec::new(),
+            }],
+        )
+        .expect("save todos");
+        app.is_remote = true;
+        app.auto_poke_incomplete_todos = true;
+        app.is_processing = true;
+        app.status = ProcessingStatus::Streaming;
+        app.current_message_id = Some(42);
+
+        app.handle_server_event(
+            crate::protocol::ServerEvent::SessionHandoffReady {
+                id: 42,
+                source_session_id: app.session.id.clone(),
+                new_session_id: destination.to_string(),
+                new_session_name: "child".to_string(),
+                auto_start: false,
+            },
+            &mut remote,
+        );
+        app.handle_server_event(crate::protocol::ServerEvent::Done { id: 42 }, &mut remote);
+
+        assert!(remote.resume_in_flight());
+        assert!(app.queued_messages().is_empty());
+        assert!(!app.pending_queued_dispatch);
+    });
+}
+
+#[test]
+fn test_agent_handoff_done_preserves_child_startup_prompt() {
+    with_temp_jcode_home(|| {
+        let destination = "session_handoff_startup_after_done";
+        crate::client_input::save_startup_queued_message_for_session(
+            destination,
+            "continue in child".to_string(),
+        );
+        let mut app = create_test_app();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let mut remote = crate::tui::backend::RemoteConnection::dummy();
+        app.is_remote = true;
+        app.auto_poke_incomplete_todos = true;
+        app.is_processing = true;
+        app.status = ProcessingStatus::Streaming;
+        app.current_message_id = Some(42);
+
+        app.handle_server_event(
+            crate::protocol::ServerEvent::SessionHandoffReady {
+                id: 42,
+                source_session_id: app.session.id.clone(),
+                new_session_id: destination.to_string(),
+                new_session_name: "child".to_string(),
+                auto_start: true,
+            },
+            &mut remote,
+        );
+        app.handle_server_event(crate::protocol::ServerEvent::Done { id: 42 }, &mut remote);
+
+        assert!(remote.resume_in_flight());
+        assert_eq!(app.queued_messages(), ["continue in child"]);
+        assert!(!app.pending_queued_dispatch);
+    });
+}
+
+#[test]
 fn test_handle_server_event_side_pane_images_populates_pane_live() {
     let mut app = create_test_app();
     let rt = tokio::runtime::Runtime::new().unwrap();
