@@ -345,6 +345,40 @@ struct SwarmStatusRefs<'a> {
     event_tx: &'a broadcast::Sender<SwarmEvent>,
 }
 
+async fn apply_processing_done(
+    (done_id, result, completion_report): (u64, Result<()>, Option<String>),
+    state: &mut ProcessingState<'_>,
+    client_connections: &Arc<RwLock<HashMap<String, ClientConnectionInfo>>>,
+    client_connection_id: &str,
+    swarm: &SwarmStatusRefs<'_>,
+) {
+    if Some(done_id) != *state.message_id {
+        crate::logging::warn(&format!(
+            "Done event id={} doesn't match processing_message_id={:?}, dropping",
+            done_id, state.message_id
+        ));
+        return;
+    }
+    crate::logging::info(&format!(
+        "Processing done for message id={}, result={}",
+        done_id,
+        if result.is_ok() { "ok" } else { "err" }
+    ));
+    *state.message_id = None;
+    *state.task = None;
+    *state.client_is_processing = false;
+    *state.processing_control = None;
+    {
+        let mut connections = client_connections.write().await;
+        if let Some(info) = connections.get_mut(client_connection_id) {
+            info.is_processing = false;
+            info.current_tool_name = None;
+        }
+    }
+    let done_session = state.session_id.take();
+    record_processing_completion(done_session.as_deref(), result, completion_report, swarm).await;
+}
+
 fn should_start_idle_soft_interrupt(
     client_is_processing: bool,
     active_turn_registered: bool,
@@ -1023,42 +1057,20 @@ pub(super) async fn handle_client(
                 continue;
             }
             done = processing_done_rx.recv() => {
-                if let Some((done_id, result, completion_report)) = done {
-                    if Some(done_id) != processing_message_id {
-                        crate::logging::warn(&format!(
-                            "Done event id={} doesn't match processing_message_id={:?}, dropping",
-                            done_id, processing_message_id
-                        ));
-                        continue;
-                    }
-                    crate::logging::info(&format!(
-                        "Processing done for message id={}, result={}",
-                        done_id,
-                        if result.is_ok() { "ok" } else { "err" }
-                    ));
-                    processing_message_id = None;
-                    processing_task = None;
-                    client_is_processing = false;
-                    processing_control = None;
-                    {
-                        let mut connections = client_connections.write().await;
-                        if let Some(info) = connections.get_mut(&client_connection_id) {
-                            info.is_processing = false;
-                            info.current_tool_name = None;
-                        }
-                    }
-
-                    let done_session = processing_session_id.take();
-                    record_processing_completion(
-                        done_session.as_deref(), result, completion_report,
-                        &SwarmStatusRefs {
-                            members: &swarm_members,
-                            swarms_by_id: &swarms_by_id,
-                            event_history: &event_history,
-                            event_counter: &event_counter,
-                            event_tx: &swarm_event_tx,
-                        },
-                    ).await;
+                if let Some(done) = done {
+                    apply_processing_done(done, &mut ProcessingState {
+                        client_is_processing: &mut client_is_processing,
+                        message_id: &mut processing_message_id,
+                        session_id: &mut processing_session_id,
+                        task: &mut processing_task,
+                        processing_control: &mut processing_control,
+                    }, &client_connections, &client_connection_id, &SwarmStatusRefs {
+                        members: &swarm_members,
+                        swarms_by_id: &swarms_by_id,
+                        event_history: &event_history,
+                        event_counter: &event_counter,
+                        event_tx: &swarm_event_tx,
+                    }).await;
                 } else {
                     break;
                 }
@@ -2231,6 +2243,26 @@ pub(super) async fn handle_client(
                 .await?;
                 if client_session_id != pre_resume_session_id {
                     provisional_session = false;
+                    // A handoff can finish while ResumeSession awaits the old
+                    // agent. Reconcile its already-queued completion before the
+                    // child's first Message, not one select iteration later.
+                    if processing_session_id.as_deref() == Some(&pre_resume_session_id)
+                        && let Ok(done) = processing_done_rx.try_recv()
+                    {
+                        apply_processing_done(done, &mut ProcessingState {
+                            client_is_processing: &mut client_is_processing,
+                            message_id: &mut processing_message_id,
+                            session_id: &mut processing_session_id,
+                            task: &mut processing_task,
+                            processing_control: &mut processing_control,
+                        }, &client_connections, &client_connection_id, &SwarmStatusRefs {
+                            members: &swarm_members,
+                            swarms_by_id: &swarms_by_id,
+                            event_history: &event_history,
+                            event_counter: &event_counter,
+                            event_tx: &swarm_event_tx,
+                        }).await;
+                    }
                 }
                 session_control = refresh_session_control_handle(
                     &client_session_id,
@@ -3699,7 +3731,8 @@ async fn start_processing_message(
                     .and_then(|stream_error| stream_error.provider_code.clone()),
             },
         };
-        let _ = tx.send(terminal_event);
+        let mut handoff_ready = None;
+        let mut handoff_error = None;
         if result.is_ok()
             && let Some(pending) = crate::tool::session_transition::take_pending(&source_session_id)
         {
@@ -3737,7 +3770,7 @@ async fn start_processing_message(
                             crate::session::lifecycle_types::HandoffStartupOutcome::Started,
                         ),
                     );
-                    let _ = tx.send(ServerEvent::SessionHandoffReady {
+                    handoff_ready = Some(ServerEvent::SessionHandoffReady {
                         id,
                         source_session_id: source_session_id.clone(),
                         new_session_id,
@@ -3767,7 +3800,7 @@ async fn start_processing_message(
                             crate::session::lifecycle_types::HandoffStartupOutcome::Failed,
                         ),
                     );
-                    let _ = tx.send(ServerEvent::Error {
+                    handoff_error = Some(ServerEvent::Error {
                         id,
                         message: format!("Failed to complete staged handoff: {error}"),
                         retry_after_secs: None,
@@ -3776,8 +3809,118 @@ async fn start_processing_message(
                 }
             }
         }
-        let _ = done_tx.send((id, result, completion_report));
+        emit_completed_turn_events(
+            &tx,
+            &done_tx,
+            handoff_ready,
+            terminal_event,
+            (id, result, completion_report),
+        );
+        if let Some(handoff_error) = handoff_error {
+            let _ = tx.send(handoff_error);
+        }
     }));
+}
+
+fn emit_completed_turn_events(
+    events: &mpsc::UnboundedSender<ServerEvent>,
+    done: &mpsc::UnboundedSender<(u64, Result<()>, Option<String>)>,
+    handoff_ready: Option<ServerEvent>,
+    terminal_event: ServerEvent,
+    completion: (u64, Result<()>, Option<String>),
+) {
+    // The owner must be able to clear the source processing state before a
+    // resumed child submits its first prompt. Arm the TUI resume barrier before
+    // Done can schedule any source-session turn-end follow-up.
+    if let Some(handoff_ready) = handoff_ready {
+        let _ = done.send(completion);
+        let _ = events.send(handoff_ready);
+        let _ = events.send(terminal_event);
+    } else {
+        let _ = events.send(terminal_event);
+        let _ = done.send(completion);
+    }
+}
+
+#[cfg(test)]
+mod handoff_completion_tests {
+    use super::*;
+
+    #[test]
+    fn completed_agent_handoff_announces_child_before_source_done_and_queues_completion_first() {
+        let (events, mut received_events) = mpsc::unbounded_channel();
+        let (done, mut received_done) = mpsc::unbounded_channel();
+        let handoff = ServerEvent::SessionHandoffReady {
+            id: 42,
+            source_session_id: "parent".to_string(),
+            new_session_id: "child".to_string(),
+            new_session_name: "child".to_string(),
+            auto_start: true,
+        };
+
+        emit_completed_turn_events(
+            &events,
+            &done,
+            Some(handoff),
+            ServerEvent::Done { id: 42 },
+            (42, Ok(()), None),
+        );
+
+        assert_eq!(received_done.try_recv().expect("server completion").0, 42);
+        assert!(matches!(
+            received_events.try_recv(),
+            Ok(ServerEvent::SessionHandoffReady { id: 42, .. })
+        ));
+        assert!(matches!(
+            received_events.try_recv(),
+            Ok(ServerEvent::Done { id: 42 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn pending_parent_completion_clears_busy_state_before_child_message() {
+        let (done, mut received_done) = mpsc::unbounded_channel();
+        done.send((42, Ok(()), None))
+            .expect("queue parent completion");
+        let mut client_is_processing = true;
+        let mut message_id = Some(42);
+        let mut session_id = Some("parent".to_string());
+        let mut task = None;
+        let mut processing_control = None;
+        let connections = Arc::new(RwLock::new(HashMap::new()));
+        let members = Arc::new(RwLock::new(HashMap::new()));
+        let swarms = Arc::new(RwLock::new(HashMap::new()));
+        let history = Arc::new(RwLock::new(std::collections::VecDeque::new()));
+        let counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let (events, _) = broadcast::channel(1);
+
+        apply_processing_done(
+            received_done
+                .try_recv()
+                .expect("already-queued parent completion"),
+            &mut ProcessingState {
+                client_is_processing: &mut client_is_processing,
+                message_id: &mut message_id,
+                session_id: &mut session_id,
+                task: &mut task,
+                processing_control: &mut processing_control,
+            },
+            &connections,
+            "client",
+            &SwarmStatusRefs {
+                members: &members,
+                swarms_by_id: &swarms,
+                event_history: &history,
+                event_counter: &counter,
+                event_tx: &events,
+            },
+        )
+        .await;
+
+        assert!(!client_is_processing);
+        assert!(message_id.is_none());
+        assert!(session_id.is_none());
+    }
 }
 
 async fn cancel_processing_message(

@@ -1261,7 +1261,12 @@ pub(in crate::tui::app) fn handle_server_event(
                     "client_turn_completed",
                     std::time::Duration::from_secs(30),
                 );
-                auto_poked = app.schedule_turn_end_followups();
+                // SessionHandoffReady is emitted before Done for agent handoffs.
+                // Do not turn the parent completion into another parent turn:
+                // the continuation belongs to the child after resume.
+                if app.pending_handoff_resume_notice.is_none() {
+                    auto_poked = app.schedule_turn_end_followups();
+                }
                 if !auto_poked {
                     app.clear_visible_turn_started();
                     if app.queued_messages.is_empty() {
