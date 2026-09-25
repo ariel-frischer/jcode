@@ -257,6 +257,22 @@ fn every_api_event_has_one_explicit_publication_contract() {
         ),
         (ApiEvent::Pong, "pong"),
         (
+            ApiEvent::Tools {
+                session_id: "s".into(),
+                tools: vec![],
+            },
+            "tools",
+        ),
+        (
+            ApiEvent::ToolCall {
+                session_id: "s".into(),
+                call_id: "c".into(),
+                name: "n".into(),
+                input: serde_json::json!({}),
+            },
+            "tool_call",
+        ),
+        (
             ApiEvent::TextDelta {
                 session_id: "s".into(),
                 text: "x".into(),
@@ -354,6 +370,15 @@ fn every_api_event_has_one_explicit_publication_contract() {
                 cache_creation_input: None,
             },
             "token_usage",
+        ),
+        (
+            ApiEvent::TurnStopped {
+                session_id: "s".into(),
+                reason: crate::TurnStopReason::Interrupted,
+                message: "stopped".into(),
+                provider_stop_reason: None,
+            },
+            "turn_stopped",
         ),
         (
             ApiEvent::TurnDone {

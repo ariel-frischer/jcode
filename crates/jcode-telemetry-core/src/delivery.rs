@@ -218,7 +218,10 @@ pub(super) fn send_transcript_payload(payload: Value) -> bool {
 }
 
 #[cfg(test)]
-fn record_test_payload(payload: &Value) -> bool {
+fn record_test_payload(payload: &Value, mode: DeliveryMode) -> bool {
+    if let Ok(mut modes) = super::tests::TEST_DELIVERY_MODES.lock() {
+        modes.push(mode);
+    }
     if let Ok(mut emitted) = super::TEST_EMITTED_PAYLOADS.lock() {
         emitted.push(payload.clone());
     }
@@ -226,13 +229,13 @@ fn record_test_payload(payload: &Value) -> bool {
 }
 
 #[cfg(not(test))]
-fn record_test_payload(_payload: &Value) -> bool {
+fn record_test_payload(_payload: &Value, _mode: DeliveryMode) -> bool {
     false
 }
 
 pub(super) fn send_payload(mut payload: Value, mode: DeliveryMode) -> bool {
     super::concurrency::mark_legacy_concurrency_unavailable(&mut payload);
-    if record_test_payload(&payload) {
+    if record_test_payload(&payload, mode) {
         return true;
     }
     match mode {

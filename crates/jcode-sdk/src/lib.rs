@@ -100,7 +100,7 @@
 //!         }
 //!         ApiEvent::TextDelta { text, .. } => print!("{text}"),
 //!         ApiEvent::TurnDone { .. } => { completed = true; break; }
-//!         ApiEvent::Error { code, message } => {
+//!         ApiEvent::Error { code, message, .. } => {
 //!             return Err(format!("{code:?}: {message}").into());
 //!         }
 //!         _ => {}

@@ -353,6 +353,7 @@ fn profile_precedence_selected_profile_wins_over_base_when_invocation_is_unset()
 
 #[test]
 fn profile_precedence_unset_invocation_inherits_profile_values_and_auto_is_not_explicit() {
+    let _env_lock = crate::storage::lock_test_env();
     let config = config_with_profile(profile_with_values());
     let args = profile_args(&[]);
 
@@ -383,6 +384,7 @@ fn profile_precedence_unset_invocation_inherits_profile_values_and_auto_is_not_e
 
 #[test]
 fn profile_precedence_base_config_wins_when_profile_fields_are_unset() {
+    let _env_lock = crate::storage::lock_test_env();
     let mut config = config_with_profile(SessionProfileConfig::default());
     config.provider.default_provider = Some("openai".to_owned());
     config.provider.default_model = Some("base-model".to_owned());
@@ -403,6 +405,7 @@ fn profile_precedence_base_config_wins_when_profile_fields_are_unset() {
 
 #[test]
 fn profile_precedence_built_in_defaults_apply_when_no_source_is_set() {
+    let _env_lock = crate::storage::lock_test_env();
     let config = config_with_profile(SessionProfileConfig::default());
     let args = profile_args(&[]);
     let options = super::resolve_run_options(&args, &config)

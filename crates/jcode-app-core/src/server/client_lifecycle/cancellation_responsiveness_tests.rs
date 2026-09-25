@@ -155,6 +155,13 @@ async fn busy_attached_message_can_be_cancelled_before_agent_lock() {
     assert!(processing_done_rx.try_recv().is_err());
     assert!(matches!(
         client_event_rx.try_recv(),
+        Ok(ServerEvent::TurnStopped {
+            reason: crate::protocol::TurnStopReason::Interrupted,
+            ..
+        })
+    ));
+    assert!(matches!(
+        client_event_rx.try_recv(),
         Ok(ServerEvent::Interrupted)
     ));
     assert!(!forked.load(Ordering::SeqCst));
