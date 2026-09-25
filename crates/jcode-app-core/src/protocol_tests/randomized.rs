@@ -65,6 +65,7 @@ fn test_protocol_request_roundtrip_randomized_samples() -> Result<()> {
         let continue_on_disconnect = rng.random_bool(0.5);
         let req = Request::Subscribe {
             workflow_progress: false,
+            system_prompt: None,
             supports_pdf_panels: false,
             id,
             working_dir: working_dir.clone(),
@@ -80,6 +81,7 @@ fn test_protocol_request_roundtrip_randomized_samples() -> Result<()> {
         };
         let decoded = parse_request_json(&serde_json::to_string(&req)?)?;
         let Request::Subscribe {
+            system_prompt: _,
             supports_pdf_panels: _,
             id: decoded_id,
             working_dir: decoded_working_dir,

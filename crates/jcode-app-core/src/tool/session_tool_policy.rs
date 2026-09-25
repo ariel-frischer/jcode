@@ -32,6 +32,7 @@ impl Drop for SessionToolPolicyRegistration {
             .is_some_and(|policy| policy.owner == Some(self.owner))
         {
             policies.remove(&self.session_id);
+            super::sdk::remove_session(&self.session_id);
         }
     }
 }
@@ -87,9 +88,21 @@ pub(crate) fn clear_session_tool_policy(session_id: &str) {
 }
 
 pub(super) fn session_tool_policy(session_id: &str) -> Option<SessionToolPolicy> {
-    SESSION_TOOL_POLICIES
+    let mut policy = SESSION_TOOL_POLICIES
         .read()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .get(session_id)
-        .cloned()
+        .cloned();
+    if let Some(config) = super::sdk::config(session_id) {
+        let policy = policy.get_or_insert_with(SessionToolPolicy::default);
+        if let Some(enabled) = config.enabled {
+            policy.allowed_tools = Some(enabled.into_iter().collect());
+            policy.disabled_tools.clear();
+        }
+        policy.disabled_tools.extend(config.disabled);
+        if let Some(allowed) = policy.allowed_tools.as_mut() {
+            allowed.extend(config.custom.into_iter().map(|t| t.name));
+        }
+    }
+    policy
 }

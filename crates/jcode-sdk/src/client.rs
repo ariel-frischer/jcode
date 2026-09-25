@@ -16,7 +16,8 @@ use crate::ssh::{SshConnectOptions, SshProcess, SshTransport};
 use jcode_harness_api::{
     API_VERSION_MAJOR, ApiEvent, ApiRequest, ClientFrame, HistoryMessage, ModelRouteInfo,
     PermissionDecision, QUEUED_MESSAGE_NAVIGATION_CAPABILITY, QueuedMessageEditorOperation,
-    ServerFrame, SessionInfo, TextMatch, api_socket_path, read_frame, write_frame,
+    ServerFrame, SessionInfo, SessionToolDefinition, TextMatch, ToolConfiguration, api_socket_path,
+    read_frame, write_frame,
 };
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -51,6 +52,20 @@ impl Default for ConnectOptions {
             ensure_runtime: true,
         }
     }
+}
+
+/// Options fixed when a session is created.
+#[derive(Clone, Debug, Default)]
+pub struct CreateSessionOptions {
+    /// Working directory for the new session. Omit to use the runtime default.
+    pub working_dir: Option<String>,
+    /// Replace the entire assembled system prompt, not just its base text.
+    ///
+    /// This bypasses the default prompt and assembled instruction/context additions.
+    /// `None` keeps normal prompt assembly. `Some(String::new())` explicitly
+    /// overrides it with an empty prompt. Immutable after creation and persisted
+    /// by the runtime for resume.
+    pub system_prompt: Option<String>,
 }
 
 /// A duplex byte transport. Lets tests and future WebSockets plug in.
@@ -106,9 +121,9 @@ impl Transport for UnixTransport {
         #[cfg(unix)]
         {
             let socket = self.0.try_clone().ok()?;
-            return Some(Arc::new(move || {
+            Some(Arc::new(move || {
                 let _ = socket.shutdown(std::net::Shutdown::Both);
-            }));
+            }))
         }
         #[cfg(windows)]
         {
@@ -307,6 +322,7 @@ fn stop_global_stream(control: &GlobalEventControl, error: Option<Error>) {
     drop(children);
 }
 
+/// A live subscription: (id, session filter, sink).
 type Subscriber = (u64, Option<String>, Sender<ApiEvent>);
 
 struct Inner {
@@ -760,11 +776,25 @@ impl JcodeClient {
             .map(drop)
     }
 
+    /// Create a session with the normal assembled system prompt.
     pub fn create_session(&self, working_dir: Option<String>) -> Result<SessionInfo> {
+        self.create_session_with_options(CreateSessionOptions {
+            working_dir,
+            ..Default::default()
+        })
+    }
+
+    /// Create a session with optional full system prompt replacement.
+    /// See [`CreateSessionOptions::system_prompt`] for override semantics.
+    pub fn create_session_with_options(
+        &self,
+        options: CreateSessionOptions,
+    ) -> Result<SessionInfo> {
         match self
             .request_ok(ApiRequest::CreateSession {
-                working_dir,
+                working_dir: options.working_dir,
                 profile: None,
+                system_prompt: options.system_prompt,
             })?
             .event
         {
@@ -1159,6 +1189,62 @@ impl JcodeClient {
         }
     }
 
+    /// Configure the tools available to a session before starting a turn.
+    ///
+    /// Custom tool invocations arrive as [`ApiEvent::ToolCall`] on [`Self::events`].
+    /// Subscribe before sending a message and answer each invocation with
+    /// [`Self::submit_tool_result`]. The SDK does not execute custom tools itself.
+    pub fn configure_tools(&self, session_id: &str, tools: ToolConfiguration) -> Result<()> {
+        match self
+            .request_ok(ApiRequest::ConfigureTools {
+                session_id: session_id.to_string(),
+                tools,
+            })?
+            .event
+        {
+            ApiEvent::Ok => Ok(()),
+            other => Err(unexpected("ok", &other)),
+        }
+    }
+
+    /// List the effective tool definitions available to a session.
+    pub fn list_tools(&self, session_id: &str) -> Result<Vec<SessionToolDefinition>> {
+        match self
+            .request_ok(ApiRequest::ListTools {
+                session_id: session_id.to_string(),
+            })?
+            .event
+        {
+            ApiEvent::Tools { tools, .. } => Ok(tools),
+            other => Err(unexpected("tools", &other)),
+        }
+    }
+
+    /// Complete a custom [`ApiEvent::ToolCall`] using its session and call ids.
+    ///
+    /// Pass textual output (serialize structured results as JSON) and `None`
+    /// for success, or `Some(message)` to report a tool execution failure.
+    pub fn submit_tool_result(
+        &self,
+        session_id: &str,
+        call_id: &str,
+        output: &str,
+        error: Option<String>,
+    ) -> Result<()> {
+        match self
+            .request_ok(ApiRequest::ToolResult {
+                session_id: session_id.to_string(),
+                call_id: call_id.to_string(),
+                output: output.to_string(),
+                error,
+            })?
+            .event
+        {
+            ApiEvent::Ok => Ok(()),
+            other => Err(unexpected("ok", &other)),
+        }
+    }
+
     /// Switch the session to a different model. `model` is an id from
     /// `list_models`.
     pub fn set_model(&self, session_id: &str, model: &str) -> Result<()> {
@@ -1318,6 +1404,12 @@ impl JcodeClient {
                 ApiEvent::PermissionRequest { request_id, .. } if options.auto_approve => {
                     self.respond_to_permission(session_id, &request_id, PermissionDecision::Allow)?;
                 }
+                ApiEvent::TurnStopped {
+                    reason, message, ..
+                } => {
+                    result.stop_reason = Some(reason);
+                    result.stop_message = Some(message);
+                }
                 ApiEvent::TurnDone { .. } => {
                     text_stream.finish(&mut result);
                     return Ok(result);
@@ -1401,6 +1493,10 @@ pub struct FileStatus {
 /// What one turn produced.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct TurnResult {
+    /// None for natural completion. Failures still return Err and are also
+    /// delivered to on_event as TurnStopped before the legacy Error event.
+    pub stop_reason: Option<jcode_harness_api::TurnStopReason>,
+    pub stop_message: Option<String>,
     /// All assistant text in the turn, including tool narration.
     pub text: String,
     /// Last completed assistant message, or aggregate text on older bridges.
@@ -1707,9 +1803,12 @@ fn event_session(event: &ApiEvent) -> Option<&str> {
         | ToolInputDelta { session_id, .. }
         | ToolExec { session_id, .. }
         | ToolDone { session_id, .. }
+        | ToolCall { session_id, .. }
+        | Tools { session_id, .. }
         | SidePanelState { session_id, .. }
         | TokenUsage { session_id, .. }
         | TurnDone { session_id, .. }
+        | TurnStopped { session_id, .. }
         | BackgroundProgress { session_id, .. }
         | MessageAccepted { session_id, .. }
         | PermissionRequest { session_id, .. }

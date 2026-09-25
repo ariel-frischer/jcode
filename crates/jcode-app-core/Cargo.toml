@@ -38,6 +38,7 @@ serde_yaml = "0.9" # Existing workspace parser, used only by the opt-in Autospec
 # File operations
 glob = "0.3"
 memchr = "2"
+ignore = "0.4"
 similar = "2"            # diffing for edits
 
 # Utilities

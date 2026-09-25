@@ -24,6 +24,8 @@ impl RawClient {
     async fn subscribe(&mut self, profile: Option<SessionProfileStartup>) -> Result<String> {
         let request = Request::Subscribe {
             workflow_progress: false,
+            system_prompt: None,
+            supports_pdf_panels: false,
             id: 1,
             working_dir: Some(std::env::current_dir()?.to_string_lossy().into_owned()),
             selfdev: None,

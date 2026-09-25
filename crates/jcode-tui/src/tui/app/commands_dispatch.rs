@@ -70,6 +70,7 @@ pub(super) fn ssh_unsupported_command(input: &str) -> bool {
             | "/onboarding-sim"
             | "/onboarding-preview"
             | "/usage"
+            | "/reset"
             | "/subscription"
             | "/fix"
             | "/support"
@@ -181,6 +182,7 @@ pub(super) fn dispatch_local_command(app: &mut App, trimmed: &str) -> bool {
         || super::commands::handle_model_status_command(app, trimmed)
         || super::debug::handle_debug_command(app, trimmed)
         || super::model_context::handle_model_command(app, trimmed)
+        || app.handle_usage_reset_command(trimmed)
         || super::commands::handle_usage_command(app, trimmed)
         || super::productivity::handle_productivity_command(app, trimmed)
         || super::commands::handle_feedback_command(app, trimmed)

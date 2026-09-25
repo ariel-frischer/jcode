@@ -32,6 +32,7 @@ pub use client::{
     UNSUPPORTED_TYPED_EVENT_CODE, read_frame, unsupported_event_diagnostic, write_frame,
 };
 pub use events::*;
+pub use jcode_session_types::TurnStopReason;
 pub use jcode_side_panel_types::{
     SidePanelPage, SidePanelPageFormat, SidePanelPageSource, SidePanelSnapshot,
 };
@@ -58,7 +59,7 @@ mod queued_message_editor_tests;
 /// Protocol major version. Breaking changes only.
 pub const API_VERSION_MAJOR: u32 = 1;
 /// Protocol minor version. Additive changes.
-pub const API_VERSION_MINOR: u32 = 6;
+pub const API_VERSION_MINOR: u32 = 8;
 
 /// Envelope wrapping every client-to-server frame.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

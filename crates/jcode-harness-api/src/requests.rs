@@ -4,6 +4,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::QueuedMessageEditorOperation;
 
+/// A session-local tool executed by the client, or an effective tool description.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionToolDefinition {
+    pub name: String,
+    pub description: String,
+    /// JSON Schema for the input. Must be a JSON object.
+    pub parameters: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Replacement tool configuration for a live session, not a patch.
+/// Reconfigure after daemon restart or loading a persisted session. Custom
+/// tools execute on the configuring client's connection.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ToolConfiguration {
+    /// Omitted/null inherits defaults. Empty disables all built-in/MCP tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled: Vec<String>,
+    /// Additive custom tools, overriding a built-in/MCP tool with the same name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom: Vec<SessionToolDefinition>,
+}
+
 /// Curated request surface. Internally-tagged on `"req"`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "req", rename_all = "snake_case")]
@@ -45,6 +69,10 @@ pub enum ApiRequest {
         working_dir: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         profile: Option<serde_json::Value>,
+        /// Replace the complete assembled system prompt for this session.
+        /// An empty string is an explicit empty override.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        system_prompt: Option<String>,
     },
 
     /// Attach to an existing session and subscribe to its event stream.
@@ -78,6 +106,24 @@ pub enum ApiRequest {
         /// Absolute RFC3339 deadline with an explicit offset.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         deadline: Option<String>,
+    },
+
+    /// Replace the attached session's tool configuration.
+    ConfigureTools {
+        session_id: String,
+        tools: ToolConfiguration,
+    },
+
+    /// List the effective tools available to the attached session.
+    ListTools { session_id: String },
+
+    /// Complete a client-executed custom tool call. Acknowledged with `Ok`.
+    ToolResult {
+        session_id: String,
+        call_id: String,
+        output: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
 
     /// Cancel the in-flight generation.

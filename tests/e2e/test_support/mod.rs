@@ -362,6 +362,7 @@ impl WsTestClient {
         let working_dir = std::env::current_dir()?.to_string_lossy().into_owned();
         self.send_request(Request::Subscribe {
             workflow_progress: false,
+            system_prompt: None,
             supports_pdf_panels: false,
             crash_on_disconnect: false,
             continue_on_disconnect: false,

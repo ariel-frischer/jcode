@@ -1489,6 +1489,7 @@ impl RawClient {
         self.next_id += 1;
         self.send_request(Request::Subscribe {
             workflow_progress: false,
+            system_prompt: None,
             supports_pdf_panels: false,
             id,
             working_dir: Some(working_dir.display().to_string()),
@@ -1677,9 +1678,13 @@ async fn wait_for_member_status(
         }
         if tokio::time::Instant::now() >= deadline {
             anyhow::bail!(
-                "timed out waiting for member {} to reach status {}",
+                "timed out waiting for member {} to reach status {}; members: {:?}",
                 target_session,
-                expected_status
+                expected_status,
+                members
+                    .iter()
+                    .map(|member| (member.session_id.clone(), member.status.clone()))
+                    .collect::<Vec<_>>()
             );
         }
         tokio::time::sleep(Duration::from_millis(25)).await;

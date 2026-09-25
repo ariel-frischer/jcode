@@ -118,12 +118,30 @@ pub enum ApiEvent {
         duration_secs: Option<f64>,
     },
 
-    /// Tool call streaming lifecycle.
+    /// Effective tool inventory, in reply to `ListTools`.
+    Tools {
+        session_id: String,
+        tools: Vec<crate::SessionToolDefinition>,
+    },
+
+    /// Custom tool execution requested from the owning client.
+    ToolCall {
+        session_id: String,
+        call_id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+
+    /// A tool name is known, even if no argument bytes have arrived yet.
+    /// Parallel calls may start before earlier calls finish streaming input.
     ToolStart {
         session_id: String,
         call_id: String,
         name: String,
     },
+    /// Incremental, potentially incomplete JSON. A nonempty `call_id` identifies
+    /// the call independently of event interleaving. Empty IDs are legacy input
+    /// for the most recently started call.
     ToolInputDelta {
         session_id: String,
         call_id: String,
@@ -169,6 +187,17 @@ pub enum ApiEvent {
         cache_read_input: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cache_creation_input: Option<u64>,
+    },
+
+    /// An abnormal stop, never emitted for natural completion. This precedes
+    /// TurnDone (and Error for failures). Render as status, not assistant text.
+    /// Transport loss alone does not establish a Crash.
+    TurnStopped {
+        session_id: String,
+        reason: crate::TurnStopReason,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider_stop_reason: Option<String>,
     },
 
     /// The turn finished; the agent is idle.
@@ -395,6 +424,8 @@ impl ApiEvent {
             Self::SessionForked { .. } => outside("session_forked"),
             Self::History { .. } => outside("history"),
             Self::Pong => outside("pong"),
+            Self::Tools { .. } => outside("tools"),
+            Self::ToolCall { .. } => owned("tool_call", ToolEffect),
             Self::TextDelta { .. } => owned("text_delta", Content),
             Self::TextDone { .. } => owned("text_done", Content),
             Self::TextReplace { .. } => owned("text_replace", Content),
@@ -407,6 +438,7 @@ impl ApiEvent {
             Self::SidePaneImages { .. } => owned("side_pane_images", Content),
             Self::SidePanelState { .. } => owned("side_panel_state", Content),
             Self::TokenUsage { .. } => owned("token_usage", Content),
+            Self::TurnStopped { .. } => owned("turn_stopped", Advisory),
             Self::TurnDone { .. } => owned("turn_done", Terminal),
             Self::WakeRequested { .. } => outside("wake_requested"),
             Self::BackgroundProgress { .. } => owned("background_progress", Advisory),
@@ -488,6 +520,10 @@ pub struct SessionInfo {
     /// ordinary sessions in every first-party session picker.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub saved: bool,
+    /// Optional label given with `/save <label>`. Pickers display and search it
+    /// alongside the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save_label: Option<String>,
     /// Persisted transcript update time, used for newest-first ordering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at_ms: Option<i64>,

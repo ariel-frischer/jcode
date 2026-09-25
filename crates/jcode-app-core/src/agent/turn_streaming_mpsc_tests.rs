@@ -107,3 +107,18 @@ fn wrap_marker_incremental_finds_marker_straddling_delta_boundary() {
     assert_eq!(hit, find_wrap_marker_full(&acc));
     assert_eq!(hit, Some("answer ".len()));
 }
+
+#[test]
+fn abnormal_incomplete_stop_excludes_natural_completion() {
+    for reason in [None, Some("end_turn"), Some("stop")] {
+        assert!(incomplete_turn_stop(reason).is_none());
+    }
+    for reason in ["max_tokens", "length", "tool_use"] {
+        assert!(
+            matches!(incomplete_turn_stop(Some(reason)), Some(crate::protocol::ServerEvent::TurnStopped {
+            reason: crate::protocol::TurnStopReason::LimitReached,
+            provider_stop_reason: Some(raw), ..
+        }) if raw == reason)
+        );
+    }
+}

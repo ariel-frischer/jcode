@@ -199,6 +199,7 @@ fn test_set_feature_roundtrip() -> Result<()> {
 fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result<()> {
     let req = Request::Subscribe {
         workflow_progress: false,
+        system_prompt: None,
         supports_pdf_panels: false,
         id: 89,
         working_dir: Some("/tmp/project".to_string()),
@@ -216,6 +217,7 @@ fn test_subscribe_request_roundtrip_preserves_session_takeover_flags() -> Result
     assert!(json.contains("\"type\":\"subscribe\""));
     let decoded = parse_request_json(&json)?;
     let Request::Subscribe {
+        system_prompt: _,
         supports_pdf_panels: _,
         id,
         working_dir,
@@ -254,6 +256,7 @@ fn test_subscribe_request_defaults_optional_flags() -> Result<()> {
     let json = r#"{"type":"subscribe","id":91}"#;
     let decoded = parse_request_json(json)?;
     let Request::Subscribe {
+        system_prompt: _,
         supports_pdf_panels: _,
         id,
         working_dir,
@@ -346,12 +349,14 @@ fn test_native_ssh_pong_capability_is_backward_compatible() -> Result<()> {
         legacy,
         ServerEvent::Pong {
             id: 7,
-            native_ssh_protocol: None
+            native_ssh_protocol: None,
+            ..
         }
     ));
     let modern = ServerEvent::Pong {
         id: 7,
         native_ssh_protocol: Some(1),
+        capabilities: vec!["session_tools".into()],
     };
     let json = serde_json::to_value(&modern)?;
     assert_eq!(json["native_ssh_protocol"], 1);
@@ -359,7 +364,8 @@ fn test_native_ssh_pong_capability_is_backward_compatible() -> Result<()> {
         serde_json::from_value::<ServerEvent>(json)?,
         ServerEvent::Pong {
             id: 7,
-            native_ssh_protocol: Some(1)
+            native_ssh_protocol: Some(1),
+            ..
         }
     ));
     assert!(
