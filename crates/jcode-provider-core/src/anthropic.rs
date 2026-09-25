@@ -1,3 +1,18 @@
+/// Claude Code CLI version presented on every Claude OAuth surface: the
+/// User-Agent, the GrowthBook `app_version`, and the billing attribution block.
+/// Anthropic gates newer models on it (`claude_code_version_too_old`), so bump
+/// this one literal to the installed `claude --version` when a gate appears.
+/// A macro so `concat!` can build the other surfaces as `&'static str` consts.
+#[macro_export]
+macro_rules! claude_code_version {
+    () => {
+        "2.1.281"
+    };
+}
+
+/// See [`claude_code_version!`].
+pub const CLAUDE_CODE_VERSION: &str = claude_code_version!();
+
 /// Claude Code OAuth beta headers used by the Anthropic transport.
 pub const ANTHROPIC_OAUTH_BETA_HEADERS: &str = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advisor-tool-2026-03-01,advanced-tool-use-2025-11-20,effort-2025-11-24";
 

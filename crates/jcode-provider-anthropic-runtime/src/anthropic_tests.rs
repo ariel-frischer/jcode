@@ -2301,3 +2301,24 @@ fn opus_55_empty_signed_thinking_is_replayed_unchanged() {
         );
     }
 }
+
+#[test]
+fn claude_code_version_is_consistent_and_meets_server_floor() {
+    let version = jcode_provider_core::CLAUDE_CODE_VERSION;
+    assert_eq!(
+        CLAUDE_CLI_USER_AGENT,
+        format!("claude-cli/{version} (external, sdk-cli)")
+    );
+    assert!(
+        jcode_provider_anthropic::OAUTH_BILLING_HEADER
+            .starts_with(&format!("cc_version={version}; ")),
+        "{}",
+        jcode_provider_anthropic::OAUTH_BILLING_HEADER
+    );
+    // Anthropic rejected Opus 5.5 below 2.1.280 (claude_code_version_too_old).
+    let parts: Vec<u32> = version.split('.').map(|p| p.parse().unwrap()).collect();
+    assert!(
+        parts >= vec![2, 1, 280],
+        "{version} is below the Opus 5.5 gate"
+    );
+}
